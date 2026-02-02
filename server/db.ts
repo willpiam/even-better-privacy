@@ -1,0 +1,556 @@
+import { DB } from "sqlite";
+import type { QueryParameterSet } from "sqlite";
+import { loadSync } from "std/dotenv";
+import { Pool } from "postgres";
+import { hexToBytes } from "./crypto.ts";
+import type { AllDetailsMap, DetailsMap, IdentityRow, RevocationRow } from "./types.ts";
+
+const textDecoder = new TextDecoder();
+
+function coerceNumber(value: number | string | bigint | null): number | null {
+  if (value === null) return null;
+  if (typeof value === "number") return value;
+  if (typeof value === "bigint") return Number(value);
+  if (typeof value === "string") return Number(value);
+  return Number(value);
+}
+
+export type DatabaseQueryParams =
+  | readonly unknown[]
+  | Readonly<Record<string, unknown>>;
+
+export abstract class DatabaseAdapter {
+  abstract execute(sql: string): Promise<void>;
+  abstract query<T extends unknown[]>(sql: string, params?: DatabaseQueryParams): Promise<T[]>;
+  abstract close(): Promise<void>;
+}
+
+export class SqliteDatabaseAdapter extends DatabaseAdapter {
+  private db: DB;
+
+  constructor(path: string) {
+    super();
+    this.db = new DB(path);
+    this.initializeSchema();
+  }
+
+  execute(sql: string): Promise<void> {
+    this.db.execute(sql);
+    return Promise.resolve();
+  }
+
+  query<T extends unknown[]>(sql: string, params: DatabaseQueryParams = []): Promise<T[]> {
+    return Promise.resolve([...this.db.query<T>(sql, params as QueryParameterSet | undefined)]);
+  }
+
+  close(): Promise<void> {
+    this.db.close();
+    return Promise.resolve();
+  }
+
+  private initializeSchema(): void {
+    this.db.execute(`
+      CREATE TABLE IF NOT EXISTS identities (
+        fingerprint TEXT PRIMARY KEY,
+        signing_key_type TEXT NOT NULL,
+        encryption_key_type TEXT NOT NULL,
+        signing_key TEXT NOT NULL,
+        encryption_key TEXT NOT NULL,
+        signing_key_details TEXT,
+        encryption_key_details TEXT,
+        created_at INTEGER NOT NULL,
+        revoked_at INTEGER,
+        revocation_certificate TEXT
+      )
+    `);
+
+    this.db.execute(`
+      CREATE TABLE IF NOT EXISTS details (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        identity_fingerprint TEXT NOT NULL,
+        path TEXT NOT NULL,
+        detail TEXT NOT NULL,
+        proof TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        revoked_at INTEGER,
+        revocation_certificate TEXT,
+        FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(identity_fingerprint, path)
+      )
+    `);
+
+    this.db.execute(`
+      CREATE TABLE IF NOT EXISTS revocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        identity_fingerprint TEXT NOT NULL,
+        type TEXT NOT NULL,
+        target TEXT,
+        nonce INTEGER NOT NULL,
+        certificate TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(identity_fingerprint, nonce)
+      )
+    `);
+
+    // Add revocation columns to existing tables if they don't exist (migration)
+    try {
+      this.db.execute(`ALTER TABLE identities ADD COLUMN revoked_at INTEGER`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE identities ADD COLUMN revocation_certificate TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN revoked_at INTEGER`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN revocation_certificate TEXT`);
+    } catch {
+      /* column already exists */
+    }
+  }
+}
+
+let envLoaded = false;
+
+function loadEnvOnce(): void {
+  if (envLoaded) return;
+  try {
+    loadSync({ export: true });
+  } catch {
+    // ignore missing .env
+  }
+  envLoaded = true;
+}
+
+export class PostgresDatabaseAdapter extends DatabaseAdapter {
+  private pool: Pool;
+
+  private constructor(pool: Pool) {
+    super();
+    this.pool = pool;
+  }
+
+  static createFromEnv(): PostgresDatabaseAdapter {
+    loadEnvOnce();
+    const hostname = Deno.env.get("PG_HOST") ?? "localhost";
+    const port = Number(Deno.env.get("PG_PORT") ?? "5432");
+    const user = Deno.env.get("PG_USER") ?? "postgres";
+    const password = Deno.env.get("PG_PASSWORD") ?? "";
+    const database = Deno.env.get("PG_DATABASE") ?? "postgres";
+    const poolSize = Number(Deno.env.get("PG_POOL_SIZE") ?? "5");
+
+    const pool = new Pool({
+      hostname,
+      port,
+      user,
+      password,
+      database,
+    }, poolSize, true);
+
+    return new PostgresDatabaseAdapter(pool);
+  }
+
+  async execute(sql: string): Promise<void> {
+    const client = await this.pool.connect();
+    try {
+      await client.queryArray(sql);
+    } finally {
+      client.release();
+    }
+  }
+
+  async query<T extends unknown[]>(sql: string, params: DatabaseQueryParams = []): Promise<T[]> {
+    const client = await this.pool.connect();
+    try {
+      const { sql: rewrittenSql, params: rewrittenParams } = this.rewriteSql(sql, params);
+      const result = await client.queryArray(rewrittenSql, rewrittenParams);
+      return result.rows as T[];
+    } finally {
+      client.release();
+    }
+  }
+
+  async close(): Promise<void> {
+    await this.pool.end();
+  }
+
+  async initializeSchema(): Promise<void> {
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS identities (
+        fingerprint TEXT PRIMARY KEY,
+        signing_key_type TEXT NOT NULL,
+        encryption_key_type TEXT NOT NULL,
+        signing_key TEXT NOT NULL,
+        encryption_key TEXT NOT NULL,
+        signing_key_details TEXT,
+        encryption_key_details TEXT,
+        created_at BIGINT NOT NULL,
+        revoked_at BIGINT,
+        revocation_certificate TEXT
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS details (
+        id BIGSERIAL PRIMARY KEY,
+        identity_fingerprint TEXT NOT NULL,
+        path TEXT NOT NULL,
+        detail TEXT NOT NULL,
+        proof TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        revoked_at BIGINT,
+        revocation_certificate TEXT,
+        FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(identity_fingerprint, path)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS revocations (
+        id BIGSERIAL PRIMARY KEY,
+        identity_fingerprint TEXT NOT NULL,
+        type TEXT NOT NULL,
+        target TEXT,
+        nonce BIGINT NOT NULL,
+        certificate TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(identity_fingerprint, nonce)
+      )
+    `);
+
+    await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
+    await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
+  }
+
+  private rewriteSql(sql: string, params: DatabaseQueryParams): { sql: string; params: unknown[] } {
+    if (!Array.isArray(params)) {
+      return { sql, params: [] };
+    }
+    let index = 0;
+    const rewritten = sql.replace(/\?/g, () => `$${++index}`);
+    return { sql: rewritten, params };
+  }
+}
+
+export async function initDb(path: string): Promise<DatabaseAdapter> {
+  loadEnvOnce();
+  const dbTypeRaw = Deno.env.get("DB_TYPE") ?? Deno.env.get("DB_BACKEND") ?? "sqlite";
+  const backend = dbTypeRaw.toLowerCase();
+  if (backend === "psql" || backend === "postgres" || backend === "postgresql") {
+    const adapter = PostgresDatabaseAdapter.createFromEnv();
+    await adapter.initializeSchema();
+    return adapter;
+  }
+  return new SqliteDatabaseAdapter(path);
+}
+
+export async function insertIdentity(db: DatabaseAdapter, record: {
+  fingerprint: string;
+  signingKeyType: "dilithium" | "sphincs";
+  encryptionKeyType: "kyber";
+  signingKey: string;
+  encryptionKey: string;
+  signingKeyDetails: Record<string, unknown> | null;
+  encryptionKeyDetails: Record<string, unknown> | null;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `INSERT INTO identities (
+      fingerprint, signing_key_type, encryption_key_type,
+      signing_key, encryption_key,
+      signing_key_details, encryption_key_details,
+      created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      record.fingerprint,
+      record.signingKeyType,
+      record.encryptionKeyType,
+      record.signingKey,
+      record.encryptionKey,
+      record.signingKeyDetails ? JSON.stringify(record.signingKeyDetails) : null,
+      record.encryptionKeyDetails ? JSON.stringify(record.encryptionKeyDetails) : null,
+      record.createdAt,
+    ],
+  );
+}
+
+export async function insertDetail(db: DatabaseAdapter, record: {
+  fingerprint: string;
+  path: string;
+  detail: string;
+  proof: string;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `INSERT INTO details (identity_fingerprint, path, detail, proof, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [record.fingerprint, record.path, record.detail, record.proof, record.createdAt],
+  );
+}
+
+export async function getDetailRecord(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  path: string,
+): Promise<{ detail: string; proof: string; revoked_at: number | null; revocation_certificate: string | null } | null> {
+  const rows = await db.query<[string, string, number | string | bigint | null, string | null]>(
+    "SELECT detail, proof, revoked_at, revocation_certificate FROM details WHERE identity_fingerprint = ? AND path = ?",
+    [fingerprint, path],
+  );
+  if (rows.length === 0) {
+    return null;
+  }
+  const [detail, proof, revoked_at, revocation_certificate] = rows[0];
+  return {
+    detail,
+    proof,
+    revoked_at: coerceNumber(revoked_at),
+    revocation_certificate,
+  };
+}
+
+export async function updateDetail(db: DatabaseAdapter, record: {
+  fingerprint: string;
+  path: string;
+  detail: string;
+  proof: string;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `UPDATE details
+     SET detail = ?, proof = ?, created_at = ?, revoked_at = NULL, revocation_certificate = NULL
+     WHERE identity_fingerprint = ? AND path = ?`,
+    [record.detail, record.proof, record.createdAt, record.fingerprint, record.path],
+  );
+}
+
+export async function getIdentity(db: DatabaseAdapter, fingerprint: string): Promise<IdentityRow | undefined> {
+  const rows = await db.query<[string, string, string, string, string, string | null, string | null, number | string | bigint, number | string | bigint | null, string | null]>(
+    `SELECT fingerprint, signing_key_type, encryption_key_type, signing_key, encryption_key,
+            signing_key_details, encryption_key_details, created_at, revoked_at, revocation_certificate
+     FROM identities WHERE fingerprint = ?`,
+    [fingerprint],
+  );
+  const row = rows[0];
+
+  if (!row) return undefined;
+  const [fp, skt, ekt, sk, ek, skd, ekd, created_at, revoked_at, revocation_certificate] = row;
+  return {
+    fingerprint: fp,
+    signing_key_type: skt as IdentityRow["signing_key_type"],
+    encryption_key_type: ekt as IdentityRow["encryption_key_type"],
+    signing_key: sk,
+    encryption_key: ek,
+    signing_key_details: skd ? JSON.parse(skd) : null,
+    encryption_key_details: ekd ? JSON.parse(ekd) : null,
+    created_at: coerceNumber(created_at) ?? 0,
+    revoked_at: coerceNumber(revoked_at),
+    revocation_certificate,
+  };
+}
+
+export async function getDetailsMap(db: DatabaseAdapter, fingerprint: string): Promise<DetailsMap> {
+  const details: DetailsMap = {};
+  for (const [path, detailValue, proof] of await db.query<[string, string, string]>(
+    "SELECT path, detail, proof FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
+    [fingerprint],
+  )) {
+    details[path] = [detailValue, proof];
+  }
+  return details;
+}
+
+export async function getAllDetailsMap(db: DatabaseAdapter): Promise<AllDetailsMap> {
+  const detailsByIdentity: AllDetailsMap = {};
+  for (const [identityFingerprint, path, detail, proof] of await db.query<[string, string, string, string]>(
+    "SELECT identity_fingerprint, path, detail, proof FROM details ORDER BY id ASC",
+  )) {
+    if (!detailsByIdentity[identityFingerprint]) {
+      detailsByIdentity[identityFingerprint] = {};
+    }
+    detailsByIdentity[identityFingerprint][path] = [detail, proof];
+  }
+  return detailsByIdentity;
+}
+
+export async function ensureNewNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<{ ok: true } | { ok: false; error: string }> {
+  let maxNonce = -1;
+  for (const [proof] of await db.query<[string]>(
+    "SELECT proof FROM details WHERE identity_fingerprint = ?",
+    [fingerprint],
+  )) {
+    try {
+      const decoded = hexToBytes(proof);
+      const record = JSON.parse(textDecoder.decode(decoded)) as { nonce?: number };
+      if (typeof record.nonce === "number") {
+        if (record.nonce === nonce) {
+          return { ok: false, error: "nonce already used" };
+        }
+        if (record.nonce > maxNonce) {
+          maxNonce = record.nonce;
+        }
+      }
+    } catch {
+      // Ignore malformed historical records; they will cause proof validation failure elsewhere.
+    }
+  }
+
+  if (nonce <= maxNonce) {
+    return { ok: false, error: "nonce must be increasing" };
+  }
+
+  return { ok: true };
+}
+
+export async function insertRevocation(db: DatabaseAdapter, record: {
+  fingerprint: string;
+  type: "detail" | "identity";
+  target: string | null;
+  nonce: number;
+  certificate: string;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `INSERT INTO revocations (identity_fingerprint, type, target, nonce, certificate, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [record.fingerprint, record.type, record.target, record.nonce, record.certificate, record.createdAt],
+  );
+}
+
+export async function getMaxRevocationNonce(db: DatabaseAdapter, fingerprint: string): Promise<number> {
+  let maxNonce = -1;
+  for (const [nonce] of await db.query<[number | string | bigint]>(
+    "SELECT nonce FROM revocations WHERE identity_fingerprint = ?",
+    [fingerprint],
+  )) {
+    const parsedNonce = coerceNumber(nonce);
+    if (parsedNonce !== null && parsedNonce > maxNonce) {
+      maxNonce = parsedNonce;
+    }
+  }
+  return maxNonce;
+}
+
+export async function hasRevocationWithNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<boolean> {
+  const rows = await db.query<[number]>(
+    "SELECT 1 FROM revocations WHERE identity_fingerprint = ? AND nonce = ?",
+    [fingerprint, nonce],
+  );
+  return rows.length > 0;
+}
+
+export async function revokeIdentity(db: DatabaseAdapter, fingerprint: string, certificate: string, revokedAt: number): Promise<void> {
+  await db.query(
+    `UPDATE identities SET revoked_at = ?, revocation_certificate = ? WHERE fingerprint = ?`,
+    [revokedAt, certificate, fingerprint],
+  );
+}
+
+export async function revokeDetail(db: DatabaseAdapter, fingerprint: string, path: string, certificate: string, revokedAt: number): Promise<void> {
+  await db.query(
+    `UPDATE details SET revoked_at = ?, revocation_certificate = ? WHERE identity_fingerprint = ? AND path = ?`,
+    [revokedAt, certificate, fingerprint, path],
+  );
+}
+
+export async function isIdentityRevoked(db: DatabaseAdapter, fingerprint: string): Promise<boolean> {
+  const rows = await db.query<[number | string | bigint | null]>(
+    "SELECT revoked_at FROM identities WHERE fingerprint = ?",
+    [fingerprint],
+  );
+  const revokedAt = rows.length > 0 ? coerceNumber(rows[0][0]) : null;
+  return revokedAt !== null;
+}
+
+export async function isDetailRevoked(db: DatabaseAdapter, fingerprint: string, path: string): Promise<boolean> {
+  const rows = await db.query<[number | string | bigint | null]>(
+    "SELECT revoked_at FROM details WHERE identity_fingerprint = ? AND path = ?",
+    [fingerprint, path],
+  );
+  const revokedAt = rows.length > 0 ? coerceNumber(rows[0][0]) : null;
+  return revokedAt !== null;
+}
+
+export async function getRevocations(db: DatabaseAdapter, fingerprint: string): Promise<RevocationRow[]> {
+  const rows: RevocationRow[] = [];
+  for (const [id, identityFp, type, target, nonce, certificate, createdAt] of await db.query<[number | string | bigint, string, string, string | null, number | string | bigint, string, number | string | bigint]>(
+    "SELECT id, identity_fingerprint, type, target, nonce, certificate, created_at FROM revocations WHERE identity_fingerprint = ? ORDER BY nonce ASC",
+    [fingerprint],
+  )) {
+    rows.push({
+      id: coerceNumber(id) ?? 0,
+      identity_fingerprint: identityFp,
+      type: type as "detail" | "identity",
+      target,
+      nonce: coerceNumber(nonce) ?? 0,
+      certificate,
+      created_at: coerceNumber(createdAt) ?? 0,
+    });
+  }
+  return rows;
+}
+
+export async function getRevokedDetailPaths(db: DatabaseAdapter, fingerprint: string): Promise<string[]> {
+  const paths: string[] = [];
+  for (const [path] of await db.query<[string]>(
+    "SELECT path FROM details WHERE identity_fingerprint = ? AND revoked_at IS NOT NULL",
+    [fingerprint],
+  )) {
+    paths.push(path);
+  }
+  return paths;
+}
+
+export type SearchResult = {
+  fingerprint: string;
+  signing_key_type: "dilithium" | "sphincs";
+  encryption_key_type: "kyber";
+  created_at: number;
+};
+
+export async function searchIdentities(
+  db: DatabaseAdapter,
+  query: string,
+  options: { page?: number; limit?: number; includeRevoked?: boolean } = {},
+): Promise<{ results: SearchResult[]; total: number }> {
+  const { page = 1, limit = 10, includeRevoked = false } = options;
+  const offset = (page - 1) * limit;
+  const like = `%${query.toLowerCase()}%`;
+
+  const baseJoin =
+    "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email')";
+  const matchClause = "(LOWER(i.fingerprint) LIKE ? OR LOWER(d.detail) LIKE ?)";
+  const revokedFilter = includeRevoked
+    ? ""
+    : "AND NOT EXISTS (SELECT 1 FROM revocations r WHERE r.identity_fingerprint = i.fingerprint AND r.type = 'identity')";
+
+  const countQuery = `SELECT COUNT(DISTINCT i.fingerprint) ${baseJoin} WHERE ${matchClause} ${revokedFilter}`;
+  const totalRows = await db.query<[number | string | bigint]>(countQuery, [like, like]);
+  const total = coerceNumber(totalRows[0]?.[0] ?? null) ?? 0;
+
+  const listQuery =
+    `SELECT DISTINCT i.fingerprint, i.signing_key_type, i.encryption_key_type, i.created_at ` +
+    `${baseJoin} WHERE ${matchClause} ${revokedFilter} ORDER BY i.created_at ASC LIMIT ? OFFSET ?`;
+  const rows = await db.query<[string, string, string, number | string | bigint]>(listQuery, [like, like, limit, offset]);
+  const results: SearchResult[] = [];
+  for (const [fp, skt, ekt, created_at] of rows) {
+    results.push({
+      fingerprint: fp,
+      signing_key_type: skt as "dilithium" | "sphincs",
+      encryption_key_type: ekt as "kyber",
+      created_at: coerceNumber(created_at) ?? 0,
+    });
+  }
+
+  return { results, total };
+}

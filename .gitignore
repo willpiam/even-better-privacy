@@ -1,0 +1,42 @@
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Encrypted identity files (user data)
+*.json.enc
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Deno
+.deno/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# Build outputs
+dist/
+build/
+
+# Node
+node_modules/

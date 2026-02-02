@@ -1,0 +1,10 @@
+{
+  "name": "ebp",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.43.1"
+  },
+  "scripts": {
+    "test:e2e": "playwright test --headed --reporter=line"
+  }
+}

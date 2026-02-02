@@ -1,0 +1,392 @@
+import { expect, test, type Page } from "@playwright/test";
+import { generateHumanName } from "./name_generator.ts";
+
+const testPassword = "smoke-test-password";
+const testServerUrl = "http://localhost:8788";
+
+async function submitPassword(page: Page, password = testPassword) {
+  await expect(page.locator("#password-modal")).toBeVisible();
+  await page.fill("#password-modal-input", password);
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
+}
+
+async function setServer(page: Page, serverUrl = testServerUrl) {
+  await page.locator(".nav-item", { hasText: "Settings" }).click();
+  await page.fill("#server-url", serverUrl);
+  await page.getByRole("button", { name: "Set Server", exact: true }).click();
+}
+
+async function generateIdentity(
+  page: Page,
+  identityName: string,
+  password = testPassword,
+) {
+  await page.goto("/");
+  await page.fill("#gen-name", identityName);
+  await page.getByRole("button", { name: "Generate Identity", exact: true }).click();
+  await submitPassword(page, password);
+  await expect(page.locator("#identity-list")).toContainText(identityName);
+}
+
+async function publishIdentity(
+  page: Page,
+  serverUrl = testServerUrl,
+  password = testPassword,
+) {
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#publish-server", serverUrl);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await submitPassword(page, password);
+}
+
+async function addDetail(
+  page: Page,
+  path: string,
+  detail: string,
+  password = testPassword,
+) {
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#detail-path", path);
+  await page.fill("#detail-value", detail);
+  await page.locator("#detail-push").setChecked(true);
+  await page.getByRole("button", { name: "Add Detail", exact: true }).click();
+  await submitPassword(page, password);
+  await expect(page.locator("#identity-details-list")).toContainText(detail);
+}
+
+async function addLocalDetail(
+  page: Page,
+  path: string,
+  detail: string,
+  password = testPassword,
+) {
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#detail-path", path);
+  await page.fill("#detail-value", detail);
+  await page.locator("#detail-push").setChecked(false);
+  await page.getByRole("button", { name: "Add Detail", exact: true }).click();
+  await submitPassword(page, password);
+  await expect(page.locator("#identity-details-list")).toContainText(detail);
+}
+
+async function ensureIdentitySelected(page: Page, identityName: string) {
+  const currentIdentity = (await page.locator("#ctx-current").textContent())?.trim();
+  if (currentIdentity === identityName) {
+    return;
+  }
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await expect(page.locator("#identity-list")).toContainText(identityName);
+  await page.locator("#identity-list li", { hasText: identityName }).click();
+  await expect(page.locator("#confirm-modal")).toBeVisible();
+  await page.getByRole("button", { name: "Switch", exact: true }).click();
+  await expect(page.locator("#ctx-current")).toHaveText(identityName);
+}
+
+async function loadServerIdentities(page: Page, search: string) {
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  await page.fill("#server-identities-override", testServerUrl);
+  await page.fill("#server-identities-search", search);
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+}
+
+async function expectServerIdentitiesContains(page: Page, search: string, text: string) {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    await loadServerIdentities(page, search);
+    const listText = await page.locator("#server-identities-list").innerText();
+    if (listText.includes(text)) {
+      return;
+    }
+    await page.waitForTimeout(500);
+  }
+  await expect(page.locator("#server-identities-list")).toContainText(text);
+}
+
+async function expectServerIdentitiesNotContains(
+  page: Page,
+  search: string,
+  text: string,
+) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    await loadServerIdentities(page, search);
+    const listText = await page.locator("#server-identities-list").innerText();
+    if (!listText.includes(text)) {
+      return;
+    }
+    await page.waitForTimeout(500);
+  }
+  await expect(page.locator("#server-identities-list")).not.toContainText(text);
+}
+
+test("creates and publishes a new identity", async ({ page }) => {
+  const identityName = `e2e-${Date.now()}`;
+  const serverUrl = testServerUrl;
+  const humanName = generateHumanName();
+
+  await page.goto("/");
+  await page.fill("#gen-name", identityName);
+  await page.getByRole("button", { name: "Generate Identity", exact: true }).click();
+
+  await submitPassword(page);
+
+  await expect(page.locator("#identity-list")).toContainText(identityName);
+
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim();
+  expect(fingerprint).toBeTruthy();
+
+  await setServer(page, serverUrl);
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#publish-server", serverUrl);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await submitPassword(page);
+
+  await page.fill("#detail-path", "name");
+  await page.fill("#detail-value", humanName);
+  await page.locator("#detail-push").setChecked(true);
+  await page.getByRole("button", { name: "Add Detail", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#identity-details-list")).toContainText(humanName);
+
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  await page.fill("#server-identities-override", serverUrl);
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+  await expect(page.locator("#server-identities-list")).toContainText(fingerprint ?? "");
+  await expect(page.locator("#server-identities-list")).toContainText(humanName);
+});
+
+test("refreshes server identities and searches in contacts", async ({ page }) => {
+  const identityName = `e2e-${Date.now()}`;
+  const serverUrl = testServerUrl;
+
+  await page.goto("/");
+  await page.fill("#gen-name", identityName);
+  await page.getByRole("button", { name: "Generate Identity", exact: true }).click();
+
+  await submitPassword(page);
+
+  await expect(page.locator("#identity-list")).toContainText(identityName);
+
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim();
+  expect(fingerprint).toBeTruthy();
+
+  await setServer(page, serverUrl);
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#publish-server", serverUrl);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await submitPassword(page);
+
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  await page.fill("#server-identities-override", serverUrl);
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+
+  const fingerprintSearch = fingerprint?.slice(0, 12) ?? "";
+  await page.fill("#server-identities-search", fingerprintSearch);
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+
+  await expect(page.locator("#server-identities-list")).toContainText(
+    fingerprintSearch,
+  );
+});
+
+test.describe.serial("multi-user encrypted messaging flow", () => {
+  const runId = Date.now();
+  const aliceIdentity = `e2e-alice-${runId}`;
+  const bobIdentity = `e2e-bob-${runId}`;
+  const aliceEmail = `alice-${runId}@example.com`;
+  const bobEmail = `bob-${runId}@example.com`;
+  const messageText = `Hello from ${aliceIdentity} to ${bobIdentity}.`;
+  let aliceFingerprint = "";
+  let bobFingerprint = "";
+
+  test("creates and publishes alice identity with name and email", async ({ page }) => {
+    await generateIdentity(page, aliceIdentity);
+    await setServer(page);
+    await publishIdentity(page);
+    await addDetail(page, "name", "Alice Example");
+    await addDetail(page, "email", aliceEmail);
+
+    aliceFingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+    expect(aliceFingerprint).toBeTruthy();
+  });
+
+  test("creates and publishes bob identity with name and email", async ({ page }) => {
+    await generateIdentity(page, bobIdentity);
+    await setServer(page);
+    await publishIdentity(page);
+    await addDetail(page, "name", "Bob Example");
+    await addDetail(page, "email", bobEmail);
+
+    bobFingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+    expect(bobFingerprint).toBeTruthy();
+  });
+
+  test("imports each other as contacts", async ({ page }) => {
+    await page.goto("/");
+    await setServer(page);
+
+    await ensureIdentitySelected(page, aliceIdentity);
+    await page.locator(".nav-item", { hasText: "Contacts" }).click();
+    await page.fill("#server-identities-override", testServerUrl);
+    await page.fill("#server-identities-search", bobEmail);
+    await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+
+    const bobEntry = page.locator("#server-identities-list .server-identity-item", {
+      hasText: bobEmail,
+    });
+    await bobEntry.getByRole("button", { name: "Import as Contact", exact: true }).click();
+    await expect(page.locator("#contacts-list")).toContainText(bobFingerprint);
+
+    await ensureIdentitySelected(page, bobIdentity);
+    await page.locator(".nav-item", { hasText: "Contacts" }).click();
+    await page.fill("#server-identities-override", testServerUrl);
+    await page.fill("#server-identities-search", aliceEmail);
+    await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+
+    const aliceEntry = page.locator("#server-identities-list .server-identity-item", {
+      hasText: aliceEmail,
+    });
+    await aliceEntry.getByRole("button", { name: "Import as Contact", exact: true }).click();
+    await expect(page.locator("#contacts-list")).toContainText(aliceFingerprint);
+  });
+
+  test("sends and verifies signed encrypted messages", async ({ page }) => {
+    await page.goto("/");
+    await ensureIdentitySelected(page, aliceIdentity);
+    await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+    await page.fill("#enc-message", messageText);
+    await page.fill("#enc-recipient", bobFingerprint);
+    await page.keyboard.press("Escape");
+    await page.locator("#enc-message").click();
+    await expect(page.locator("#enc-recipient-dropdown")).toBeHidden();
+    await page.locator("#enc-sign").setChecked(true);
+    await page.getByRole("button", { name: "Encrypt", exact: true }).click();
+    await submitPassword(page);
+    await expect(page.locator("#enc-output")).not.toHaveValue("");
+    const encryptedPayload = await page.locator("#enc-output").inputValue();
+
+    await ensureIdentitySelected(page, bobIdentity);
+    await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+    await page.fill("#dec-payload", encryptedPayload);
+    await page.fill("#dec-sender", aliceFingerprint);
+    await page.keyboard.press("Escape");
+    await page.locator("#dec-payload").click();
+    await expect(page.locator("#dec-sender-dropdown")).toBeHidden();
+    await page.getByRole("button", { name: "Decrypt", exact: true }).click();
+    await submitPassword(page);
+
+    await expect.poll(async () => {
+      return await page.locator("#dec-output").inputValue();
+    }).toContain(messageText);
+    await expect(page.locator("#dec-verified")).toHaveText(/Valid/);
+  });
+});
+
+test("publishes, revokes, and re-adds a detail, verified in contacts", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-detail-${runId}`;
+  const email = `detail-${runId}@example.com`;
+
+  await generateIdentity(page, identityName);
+  await setServer(page);
+  await publishIdentity(page);
+  await addDetail(page, "email", email);
+
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(fingerprint).toBeTruthy();
+
+  await expectServerIdentitiesContains(page, fingerprint, fingerprint);
+  await expectServerIdentitiesContains(page, fingerprint, email);
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.locator("summary", { hasText: "Revoke a Detail" }).click();
+  await page.selectOption("#revoke-detail-path", "email");
+  await page.fill("#revoke-detail-reason", "rotated");
+  await page.locator("#revoke-detail-push").setChecked(true);
+  await page.getByRole("button", { name: "Revoke Detail", exact: true }).click();
+  await expect(page.locator("#confirm-modal")).toBeVisible();
+  await page.getByRole("button", { name: "Revoke", exact: true }).click();
+  await submitPassword(page);
+
+  await expectServerIdentitiesContains(page, fingerprint, fingerprint);
+  await expectServerIdentitiesNotContains(page, fingerprint, email);
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.fill("#detail-path", "email");
+  await page.fill("#detail-value", email);
+  await page.locator("#detail-push").setChecked(true);
+  await page.getByRole("button", { name: "Add Detail", exact: true }).click();
+  await submitPassword(page);
+
+  await expectServerIdentitiesContains(page, fingerprint, fingerprint);
+  await expectServerIdentitiesContains(page, fingerprint, email);
+});
+
+test("revoked identitiy is removed from search results", async ({ page }) => {
+
+  // 1. make new identity & publish
+  const runId = Date.now();
+  const identityName = `e2e-revoke-identity-${runId}`;
+
+  await generateIdentity(page, identityName);
+  await setServer(page);
+  await publishIdentity(page);
+
+  // 2. verify identity was properly published by searching for it by fingerprint
+  // 2.a. get fingerprint
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(fingerprint).toBeTruthy();
+  console.log(`(stub, yes that one) fingerprint "${fingerprint}"`);
+
+  // 2.b. navigate to the contacts page
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  // navigate to the "Browse Server Identities" section
+  await page.locator("#server-identities-form").click();
+
+  // press "Load from Server" button
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+
+  // find the search box and set its value to the fingerprint
+  await page.fill("#server-identities-search", fingerprint);
+  // press "Load from Server" button
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+  // verify the fingerprint is in the list
+  await expect(page.locator("#server-identities-list")).toContainText(fingerprint);
+
+  console.log("Uploaded identity found in search results");
+
+  // 3. revoke identity
+  // go back to the identities page
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+
+  // go to Revocation section
+  // click the "Revoke Entire Identity" Option
+  await page.locator("summary", { hasText: "Revoke Entire Identity" }).click();
+  // find the optional reason field and set it to "Automated test revocation"
+  await page.fill("#revoke-identity-reason", "Automated test revocation");
+  // find the "Push to server" checkbox and set it to true
+  await page.locator("#revoke-identity-push").setChecked(true);
+  // press the "Revoke Identity" button
+  await page.getByRole("button", { name: "Revoke Identity", exact: true }).click();
+  
+  // press "yes, revoke my identity" button
+  await page.getByRole("button", { name: "Yes, Revoke My Identity", exact: true }).click();
+  // press "I understand, revoke" button
+  await page.getByRole("button", { name: "I Understand, Revoke", exact: true }).click();
+  // enter the password and press submit
+  await submitPassword(page);
+
+
+  // navigate to the contacts page
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  // navigate to the "Browse Server Identities" section
+  await page.locator("#server-identities-form").click();
+  // press "Load from Server" button
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+  // enter the old fingerprint into the search box
+  await page.fill("#server-identities-search", fingerprint);
+
+  // the list of identites should now have one element and it should contain the text "(none found)"
+  await expect(page.locator("#server-identities-list")).toContainText("(none found)");
+  console.log("Revoked identity not found in search results");
+});

@@ -1,0 +1,1967 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EBP Local GUI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-main: 'Outfit', -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+      
+      --bg-base: #0d1117;
+      --bg-card: #161b22;
+      --bg-input: #0d1117;
+      --bg-hover: #21262d;
+      --bg-overlay: rgba(0, 0, 0, 0.7);
+      
+      --border: #30363d;
+      --border-focus: #58a6ff;
+      
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-muted: #6e7681;
+      
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --accent-bg: rgba(88, 166, 255, 0.15);
+      
+      --success: #3fb950;
+      --success-bg: rgba(63, 185, 80, 0.15);
+      --error: #f85149;
+      --error-bg: rgba(248, 81, 73, 0.15);
+      --warning: #d29922;
+      
+      --radius-sm: 6px;
+      --radius-md: 10px;
+      --radius-lg: 14px;
+      
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+      --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+      --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+      --shadow-glow: 0 0 20px rgba(88, 166, 255, 0.15);
+      
+      --sidebar-width: 220px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: var(--font-main);
+      background: var(--bg-base);
+      color: var(--text-primary);
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      line-height: 1.5;
+      display: flex;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Sidebar Navigation
+    ───────────────────────────────────────────────────────────────────────── */
+    
+    .sidebar {
+      width: var(--sidebar-width);
+      min-height: 100vh;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      position: fixed;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      z-index: 100;
+    }
+
+    .sidebar-header {
+      padding: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-header h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, var(--text-primary) 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sidebar-header h1::before {
+      content: '🔐 ';
+      -webkit-text-fill-color: initial;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 12px;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      margin-bottom: 8px;
+    }
+
+    .nav-section-title {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      padding: 8px 12px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      border: 1px solid transparent;
+    }
+
+    .nav-item:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .nav-item.active {
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-color: rgba(88, 166, 255, 0.3);
+    }
+
+    .nav-item-icon {
+      font-size: 1.1rem;
+      width: 24px;
+      text-align: center;
+    }
+
+    .sidebar-footer {
+      padding: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    #status {
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 500;
+      background: var(--accent-bg);
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      transition: all 0.3s ease;
+      animation: slideIn 0.3s ease;
+      text-align: center;
+    }
+
+    #status[data-kind="error"] {
+      background: var(--error-bg);
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    #status[data-kind="success"] {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    /* Revocation badge */
+    .revoked-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid var(--error);
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .revoked-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border-radius: var(--radius-sm);
+      background: var(--error-bg);
+      color: var(--error);
+      border: 1px solid var(--error);
+      font-weight: 600;
+      margin-bottom: 12px;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Main Content
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .main-content {
+      flex: 1;
+      margin-left: var(--sidebar-width);
+      padding: 32px;
+      min-height: 100vh;
+      background-image: 
+        radial-gradient(ellipse 80% 50% at 50% -20%, rgba(88, 166, 255, 0.08), transparent),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(139, 92, 246, 0.06), transparent);
+    }
+
+    .page {
+      display: none;
+      max-width: 800px;
+      margin: 0 auto;
+      animation: fadeIn 0.25s ease;
+    }
+
+    .page.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .page-header {
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .page-header h2 {
+      margin: 0 0 4px;
+      font-size: 1.5rem;
+      font-weight: 700;
+    }
+
+    .page-header p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.95rem;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Shared Components
+    ───────────────────────────────────────────────────────────────────────── */
+
+    section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+      margin-bottom: 16px;
+    }
+
+    section:last-child {
+      margin-bottom: 0;
+    }
+
+    section h3 {
+      margin: 0 0 16px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    section h3::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 2px;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: flex-end;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    label {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    label.inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      color: var(--text-primary);
+      font-weight: 400;
+    }
+
+    input, select, textarea {
+      font: inherit;
+      font-size: 0.9rem;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      color: var(--text-primary);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      border-color: var(--border-focus);
+      box-shadow: 0 0 0 3px var(--accent-bg);
+    }
+
+    input::placeholder, textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    input[type="password"] {
+      font-family: var(--font-mono);
+      letter-spacing: 0.05em;
+    }
+
+    textarea {
+      min-height: 100px;
+      width: 100%;
+      resize: vertical;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+
+    textarea[readonly] {
+      background: rgba(88, 166, 255, 0.05);
+      border-style: dashed;
+    }
+
+    select {
+      cursor: pointer;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M2 4l4 4 4-4'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 12px center;
+      padding-right: 36px;
+    }
+
+    button {
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 600;
+      padding: 10px 18px;
+      border: 1px solid transparent;
+      border-radius: var(--radius-sm);
+      background: var(--accent);
+      color: var(--bg-base);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-width: 100px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    button:hover:not(:disabled) {
+      background: var(--accent-hover);
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-glow);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    button.secondary {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-primary);
+    }
+
+    button.secondary:hover:not(:disabled) {
+      background: var(--bg-hover);
+      border-color: var(--text-muted);
+      box-shadow: none;
+    }
+
+    button.danger {
+      background: var(--error);
+      color: white;
+    }
+
+    button.danger:hover:not(:disabled) {
+      background: #da3633;
+      box-shadow: 0 0 20px rgba(248, 81, 73, 0.3);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button.loading {
+      color: transparent;
+    }
+
+    button.loading::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      border: 2px solid transparent;
+      border-top-color: var(--bg-base);
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    button.secondary.loading::after {
+      border-top-color: var(--text-primary);
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    li {
+      padding: 12px 14px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      margin-bottom: 8px;
+      font-size: 0.875rem;
+      transition: all 0.15s ease;
+    }
+
+    li:last-child {
+      margin-bottom: 0;
+    }
+
+    li.clickable {
+      cursor: pointer;
+    }
+
+    li.clickable:hover {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    li.current {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    .two {
+      display: grid;
+      gap: 20px;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    .small {
+      font-size: 0.875rem;
+    }
+
+    .muted {
+      color: var(--text-muted);
+    }
+
+    .mono {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .fingerprint {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      word-break: break-all;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      background: var(--accent-bg);
+      color: var(--accent);
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    .output-wrapper {
+      position: relative;
+    }
+
+    .output-wrapper textarea {
+      padding-right: 44px;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 6px 8px;
+      min-width: unset;
+      font-size: 0.75rem;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+    }
+
+    .copy-btn:hover:not(:disabled) {
+      color: var(--text-primary);
+      background: var(--border);
+      box-shadow: none;
+      transform: none;
+    }
+
+    .copy-btn.copied {
+      background: var(--success-bg);
+      border-color: var(--success);
+      color: var(--success);
+    }
+
+    .password-wrapper {
+      position: relative;
+      display: flex;
+    }
+
+    .password-wrapper input {
+      flex: 1;
+      padding-right: 40px;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      padding: 6px 8px;
+      min-width: unset;
+      color: var(--text-muted);
+      cursor: pointer;
+    }
+
+    .password-toggle:hover {
+      color: var(--text-primary);
+      background: transparent;
+      transform: translateY(-50%);
+      box-shadow: none;
+    }
+
+    .input-with-warning {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .input-with-warning input {
+      flex: 1;
+    }
+
+    .input-warning {
+      font-size: 0.85rem;
+      color: var(--warning);
+      white-space: nowrap;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .input-warning.hidden {
+      display: none;
+    }
+
+    .result-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      font-weight: 600;
+      font-size: 0.875rem;
+    }
+
+    .result-badge.valid {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+
+    .result-badge.invalid {
+      background: var(--error-bg);
+      color: var(--error);
+    }
+
+    .result-badge.pending {
+      background: var(--bg-hover);
+      color: var(--text-muted);
+    }
+
+    .result-badge.warning {
+      background: rgba(210, 153, 34, 0.15);
+      color: var(--warning);
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Modal
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: var(--bg-overlay);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      animation: fadeInOverlay 0.2s ease;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    @keyframes fadeInOverlay {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .modal {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: var(--shadow-lg);
+      animation: slideUp 0.25s ease;
+    }
+
+    @keyframes slideUp {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .modal h3 {
+      margin: 0 0 12px;
+      font-size: 1.1rem;
+    }
+
+    .modal p {
+      margin: 0 0 20px;
+      color: var(--text-secondary);
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Project Info Page
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+
+    .info-card h3 {
+      margin: 0 0 12px;
+      font-size: 1.1rem;
+      color: var(--text-primary);
+    }
+
+    .info-card h3::before {
+      display: none;
+    }
+
+    .info-card p {
+      margin: 0 0 12px;
+      color: var(--text-secondary);
+      line-height: 1.7;
+    }
+
+    .info-card p:last-child {
+      margin-bottom: 0;
+    }
+
+    .info-card a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .info-card a:hover {
+      text-decoration: underline;
+    }
+
+    .warning-box {
+      background: rgba(210, 153, 34, 0.1);
+      border: 1px solid var(--warning);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .warning-box-icon {
+      font-size: 1.5rem;
+    }
+
+    .warning-box-content {
+      flex: 1;
+    }
+
+    .warning-box-content strong {
+      color: var(--warning);
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .warning-box-content p {
+      margin: 0;
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+    }
+
+    .github-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.2s ease;
+    }
+
+    .github-link:hover {
+      background: var(--border);
+      border-color: var(--text-muted);
+      text-decoration: none;
+    }
+
+    .github-link svg {
+      width: 20px;
+      height: 20px;
+      fill: currentColor;
+    }
+
+    .support-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+
+    .support-label {
+      font-weight: 600;
+      color: var(--text-secondary);
+      min-width: 80px;
+    }
+
+    .support-item code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--accent);
+      word-break: break-all;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Identity List Item
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .identity-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .identity-item-name {
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .identity-item-action {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    li.clickable:hover .identity-item-action {
+      color: var(--accent);
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Context Bar
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .context-bar {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 0.875rem;
+    }
+
+    .context-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .context-item-label {
+      color: var(--text-muted);
+    }
+
+    .context-item-value {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .context-item-fingerprint {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .fingerprint-value {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--accent);
+      max-width: 200px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Server identity list items */
+    .server-identity-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .server-identity-info {
+      flex: 1;
+      min-width: 200px;
+    }
+
+    .server-identity-actions {
+      flex-shrink: 0;
+    }
+
+    .server-identity-actions .btn-import-contact {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      min-width: unset;
+    }
+
+    .already-contact {
+      font-size: 0.8rem;
+      color: var(--success);
+      font-weight: 500;
+    }
+
+    /* Contact items */
+    .contact-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .contact-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .contact-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .contact-details-preview,
+    .server-identity-details-preview {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 6px 0;
+    }
+
+    .detail-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      background: var(--bg-hover);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .contact-actions {
+      flex-shrink: 0;
+    }
+
+    .click-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    li.clickable:hover .click-hint {
+      color: var(--accent);
+    }
+
+    /* Detail items with sync status */
+    .detail-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .detail-item-content {
+      flex: 1;
+      min-width: 200px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .local-only-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      background: var(--warning);
+      color: var(--bg-base);
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .synced-badge,
+    .published-badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 2px 6px;
+      background: var(--success-bg);
+      color: var(--success);
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+
+    .btn-push-detail {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      min-width: unset;
+    }
+
+    /* Contact detail modal */
+    .modal-wide {
+      max-width: 500px;
+    }
+
+    .contact-detail-content {
+      margin-bottom: 20px;
+    }
+
+    .contact-detail-header {
+      margin-bottom: 12px;
+    }
+
+    .contact-detail-main-name {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .contact-detail-keytypes {
+      font-size: 0.85rem;
+    }
+
+    .contact-detail-fingerprint {
+      background: var(--bg-base);
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+    }
+
+    .contact-detail-fingerprint code {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      word-break: break-all;
+      color: var(--accent);
+    }
+
+    .contact-detail-server-link {
+      background: var(--bg-base);
+      padding: 10px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 16px;
+    }
+
+    .server-api-link {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      word-break: break-all;
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    .server-api-link:hover {
+      text-decoration: underline;
+    }
+
+    .contact-detail-section {
+      margin-top: 16px;
+    }
+
+    .contact-detail-section strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--text-secondary);
+      font-size: 0.85rem;
+    }
+
+    .contact-detail-list {
+      background: var(--bg-base);
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .detail-row {
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row:last-child {
+      border-bottom: none;
+    }
+
+    /* Help text */
+    .help-text {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin: 4px 0 8px;
+      font-style: italic;
+    }
+
+    .copy-fingerprint-btn {
+      background: transparent;
+      border: none;
+      padding: 2px 6px;
+      min-width: unset;
+      font-size: 0.8rem;
+      cursor: pointer;
+      opacity: 0.6;
+      transition: opacity 0.15s ease;
+    }
+
+    .copy-fingerprint-btn:hover {
+      opacity: 1;
+      background: transparent;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .copy-fingerprint-btn.copied {
+      opacity: 1;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Searchable Contact Field
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .contact-search-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    .contact-search-wrapper input {
+      width: 100%;
+      padding-right: 32px;
+    }
+
+    .contact-search-clear {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: transparent;
+      border: none;
+      padding: 4px;
+      min-width: unset;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.9rem;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+    }
+
+    .contact-search-wrapper input:not(:placeholder-shown) + .contact-search-clear,
+    .contact-search-wrapper input:focus + .contact-search-clear {
+      opacity: 0.6;
+    }
+
+    .contact-search-clear:hover {
+      opacity: 1;
+      color: var(--text-primary);
+      background: transparent;
+      transform: translateY(-50%);
+      box-shadow: none;
+    }
+
+    .contact-search-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-top: none;
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      max-height: 240px;
+      overflow-y: auto;
+      z-index: 150;
+      box-shadow: var(--shadow-md);
+      display: none;
+    }
+
+    .contact-search-dropdown.active {
+      display: block;
+    }
+
+    .contact-search-item {
+      padding: 10px 12px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s ease;
+    }
+
+    .contact-search-item:last-child {
+      border-bottom: none;
+    }
+
+    .contact-search-item:hover,
+    .contact-search-item.highlighted {
+      background: var(--accent-bg);
+    }
+
+    .contact-search-item-name {
+      font-weight: 600;
+      color: var(--text-primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .contact-search-item-details {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+
+    .contact-search-item-detail {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      background: var(--bg-hover);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .contact-search-item-fingerprint {
+      font-family: var(--font-mono);
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .contact-search-no-results {
+      padding: 12px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      text-align: center;
+    }
+
+    .contact-search-hint {
+      padding: 8px 12px;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      border-top: 1px solid var(--border);
+      background: var(--bg-base);
+    }
+
+    .match-highlight {
+      background: rgba(88, 166, 255, 0.3);
+      border-radius: 2px;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Pagination Controls
+    ───────────────────────────────────────────────────────────────────────── */
+
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    .pagination-controls button {
+      min-width: 100px;
+      padding: 8px 14px;
+      font-size: 0.85rem;
+    }
+
+    .pagination-info {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      min-width: 100px;
+      text-align: center;
+    }
+
+    /* ─────────────────────────────────────────────────────────────────────────
+       Responsive
+    ───────────────────────────────────────────────────────────────────────── */
+
+    @media (max-width: 768px) {
+      .sidebar {
+        width: 100%;
+        height: auto;
+        min-height: unset;
+        position: relative;
+        flex-direction: row;
+        flex-wrap: wrap;
+      }
+
+      .sidebar-header {
+        flex: 1;
+        border-bottom: none;
+        border-right: 1px solid var(--border);
+      }
+
+      .sidebar-nav {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        padding: 8px;
+        border-top: 1px solid var(--border);
+      }
+
+      .nav-section {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-bottom: 0;
+      }
+
+      .nav-section-title {
+        display: none;
+      }
+
+      .nav-item {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+      }
+
+      .nav-item-icon {
+        font-size: 1rem;
+      }
+
+      .sidebar-footer {
+        width: 100%;
+        border-top: 1px solid var(--border);
+      }
+
+      .main-content {
+        margin-left: 0;
+        padding: 20px;
+      }
+
+      .two {
+        grid-template-columns: 1fr;
+      }
+
+      body {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <h1>EBP</h1>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Main</div>
+        <div class="nav-item active" data-page="identities">
+          <span class="nav-item-icon">🪪</span>
+          Identities
+        </div>
+        <div class="nav-item" data-page="contacts">
+          <span class="nav-item-icon">👥</span>
+          Contacts
+        </div>
+        <div class="nav-item" data-page="sign-verify">
+          <span class="nav-item-icon">✍️</span>
+          Sign / Verify
+        </div>
+        <div class="nav-item" data-page="encrypt-decrypt">
+          <span class="nav-item-icon">🔒</span>
+          Encrypt / Decrypt
+        </div>
+      </div>
+      <div class="nav-section">
+        <div class="nav-section-title">System</div>
+        <div class="nav-item" data-page="settings">
+          <span class="nav-item-icon">⚙️</span>
+          Settings
+        </div>
+        <div class="nav-item" data-page="project-info">
+          <span class="nav-item-icon">ℹ️</span>
+          Project Info
+        </div>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div id="status">Loading…</div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Context Bar -->
+    <div class="context-bar">
+      <div class="context-item">
+        <span class="context-item-label">Identity:</span>
+        <span class="context-item-value" id="ctx-current">-</span>
+      </div>
+      <div class="context-item context-item-fingerprint" id="ctx-fingerprint-container" style="display: none;">
+        <span class="context-item-label">Fingerprint:</span>
+        <span class="context-item-value fingerprint-value" id="ctx-fingerprint">-</span>
+        <button class="copy-fingerprint-btn" id="copy-fingerprint-btn" title="Copy fingerprint">📋</button>
+      </div>
+      <div class="context-item">
+        <span class="context-item-label">Server:</span>
+        <span class="context-item-value" id="ctx-server">-</span>
+      </div>
+      <div class="context-item">
+        <span class="context-item-label">Protocol:</span>
+        <span class="context-item-value" id="ctx-protocol">-</span>
+      </div>
+    </div>
+
+    <!-- Page: Identities -->
+    <div class="page active" id="page-identities">
+      <div class="page-header">
+        <h2>Identities</h2>
+        <p>Manage your cryptographic identities</p>
+      </div>
+
+      <section>
+        <h3>Your Identities</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Click an identity to switch to it</p>
+        <ul id="identity-list" class="small"></ul>
+      </section>
+
+      <section>
+        <h3>Create New Identity</h3>
+        <form id="generate-form" class="stack">
+          <label>Name (optional)
+            <input id="gen-name" type="text" placeholder="my-identity" />
+          </label>
+          <label>Signing Algorithm
+            <select id="gen-signing">
+              <option value="dilithium">Dilithium (recommended)</option>
+              <option value="sphincs">SPHINCS+</option>
+            </select>
+          </label>
+          <label class="inline"><input id="gen-force" type="checkbox" /> Overwrite if exists</label>
+          <div>
+            <button type="submit">Generate Identity</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h3>Export Public Identity</h3>
+        <form id="export-form" class="stack">
+          <div>
+            <button type="submit">Export</button>
+          </div>
+          <label>Output
+            <div class="output-wrapper">
+              <textarea id="export-output" readonly placeholder="Exported identity will appear here..."></textarea>
+              <button type="button" class="copy-btn" data-target="export-output">Copy</button>
+            </div>
+          </label>
+        </form>
+      </section>
+
+      <section>
+        <h3>Identity Details</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Attach public information to your identity (name, email, etc.). These are cryptographically signed and can be published to the server.</p>
+        
+        <div id="current-details" style="margin-bottom: 16px;">
+          <strong class="small">Current Details</strong>
+          <ul id="identity-details-list" class="small" style="margin-top: 8px;"></ul>
+        </div>
+
+        <form id="add-detail-form" class="stack">
+          <div class="two">
+            <label>Path (e.g., name, email, phone)
+              <input id="detail-path" type="text" placeholder="name" />
+            </label>
+            <label>Value
+              <input id="detail-value" type="text" placeholder="John Doe" />
+            </label>
+          </div>
+          <div class="row">
+            <label class="inline"><input id="detail-push" type="checkbox" /> Push to server</label>
+          </div>
+          <div>
+            <button type="submit">Add Detail</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h3>Publish to Server</h3>
+        <form id="publish-form" class="row">
+          <label>Server override (optional)
+            <input id="publish-server" type="text" placeholder="http://localhost:8080" />
+          </label>
+          <button type="submit">Publish</button>
+        </form>
+      </section>
+
+      <section>
+        <h3>Revocation</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Revoke details or the entire identity. Revocations are cryptographically signed and irreversible.</p>
+        
+        <div id="revocation-status" style="margin-bottom: 16px; display: none;">
+          <div class="warning-box" id="identity-revoked-warning">
+            <div class="warning-box-icon">⛔</div>
+            <div class="warning-box-content">
+              <strong>Identity Revoked</strong>
+              <p>This identity has been marked as revoked and should no longer be trusted.</p>
+            </div>
+          </div>
+        </div>
+
+        <div id="revocation-actions">
+          <div class="stack">
+            <details>
+              <summary style="cursor: pointer; color: var(--text-secondary); margin-bottom: 12px;">
+                <strong>Revoke a Detail</strong>
+              </summary>
+              <form id="revoke-detail-form" class="stack" style="margin-top: 12px;">
+                <label>Detail Path
+                  <select id="revoke-detail-path">
+                    <option value="">Select a detail to revoke...</option>
+                  </select>
+                </label>
+                <label>Reason (optional)
+                  <input id="revoke-detail-reason" type="text" placeholder="e.g., Changed email address" />
+                </label>
+                <label class="inline"><input id="revoke-detail-push" type="checkbox" /> Push to server</label>
+                <div>
+                  <button type="submit" class="secondary">Revoke Detail</button>
+                </div>
+              </form>
+            </details>
+            
+            <details>
+              <summary style="cursor: pointer; color: var(--text-secondary); margin-bottom: 12px;">
+                <strong>Generate Emergency Revocation Certificate</strong>
+              </summary>
+              <p class="small muted" style="margin: 12px 0;">Create a certificate you can store safely and use later if your identity is compromised. This does NOT revoke your identity immediately.</p>
+              <form id="emergency-cert-form" class="stack" style="margin-top: 12px;">
+                <div>
+                  <button type="submit" class="secondary">Generate Certificate</button>
+                </div>
+                <label>
+                  <div class="output-wrapper">
+                    <textarea id="emergency-cert-output" readonly placeholder="Emergency certificate will appear here. Store it securely."></textarea>
+                    <button type="button" class="copy-btn" data-target="emergency-cert-output">Copy</button>
+                  </div>
+                </label>
+              </form>
+            </details>
+            
+            <details>
+              <summary style="cursor: pointer; color: var(--error); margin-bottom: 12px;">
+                <strong>⚠️ Revoke Entire Identity</strong>
+              </summary>
+              <div class="warning-box" style="margin: 12px 0;">
+                <div class="warning-box-icon">⚠️</div>
+                <div class="warning-box-content">
+                  <strong>Danger Zone</strong>
+                  <p>Revoking your identity marks it as compromised. This action is <strong>irreversible</strong>.</p>
+                </div>
+              </div>
+              <form id="revoke-identity-form" class="stack" style="margin-top: 12px;">
+                <label>Reason (optional)
+                  <input id="revoke-identity-reason" type="text" placeholder="e.g., Key compromised" />
+                </label>
+                <label class="inline"><input id="revoke-identity-push" type="checkbox" /> Push to server</label>
+                <div>
+                  <button type="submit" class="danger">Revoke Identity</button>
+                </div>
+              </form>
+            </details>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Page: Contacts -->
+    <div class="page" id="page-contacts">
+      <div class="page-header">
+        <h2>Contacts</h2>
+        <p>Manage external identities you communicate with</p>
+      </div>
+
+      <section>
+        <h3>Known Contacts</h3>
+        <ul id="contacts-list" class="small"></ul>
+      </section>
+
+      <section>
+        <h3>Import Contact</h3>
+        <form id="import-form" class="stack">
+          <label>Contact JSON
+            <textarea id="contact-json" placeholder='{"fingerprint":"...", "signingKey":"...", ...}'></textarea>
+          </label>
+          <label>Name (optional)
+            <input id="contact-name" type="text" />
+          </label>
+          <div>
+            <button type="submit">Import</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h3>Fetch from Server</h3>
+        <form id="fetch-form" class="stack">
+          <label>Fingerprint
+            <input id="fetch-fp" type="text" placeholder="fingerprint or prefix" />
+          </label>
+          <label>Save as (optional)
+            <input id="fetch-name" type="text" />
+          </label>
+          <label>Server override (optional)
+            <input id="fetch-server" type="text" placeholder="http://localhost:8080" />
+          </label>
+          <div>
+            <button type="submit">Fetch</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h3>Browse Server Identities</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Browse all identities published to the server and import them as contacts.</p>
+        <form id="server-identities-form" class="row" style="margin-bottom: 16px;">
+          <label>Search (name, email, fingerprint)
+            <input id="server-identities-search" type="text" placeholder="alice, alice@example.com, or fingerprint prefix" />
+          </label>
+          <label>Server override (optional)
+            <input id="server-identities-override" type="text" placeholder="http://localhost:8080" />
+          </label>
+          <button type="submit">Load from Server</button>
+        </form>
+        <ul id="server-identities-list" class="small"></ul>
+        <div id="server-identities-pagination" class="pagination-controls" style="display: none;">
+          <button type="button" class="secondary" id="server-identities-prev" disabled>← Previous</button>
+          <span class="pagination-info" id="server-identities-page-info">Page 1 of 1</span>
+          <button type="button" class="secondary" id="server-identities-next" disabled>Next →</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- Page: Sign / Verify -->
+    <div class="page" id="page-sign-verify">
+      <div class="page-header">
+        <h2>Sign / Verify</h2>
+        <p>Create and verify cryptographic signatures</p>
+      </div>
+
+      <div class="two">
+        <section>
+          <h3>Sign Message</h3>
+          <form id="sign-form" class="stack">
+            <label>Message
+              <textarea id="sign-message" placeholder="Enter message to sign..."></textarea>
+            </label>
+            <label class="inline"><input id="sign-detached" type="checkbox" /> Detached signature</label>
+            <p class="help-text">Detached: outputs only the signature, not the message. Use when the recipient already has the original message.</p>
+            <div>
+              <button type="submit">Sign</button>
+            </div>
+            <label>Output
+              <div class="output-wrapper">
+                <textarea id="sign-output" readonly placeholder="Signed message will appear here..."></textarea>
+                <button type="button" class="copy-btn" data-target="sign-output">Copy</button>
+              </div>
+            </label>
+          </form>
+        </section>
+
+        <section>
+          <h3>Verify Signature</h3>
+          <form id="verify-form" class="stack">
+            <label>Payload (signed JSON)
+              <textarea id="verify-payload" placeholder='{"type":"ebp-signed-message",...}'></textarea>
+            </label>
+            <label>Sender (contact name or fingerprint)
+              <div class="contact-search-wrapper">
+                <input id="verify-sender" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="verify-sender" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="verify-sender-dropdown"></div>
+              </div>
+            </label>
+            <div>
+              <button type="submit">Verify</button>
+            </div>
+            <div class="small">Result: <span id="verify-result" class="result-badge pending">-</span></div>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <!-- Page: Encrypt / Decrypt -->
+    <div class="page" id="page-encrypt-decrypt">
+      <div class="page-header">
+        <h2>Encrypt / Decrypt</h2>
+        <p>Secure message exchange using post-quantum cryptography</p>
+      </div>
+
+      <div class="two">
+        <section>
+          <h3>Encrypt Message</h3>
+          <form id="encrypt-form" class="stack">
+            <label>Message
+              <textarea id="enc-message" placeholder="Enter message to encrypt..."></textarea>
+            </label>
+            <label>Recipient (contact name or fingerprint)
+              <div class="contact-search-wrapper">
+                <input id="enc-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="enc-recipient" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="enc-recipient-dropdown"></div>
+              </div>
+            </label>
+            <label class="inline"><input id="enc-sign" type="checkbox" /> Also sign message</label>
+            <div>
+              <button type="submit">Encrypt</button>
+            </div>
+            <label>Output
+              <div class="output-wrapper">
+                <textarea id="enc-output" readonly placeholder="Encrypted message will appear here..."></textarea>
+                <button type="button" class="copy-btn" data-target="enc-output">Copy</button>
+              </div>
+            </label>
+          </form>
+        </section>
+
+        <section>
+          <h3>Decrypt Message</h3>
+          <form id="decrypt-form" class="stack">
+            <label>Payload (encrypted JSON)
+              <textarea id="dec-payload" placeholder='{"type":"ebp-encrypted-message",...}'></textarea>
+            </label>
+            <label>Sender (for signed messages)
+              <div class="contact-search-wrapper">
+                <input id="dec-sender" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="dec-sender" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="dec-sender-dropdown"></div>
+              </div>
+            </label>
+            <div>
+              <button type="submit">Decrypt</button>
+            </div>
+            <label>Output
+              <div class="output-wrapper">
+                <textarea id="dec-output" readonly placeholder="Decrypted message will appear here..."></textarea>
+                <button type="button" class="copy-btn" data-target="dec-output">Copy</button>
+              </div>
+            </label>
+            <div class="small">Signature verified: <span id="dec-verified" class="result-badge pending">-</span></div>
+          </form>
+        </section>
+      </div>
+    </div>
+
+    <!-- Page: Settings -->
+    <div class="page" id="page-settings">
+      <div class="page-header">
+        <h2>Settings</h2>
+        <p>Configure server connection and view system information</p>
+      </div>
+
+      <section>
+        <h3>Server Configuration</h3>
+        <form id="server-form" class="stack">
+          <label>Server URL
+            <select id="server-url-preset">
+              <option value="">Custom...</option>
+              <option value="https://ebp-cqyo.onrender.com">https://ebp-cqyo.onrender.com</option>
+              <option value="http://localhost:8080">http://localhost:8080</option>
+            </select>
+            <input id="server-url" type="text" placeholder="http://localhost:8080" />
+          </label>
+          <div class="row">
+            <button type="submit">Set Server</button>
+            <button type="button" class="secondary" id="server-clear">Clear Server</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
+        <h3>System Information</h3>
+        <div class="stack small">
+          <div>Identity directory: <span class="mono muted" id="ctx-idir">-</span></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Page: Project Info -->
+    <div class="page" id="page-project-info">
+      <div class="page-header">
+        <h2>Project Info</h2>
+        <p>About the EBP (Even Better Privacy) project</p>
+      </div>
+
+      <div class="info-card">
+        <h3>What is EBP?</h3>
+        <p>
+          EBP (Even Better Privacy) is a post-quantum cryptographic identity and messaging system. 
+          It enables users to create cryptographic identities, sign messages, encrypt communications, 
+          and publish identities to servers — all using quantum-resistant algorithms.
+        </p>
+        <p>
+          The system uses <strong>Dilithium</strong> or <strong>SPHINCS+</strong> for digital signatures, 
+          and <strong>Kyber</strong> for key encapsulation (encryption). These algorithms are designed 
+          to be secure against attacks from both classical and quantum computers.
+        </p>
+      </div>
+
+      <div class="warning-box">
+        <div class="warning-box-icon">⚠️</div>
+        <div class="warning-box-content">
+          <strong>Local Use Only</strong>
+          <p>
+            This GUI is designed as a web interface but is intended <strong>only for local use</strong>. 
+            It runs a local backend server on your machine and should not be exposed to the public internet. 
+            Your private keys never leave your device.
+          </p>
+        </div>
+      </div>
+
+      <div class="info-card" style="margin-top: 16px;">
+        <h3>Source Code</h3>
+        <p>
+          EBP is open source. You can view the source code, report issues, and contribute on GitHub.
+        </p>
+        <a href="https://github.com/willpiam/ebp" target="_blank" rel="noopener noreferrer" class="github-link">
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+          View on GitHub
+        </a>
+      </div>
+
+      <div class="info-card">
+        <h3>How to Use</h3>
+        <p>
+          <strong>1. Create an Identity:</strong> Go to the Identities page and generate a new identity with a secure password. 
+          Your identity contains your public/private key pairs for signing and encryption.
+        </p>
+        <p>
+          <strong>2. Add Contacts:</strong> Import contacts by pasting their public identity JSON, or fetch them from a server using their fingerprint.
+        </p>
+        <p>
+          <strong>3. Sign & Verify:</strong> Sign messages to prove they came from you. Others can verify your signature using your public key.
+        </p>
+        <p>
+          <strong>4. Encrypt & Decrypt:</strong> Encrypt messages so only the intended recipient can read them. Optionally sign encrypted messages for authentication.
+        </p>
+        <p>
+          <strong>5. Publish:</strong> Optionally publish your public identity to a server so others can discover and communicate with you.
+        </p>
+      </div>
+
+      <div class="info-card">
+        <h3>💖 Support Me</h3>
+        <p>If you find EBP useful, consider supporting the project:</p>
+        <div class="stack" style="gap: 10px; margin-top: 12px;">
+          <div class="support-item">
+            <span class="support-label">Ethereum:</span>
+            <a href="https://app.ens.domains/williamdoyle.eth" target="_blank" rel="noopener noreferrer"><code class="mono">williamdoyle.eth</code></a>
+          </div>
+          <div class="support-item">
+            <span class="support-label">Cardano:</span>
+            <a href="https://handle.me/wildoy" target="_blank" rel="noopener noreferrer"><code class="mono">$wildoy</code></a>
+          </div>
+          <div class="support-item">
+            <span class="support-label">QRL:</span>
+            <a href="https://explorer.theqrl.org/a/Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db" target="_blank" rel="noopener noreferrer"><code class="mono">Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db</code></a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal">
+      <h3 id="confirm-modal-title">Confirm Action</h3>
+      <p id="confirm-modal-message">Are you sure?</p>
+      <div class="modal-actions">
+        <button class="secondary" id="confirm-modal-cancel">Cancel</button>
+        <button id="confirm-modal-confirm">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Password Modal -->
+  <div class="modal-overlay" id="password-modal">
+    <div class="modal">
+      <h3 id="password-modal-title">Enter Password</h3>
+      <p class="small muted" style="margin: 0 0 12px;">Your password stays local and is never sent to the server.</p>
+      <div class="password-wrapper">
+        <input id="password-modal-input" type="password" placeholder="Enter password" />
+        <button type="button" class="password-toggle" id="password-modal-toggle" title="Toggle visibility">👁</button>
+      </div>
+      <div class="input-warning" id="password-modal-error"></div>
+      <div class="modal-actions" style="margin-top: 12px;">
+        <button class="secondary" id="password-modal-cancel">Cancel</button>
+        <button id="password-modal-confirm">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Details Modal -->
+  <div class="modal-overlay" id="contact-detail-modal">
+    <div class="modal modal-wide">
+      <h3>Contact Details</h3>
+      <div class="contact-detail-content">
+        <div class="revoked-banner" id="contact-detail-revoked">Revoked identity</div>
+        <div class="contact-detail-header">
+          <div class="contact-detail-main-name" id="contact-detail-name"></div>
+          <div class="contact-detail-keytypes muted" id="contact-detail-keytypes"></div>
+        </div>
+        <div class="contact-detail-fingerprint">
+          <span class="muted">Fingerprint:</span>
+          <code id="contact-detail-fingerprint"></code>
+        </div>
+        <div class="contact-detail-server-link" id="contact-detail-server-link-container" style="display: none;">
+          <span class="muted">Server API:</span>
+          <a href="#" id="contact-detail-server-link" target="_blank" rel="noopener noreferrer" class="server-api-link"></a>
+        </div>
+        <div class="contact-detail-section">
+          <strong>Details</strong>
+          <div id="contact-detail-details"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" id="contact-detail-close">Close</button>
+        <button id="contact-detail-sync-btn">Sync from Server</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
