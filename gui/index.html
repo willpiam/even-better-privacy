@@ -1694,6 +1694,7 @@
               <div class="output-wrapper">
                 <textarea id="sign-output" readonly placeholder="Signed message will appear here..."></textarea>
                 <button type="button" class="copy-btn" data-target="sign-output">Copy</button>
+                <button type="button" class="secondary" id="sign-download-btn">Download JSON</button>
               </div>
             </label>
           </form>
@@ -1705,6 +1706,11 @@
             <label>Payload (signed JSON)
               <textarea id="verify-payload" placeholder='{"type":"ebp-signed-message",...}'></textarea>
             </label>
+            <div class="row">
+              <label>Import JSON file
+                <input id="verify-payload-file" type="file" accept="application/json,.json" />
+              </label>
+            </div>
             <label>Sender (contact name or fingerprint)
               <div class="contact-search-wrapper">
                 <input id="verify-sender" type="text" placeholder="Search contacts..." autocomplete="off" />
@@ -1750,6 +1756,7 @@
               <div class="output-wrapper">
                 <textarea id="enc-output" readonly placeholder="Encrypted message will appear here..."></textarea>
                 <button type="button" class="copy-btn" data-target="enc-output">Copy</button>
+                <button type="button" class="secondary" id="enc-download-btn">Download JSON</button>
               </div>
             </label>
           </form>
@@ -1761,6 +1768,11 @@
             <label>Payload (encrypted JSON)
               <textarea id="dec-payload" placeholder='{"type":"ebp-encrypted-message",...}'></textarea>
             </label>
+            <div class="row">
+              <label>Import JSON file
+                <input id="dec-payload-file" type="file" accept="application/json,.json" />
+              </label>
+            </div>
             <label>Sender (for signed messages)
               <div class="contact-search-wrapper">
                 <input id="dec-sender" type="text" placeholder="Search contacts..." autocomplete="off" />

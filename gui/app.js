@@ -416,6 +416,61 @@ async function withLoading(btn, fn) {
   }
 }
 
+function getPayloadDownloadName(payload, fallback) {
+  if (!payload || typeof payload !== "object") return fallback;
+  switch (payload.type) {
+    case "ebp-signature":
+      return "ebp-signature.json";
+    case "ebp-signed-message":
+      return "ebp-signed-message.json";
+    case "ebp-encrypted-message":
+      return "ebp-encrypted-message.json";
+    case "ebp-encrypted-signed-message":
+      return "ebp-encrypted-signed-message.json";
+    default:
+      return fallback;
+  }
+}
+
+function downloadJsonFromTextarea(textareaId, fallbackName) {
+  const textarea = document.getElementById(textareaId);
+  if (!textarea || !textarea.value) return;
+
+  try {
+    const payload = JSON.parse(textarea.value);
+    const filename = getPayloadDownloadName(payload, fallbackName);
+    const pretty = JSON.stringify(payload, null, 2) + "\n";
+    const blob = new Blob([pretty], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    setStatus("Output is not valid JSON", "error");
+  }
+}
+
+async function loadJsonFileIntoTextarea(fileInput, textareaId) {
+  const textarea = document.getElementById(textareaId);
+  const file = fileInput?.files?.[0];
+  if (!textarea || !file) return;
+
+  try {
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    textarea.value = JSON.stringify(payload, null, 2);
+    setStatus(`Loaded ${file.name}`, "success");
+  } catch (err) {
+    setStatus("Invalid JSON file", "error");
+  } finally {
+    fileInput.value = "";
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Copy to clipboard
 // ─────────────────────────────────────────────────────────────────────────────
@@ -459,6 +514,38 @@ document.getElementById("copy-fingerprint-btn").addEventListener("click", async 
     console.error("Copy failed:", err);
   }
 });
+
+const signDownloadBtn = document.getElementById("sign-download-btn");
+if (signDownloadBtn) {
+  signDownloadBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    downloadJsonFromTextarea("sign-output", "ebp-signed-message.json");
+  });
+}
+
+const encDownloadBtn = document.getElementById("enc-download-btn");
+if (encDownloadBtn) {
+  encDownloadBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    downloadJsonFromTextarea("enc-output", "ebp-encrypted-message.json");
+  });
+}
+
+const verifyPayloadFile = document.getElementById("verify-payload-file");
+if (verifyPayloadFile) {
+  verifyPayloadFile.addEventListener("change", async () => {
+    await loadJsonFileIntoTextarea(verifyPayloadFile, "verify-payload");
+    updateVerifyResult("verify-result", null, null);
+  });
+}
+
+const decryptPayloadFile = document.getElementById("dec-payload-file");
+if (decryptPayloadFile) {
+  decryptPayloadFile.addEventListener("change", async () => {
+    await loadJsonFileIntoTextarea(decryptPayloadFile, "dec-payload");
+    updateVerifyResult("dec-verified", null, null);
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API
