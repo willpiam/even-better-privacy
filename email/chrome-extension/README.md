@@ -13,7 +13,7 @@ calling the local EBP GUI backend API.
 ## Prerequisites
 
 - EBP running: `deno task gui`
-- Gmail open in Chrome at `https://mail.google.com`
+- Gmail or Outlook on web open in Chrome (`https://mail.google.com` or `https://outlook.office.com`)
 
 ## Install (unpacked)
 

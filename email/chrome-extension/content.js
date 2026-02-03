@@ -1,6 +1,8 @@
 const MARKER_START = "-----BEGIN EBP MESSAGE-----";
 const MARKER_END = "-----END EBP MESSAGE-----";
 
+const IS_OUTLOOK = /outlook\.(office|live|office365)\.com$/i.test(window.location.host);
+
 const contactCache = {
   loaded: false,
   contacts: []
@@ -212,10 +214,28 @@ async function buildComposeControls(composeRoot, bodyEl) {
 }
 
 function findComposeBodies() {
+  if (IS_OUTLOOK) {
+    const candidates = Array.from(
+      document.querySelectorAll(
+        '[contenteditable="true"][role="textbox"],[contenteditable="true"][aria-label*="Message body"]'
+      )
+    );
+    return candidates.filter((el) => !el.closest("[data-ebp-compose-controls]"));
+  }
+
   return Array.from(document.querySelectorAll('div[aria-label="Message Body"][contenteditable="true"]'));
 }
 
 function resolveComposeRoot(bodyEl) {
+  if (IS_OUTLOOK) {
+    return (
+      bodyEl.closest('[data-automationid="ComposeForm"]') ||
+      bodyEl.closest('[data-automationid="ContentControl"]') ||
+      bodyEl.closest("div[role='dialog']") ||
+      bodyEl.parentElement
+    );
+  }
+
   return (
     bodyEl.closest("div[role='dialog']") ||
     bodyEl.closest("div.M9") ||
@@ -242,44 +262,61 @@ function createDecryptButton(messageBody) {
   button.dataset.ebpDecryptButton = "true";
 
   button.addEventListener("click", async () => {
-    const text = messageBody.innerText || "";
-    const payload = extractPayload(text);
-    if (!payload) {
-      showToast("No EBP payload found", true);
-      return;
+    try {
+      const text = messageBody.innerText || "";
+      const payload = extractPayload(text);
+      if (!payload) {
+        showToast("No EBP payload found", true);
+        return;
+      }
+      const password = window.prompt("EBP identity password");
+      if (!password) return;
+      showToast("Decrypting...");
+      const response = await sendMessage({
+        type: "ebp-decrypt",
+        payload,
+        password
+      });
+      if (!response?.ok) {
+        showToast(`EBP decrypt failed: ${response?.error ?? "unknown error"}`, true);
+        return;
+      }
+      if (!response.data) {
+        showToast("EBP decrypt failed: empty response", true);
+        return;
+      }
+      const { message, verified, verifyStatus, signerFingerprint } = response.data;
+      let status = "Unsigned";
+      let statusType = "unknown";
+      if (verified === true) status = `Verified (${verifyStatus || "valid"})`;
+      if (verified === false) status = `Invalid (${verifyStatus || "invalid"})`;
+      if (verified === null) status = `Unknown (${verifyStatus || "unknown"})`;
+      if (verified === true) statusType = "valid";
+      if (verified === false) statusType = "invalid";
+      if (signerFingerprint) {
+        status = `${status} · signer: ${signerFingerprint}`;
+      }
+      showModal("EBP Decrypted Message", message ?? "", status, statusType);
+    } catch (error) {
+      console.error("EBP decrypt handler failed:", error);
+      showToast(`EBP decrypt failed: ${error?.message ?? "unknown error"}`, true);
     }
-    const password = window.prompt("EBP identity password");
-    if (!password) return;
-    const response = await sendMessage({
-      type: "ebp-decrypt",
-      payload,
-      password
-    });
-    if (!response?.ok) {
-      showToast(`EBP decrypt failed: ${response?.error ?? "unknown error"}`, true);
-      return;
-    }
-    const { message, verified, verifyStatus, signerFingerprint } = response.data;
-    let status = "Unsigned";
-    let statusType = "unknown";
-    if (verified === true) status = `Verified (${verifyStatus || "valid"})`;
-    if (verified === false) status = `Invalid (${verifyStatus || "invalid"})`;
-    if (verified === null) status = `Unknown (${verifyStatus || "unknown"})`;
-    if (verified === true) statusType = "valid";
-    if (verified === false) statusType = "invalid";
-    if (signerFingerprint) {
-      status = `${status} · signer: ${signerFingerprint}`;
-    }
-    showModal("EBP Decrypted Message", message ?? "", status, statusType);
   });
 
   messageBody.prepend(button);
 }
 
 function initReadObservers() {
-  const messageBodies = Array.from(document.querySelectorAll("div.a3s"));
+  const messageBodies = IS_OUTLOOK
+    ? Array.from(
+        document.querySelectorAll(
+          '[data-automationid="MessageBody"],[data-automationid="readMessageBody"],div[role="document"]'
+        )
+      )
+    : Array.from(document.querySelectorAll("div.a3s"));
   messageBodies.forEach((body) => {
     if (body.dataset.ebpProcessed) return;
+    if (body.getAttribute("contenteditable") === "true") return;
     body.dataset.ebpProcessed = "true";
     const text = body.innerText || "";
     if (text.includes(MARKER_START)) {
