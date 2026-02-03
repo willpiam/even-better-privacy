@@ -1,0 +1,107 @@
+.ebp-compose-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+  padding: 6px;
+  border: 1px solid #dadce0;
+  border-radius: 6px;
+  background: #f8f9fa;
+  font-size: 12px;
+}
+
+.ebp-button {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.ebp-button-secondary {
+  background: #5f6368;
+}
+
+.ebp-select {
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+.ebp-decrypt-button {
+  margin-bottom: 8px;
+}
+
+.ebp-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  background: #1a73e8;
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 6px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  z-index: 9999;
+  font-size: 12px;
+}
+
+.ebp-toast-error {
+  background: #d93025;
+}
+
+.ebp-toast-visible {
+  opacity: 1;
+}
+
+.ebp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.ebp-modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 16px;
+  width: 80%;
+  max-width: 640px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ebp-modal-header {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.ebp-modal-status {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.ebp-modal-status-valid {
+  color: #1e8e3e;
+}
+
+.ebp-modal-status-invalid {
+  color: #d93025;
+}
+
+.ebp-modal-body {
+  white-space: pre-wrap;
+  background: #f1f3f4;
+  padding: 10px;
+  border-radius: 6px;
+  overflow: auto;
+  font-size: 12px;
+}

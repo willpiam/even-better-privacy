@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>EBP Gmail Settings</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        padding: 16px;
+        max-width: 640px;
+      }
+      label {
+        display: block;
+        margin: 12px 0 4px;
+        font-weight: 600;
+      }
+      input {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+      }
+      button {
+        margin-top: 12px;
+        padding: 8px 12px;
+        border: none;
+        border-radius: 4px;
+        background: #1a73e8;
+        color: #fff;
+        cursor: pointer;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h2>EBP Gmail Settings</h2>
+    <label for="backendUrl">Local backend URL</label>
+    <input id="backendUrl" type="text" placeholder="http://localhost:8787" />
+
+    <label for="identity">Identity name (optional)</label>
+    <input id="identity" type="text" placeholder="default identity" />
+
+    <label for="home">EBP home override (optional)</label>
+    <input id="home" type="text" placeholder="/home/user/.ebp" />
+
+    <button id="save">Save</button>
+    <div id="status" class="status"></div>
+
+    <script src="options.js"></script>
+  </body>
+</html>

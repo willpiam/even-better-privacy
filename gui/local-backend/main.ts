@@ -2,6 +2,9 @@
 
 import { serve } from "std/http/server";
 import { Identity, ExternalIdentity, IdentityPublicData } from "../../core/Identity.ts";
+import { DilithiumSigningKey } from "../../core/Dilithium.ts";
+import { SphincsSigningKey } from "../../core/Sphincs.ts";
+import { KyberEncryptionKey } from "../../core/Kyber.ts";
 import { PROTOCOL_VERSION } from "../../core/version.ts";
 import {
 	CLIContext,
@@ -212,6 +215,46 @@ async function listContacts(ctx: CLIContext): Promise<Array<{ name: string; cont
 		throw e;
 	}
 	return contacts;
+}
+
+function computeExternalFingerprint(identity: ExternalIdentity): string | null {
+	try {
+		const shell = Object.create(Identity.prototype) as Identity;
+		shell.signingKeyType = identity.signingKeyType;
+		shell.encryptionKeyType = identity.encryptionKeyType;
+
+		switch (identity.signingKeyType) {
+			case "dilithium":
+				shell.signingKey = DilithiumSigningKey.fromPublicKey(
+					identity.signingKey,
+					identity.signingKeyDetails?.variant ?? "ml_dsa87",
+				);
+				break;
+			case "sphincs":
+				shell.signingKey = SphincsSigningKey.fromPublicKey(
+					identity.signingKey,
+					identity.signingKeyDetails?.variant ?? "slh_dsa_sha2_256s",
+				);
+				break;
+			default:
+				return null;
+		}
+
+		switch (identity.encryptionKeyType) {
+			case "kyber":
+				shell.encryptionKey = KyberEncryptionKey.fromPublicKey(
+					identity.encryptionKey,
+					identity.encryptionKeyDetails?.variant ?? "ml_kem1024",
+				);
+				break;
+			default:
+				return null;
+		}
+
+		return shell.toFingerprint();
+	} catch {
+		return null;
+	}
 }
 
 async function handleRequest(req: Request): Promise<Response> {
@@ -605,7 +648,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				} catch (e) {
 					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
 				}
-				return json({ message, verified: null, verifyStatus: "unsigned" });
+				return json({ message, verified: null, verifyStatus: "unsigned", signerFingerprint: null });
 			}
 
 			if (type === "ebp-encrypted-signed-message") {
@@ -613,6 +656,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				const senderFp = typeof payload.senderFingerprint === "string" ? payload.senderFingerprint : undefined;
 				let contact: ExternalIdentity | undefined;
 				let isKnownContact = false;
+				let signerFingerprint: string | null = senderFp ?? null;
 				
 				// Helper to safely decrypt
 				const safeDecrypt = (ct: string): string => {
@@ -660,9 +704,14 @@ async function handleRequest(req: Request): Promise<Response> {
 							const message = safeDecrypt(ciphertext);
 							try {
 								const inner = JSON.parse(message);
-								return json({ message: inner.message ?? message, verified: null, verifyStatus: "sender_not_found" });
+								return json({
+									message: inner.message ?? message,
+									verified: null,
+									verifyStatus: "sender_not_found",
+									signerFingerprint,
+								});
 							} catch {
-								return json({ message, verified: null, verifyStatus: "sender_not_found" });
+								return json({ message, verified: null, verifyStatus: "sender_not_found", signerFingerprint });
 							}
 						}
 					}
@@ -677,9 +726,14 @@ async function handleRequest(req: Request): Promise<Response> {
 							const message = safeDecrypt(ciphertext);
 							try {
 								const inner = JSON.parse(message);
-								return json({ message: inner.message ?? message, verified: null, verifyStatus: "sender_not_in_contacts" });
+								return json({
+									message: inner.message ?? message,
+									verified: null,
+									verifyStatus: "sender_not_in_contacts",
+									signerFingerprint,
+								});
 							} catch {
-								return json({ message, verified: null, verifyStatus: "sender_not_in_contacts" });
+								return json({ message, verified: null, verifyStatus: "sender_not_in_contacts", signerFingerprint });
 							}
 						}
 					}
@@ -688,20 +742,65 @@ async function handleRequest(req: Request): Promise<Response> {
 					const message = safeDecrypt(ciphertext);
 					try {
 						const inner = JSON.parse(message);
-						return json({ message: inner.message ?? message, verified: null, verifyStatus: "sender_not_specified" });
+						return json({
+							message: inner.message ?? message,
+							verified: null,
+							verifyStatus: "sender_not_specified",
+							signerFingerprint,
+						});
 					} catch {
-						return json({ message, verified: null, verifyStatus: "sender_not_specified" });
+						return json({ message, verified: null, verifyStatus: "sender_not_specified", signerFingerprint });
 					}
 				}
 				
 				try {
+					const computedFingerprint = computeExternalFingerprint(contact);
+					signerFingerprint = contact.fingerprint ?? signerFingerprint;
+					if (!computedFingerprint || computedFingerprint !== contact.fingerprint) {
+						const message = safeDecrypt(ciphertext);
+						try {
+							const inner = JSON.parse(message);
+							return json({
+								message: inner.message ?? message,
+								verified: false,
+								verifyStatus: "fingerprint_mismatch",
+								signerFingerprint,
+							});
+						} catch {
+							return json({ message, verified: false, verifyStatus: "fingerprint_mismatch", signerFingerprint });
+						}
+					}
+					if (senderFp && computedFingerprint !== senderFp) {
+						const message = safeDecrypt(ciphertext);
+						try {
+							const inner = JSON.parse(message);
+							return json({
+								message: inner.message ?? message,
+								verified: false,
+								verifyStatus: "fingerprint_mismatch",
+								signerFingerprint,
+							});
+						} catch {
+							return json({ message, verified: false, verifyStatus: "fingerprint_mismatch", signerFingerprint });
+						}
+					}
 					const result = identity.decryptAndVerify(ciphertext, contact);
 					if (result.verified) {
 						// Signature is valid - but is this a known contact?
 						const status = isKnownContact ? "valid" : "valid_unknown_signer";
-						return json({ message: result.message, verified: result.verified, verifyStatus: status });
+						return json({
+							message: result.message,
+							verified: result.verified,
+							verifyStatus: status,
+							signerFingerprint,
+						});
 					} else {
-						return json({ message: result.message, verified: false, verifyStatus: "invalid" });
+						return json({
+							message: result.message,
+							verified: false,
+							verifyStatus: "invalid",
+							signerFingerprint,
+						});
 					}
 				} catch (e) {
 					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
