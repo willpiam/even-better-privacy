@@ -163,7 +163,10 @@ function renderIdentityDetails() {
     
     li.innerHTML = `
       <div class="detail-item-content">
-        <strong>${escapeHtml(item.path)}</strong>: ${escapeHtml(item.detail)}
+        <div class="detail-text">
+          <strong>${escapeHtml(item.path)}</strong>:
+          <span class="detail-value" title="${escapeHtml(item.detail)}">${escapeHtml(item.detail)}</span>
+        </div>
         ${isLocalOnly && state.server ? '<span class="local-only-badge">Local only</span>' : ''}
         ${isOnServer ? '<span class="synced-badge">✓ Synced</span>' : ''}
       </div>
@@ -930,7 +933,12 @@ async function showContactDetails(contact) {
       : contact.details;
     
     for (const d of details) {
-      detailsHtml += `<div class="detail-row"><strong>${escapeHtml(d.path)}:</strong> ${escapeHtml(d.detail)}</div>`;
+      detailsHtml += `
+        <div class="detail-row">
+          <strong>${escapeHtml(d.path)}:</strong>
+          <span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>
+        </div>
+      `;
     }
   } else {
     detailsHtml += '<div class="muted">(no details available)</div>';

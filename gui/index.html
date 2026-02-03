@@ -1005,9 +1005,26 @@
       flex: 1;
       min-width: 200px;
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
       flex-wrap: wrap;
+    }
+
+    .detail-text {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .detail-value {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      white-space: pre-wrap;
     }
 
     .local-only-badge {
@@ -1113,8 +1130,17 @@
     }
 
     .detail-row {
+      display: grid;
+      grid-template-columns: minmax(80px, 140px) minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
       padding: 6px 0;
       border-bottom: 1px solid var(--border);
+    }
+
+    .detail-row strong {
+      word-break: break-word;
+      overflow-wrap: anywhere;
     }
 
     .detail-row:last-child {
