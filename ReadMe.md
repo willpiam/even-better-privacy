@@ -251,3 +251,4 @@ MIT — see [LICENSE](LICENSE) for details.
     - email address verifies the key by responding to a request email
 - Sign files
     - CLI and GUI
+- end to end tests for the email plugin
