@@ -189,6 +189,40 @@ test("refreshes server identities and searches in contacts", async ({ page }) =>
   );
 });
 
+test("verifies detached signature with provided public keys", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-detached-${runId}`;
+  const messageText = `Detached signature message ${runId}`;
+
+  await generateIdentity(page, identityName);
+  await ensureIdentitySelected(page, identityName);
+
+  await page.locator(".nav-item", { hasText: "Sign / Verify" }).click();
+  await page.fill("#sign-message", messageText);
+  await page.locator("#sign-detached").setChecked(true);
+  await page.getByRole("button", { name: "Sign", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#sign-output")).not.toHaveValue("");
+  const detachedPayload = await page.locator("#sign-output").inputValue();
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.getByRole("button", { name: "Export", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#export-output")).not.toHaveValue("");
+  const publicIdentity = await page.locator("#export-output").inputValue();
+
+  await page.locator(".nav-item", { hasText: "Sign / Verify" }).click();
+  await page.fill("#verify-payload", detachedPayload);
+  await page.fill("#verify-message", messageText);
+  await page.locator("#verify-use-public-keys").setChecked(true);
+  await page.fill("#verify-public-keys", publicIdentity);
+  await page.fill("#verify-sender", "nonexistent-contact");
+  await page.keyboard.press("Escape");
+  await page.locator("#verify-payload").click();
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await expect(page.locator("#verify-result")).toHaveText(/Valid/);
+});
+
 test.describe.serial("multi-user encrypted messaging flow", () => {
   const runId = Date.now();
   const aliceIdentity = `e2e-alice-${runId}`;

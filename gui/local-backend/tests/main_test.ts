@@ -503,6 +503,134 @@ Deno.test({
 });
 
 Deno.test({
+	name: "POST /api/v1/verify accepts detached signature with public identity",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const message = "Detached verification check";
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: identity.toFingerprint(),
+				signature: identity.signMessage(message),
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					message,
+					publicIdentity: identity.summary,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			assertEquals((body as { verified: boolean }).verified, true);
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/verify rejects detached signature without message",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: identity.toFingerprint(),
+				signature: identity.signMessage("message"),
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					publicIdentity: identity.summary,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.BadRequest);
+			assertStringIncludes((body as { error: string }).error, "message is required");
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/verify rejects public identity missing signing key",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const message = "Detached verification check";
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: identity.toFingerprint(),
+				signature: identity.signMessage(message),
+			};
+
+			const publicIdentity = { ...identity.summary, signingKey: "" };
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					message,
+					publicIdentity,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.BadRequest);
+			assertStringIncludes((body as { error: string }).error, "signing key");
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/verify rejects public identity with invalid signing key type",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const message = "Detached verification check";
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: identity.toFingerprint(),
+				signature: identity.signMessage(message),
+			};
+
+			const publicIdentity = { ...identity.summary, signingKeyType: "rsa" };
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					message,
+					publicIdentity,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.BadRequest);
+			assertStringIncludes((body as { error: string }).error, "signing key type");
+		});
+	},
+});
+
+Deno.test({
 	name: "POST /api/v1/encrypt creates encrypted message",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {

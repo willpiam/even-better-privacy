@@ -542,6 +542,14 @@ if (verifyPayloadFile) {
   });
 }
 
+const verifyPublicKeysFile = document.getElementById("verify-public-keys-file");
+if (verifyPublicKeysFile) {
+  verifyPublicKeysFile.addEventListener("change", async () => {
+    await loadJsonFileIntoTextarea(verifyPublicKeysFile, "verify-public-keys");
+    updateVerifyResult("verify-result", null, null);
+  });
+}
+
 const decryptPayloadFile = document.getElementById("dec-payload-file");
 if (decryptPayloadFile) {
   decryptPayloadFile.addEventListener("change", async () => {
@@ -1409,16 +1417,22 @@ document.getElementById("verify-form").addEventListener("submit", async (e) => {
   const btn = e.target.querySelector('button[type="submit"]');
   const payloadRaw = document.getElementById("verify-payload").value;
   const message = document.getElementById("verify-message").value;
+  const usePublicKeys = document.getElementById("verify-use-public-keys").checked;
+  const publicKeysRaw = document.getElementById("verify-public-keys").value;
   const sender = document.getElementById("verify-sender").value.trim();
   await withLoading(btn, async () => {
     try {
       const payload = JSON.parse(payloadRaw);
+      const publicIdentity = usePublicKeys && publicKeysRaw.trim().length > 0
+        ? JSON.parse(publicKeysRaw)
+        : undefined;
       const res = await api("/verify", {
         method: "POST",
         body: JSON.stringify({
           payload,
           message: message || undefined,
-          sender: sender || undefined
+          sender: sender || undefined,
+          publicIdentity
         }),
       });
       updateVerifyResult("verify-result", res.verified, res.verified ? "valid" : "invalid");
@@ -1429,6 +1443,15 @@ document.getElementById("verify-form").addEventListener("submit", async (e) => {
     }
   });
 });
+
+const verifyPublicKeysToggle = document.getElementById("verify-use-public-keys");
+if (verifyPublicKeysToggle) {
+  verifyPublicKeysToggle.addEventListener("change", (e) => {
+    const wrapper = document.getElementById("verify-public-keys-wrapper");
+    if (!wrapper) return;
+    wrapper.style.display = e.target.checked ? "block" : "none";
+  });
+}
 
 document.getElementById("encrypt-form").addEventListener("submit", async (e) => {
   e.preventDefault();

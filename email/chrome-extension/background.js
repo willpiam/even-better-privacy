@@ -106,6 +106,24 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         return;
       }
 
+      if (message?.type === "ebp-identity-export-public") {
+        const { password } = message;
+        if (!password) {
+          throw new Error("password required for public key export");
+        }
+        const payload = {
+          password,
+          ...buildIdentityPayload(settings)
+        };
+        const data = await apiFetch("/api/v1/identity/export-public", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        sendResponse({ ok: true, data });
+        return;
+      }
+
       if (message?.type === "ebp-decrypt") {
         const { payload, password, sender } = message;
         if (!payload || !password) {

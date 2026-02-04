@@ -176,9 +176,11 @@ function findGmailFileInput(composeRoot) {
   );
 }
 
-function attachFileToInput(fileInput, file) {
+function attachFilesToInput(fileInput, files) {
   const dataTransfer = new DataTransfer();
-  dataTransfer.items.add(file);
+  const existing = fileInput.files ? Array.from(fileInput.files) : [];
+  existing.forEach((file) => dataTransfer.items.add(file));
+  files.forEach((file) => dataTransfer.items.add(file));
   fileInput.files = dataTransfer.files;
   fileInput.dispatchEvent(new Event("change", { bubbles: true }));
 }
@@ -294,9 +296,22 @@ async function buildComposeControls(composeRoot, bodyEl) {
           showToast("Gmail attachment input not found", true);
           return;
         }
-        const attachment = createJsonAttachment(response.data, "ebp-signature.json");
-        attachFileToInput(fileInput, attachment);
-        showToast("EBP signature attached");
+        const signatureAttachment = createJsonAttachment(response.data, "ebp-signature.json");
+        const identityResponse = await sendMessage({
+          type: "ebp-identity-export-public",
+          password
+        });
+        if (!identityResponse?.ok) {
+          showToast(`EBP public key export failed: ${identityResponse?.error ?? "unknown error"}`, true);
+          return;
+        }
+        const fingerprint = identityResponse.data?.fingerprint ?? "unknown";
+        const publicAttachment = createJsonAttachment(
+          identityResponse.data,
+          `ebp-pub-${fingerprint}.json`
+        );
+        attachFilesToInput(fileInput, [signatureAttachment, publicAttachment]);
+        showToast("EBP signature + public keys attached");
       } catch (error) {
         console.error("EBP sign attach failed:", error);
         showToast(`EBP sign failed: ${error?.message ?? "unknown error"}`, true);

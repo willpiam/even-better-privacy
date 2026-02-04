@@ -1735,6 +1735,20 @@
             <label>Message (required for detached signatures)
               <textarea id="verify-message" placeholder="Paste the original message body here..."></textarea>
             </label>
+            <label class="row">
+              <input id="verify-use-public-keys" type="checkbox" />
+              <span>Provide public keys for verification</span>
+            </label>
+            <div id="verify-public-keys-wrapper" class="stack" style="display: none;">
+              <label>Public keys JSON
+                <textarea id="verify-public-keys" placeholder='{"fingerprint":"...","signingKey":"...","signingKeyType":"..."}'></textarea>
+              </label>
+              <div class="row">
+                <label>Import public keys file
+                  <input id="verify-public-keys-file" type="file" accept="application/json,.json" />
+                </label>
+              </div>
+            </div>
             <div class="row">
               <label>Import JSON file
                 <input id="verify-payload-file" type="file" accept="application/json,.json" />
