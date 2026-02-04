@@ -1408,13 +1408,18 @@ document.getElementById("verify-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
   const payloadRaw = document.getElementById("verify-payload").value;
+  const message = document.getElementById("verify-message").value;
   const sender = document.getElementById("verify-sender").value.trim();
   await withLoading(btn, async () => {
     try {
       const payload = JSON.parse(payloadRaw);
       const res = await api("/verify", {
         method: "POST",
-        body: JSON.stringify({ payload, sender: sender || undefined }),
+        body: JSON.stringify({
+          payload,
+          message: message || undefined,
+          sender: sender || undefined
+        }),
       });
       updateVerifyResult("verify-result", res.verified, res.verified ? "valid" : "invalid");
       setStatus("Verified", "success");

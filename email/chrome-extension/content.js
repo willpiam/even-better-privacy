@@ -3,6 +3,7 @@ const MARKER_END = "-----END EBP MESSAGE-----";
 
 const IS_OUTLOOK = /outlook\.(office|live|office365)\.com$/i.test(window.location.host);
 const IS_PROTON = /mail\.proton\.me$/i.test(window.location.host) || /mail\.protonmail\.com$/i.test(window.location.host);
+const IS_GMAIL = /mail\.google\.com$/i.test(window.location.host);
 
 const contactCache = {
   loaded: false,
@@ -160,6 +161,28 @@ function resolveRecipientOption(contacts, select) {
   });
 }
 
+function createJsonAttachment(data, filename) {
+  const jsonText = JSON.stringify(data, null, 2);
+  const blob = new Blob([jsonText], { type: "application/json" });
+  return new File([blob], filename, { type: "application/json" });
+}
+
+function findGmailFileInput(composeRoot) {
+  return (
+    composeRoot.querySelector('input[type="file"][name="file"]') ||
+    composeRoot.querySelector('input[type="file"]') ||
+    document.querySelector('input[type="file"][name="file"]') ||
+    document.querySelector('input[type="file"]')
+  );
+}
+
+function attachFileToInput(fileInput, file) {
+  const dataTransfer = new DataTransfer();
+  dataTransfer.items.add(file);
+  fileInput.files = dataTransfer.files;
+  fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 async function buildComposeControls(composeRoot, bodyEl) {
   if (bodyEl.dataset.ebpComposeProcessed === "true") return;
   const existingControls = composeRoot.querySelectorAll("[data-ebp-compose-controls]");
@@ -193,6 +216,13 @@ async function buildComposeControls(composeRoot, bodyEl) {
 
   const signEncryptButton = createButton("EBP Sign & Encrypt", composeDoc);
   controls.appendChild(signEncryptButton);
+
+  let signAttachButton = null;
+  if (IS_GMAIL) {
+    signAttachButton = createButton("EBP Sign (JSON)", composeDoc);
+    signAttachButton.className += " ebp-button-secondary";
+    controls.appendChild(signAttachButton);
+  }
 
   const refreshButton = createButton("Refresh Contacts", composeDoc);
   refreshButton.className += " ebp-button-secondary";
@@ -238,6 +268,41 @@ async function buildComposeControls(composeRoot, bodyEl) {
     bodyEl.innerText = formatPayload(response.data);
     showToast("EBP signed+encrypted payload inserted");
   });
+
+  if (signAttachButton) {
+    signAttachButton.addEventListener("click", async () => {
+      try {
+        const message = bodyEl.innerText.trim();
+        if (!message) {
+          showToast("Compose body is empty", true);
+          return;
+        }
+        const password = window.prompt("EBP identity password");
+        if (!password) return;
+        const response = await sendMessage({
+          type: "ebp-sign",
+          message,
+          password,
+          detached: true
+        });
+        if (!response?.ok) {
+          showToast(`EBP sign failed: ${response?.error ?? "unknown error"}`, true);
+          return;
+        }
+        const fileInput = findGmailFileInput(composeRoot);
+        if (!fileInput) {
+          showToast("Gmail attachment input not found", true);
+          return;
+        }
+        const attachment = createJsonAttachment(response.data, "ebp-signature.json");
+        attachFileToInput(fileInput, attachment);
+        showToast("EBP signature attached");
+      } catch (error) {
+        console.error("EBP sign attach failed:", error);
+        showToast(`EBP sign failed: ${error?.message ?? "unknown error"}`, true);
+      }
+    });
+  }
 
   const insertTarget = bodyEl.parentElement || composeRoot;
   if (insertTarget.contains(bodyEl)) {

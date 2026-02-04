@@ -84,7 +84,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       }
 
       if (message?.type === "ebp-sign") {
-        const { message: text, password } = message;
+        const { message: text, password, detached } = message;
         if (!text) {
           throw new Error("missing message");
         }
@@ -94,7 +94,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         const payload = {
           message: text,
           password,
-          detached: false,
+          detached: Boolean(detached),
           ...buildIdentityPayload(settings)
         };
         const data = await apiFetch("/api/v1/sign", {

@@ -559,6 +559,13 @@ async function handleRequest(req: Request): Promise<Response> {
 					message = String(obj.message ?? "");
 					signature = String(obj.signature ?? "");
 					fingerprint = String(obj.fingerprint ?? "");
+				} else if (obj.type === "ebp-signature") {
+					if (!messageOverride) {
+						throw new HttpError(STATUS.BadRequest, "message is required for detached signatures");
+					}
+					message = messageOverride;
+					signature = String(obj.signature ?? "");
+					fingerprint = String(obj.fingerprint ?? "");
 				} else {
 					throw new HttpError(STATUS.BadRequest, "unsupported payload type");
 				}
