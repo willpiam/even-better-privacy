@@ -218,6 +218,17 @@ The `ebp` CLI manages post-quantum identities and secure messaging. You can gene
 1. Run the local backend: `deno task gui:local-backend`
 2. Navigate to [localhost:8787](http://localhost:8787/) 
 
+## Email
+
+EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
+controls to webmail using the local GUI backend API.
+
+Supported email clients (web):
+- Gmail
+- Outlook (Outlook on the web)
+
+See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md).
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for future plans and development notes.
@@ -240,5 +251,3 @@ MIT — see [LICENSE](LICENSE) for details.
     - email address verifies the key by responding to a request email
 - Sign files
     - CLI and GUI
-- Email Support
-    - plugin or custom client? 
