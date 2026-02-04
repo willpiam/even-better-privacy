@@ -55,12 +55,29 @@ function createButton(label, doc = document) {
   button.type = "button";
   button.className = "ebp-button";
   button.textContent = label;
+  if (IS_PROTON) {
+    button.style.background = "#1a73e8";
+    button.style.color = "#fff";
+    button.style.border = "none";
+    button.style.borderRadius = "4px";
+    button.style.padding = "6px 10px";
+    button.style.cursor = "pointer";
+    button.style.fontSize = "12px";
+  }
   return button;
 }
 
 function createSelect(doc = document) {
   const select = doc.createElement("select");
   select.className = "ebp-select";
+  if (IS_PROTON) {
+    select.style.border = "1px solid #dadce0";
+    select.style.borderRadius = "4px";
+    select.style.padding = "4px 6px";
+    select.style.fontSize = "12px";
+    select.style.background = "#fff";
+    select.style.color = "#202124";
+  }
   return select;
 }
 
@@ -158,6 +175,17 @@ async function buildComposeControls(composeRoot, bodyEl) {
   const controls = document.createElement("div");
   controls.className = "ebp-compose-controls";
   controls.dataset.ebpComposeControls = "true";
+  if (IS_PROTON) {
+    controls.style.display = "flex";
+    controls.style.gap = "8px";
+    controls.style.alignItems = "center";
+    controls.style.margin = "8px 0";
+    controls.style.padding = "6px";
+    controls.style.border = "1px solid #dadce0";
+    controls.style.borderRadius = "6px";
+    controls.style.background = "#f8f9fa";
+    controls.style.fontSize = "12px";
+  }
 
   const composeDoc = bodyEl.ownerDocument || document;
   const select = createSelect(composeDoc);
@@ -168,6 +196,10 @@ async function buildComposeControls(composeRoot, bodyEl) {
 
   const refreshButton = createButton("Refresh Contacts", composeDoc);
   refreshButton.className += " ebp-button-secondary";
+  if (IS_PROTON) {
+    refreshButton.style.background = "#5f6368";
+    refreshButton.style.color = "#fff";
+  }
   controls.appendChild(refreshButton);
 
   const contacts = await loadContacts();
@@ -281,6 +313,10 @@ function createDecryptButton(messageBody) {
   const button = createButton("Decrypt & Verify", messageBody.ownerDocument);
   button.className += " ebp-decrypt-button";
   button.dataset.ebpDecryptButton = "true";
+  if (IS_PROTON) {
+    button.style.marginBottom = "8px";
+    button.style.boxShadow = "0 1px 2px rgba(26, 115, 232, 0.4)";
+  }
 
   button.addEventListener("click", async () => {
     try {
@@ -342,7 +378,7 @@ function collectProtonMessageBodies() {
         frameBodies.push(frameDoc.body);
       }
       bodies.push(...frameBodies);
-    } catch (error) {
+    } catch (_error) {
       // ignore cross-origin frames
     }
   });
