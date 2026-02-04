@@ -2,6 +2,7 @@ const MARKER_START = "-----BEGIN EBP MESSAGE-----";
 const MARKER_END = "-----END EBP MESSAGE-----";
 
 const IS_OUTLOOK = /outlook\.(office|live|office365)\.com$/i.test(window.location.host);
+const IS_PROTON = /mail\.proton\.me$/i.test(window.location.host) || /mail\.protonmail\.com$/i.test(window.location.host);
 
 const contactCache = {
   loaded: false,
@@ -49,16 +50,16 @@ function extractPayload(text) {
   }
 }
 
-function createButton(label) {
-  const button = document.createElement("button");
+function createButton(label, doc = document) {
+  const button = doc.createElement("button");
   button.type = "button";
   button.className = "ebp-button";
   button.textContent = label;
   return button;
 }
 
-function createSelect() {
-  const select = document.createElement("select");
+function createSelect(doc = document) {
+  const select = doc.createElement("select");
   select.className = "ebp-select";
   return select;
 }
@@ -158,13 +159,14 @@ async function buildComposeControls(composeRoot, bodyEl) {
   controls.className = "ebp-compose-controls";
   controls.dataset.ebpComposeControls = "true";
 
-  const select = createSelect();
+  const composeDoc = bodyEl.ownerDocument || document;
+  const select = createSelect(composeDoc);
   controls.appendChild(select);
 
-  const signEncryptButton = createButton("EBP Sign & Encrypt");
+  const signEncryptButton = createButton("EBP Sign & Encrypt", composeDoc);
   controls.appendChild(signEncryptButton);
 
-  const refreshButton = createButton("Refresh Contacts");
+  const refreshButton = createButton("Refresh Contacts", composeDoc);
   refreshButton.className += " ebp-button-secondary";
   controls.appendChild(refreshButton);
 
@@ -214,6 +216,16 @@ async function buildComposeControls(composeRoot, bodyEl) {
 }
 
 function findComposeBodies() {
+  if (IS_PROTON) {
+    const candidates = Array.from(
+      document.querySelectorAll(
+        '#rooster-editor[contenteditable="true"],[data-testid="composer-editor"][contenteditable="true"],' +
+          '[data-testid="composer-body"][contenteditable="true"],div[contenteditable="true"][aria-label="Message body"],' +
+          'div[contenteditable="true"][aria-label="Message Body"]'
+      )
+    );
+    return candidates.filter((el) => !el.closest("[data-ebp-compose-controls]"));
+  }
   if (IS_OUTLOOK) {
     const candidates = Array.from(
       document.querySelectorAll(
@@ -227,6 +239,15 @@ function findComposeBodies() {
 }
 
 function resolveComposeRoot(bodyEl) {
+  if (IS_PROTON) {
+    return (
+      bodyEl.closest('[data-testid*="composer"]') ||
+      bodyEl.closest('[class*="composer"]') ||
+      bodyEl.closest('[class*="Composer"]') ||
+      bodyEl.closest("section") ||
+      bodyEl.parentElement
+    );
+  }
   if (IS_OUTLOOK) {
     return (
       bodyEl.closest('[data-automationid="ComposeForm"]') ||
@@ -257,7 +278,7 @@ async function initComposeObservers() {
 
 function createDecryptButton(messageBody) {
   if (messageBody.querySelector("[data-ebp-decrypt-button]")) return;
-  const button = createButton("Decrypt & Verify");
+  const button = createButton("Decrypt & Verify", messageBody.ownerDocument);
   button.className += " ebp-decrypt-button";
   button.dataset.ebpDecryptButton = "true";
 
@@ -306,14 +327,39 @@ function createDecryptButton(messageBody) {
   messageBody.prepend(button);
 }
 
+function collectProtonMessageBodies() {
+  const selector =
+    '[data-testid="message-body"],[data-testid="message-content"],[data-testid="message-view"],' +
+    '[data-testid="message-frame"],.message-content,.message-body,.message-view,div[role="document"]';
+  const bodies = Array.from(document.querySelectorAll(selector));
+
+  document.querySelectorAll("iframe").forEach((frame) => {
+    try {
+      const frameDoc = frame.contentDocument;
+      if (!frameDoc) return;
+      const frameBodies = Array.from(frameDoc.querySelectorAll(selector));
+      if (frameBodies.length === 0 && frameDoc.body) {
+        frameBodies.push(frameDoc.body);
+      }
+      bodies.push(...frameBodies);
+    } catch (error) {
+      // ignore cross-origin frames
+    }
+  });
+
+  return bodies;
+}
+
 function initReadObservers() {
-  const messageBodies = IS_OUTLOOK
-    ? Array.from(
-        document.querySelectorAll(
-          '[data-automationid="MessageBody"],[data-automationid="readMessageBody"],div[role="document"]'
+  const messageBodies = IS_PROTON
+    ? collectProtonMessageBodies()
+    : IS_OUTLOOK
+      ? Array.from(
+          document.querySelectorAll(
+            '[data-automationid="MessageBody"],[data-automationid="readMessageBody"],div[role="document"]'
+          )
         )
-      )
-    : Array.from(document.querySelectorAll("div.a3s"));
+      : Array.from(document.querySelectorAll("div.a3s"));
   messageBodies.forEach((body) => {
     if (body.dataset.ebpProcessed) return;
     if (body.getAttribute("contenteditable") === "true") return;

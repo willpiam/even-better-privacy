@@ -1,7 +1,7 @@
-# EBP Gmail Chrome Extension
+# EBP Mail Chrome Extension
 
-This Chrome extension integrates EBP encryption/decryption into Gmail by
-calling the local EBP GUI backend API.
+This Chrome extension integrates EBP encryption/decryption into supported
+webmail clients by calling the local EBP GUI backend API.
 
 ## Features
 
@@ -13,7 +13,7 @@ calling the local EBP GUI backend API.
 ## Prerequisites
 
 - EBP running: `deno task gui`
-- Gmail or Outlook on web open in Chrome (`https://mail.google.com` or `https://outlook.office.com`)
+- Gmail, Outlook, or Proton Mail on web open in Chrome (`https://mail.google.com`, `https://outlook.office.com`, or `https://mail.proton.me`)
 
 ## Install (unpacked)
 
