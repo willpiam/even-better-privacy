@@ -46,7 +46,7 @@ PG_POOL_SIZE=5
 #### Lattice Based
 
 - ML-DSA (Dilithium)
-- FN-DSA (Falcon)
+- FN-DSA (Falcon) (Planned)
 
 ### Encrypting
 

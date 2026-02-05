@@ -631,6 +631,70 @@ Deno.test({
 });
 
 Deno.test({
+	name: "POST /api/v1/verify returns false for detached signature with wrong message",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: identity.toFingerprint(),
+				signature: identity.signMessage("correct message"),
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					message: "wrong message",
+					publicIdentity: identity.summary,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			assertEquals((body as { verified: boolean }).verified, false);
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/verify returns false for detached signature with mismatched keys",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const signer = await createTestIdentity(home, "signer", "password123");
+			const other = await createTestIdentity(home, "other", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "signer" });
+
+			const message = "Detached verification check";
+			const payload = {
+				type: "ebp-signature",
+				version: 1,
+				fingerprint: signer.toFingerprint(),
+				signature: signer.signMessage(message),
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/verify",
+				jsonPost({
+					payload,
+					message,
+					publicIdentity: other.summary,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			assertEquals((body as { verified: boolean }).verified, false);
+		});
+	},
+});
+
+Deno.test({
 	name: "POST /api/v1/encrypt creates encrypted message",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {

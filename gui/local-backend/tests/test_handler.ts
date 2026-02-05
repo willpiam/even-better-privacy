@@ -467,12 +467,14 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				signature?: unknown;
 				sender?: unknown;
 				home?: unknown;
+				publicIdentity?: unknown;
 			}>(req);
 			const payload = body.payload;
 			const messageOverride = typeof body.message === "string" ? body.message : undefined;
 			const signatureOverride = typeof body.signature === "string" ? body.signature : undefined;
 			const sender = typeof body.sender === "string" ? body.sender : undefined;
 			const home = typeof body.home === "string" ? body.home : undefined;
+			const publicIdentity = body.publicIdentity;
 			if (!payload) throw new HttpError(STATUS.BadRequest, "payload is required");
 
 			const ctx = await getContext(home);
@@ -484,6 +486,13 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				const obj = payload as Record<string, unknown>;
 				if (obj.type === "ebp-signed-message") {
 					message = String(obj.message ?? "");
+					signature = String(obj.signature ?? "");
+					fingerprint = String(obj.fingerprint ?? "");
+				} else if (obj.type === "ebp-signature") {
+					if (!messageOverride) {
+						throw new HttpError(STATUS.BadRequest, "message is required for detached signatures");
+					}
+					message = messageOverride;
 					signature = String(obj.signature ?? "");
 					fingerprint = String(obj.fingerprint ?? "");
 				} else {
@@ -498,7 +507,38 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				fingerprint = "";
 			}
 
-			const contact = await loadContact(ctx, sender ?? fingerprint.substring(0, 16));
+			let contact: ExternalIdentity;
+			if (publicIdentity && typeof publicIdentity === "object") {
+				const candidate = publicIdentity as Record<string, unknown>;
+				const signingKey = typeof candidate.signingKey === "string" ? candidate.signingKey : "";
+				const signingKeyType = typeof candidate.signingKeyType === "string" ? candidate.signingKeyType : "";
+				const encryptionKey = typeof candidate.encryptionKey === "string" ? candidate.encryptionKey : "";
+				const encryptionKeyType = typeof candidate.encryptionKeyType === "string" ? candidate.encryptionKeyType : "";
+				if (!signingKey || !signingKeyType) {
+					throw new HttpError(STATUS.BadRequest, "public identity missing signing key");
+				}
+				if (!encryptionKey || !encryptionKeyType) {
+					throw new HttpError(STATUS.BadRequest, "public identity missing encryption key");
+				}
+				if (!["dilithium", "sphincs"].includes(signingKeyType)) {
+					throw new HttpError(STATUS.BadRequest, "public identity has invalid signing key type");
+				}
+				if (encryptionKeyType !== "kyber") {
+					throw new HttpError(STATUS.BadRequest, "public identity has invalid encryption key type");
+				}
+				contact = {
+					fingerprint: typeof candidate.fingerprint === "string" ? candidate.fingerprint : fingerprint,
+					signingKey,
+					signingKeyType: signingKeyType as ExternalIdentity["signingKeyType"],
+					signingKeyDetails: candidate.signingKeyDetails,
+					encryptionKey,
+					encryptionKeyType: "kyber",
+					encryptionKeyDetails: candidate.encryptionKeyDetails,
+					details: (candidate.details as ExternalIdentity["details"]) ?? {},
+				};
+			} else {
+				contact = await loadContact(ctx, sender ?? fingerprint.substring(0, 16));
+			}
 			const verified = Identity.VerifySignature(contact, message, signature);
 			return json({ verified });
 		}
