@@ -1012,12 +1012,14 @@ async function showContactDetails(contact) {
       : contact.details;
     
     for (const d of details) {
-      const dot = d.path === "email" ? emailDot : "";
+      const isEmail = d.path === "email";
+      const valueHtml = isEmail
+        ? `<span class="detail-value email-detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}${emailDot}</span>`
+        : `<span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>`;
       detailsHtml += `
         <div class="detail-row">
           <strong>${escapeHtml(d.path)}:</strong>
-          <span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>
-          ${dot}
+          ${valueHtml}
         </div>
       `;
     }
