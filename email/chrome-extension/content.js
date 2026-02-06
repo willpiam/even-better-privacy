@@ -94,7 +94,7 @@ function showToast(message, isError = false) {
   }, 2800);
 }
 
-function showModal(title, body, status, statusType) {
+function showModal(title, body, status, statusType, metaLines = []) {
   const overlay = document.createElement("div");
   overlay.className = "ebp-modal-overlay";
 
@@ -124,6 +124,17 @@ function showModal(title, body, status, statusType) {
 
   modal.appendChild(header);
   modal.appendChild(statusEl);
+  if (metaLines.length) {
+    const meta = document.createElement("div");
+    meta.className = "ebp-modal-meta";
+    metaLines.forEach((line) => {
+      const row = document.createElement("div");
+      row.className = "ebp-modal-meta-row";
+      row.textContent = line;
+      meta.appendChild(row);
+    });
+    modal.appendChild(meta);
+  }
   modal.appendChild(pre);
   modal.appendChild(close);
   overlay.appendChild(modal);
@@ -136,6 +147,49 @@ function getDetailValue(details, key) {
   if (Array.isArray(value)) return value[0] ?? "";
   if (typeof value === "string") return value;
   return "";
+}
+
+function getDetailMeta(detailsMeta, key) {
+  if (!detailsMeta || typeof detailsMeta !== "object") return null;
+  return detailsMeta[key] ?? null;
+}
+
+function extractEmail(text) {
+  if (!text) return "";
+  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : "";
+}
+
+function findSenderEmail(messageBody) {
+  if (!messageBody) return "";
+  const root =
+    messageBody.closest("div.adn") ||
+    messageBody.closest("div[role='listitem']") ||
+    messageBody.closest("div[role='article']") ||
+    messageBody.closest("div[role='document']") ||
+    messageBody.parentElement;
+  if (!root) return "";
+
+  const gmailEmailEl = root.querySelector("span[email], span[data-hovercard-id]");
+  if (gmailEmailEl) {
+    const candidate =
+      gmailEmailEl.getAttribute("email") ||
+      gmailEmailEl.getAttribute("data-hovercard-id") ||
+      gmailEmailEl.textContent ||
+      "";
+    const email = extractEmail(candidate);
+    if (email) return email;
+  }
+
+  const mailto = root.querySelector('a[href^="mailto:"]');
+  if (mailto) {
+    const href = mailto.getAttribute("href") || "";
+    const raw = href.replace(/^mailto:/i, "").split("?")[0];
+    const email = raw || extractEmail(mailto.textContent || "");
+    if (email) return email;
+  }
+
+  return extractEmail(root.textContent || "");
 }
 
 function getContactDisplayName(contact) {
@@ -433,7 +487,26 @@ function createDecryptButton(messageBody) {
       if (signerFingerprint) {
         status = `${status} · signer: ${signerFingerprint}`;
       }
-      showModal("EBP Decrypted Message", message ?? "", status, statusType);
+
+      const metaLines = [];
+      if (verified === true && signerFingerprint) {
+        const contacts = await loadContacts();
+        const signer = contacts.find((contact) => contact.fingerprint === signerFingerprint);
+        const signerMeta = signer ? getDetailMeta(signer.detailsMeta, "email") : null;
+        const signerEmail = signer && signerMeta?.verified
+          ? getDetailValue(signer.details, "email")
+          : "";
+        if (signerEmail) {
+          const senderEmail = findSenderEmail(messageBody);
+          const sameSender =
+            senderEmail &&
+            senderEmail.toLowerCase() === signerEmail.toLowerCase();
+          const matchLabel = sameSender ? " ✓ matches sender" : "";
+          metaLines.push(`Verified signer email: ${signerEmail}${matchLabel}`);
+        }
+      }
+
+      showModal("EBP Decrypted Message", message ?? "", status, statusType, metaLines);
     } catch (error) {
       console.error("EBP decrypt handler failed:", error);
       showToast(`EBP decrypt failed: ${error?.message ?? "unknown error"}`, true);

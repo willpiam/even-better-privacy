@@ -101,6 +101,20 @@
   color: #d93025;
 }
 
+.ebp-modal-meta {
+  font-size: 12px;
+  color: #3c4043;
+  background: #f8f9fa;
+  border-radius: 6px;
+  padding: 8px 10px;
+  display: grid;
+  gap: 4px;
+}
+
+.ebp-modal-meta-row {
+  line-height: 1.4;
+}
+
 .ebp-modal-body {
   white-space: pre-wrap;
   background: #f1f3f4;
