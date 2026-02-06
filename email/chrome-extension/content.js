@@ -160,6 +160,44 @@ function extractEmail(text) {
   return match ? match[0] : "";
 }
 
+function collectRecipientEmails(composeRoot) {
+  if (!composeRoot) return [];
+  const emails = new Set();
+
+  const attrCandidates = composeRoot.querySelectorAll("[email],[data-hovercard-id]");
+  attrCandidates.forEach((el) => {
+    const candidate =
+      el.getAttribute("email") ||
+      el.getAttribute("data-hovercard-id") ||
+      el.textContent ||
+      "";
+    const email = extractEmail(candidate);
+    if (email) emails.add(email.toLowerCase());
+  });
+
+  const mailtoLinks = composeRoot.querySelectorAll('a[href^="mailto:"]');
+  mailtoLinks.forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const raw = href.replace(/^mailto:/i, "").split("?")[0];
+    const email = raw || extractEmail(link.textContent || "");
+    if (email) emails.add(email.toLowerCase());
+  });
+
+  const inputs = composeRoot.querySelectorAll(
+    'input[aria-label*="To"],textarea[aria-label*="To"],input[name="to"],textarea[name="to"]'
+  );
+  inputs.forEach((input) => {
+    const value = input.value || input.getAttribute("value") || "";
+    value
+      .split(/[;,]/)
+      .map((part) => extractEmail(part))
+      .filter(Boolean)
+      .forEach((email) => emails.add(email.toLowerCase()));
+  });
+
+  return Array.from(emails);
+}
+
 function findSenderEmail(messageBody) {
   if (!messageBody) return "";
   const root =
@@ -270,6 +308,11 @@ async function buildComposeControls(composeRoot, bodyEl) {
   const select = createSelect(composeDoc);
   controls.appendChild(select);
 
+  const recipientStatus = document.createElement("div");
+  recipientStatus.className = "ebp-recipient-status";
+  recipientStatus.textContent = "Select a recipient to check email details.";
+  controls.appendChild(recipientStatus);
+
   const signEncryptButton = createButton("EBP Sign & Encrypt", composeDoc);
   controls.appendChild(signEncryptButton);
 
@@ -291,11 +334,60 @@ async function buildComposeControls(composeRoot, bodyEl) {
   const contacts = await loadContacts();
   resolveRecipientOption(contacts, select);
 
+  function updateRecipientStatus(contactsList) {
+    const recipientName = select.value;
+    if (!recipientName) {
+      recipientStatus.className = "ebp-recipient-status";
+      recipientStatus.textContent = "Select a recipient to check email details.";
+      return;
+    }
+
+    const contact = contactsList.find((c) => c.name === recipientName);
+    if (!contact) {
+      recipientStatus.className = "ebp-recipient-status ebp-recipient-status-warn";
+      recipientStatus.textContent = "Recipient contact not found in local list.";
+      return;
+    }
+
+    const email = getDetailValue(contact.details, "email");
+    if (!email) {
+      recipientStatus.className = "ebp-recipient-status ebp-recipient-status-warn";
+      recipientStatus.textContent = "Selected contact has no email detail.";
+      return;
+    }
+
+    const meta = getDetailMeta(contact.detailsMeta, "email");
+    const verified = meta?.verified === true;
+    const recipients = collectRecipientEmails(composeRoot);
+    const matchesRecipient = recipients.some(
+      (value) => value.toLowerCase() === email.toLowerCase()
+    );
+
+    const verifiedLabel = verified ? "verified" : "unverified";
+    const matchLabel = recipients.length
+      ? matchesRecipient
+        ? "matches To field ✓"
+        : "does not match To field"
+      : "no recipient email detected";
+
+    recipientStatus.className = `ebp-recipient-status ${
+      verified ? "ebp-recipient-status-ok" : "ebp-recipient-status-warn"
+    } ${matchesRecipient ? "ebp-recipient-status-match" : ""}`.trim();
+    recipientStatus.textContent = `Contact email: ${email} (${verifiedLabel}) · ${matchLabel}`;
+  }
+
   refreshButton.addEventListener("click", async () => {
     contactCache.loaded = false;
     const updated = await loadContacts();
     resolveRecipientOption(updated, select);
+    updateRecipientStatus(updated);
   });
+
+  select.addEventListener("change", () => updateRecipientStatus(contactCache.contacts));
+  composeRoot.addEventListener("input", () => updateRecipientStatus(contactCache.contacts), true);
+  composeRoot.addEventListener("change", () => updateRecipientStatus(contactCache.contacts), true);
+  composeRoot.addEventListener("click", () => updateRecipientStatus(contactCache.contacts), true);
+  updateRecipientStatus(contacts);
 
   signEncryptButton.addEventListener("click", async () => {
     const recipient = select.value;

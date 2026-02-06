@@ -31,6 +31,23 @@
   font-size: 12px;
 }
 
+.ebp-recipient-status {
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.ebp-recipient-status-ok {
+  color: #1e8e3e;
+}
+
+.ebp-recipient-status-warn {
+  color: #b06000;
+}
+
+.ebp-recipient-status-match {
+  font-weight: 600;
+}
+
 .ebp-decrypt-button {
   margin-bottom: 8px;
   background: #1a73e8 !important;
