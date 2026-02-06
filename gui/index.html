@@ -979,18 +979,30 @@
       color: var(--text-secondary);
     }
 
-    .email-verified {
-      color: #2e7d32;
+    .detail-tag.email-verified-tag {
+      color: var(--success);
+      background: var(--success-bg);
+      border: 1px solid rgba(63, 185, 80, 0.35);
+    }
+
+    .detail-tag.email-unverified-tag {
+      color: var(--warning);
+      background: rgba(210, 153, 34, 0.12);
+      border: 1px solid rgba(210, 153, 34, 0.35);
+    }
+
+    .email-status-dot {
       margin-left: 6px;
       font-size: 0.9em;
       vertical-align: middle;
     }
 
+    .email-verified {
+      color: var(--success);
+    }
+
     .email-unverified {
-      color: #f57c00;
-      margin-left: 6px;
-      font-size: 0.9em;
-      vertical-align: middle;
+      color: var(--warning);
     }
 
     .contact-actions {

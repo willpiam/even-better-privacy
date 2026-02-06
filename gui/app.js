@@ -41,6 +41,11 @@ function getDetailValue(details, path) {
   return val || null;
 }
 
+function getDetailMeta(detailsMeta, path) {
+  if (!detailsMeta || typeof detailsMeta !== "object") return null;
+  return detailsMeta[path] ?? null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Fingerprint Management
 // ─────────────────────────────────────────────────────────────────────────────
@@ -961,6 +966,10 @@ function renderContacts() {
     // Extract name and email from details if available
     const detailName = getDetailValue(c.details, "name");
     const detailEmail = getDetailValue(c.details, "email");
+    const emailMeta = getDetailMeta(c.detailsMeta, "email");
+    const emailVerified = emailMeta?.verified === true;
+    const emailTagClass = emailVerified ? "email-verified-tag" : "email-unverified-tag";
+    const emailTagTitle = emailVerified ? "Email verified" : "Email not verified";
     const isRevoked = !!c.revoked;
     
     li.innerHTML = `
@@ -973,7 +982,7 @@ function renderContacts() {
         ${detailName || detailEmail ? `
           <div class="contact-details-preview">
             ${detailName ? `<span class="detail-tag">👤 ${escapeHtml(detailName)}</span>` : ''}
-            ${detailEmail ? `<span class="detail-tag">✉️ ${escapeHtml(detailEmail)}</span>` : ''}
+            ${detailEmail ? `<span class="detail-tag ${emailTagClass}" title="${emailTagTitle}">✉️ ${escapeHtml(detailEmail)}</span>` : ''}
           </div>
         ` : ''}
         <div class="fingerprint">${escapeHtml(c.fingerprint)}</div>
@@ -991,6 +1000,11 @@ function renderContacts() {
 async function showContactDetails(contact) {
   // Build details HTML
   let detailsHtml = '<div class="contact-detail-list">';
+  const emailMeta = getDetailMeta(contact.detailsMeta, "email");
+  const emailVerified = emailMeta?.verified === true;
+  const emailDot = emailVerified
+    ? '<span class="email-status-dot email-verified" title="Email verified">●</span>'
+    : '<span class="email-status-dot email-unverified" title="Email not verified">●</span>';
   
   if (contact.details && Object.keys(contact.details).length > 0) {
     const details = typeof contact.details === 'object' && !Array.isArray(contact.details)
@@ -998,10 +1012,12 @@ async function showContactDetails(contact) {
       : contact.details;
     
     for (const d of details) {
+      const dot = d.path === "email" ? emailDot : "";
       detailsHtml += `
         <div class="detail-row">
           <strong>${escapeHtml(d.path)}:</strong>
           <span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>
+          ${dot}
         </div>
       `;
     }

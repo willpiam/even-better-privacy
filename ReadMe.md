@@ -33,6 +33,15 @@ PG_USER=postgres
 PG_PASSWORD=postgres
 PG_DATABASE=ebp
 PG_POOL_SIZE=5
+
+SMTP_HOST=smtp.example.com
+SMTP_PORT=465
+SMTP_USER=<sender email address>
+SMTP_PASS="sender email password here"
+SMTP_FROM=<sender email address>
+SMTP_SECURE=tls
+
+PUBLIC_BASE_URL=<base url of ebp key server>
 ```
 
 ## Supported Crypto-Systems

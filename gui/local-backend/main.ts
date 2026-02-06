@@ -474,6 +474,7 @@ async function handleRequest(req: Request): Promise<Response> {
 					signingKeyType: contact.signingKeyType,
 					encryptionKeyType: contact.encryptionKeyType,
 					details: contact.details ?? {},
+					detailsMeta: contact.detailsMeta ?? {},
 				})),
 			});
 		}
@@ -1092,6 +1093,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				signingKeyDetails?: unknown;
 				encryptionKeyDetails?: unknown;
 				details?: Record<string, [string, string]>;
+				detailsMeta?: Record<string, { verified: boolean; verifiedAt: number | null }>;
 			};
 
 			const signingKeyType = b?.signingKeyType === "sphincs" ? "sphincs" as const : "dilithium" as const;
@@ -1106,6 +1108,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				signingKeyDetails: b?.signingKeyDetails,
 				encryptionKeyDetails: b?.encryptionKeyDetails,
 				details: b?.details ?? {},
+				detailsMeta: b?.detailsMeta ?? {},
 			};
 
 			if (!external.signingKey || !external.encryptionKey) {
