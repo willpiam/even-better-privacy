@@ -71,3 +71,8 @@ export function computeStateHash(state: IdentityState): string {
   return toHex(sha256(data));
 }
 
+export function computeTokenHash(token: string): string {
+  const data = textEncoder.encode(token);
+  return toHex(sha256(data));
+}
+

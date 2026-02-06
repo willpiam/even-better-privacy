@@ -770,6 +770,10 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 			return json({ ok: true, path, detail });
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/v1/verify-email/request") {
+			return json({ ok: true, status: "sent" });
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/v1/revoke/detail") {
 			const body = await readJson<{
 				path?: unknown;

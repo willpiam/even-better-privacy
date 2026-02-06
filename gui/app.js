@@ -14,6 +14,7 @@ const state = {
   currentFingerprint: null,
   currentDetails: [], // Array of {path, detail}
   serverDetails: [], // Array of {path, detail} - details on the server for current identity
+  serverDetailsMeta: {}, // {path: {verified, verifiedAt}}
   server: null,
   protocolVersion: null,
   identities: [],
@@ -81,6 +82,7 @@ async function loadPublicIdentityInfo() {
       state.currentFingerprint = null;
       state.currentDetails = [];
       state.serverDetails = [];
+      state.serverDetailsMeta = {};
       state.isRevoked = false;
       state.revokedDetails = [];
       renderFingerprint();
@@ -93,6 +95,7 @@ async function loadPublicIdentityInfo() {
     state.currentFingerprint = null;
     state.currentDetails = [];
     state.serverDetails = [];
+    state.serverDetailsMeta = {};
     state.isRevoked = false;
     state.revokedDetails = [];
     renderFingerprint();
@@ -107,6 +110,7 @@ async function loadPublicIdentityInfo() {
 async function loadServerDetailsForCurrentIdentity(fingerprint) {
   if (!state.server || !fingerprint) {
     state.serverDetails = [];
+    state.serverDetailsMeta = {};
     return;
   }
   
@@ -120,17 +124,22 @@ async function loadServerDetailsForCurrentIdentity(fingerprint) {
           path,
           detail: Array.isArray(val) ? val[0] : val
         }));
+        state.serverDetailsMeta = data.detailsMeta || {};
       } else {
         state.serverDetails = [];
+        state.serverDetailsMeta = {};
       }
     } else if (res.status === 404) {
       // Identity not on server yet
       state.serverDetails = [];
+      state.serverDetailsMeta = {};
     } else {
       state.serverDetails = [];
+      state.serverDetailsMeta = {};
     }
   } catch (err) {
     state.serverDetails = [];
+    state.serverDetailsMeta = {};
     console.warn("Could not load server details:", err);
   }
 }
@@ -160,16 +169,28 @@ function renderIdentityDetails() {
     const serverDetail = state.serverDetails.find(d => d.path === item.path);
     const isOnServer = serverDetail && serverDetail.detail === item.detail;
     const isLocalOnly = !isOnServer;
+    const isEmailDetail = item.path === "email";
+    const emailMeta = isEmailDetail && isOnServer
+      ? (state.serverDetailsMeta?.email || null)
+      : null;
+    const emailMarker = emailMeta?.verified
+      ? '<span class="email-verified" title="Email verified">●</span>'
+      : "";
+    const emailAction = emailMeta && !emailMeta.verified
+      ? `<button class="btn-verify-email secondary" data-email="${escapeHtml(item.detail)}">Send verification link</button>`
+      : "";
     
     li.innerHTML = `
       <div class="detail-item-content">
         <div class="detail-text">
           <strong>${escapeHtml(item.path)}</strong>:
           <span class="detail-value" title="${escapeHtml(item.detail)}">${escapeHtml(item.detail)}</span>
+          ${emailMarker}
         </div>
         ${isLocalOnly && state.server ? '<span class="local-only-badge">Local only</span>' : ''}
         ${isOnServer ? '<span class="synced-badge">✓ Synced</span>' : ''}
       </div>
+      ${emailAction}
       ${isLocalOnly && state.server ? `
         <button class="btn-push-detail secondary" data-path="${escapeHtml(item.path)}" data-detail="${escapeHtml(item.detail)}">
           Push to Server
@@ -187,6 +208,15 @@ function renderIdentityDetails() {
       await showPushDetailModal(path, btn);
     });
   });
+
+  // Add click handlers for verification buttons
+  identityDetailsList.querySelectorAll(".btn-verify-email").forEach(btn => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const email = btn.dataset.email;
+      await requestEmailVerification(email, btn);
+    });
+  });
 }
 
 async function showPushDetailModal(path, btn) {
@@ -202,6 +232,33 @@ async function showPushDetailModal(path, btn) {
     });
     setStatus(`Detail "${path}" pushed to server`, "success");
     await loadAll();
+  } catch (err) {
+    setStatus(err.message, "error");
+  } finally {
+    if (btn) setButtonLoading(btn, false);
+  }
+}
+
+async function requestEmailVerification(email, btn) {
+  if (!state.server) {
+    setStatus("No server configured for verification", "error");
+    return;
+  }
+  if (!email) {
+    setStatus("Email detail missing", "error");
+    return;
+  }
+
+  if (btn) setButtonLoading(btn, true);
+  try {
+    await api("/verify-email/request", {
+      method: "POST",
+      body: JSON.stringify({
+        fingerprint: state.currentFingerprint,
+        detail: email,
+      }),
+    });
+    setStatus(`Verification email sent to ${email}`, "success");
   } catch (err) {
     setStatus(err.message, "error");
   } finally {

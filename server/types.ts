@@ -51,3 +51,4 @@ export type IdentityState = {
 export type DetailsMap = Record<string, [string, string]>;
 export type AllDetailsMap = Record<string, DetailsMap>;
 
+export type DetailsMetaMap = Record<string, { verified: boolean; verifiedAt: number | null }>;

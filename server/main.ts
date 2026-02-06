@@ -6,8 +6,10 @@ import { SphincsSigningKey } from "../core/Sphincs.ts";
 import { PROTOCOL_VERSION } from "../core/version.ts";
 import {
   ensureNewNonce,
+  getDetailByVerificationToken,
   getDetailRecord,
   getDetailsMap,
+  getDetailsMetaMap,
   getIdentity,
   getMaxRevocationNonce,
   getRevocations,
@@ -22,14 +24,18 @@ import {
   revokeDetail,
   revokeIdentity,
   updateDetail,
+  updateDetailVerification,
 } from "./db.ts";
 import type { DatabaseAdapter } from "./db.ts";
 import {
   computeIdentityFingerprint,
   computeSigningRawFingerprint,
   computeStateHash,
+  computeTokenHash,
   stableStringify,
+  toHex,
 } from "./crypto.ts";
+import nodemailer from "npm:nodemailer";
 import { verifyDetailProof } from "./detail.ts";
 import { verifyRevocationCertificate } from "./revocation.ts";
 import { buildState } from "./state.ts";
@@ -104,7 +110,69 @@ const LIMITS = {
   stateSignature: 50_000,
   stateHash: 128,           // SHA-256 hex
   searchQuery: 256,         // Search query string
+  verificationToken: 256,   // Email verification token
 };
+
+// =============================================================================
+// Email Verification Configuration
+// =============================================================================
+
+const EMAIL_VERIFICATION_TTL_MS =
+  Number(Deno.env.get("EMAIL_VERIFICATION_TTL_MS") ?? String(24 * 60 * 60 * 1000));
+
+const EMAIL_VERIFICATION_STORE_PLAINTEXT =
+  (Deno.env.get("EMAIL_VERIFICATION_STORE_PLAINTEXT") ?? "false").toLowerCase() === "true";
+
+function generateVerificationToken(): string {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return toHex(bytes);
+}
+
+function isLocalHostname(hostname: string): boolean {
+  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+  return hostname.endsWith(".localhost");
+}
+
+function getPublicBaseUrl(req: Request): string | null {
+  const configured = Deno.env.get("PUBLIC_BASE_URL");
+  if (configured) return configured;
+
+  const url = new URL(req.url);
+  if (isLocalHostname(url.hostname)) return url.origin;
+
+  return null;
+}
+
+async function sendVerificationEmail(to: string, link: string): Promise<void> {
+  const host = Deno.env.get("SMTP_HOST");
+  const from = Deno.env.get("SMTP_FROM");
+  if (!host || !from) {
+    console.log(`[email-verification] ${to}: ${link}`);
+    return;
+  }
+
+  const port = Number(Deno.env.get("SMTP_PORT") ?? "587");
+  const secure =
+    (Deno.env.get("SMTP_SECURE") ?? "").toLowerCase() === "true" ||
+    port === 465;
+  const user = Deno.env.get("SMTP_USER") ?? undefined;
+  const pass = Deno.env.get("SMTP_PASS") ?? undefined;
+
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: user ? { user, pass: pass ?? "" } : undefined,
+  });
+
+  await transport.sendMail({
+    from,
+    to,
+    subject: "Verify your email",
+    text: `Please verify your email by visiting this link:\n\n${link}\n\nIf you did not request this, you can ignore this message.`,
+  });
+}
 
 // =============================================================================
 // Rate Limiting
@@ -115,6 +183,8 @@ const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number }> = {
   "POST /api/v1/identity": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/detail": { windowMs: 60_000, maxRequests: 30 },
   "POST /api/v1/revoke": { windowMs: 60_000, maxRequests: 10 },
+  "POST /api/v1/verify-email/request": { windowMs: 60_000, maxRequests: 15 },
+  "GET /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
   "GET *": { windowMs: 60_000, maxRequests: 200 },
 };
 
@@ -409,6 +479,18 @@ async function handleRequest(req: Request): Promise<Response> {
       return respond(attachCors(await handlePostDetail(req, db), corsHeaders));
     }
 
+    if (req.method === "POST" && url.pathname === "/api/v1/verify-email/request") {
+      return respond(attachCors(await handleRequestVerifyEmail(req, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/verify-email") {
+      return respond(attachCors(await handleVerifyEmailConfirm(req, db), corsHeaders));
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/verify-email") {
+      return respond(attachCors(await handleVerifyEmailPage(url), corsHeaders));
+    }
+
     if (req.method === "POST" && url.pathname === "/api/v1/revoke") {
       return respond(attachCors(await handlePostRevocation(req, db), corsHeaders));
     }
@@ -648,6 +730,9 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
   const detailCheck = validateStringLength(payload.detail, "detail", LIMITS.detail, false);
   if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
   const detail = detailCheck.value;
+  if (path === "email" && detail.length === 0) {
+    return json({ error: "email detail cannot be empty" }, 400);
+  }
 
   const proofLengthCheck = validateStringLength(payload.proof, "proof", LIMITS.proof);
   if (!proofLengthCheck.ok) return json({ error: proofLengthCheck.error }, 400);
@@ -680,6 +765,34 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
     } else {
       await insertDetail(db, { fingerprint, path, detail, proof, createdAt });
     }
+
+    if (path === "email") {
+      const token = generateVerificationToken();
+      const tokenHash = computeTokenHash(token);
+      const now = Date.now();
+      await updateDetailVerification(db, {
+        fingerprint,
+        path,
+        verifiedAt: null,
+        verificationToken: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
+        verificationTokenHash: tokenHash,
+        verificationExpiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+        verificationSentAt: now,
+      });
+
+      const baseUrl = getPublicBaseUrl(req);
+      if (!baseUrl) {
+        console.warn("public base URL not configured; skipping verification email");
+        return json({ ok: true, warning: "verification_email_not_sent" });
+      }
+
+      const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
+      try {
+        await sendVerificationEmail(detail, link);
+      } catch (err) {
+        console.error("failed to send verification email:", err);
+      }
+    }
   } catch (e) {
     if (String(e).includes("UNIQUE")) {
       return json({ error: "detail already exists for path" }, 409);
@@ -689,6 +802,217 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
   }
 
   return json({ ok: true });
+}
+
+async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) {
+    return json({ error: bodyResult.error }, bodyResult.status);
+  }
+  const payload = bodyResult.data;
+
+  const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint);
+  if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
+  const fingerprint = fingerprintCheck.value;
+
+  const detailCheck = validateStringLength(payload.detail, "detail", LIMITS.detail, true);
+  if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
+  const providedDetail = detailCheck.value;
+
+  const record = await getDetailRecord(db, fingerprint, "email");
+  if (!record) {
+    return json({ error: "email detail not found" }, 404);
+  }
+  if (record.revoked_at !== null) {
+    return json({ error: "email detail is revoked" }, 409);
+  }
+  if (record.detail !== providedDetail) {
+    return json({ error: "email detail mismatch" }, 409);
+  }
+  if (record.verified_at !== null) {
+    return json({ ok: true, status: "already_verified" });
+  }
+
+  const token = generateVerificationToken();
+  const tokenHash = computeTokenHash(token);
+  const now = Date.now();
+  await updateDetailVerification(db, {
+    fingerprint,
+    path: "email",
+    verifiedAt: null,
+    verificationToken: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
+    verificationTokenHash: tokenHash,
+    verificationExpiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+    verificationSentAt: now,
+  });
+
+  const baseUrl = getPublicBaseUrl(req);
+  if (!baseUrl) {
+    return json({ error: "public base url not configured" }, 500);
+  }
+
+  const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
+  try {
+    await sendVerificationEmail(record.detail, link);
+  } catch (err) {
+    console.error("failed to send verification email:", err);
+  }
+
+  return json({ ok: true, status: "sent" });
+}
+
+function wantsJson(req: Request): boolean {
+  const accept = req.headers.get("accept") ?? "";
+  return accept.includes("application/json");
+}
+
+function html(body: string, status = 200, corsHeaders?: HeadersInit): Response {
+  const securityHeaders = buildSecurityHeaders();
+  return new Response(body, {
+    status,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      ...securityHeaders,
+      ...corsHeaders,
+    },
+  });
+}
+
+function renderVerifyEmailPage(options: {
+  title: string;
+  message: string;
+  token?: string;
+  showButton?: boolean;
+}): string {
+  const buttonHtml = options.showButton && options.token
+    ? `<form method="POST" action="/api/v1/verify-email">
+    <input type="hidden" name="token" value="${options.token}">
+    <button type="submit">Confirm email verification</button>
+  </form>`
+    : "";
+
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>${options.title}</title>
+  </head>
+  <body>
+    <h1>${options.title}</h1>
+    <p>${options.message}</p>
+    ${buttonHtml}
+  </body>
+</html>`;
+}
+
+async function readVerificationTokenFromRequest(req: Request): Promise<{ ok: true; token: string } | { ok: false; error: string; status: number }> {
+  const contentType = req.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+    if (!bodyResult.ok) {
+      return { ok: false, error: bodyResult.error, status: bodyResult.status };
+    }
+    const tokenCheck = validateStringLength(bodyResult.data.token, "token", LIMITS.verificationToken);
+    if (!tokenCheck.ok) return { ok: false, error: tokenCheck.error, status: 400 };
+    return { ok: true, token: tokenCheck.value };
+  }
+
+  const bodyText = await req.text();
+  const params = new URLSearchParams(bodyText);
+  const tokenCheck = validateStringLength(params.get("token"), "token", LIMITS.verificationToken);
+  if (!tokenCheck.ok) return { ok: false, error: tokenCheck.error, status: 400 };
+  return { ok: true, token: tokenCheck.value };
+}
+
+function handleVerifyEmailPage(url: URL): Response {
+  const tokenCheck = validateStringLength(url.searchParams.get("token"), "token", LIMITS.verificationToken);
+  if (!tokenCheck.ok) {
+    return html(renderVerifyEmailPage({
+      title: "Email verification failed",
+      message: tokenCheck.error,
+    }), 400);
+  }
+
+  return html(renderVerifyEmailPage({
+    title: "Confirm email verification",
+    message: "Click the button below to confirm your email verification.",
+    token: tokenCheck.value,
+    showButton: true,
+  }));
+}
+
+async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const tokenResult = await readVerificationTokenFromRequest(req);
+  if (!tokenResult.ok) {
+    return wantsJson(req)
+      ? json({ error: tokenResult.error }, tokenResult.status)
+      : html(renderVerifyEmailPage({
+        title: "Email verification failed",
+        message: tokenResult.error,
+      }), tokenResult.status);
+  }
+  const token = tokenResult.token;
+  const tokenHash = computeTokenHash(token);
+
+  const record = await getDetailByVerificationToken(db, tokenHash, token);
+  if (!record) {
+    return wantsJson(req)
+      ? json({ error: "token not found" }, 404)
+      : html(renderVerifyEmailPage({
+        title: "Email verification failed",
+        message: "Token not found.",
+      }), 404);
+  }
+  if (record.path !== "email") {
+    return wantsJson(req)
+      ? json({ error: "token not valid for email verification" }, 400)
+      : html(renderVerifyEmailPage({
+        title: "Email verification failed",
+        message: "Token not valid for email verification.",
+      }), 400);
+  }
+  if (record.revoked_at !== null) {
+    return wantsJson(req)
+      ? json({ error: "email detail is revoked" }, 409)
+      : html(renderVerifyEmailPage({
+        title: "Email verification failed",
+        message: "Email detail is revoked.",
+      }), 409);
+  }
+  if (record.verification_expires_at !== null && Date.now() > record.verification_expires_at) {
+    return wantsJson(req)
+      ? json({ error: "token expired" }, 400)
+      : html(renderVerifyEmailPage({
+        title: "Email verification failed",
+        message: "Token expired.",
+      }), 400);
+  }
+  if (record.verified_at !== null) {
+    return wantsJson(req)
+      ? json({ ok: true, status: "already_verified" })
+      : html(renderVerifyEmailPage({
+        title: "Email already verified",
+        message: "Your email address is already verified.",
+      }));
+  }
+
+  const now = Date.now();
+  await updateDetailVerification(db, {
+    fingerprint: record.fingerprint,
+    path: record.path,
+    verifiedAt: now,
+    verificationToken: null,
+    verificationTokenHash: null,
+    verificationExpiresAt: null,
+    verificationSentAt: record.verification_sent_at,
+  });
+
+  return wantsJson(req)
+    ? json({ ok: true, status: "verified" })
+    : html(renderVerifyEmailPage({
+      title: "Email verified",
+      message: "Your email address has been verified.",
+    }));
 }
 
 async function handleGetIdentity(fingerprint: string, db: DatabaseAdapter): Promise<Response> {
@@ -703,6 +1027,7 @@ async function handleGetIdentity(fingerprint: string, db: DatabaseAdapter): Prom
   }
 
   const details = await getDetailsMap(db, fingerprint);
+  const detailsMeta = await getDetailsMetaMap(db, fingerprint);
   const revoked = await isIdentityRevoked(db, fingerprint);
   const revokedDetailPaths = await getRevokedDetailPaths(db, fingerprint);
 
@@ -715,6 +1040,7 @@ async function handleGetIdentity(fingerprint: string, db: DatabaseAdapter): Prom
     signingKeyDetails: identity.signing_key_details,
     encryptionKeyDetails: identity.encryption_key_details,
     details,
+    detailsMeta,
     revoked,
     revocationCertificate: identity.revocation_certificate ?? undefined,
     revokedDetails: revokedDetailPaths,
@@ -837,6 +1163,9 @@ async function handleGetRevocations(fingerprint: string, db: DatabaseAdapter): P
 
 // Exports for testing
 export { handleListIdentities, handleSearchIdentities, handleRequest, closeDb };
+export async function getDbForTests(): Promise<DatabaseAdapter> {
+  return await getDb();
+}
 
 const DEFAULT_PAGE_SIZE = 5;
 
@@ -866,6 +1195,7 @@ async function handleListIdentities(url: URL, db: DatabaseAdapter): Promise<Resp
     encryptionKeyType: string;
     createdAt: number;
     details: Record<string, [string, string]>;
+    detailsMeta: Record<string, { verified: boolean; verifiedAt: number | null }>;
     revoked: boolean;
     revokedDetails: string[];
     revocationCertificate?: string | null;
@@ -880,6 +1210,7 @@ async function handleListIdentities(url: URL, db: DatabaseAdapter): Promise<Resp
       encryptionKeyType: ekt,
       createdAt: createdAtNumber,
       details: {},
+      detailsMeta: {},
       revoked: false,
       revokedDetails: [],
       revocationCertificate: null,
@@ -889,21 +1220,28 @@ async function handleListIdentities(url: URL, db: DatabaseAdapter): Promise<Resp
   // Fetch details only for the identities on this page
   if (fingerprints.length > 0) {
     const placeholders = fingerprints.map(() => "?").join(",");
-    const detailRows = await db.query<[string, string, string, string]>(
-      `SELECT identity_fingerprint, path, detail, proof FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
+    const detailRows = await db.query<[string, string, string, string, number | string | bigint | null]>(
+      `SELECT identity_fingerprint, path, detail, proof, verified_at FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
       fingerprints,
     );
     
     const detailsByFp: Record<string, Record<string, [string, string]>> = {};
-    for (const [identityFp, path, detail, proof] of detailRows) {
+    const detailsMetaByFp: Record<string, Record<string, { verified: boolean; verifiedAt: number | null }>> = {};
+    for (const [identityFp, path, detail, proof, verified_at] of detailRows) {
       if (!detailsByFp[identityFp]) {
         detailsByFp[identityFp] = {};
       }
+      if (!detailsMetaByFp[identityFp]) {
+        detailsMetaByFp[identityFp] = {};
+      }
       detailsByFp[identityFp][path] = [detail, proof];
+      const verifiedAt = coerceNumber(verified_at);
+      detailsMetaByFp[identityFp][path] = { verified: verifiedAt !== null, verifiedAt };
     }
 
     for (const row of rows) {
       row.details = detailsByFp[row.fingerprint] ?? {};
+      row.detailsMeta = detailsMetaByFp[row.fingerprint] ?? {};
     }
 
     // Apply revocations: drop revoked details and mark revoked identities
@@ -913,6 +1251,7 @@ async function handleListIdentities(url: URL, db: DatabaseAdapter): Promise<Resp
       // Remove revoked details from the list we return
       for (const path of revokedDetails) {
         delete row.details[path];
+        delete row.detailsMeta[path];
       }
 
       const revoked = await isIdentityRevoked(db, row.fingerprint);
@@ -988,6 +1327,7 @@ async function handleSearchIdentities(url: URL, db: DatabaseAdapter): Promise<Re
     encryptionKeyType: string;
     createdAt: number;
     details: Record<string, [string, string]>;
+    detailsMeta: Record<string, { verified: boolean; verifiedAt: number | null }>;
     revoked: boolean;
     revokedDetails: string[];
     revocationCertificate?: string | null;
@@ -1002,6 +1342,7 @@ async function handleSearchIdentities(url: URL, db: DatabaseAdapter): Promise<Re
       encryptionKeyType: ekt,
       createdAt: createdAtNumber,
       details: {},
+      detailsMeta: {},
       revoked: false,
       revokedDetails: [],
       revocationCertificate: null,
@@ -1010,21 +1351,28 @@ async function handleSearchIdentities(url: URL, db: DatabaseAdapter): Promise<Re
 
   if (fingerprints.length > 0) {
     const placeholders = fingerprints.map(() => "?").join(",");
-    const detailRows = await db.query<[string, string, string, string]>(
-      `SELECT identity_fingerprint, path, detail, proof FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
+    const detailRows = await db.query<[string, string, string, string, number | string | bigint | null]>(
+      `SELECT identity_fingerprint, path, detail, proof, verified_at FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
       fingerprints,
     );
 
     const detailsByFp: Record<string, Record<string, [string, string]>> = {};
-    for (const [identityFp, path, detail, proof] of detailRows) {
+    const detailsMetaByFp: Record<string, Record<string, { verified: boolean; verifiedAt: number | null }>> = {};
+    for (const [identityFp, path, detail, proof, verified_at] of detailRows) {
       if (!detailsByFp[identityFp]) {
         detailsByFp[identityFp] = {};
       }
+      if (!detailsMetaByFp[identityFp]) {
+        detailsMetaByFp[identityFp] = {};
+      }
       detailsByFp[identityFp][path] = [detail, proof];
+      const verifiedAt = coerceNumber(verified_at);
+      detailsMetaByFp[identityFp][path] = { verified: verifiedAt !== null, verifiedAt };
     }
 
     for (const row of rows) {
       row.details = detailsByFp[row.fingerprint] ?? {};
+      row.detailsMeta = detailsMetaByFp[row.fingerprint] ?? {};
     }
 
     for (const row of rows) {
@@ -1032,6 +1380,7 @@ async function handleSearchIdentities(url: URL, db: DatabaseAdapter): Promise<Re
       row.revokedDetails = revokedDetails;
       for (const path of revokedDetails) {
         delete row.details[path];
+        delete row.detailsMeta[path];
       }
 
       const revoked = await isIdentityRevoked(db, row.fingerprint);

@@ -14,7 +14,9 @@
     "jsr:@std/cli@^1.0.6": "1.0.24",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@playwright/test@^1.43.1": "1.57.0",
-    "npm:@types/node@*": "24.2.0"
+    "npm:@types/node@*": "24.2.0",
+    "npm:nodemailer@*": "6.10.1",
+    "npm:nodemailer@^6.9.14": "6.10.1"
   },
   "jsr": {
     "@noble/ciphers@1.3.0": {
@@ -73,6 +75,9 @@
       "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
       "os": ["darwin"],
       "scripts": true
+    },
+    "nodemailer@6.10.1": {
+      "integrity": "sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA=="
     },
     "playwright-core@1.57.0": {
       "integrity": "sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==",
@@ -179,7 +184,8 @@
       "jsr:@noble/ciphers@^1.2.1",
       "jsr:@noble/hashes@^1.8.0",
       "jsr:@noble/post-quantum@~0.5.2",
-      "jsr:@std/cli@^1.0.6"
+      "jsr:@std/cli@^1.0.6",
+      "npm:nodemailer@^6.9.14"
     ],
     "packageJson": {
       "dependencies": [

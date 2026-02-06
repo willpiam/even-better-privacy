@@ -13,6 +13,7 @@ async function withServer(
   const dbPath = await Deno.makeTempFile({ suffix: ".sqlite" });
   // Ensure each test gets a fresh module instance and DB
   Deno.env.set("DB_PATH", dbPath);
+  Deno.env.set("EMAIL_VERIFICATION_STORE_PLAINTEXT", "true");
   const mod: MainModule = await import(`../main.ts#${crypto.randomUUID()}`);
 
   try {
@@ -29,6 +30,7 @@ async function withServer(
       // ignore cleanup failures
     }
     Deno.env.delete("DB_PATH");
+    Deno.env.delete("EMAIL_VERIFICATION_STORE_PLAINTEXT");
   }
 }
 
@@ -182,6 +184,44 @@ Deno.test("Revoked detail rejects old proof but accepts new proof", async () => 
     const identity = await identityRes.json();
     assertEquals(identity.details.email[0], detail);
     assertEquals(identity.revokedDetails, []);
+  });
+});
+
+Deno.test("Email detail is unverified until verification endpoint is called", async () => {
+  await withServer(async (mod, dbPath) => {
+    const { fingerprint, signingKey } = await registerIdentity(mod);
+    const detailRes = await postDetail(mod, fingerprint, signingKey, "email", "user@example.com", 0);
+    assertEquals(detailRes.status, 200);
+
+    const db = await mod.getDbForTests();
+    const rows = await db.query<[number | string | bigint | null, string | null]>(
+      "SELECT verified_at, verification_token FROM details WHERE identity_fingerprint = ? AND path = ?",
+      [fingerprint, "email"],
+    );
+    assertEquals(rows.length, 1);
+    const [verifiedAtRaw, verificationToken] = rows[0];
+    assertEquals(verifiedAtRaw, null);
+    assert(verificationToken, "verification token should be set");
+
+    const verifyRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/verify-email", {
+        method: "POST",
+        headers: { "content-type": "application/json", "accept": "application/json" },
+        body: JSON.stringify({ token: verificationToken }),
+      }),
+    );
+    assertEquals(verifyRes.status, 200);
+    const verifyBody = await verifyRes.json();
+    assertEquals(verifyBody.ok, true);
+
+    const refreshedRows = await db.query<[number | string | bigint | null, string | null]>(
+      "SELECT verified_at, verification_token FROM details WHERE identity_fingerprint = ? AND path = ?",
+      [fingerprint, "email"],
+    );
+    assertEquals(refreshedRows.length, 1);
+    const [refreshedVerifiedAtRaw, refreshedToken] = refreshedRows[0];
+    assert(refreshedVerifiedAtRaw !== null, "email should be marked verified");
+    assertEquals(refreshedToken, null);
   });
 });
 

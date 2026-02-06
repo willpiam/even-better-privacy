@@ -4,15 +4,17 @@
     "@noble/hashes": "jsr:@noble/hashes@^1.8.0",
     "@noble/ciphers": "jsr:@noble/ciphers@^1.2.1",
     "@std/cli/parse-args": "jsr:@std/cli@^1.0.6/parse-args",
+    "nodemailer": "npm:nodemailer@^6.9.14",
     "postgres": "https://deno.land/x/postgres@v0.17.0/mod.ts",
     "sqlite": "https://deno.land/x/sqlite@v3.9.1/mod.ts",
     "std/dotenv": "https://deno.land/std@0.224.0/dotenv/mod.ts",
     "std/http/server": "https://deno.land/std@0.224.0/http/server.ts",
     "std/http/status": "https://deno.land/std@0.224.0/http/status.ts"
   },
+  "nodeModulesDir": "auto",
   "tasks": {
     "cli": "deno run --allow-read --allow-write --allow-env --allow-net ./cli/main.ts",
-    "server": "deno run --allow-net --allow-read --allow-write --allow-env ./server/main.ts",
+    "server": "deno run --allow-sys --allow-net --allow-read --allow-write --allow-env ./server/main.ts",
     "server:remote": "deno task server",
     "postgres": "sh -c 'if docker ps -a --format \"{{.Names}}\" | grep -q \"^ebp-postgres$\"; then docker start ebp-postgres >/dev/null 2>&1 || true; else docker run -d --name ebp-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ebp -p 55432:5432 postgres:16-alpine; fi'",
     "gui:local-backend": "deno run --allow-read --allow-write --allow-env --allow-net ./gui/local-backend/main.ts",

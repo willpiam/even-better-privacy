@@ -72,6 +72,11 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         detail TEXT NOT NULL,
         proof TEXT NOT NULL,
         created_at INTEGER NOT NULL,
+        verified_at INTEGER,
+        verification_token TEXT,
+        verification_token_hash TEXT,
+        verification_expires_at INTEGER,
+        verification_sent_at INTEGER,
         revoked_at INTEGER,
         revocation_certificate TEXT,
         FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
@@ -111,6 +116,31 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     }
     try {
       this.db.execute(`ALTER TABLE details ADD COLUMN revocation_certificate TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN verified_at INTEGER`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN verification_token TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN verification_token_hash TEXT`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN verification_expires_at INTEGER`);
+    } catch {
+      /* column already exists */
+    }
+    try {
+      this.db.execute(`ALTER TABLE details ADD COLUMN verification_sent_at INTEGER`);
     } catch {
       /* column already exists */
     }
@@ -205,6 +235,11 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         detail TEXT NOT NULL,
         proof TEXT NOT NULL,
         created_at BIGINT NOT NULL,
+        verified_at BIGINT,
+        verification_token TEXT,
+        verification_token_hash TEXT,
+        verification_expires_at BIGINT,
+        verification_sent_at BIGINT,
         revoked_at BIGINT,
         revocation_certificate TEXT,
         FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
@@ -230,6 +265,11 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
     await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
     await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verified_at BIGINT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_token TEXT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_token_hash TEXT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_expires_at BIGINT`);
+    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_sent_at BIGINT`);
   }
 
   private rewriteSql(sql: string, params: DatabaseQueryParams): { sql: string; params: unknown[] } {
@@ -302,20 +342,35 @@ export async function getDetailRecord(
   db: DatabaseAdapter,
   fingerprint: string,
   path: string,
-): Promise<{ detail: string; proof: string; revoked_at: number | null; revocation_certificate: string | null } | null> {
-  const rows = await db.query<[string, string, number | string | bigint | null, string | null]>(
-    "SELECT detail, proof, revoked_at, revocation_certificate FROM details WHERE identity_fingerprint = ? AND path = ?",
+): Promise<{
+  detail: string;
+  proof: string;
+  revoked_at: number | null;
+  revocation_certificate: string | null;
+  verified_at: number | null;
+  verification_token: string | null;
+  verification_token_hash: string | null;
+  verification_expires_at: number | null;
+  verification_sent_at: number | null;
+} | null> {
+  const rows = await db.query<[string, string, number | string | bigint | null, string | null, number | string | bigint | null, string | null, string | null, number | string | bigint | null, number | string | bigint | null]>(
+    "SELECT detail, proof, revoked_at, revocation_certificate, verified_at, verification_token, verification_token_hash, verification_expires_at, verification_sent_at FROM details WHERE identity_fingerprint = ? AND path = ?",
     [fingerprint, path],
   );
   if (rows.length === 0) {
     return null;
   }
-  const [detail, proof, revoked_at, revocation_certificate] = rows[0];
+  const [detail, proof, revoked_at, revocation_certificate, verified_at, verification_token, verification_token_hash, verification_expires_at, verification_sent_at] = rows[0];
   return {
     detail,
     proof,
     revoked_at: coerceNumber(revoked_at),
     revocation_certificate,
+    verified_at: coerceNumber(verified_at),
+    verification_token,
+    verification_token_hash,
+    verification_expires_at: coerceNumber(verification_expires_at),
+    verification_sent_at: coerceNumber(verification_sent_at),
   };
 }
 
@@ -328,10 +383,68 @@ export async function updateDetail(db: DatabaseAdapter, record: {
 }): Promise<void> {
   await db.query(
     `UPDATE details
-     SET detail = ?, proof = ?, created_at = ?, revoked_at = NULL, revocation_certificate = NULL
+     SET detail = ?, proof = ?, created_at = ?, revoked_at = NULL, revocation_certificate = NULL,
+         verified_at = NULL, verification_token = NULL, verification_token_hash = NULL,
+         verification_expires_at = NULL, verification_sent_at = NULL
      WHERE identity_fingerprint = ? AND path = ?`,
     [record.detail, record.proof, record.createdAt, record.fingerprint, record.path],
   );
+}
+
+export async function updateDetailVerification(db: DatabaseAdapter, record: {
+  fingerprint: string;
+  path: string;
+  verifiedAt: number | null;
+  verificationToken: string | null;
+  verificationTokenHash: string | null;
+  verificationExpiresAt: number | null;
+  verificationSentAt: number | null;
+}): Promise<void> {
+  await db.query(
+    `UPDATE details
+     SET verified_at = ?, verification_token = ?, verification_token_hash = ?, verification_expires_at = ?, verification_sent_at = ?
+     WHERE identity_fingerprint = ? AND path = ?`,
+    [
+      record.verifiedAt,
+      record.verificationToken,
+      record.verificationTokenHash,
+      record.verificationExpiresAt,
+      record.verificationSentAt,
+      record.fingerprint,
+      record.path,
+    ],
+  );
+}
+
+export async function getDetailByVerificationToken(
+  db: DatabaseAdapter,
+  tokenHash: string,
+  tokenPlaintext: string,
+): Promise<{
+  fingerprint: string;
+  path: string;
+  detail: string;
+  verified_at: number | null;
+  verification_expires_at: number | null;
+  verification_sent_at: number | null;
+  revoked_at: number | null;
+} | null> {
+  const rows = await db.query<[string, string, string, number | string | bigint | null, number | string | bigint | null, number | string | bigint | null, number | string | bigint | null]>(
+    `SELECT identity_fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at
+     FROM details WHERE verification_token_hash = ? OR verification_token = ?`,
+    [tokenHash, tokenPlaintext],
+  );
+  if (rows.length === 0) return null;
+  const [fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at] = rows[0];
+  return {
+    fingerprint,
+    path,
+    detail,
+    verified_at: coerceNumber(verified_at),
+    verification_expires_at: coerceNumber(verification_expires_at),
+    verification_sent_at: coerceNumber(verification_sent_at),
+    revoked_at: coerceNumber(revoked_at),
+  };
 }
 
 export async function getIdentity(db: DatabaseAdapter, fingerprint: string): Promise<IdentityRow | undefined> {
@@ -368,6 +481,22 @@ export async function getDetailsMap(db: DatabaseAdapter, fingerprint: string): P
     details[path] = [detailValue, proof];
   }
   return details;
+}
+
+export async function getDetailsMetaMap(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<Record<string, { verified: boolean; verifiedAt: number | null }>> {
+  const meta: Record<string, { verified: boolean; verifiedAt: number | null }> = {};
+  for (const [path, verified_at, revoked_at] of await db.query<[string, number | string | bigint | null, number | string | bigint | null]>(
+    "SELECT path, verified_at, revoked_at FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
+    [fingerprint],
+  )) {
+    const verifiedAt = coerceNumber(verified_at);
+    const revokedAt = coerceNumber(revoked_at);
+    meta[path] = { verified: verifiedAt !== null && revokedAt === null, verifiedAt };
+  }
+  return meta;
 }
 
 export async function getAllDetailsMap(db: DatabaseAdapter): Promise<AllDetailsMap> {
@@ -458,7 +587,11 @@ export async function revokeIdentity(db: DatabaseAdapter, fingerprint: string, c
 
 export async function revokeDetail(db: DatabaseAdapter, fingerprint: string, path: string, certificate: string, revokedAt: number): Promise<void> {
   await db.query(
-    `UPDATE details SET revoked_at = ?, revocation_certificate = ? WHERE identity_fingerprint = ? AND path = ?`,
+    `UPDATE details
+     SET revoked_at = ?, revocation_certificate = ?,
+         verified_at = NULL, verification_token = NULL, verification_token_hash = NULL,
+         verification_expires_at = NULL, verification_sent_at = NULL
+     WHERE identity_fingerprint = ? AND path = ?`,
     [revokedAt, certificate, fingerprint, path],
   );
 }

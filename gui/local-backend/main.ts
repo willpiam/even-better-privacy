@@ -909,6 +909,50 @@ async function handleRequest(req: Request): Promise<Response> {
 			return json({ ok: true, path, detail });
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/v1/verify-email/request") {
+			const body = await readJson<{
+				home?: unknown;
+				identity?: unknown;
+				server?: unknown;
+				fingerprint?: unknown;
+				detail?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			const providedFingerprint = typeof body.fingerprint === "string" ? body.fingerprint : undefined;
+			const detail = typeof body.detail === "string" ? body.detail : undefined;
+
+			const ctx = await getContext(home, identityName);
+			const server = resolveServer(ctx, serverOverride);
+			const publicData = await loadIdentityPublic(ctx);
+			const fingerprint = providedFingerprint ?? publicData?.fingerprint ?? null;
+			if (!fingerprint) throw new HttpError(STATUS.NotFound, "identity fingerprint not found");
+
+			const res = await fetch(apiUrl(server, "/api/v1/verify-email/request"), {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({
+					fingerprint,
+					detail,
+				}),
+			});
+
+			if (!res.ok) {
+				let reason = `HTTP ${res.status}`;
+				try {
+					const body = await res.json();
+					if (body?.error) reason = body.error;
+				} catch {
+					// ignore
+				}
+				throw new HttpError(STATUS.BadGateway, `failed to send verification email: ${reason}`);
+			}
+
+			const payload = await res.json();
+			return json(payload);
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/v1/publish") {
 			const body = await readJson<{
 				password?: unknown;
