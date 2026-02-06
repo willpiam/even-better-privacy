@@ -1,4 +1,5 @@
 import { bytesToBase64, base64ToBytes } from "./Base64.ts";
+import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -24,7 +25,7 @@ export class AES {
 
 		// [version(1)] [salt] [iv] [ciphertext]
 		const result = new Uint8Array(1 + salt.length + iv.length + ciphertext.length);
-		result[0] = 1; // version
+		result[0] = FILE_FORMAT_VERSIONS.aesCiphertext; // version
 		result.set(salt, 1);
 		result.set(iv, 1 + salt.length);
 		result.set(ciphertext, 1 + salt.length + iv.length);
@@ -39,7 +40,7 @@ export class AES {
 		}
 
 		const version = data[0];
-		if (version !== 1) {
+		if (version !== FILE_FORMAT_VERSIONS.aesCiphertext) {
 			throw new Error("Unsupported ciphertext version");
 		}
 

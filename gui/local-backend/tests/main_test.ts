@@ -1,7 +1,7 @@
 import { assertEquals, assert, assertExists, assertStringIncludes } from "jsr:@std/assert@^1.0.6";
 import { Identity, ExternalIdentity } from "../../../core/Identity.ts";
 import { ensureDir, writeState } from "../../../cli/utils.ts";
-import { PROTOCOL_VERSION } from "../../../core/version.ts";
+import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../../core/version.ts";
 
 // We import the handler dynamically to avoid starting the server
 // Instead, we'll test the request handling logic directly
@@ -513,7 +513,7 @@ Deno.test({
 			const message = "Detached verification check";
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
 				signature: identity.signMessage(message),
 			};
@@ -544,7 +544,7 @@ Deno.test({
 
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
 				signature: identity.signMessage("message"),
 			};
@@ -575,7 +575,7 @@ Deno.test({
 			const message = "Detached verification check";
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
 				signature: identity.signMessage(message),
 			};
@@ -608,7 +608,7 @@ Deno.test({
 			const message = "Detached verification check";
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
 				signature: identity.signMessage(message),
 			};
@@ -640,7 +640,7 @@ Deno.test({
 
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
 				signature: identity.signMessage("correct message"),
 			};
@@ -673,7 +673,7 @@ Deno.test({
 			const message = "Detached verification check";
 			const payload = {
 				type: "ebp-signature",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: signer.toFingerprint(),
 				signature: signer.signMessage(message),
 			};

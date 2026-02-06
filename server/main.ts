@@ -3,7 +3,7 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
-import { PROTOCOL_VERSION } from "../core/version.ts";
+import { PROTOCOL_VERSION, COMPONENT_VERSIONS } from "../core/version.ts";
 import {
   ensureNewNonce,
   getDetailByVerificationToken,
@@ -456,7 +456,11 @@ async function handleRequest(req: Request): Promise<Response> {
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/health") {
-      return jsonResponse({ status: "ok", protocolVersion: PROTOCOL_VERSION });
+      return jsonResponse({
+        status: "ok",
+        protocolVersion: PROTOCOL_VERSION,
+        componentVersion: COMPONENT_VERSIONS.server,
+      });
     }
 
     const db = await getDb();

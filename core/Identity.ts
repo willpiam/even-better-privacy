@@ -9,7 +9,7 @@ import { Key } from "./Keys.ts";
 import { AES } from "./AES.ts";
 import { sha256 } from "@noble/hashes/sha2";
 import { Buffer } from "node:buffer";
-import { PROTOCOL_VERSION, isProtocolVersionSupported } from "./version.ts";
+import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import {
     createRevocationCertificate,
     getRevocationSignaturePayload,
@@ -45,13 +45,14 @@ export type IdentityPublicData = {
 
 /** New storage format: public data unencrypted, private keys encrypted */
 export type IdentityStorageFormat = {
-    version: 2;
+    version: typeof FILE_FORMAT_VERSIONS.identityStorage;
     protocolVersion: string;
     public: IdentityPublicData;
     encrypted: string; // AES-encrypted private keys
 };
 
 export type ExternalIdentity = {
+    version?: number;
     fingerprint: string;
     signingKeyType: SigningKeyOptions;
     encryptionKeyType: EncryptionKeyOptions;
@@ -466,6 +467,7 @@ export class Identity extends Key {
 
     get summary() : ExternalIdentity {
         const summary : Partial<ExternalIdentity> = {
+            version: FILE_FORMAT_VERSIONS.publicIdentity,
             fingerprint: this.toFingerprint(),
             signingKeyType: this.signingKeyType,
             encryptionKeyType: this.encryptionKeyType,
@@ -594,7 +596,7 @@ export class Identity extends Key {
         const encrypted = await AES.encrypt(password, JSON.stringify(privateData));
         
         const storage: IdentityStorageFormat = {
-            version: 2,
+            version: FILE_FORMAT_VERSIONS.identityStorage,
             protocolVersion: PROTOCOL_VERSION,
             public: this.publicData,
             encrypted,
@@ -607,7 +609,7 @@ export class Identity extends Key {
     static readPublicData(storageData: string): IdentityPublicData | null {
         try {
             const parsed = JSON.parse(storageData);
-            if (parsed.version === 2 && parsed.public) {
+            if (parsed.version === FILE_FORMAT_VERSIONS.identityStorage && parsed.public) {
                 return parsed.public as IdentityPublicData;
             }
             return null;
@@ -625,7 +627,7 @@ export class Identity extends Key {
         const parsed = JSON.parse(storageData);
         
         // Handle new v2 format
-        if (parsed.version === 2) {
+        if (parsed.version === FILE_FORMAT_VERSIONS.identityStorage) {
             const pub = parsed.public as IdentityPublicData;
             
             // Check protocol version compatibility

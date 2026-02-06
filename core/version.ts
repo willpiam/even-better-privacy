@@ -13,6 +13,33 @@
 export const PROTOCOL_VERSION = "0.0.1";
 
 /**
+ * Application/component versions.
+ * Keep these in sync across all entrypoints (server, GUI, CLI, email plugin).
+ */
+export const APP_VERSION = "0.1.0";
+export const COMPONENT_VERSIONS = {
+    server: APP_VERSION,
+    cli: APP_VERSION,
+    gui: APP_VERSION,
+    guiLocalBackend: APP_VERSION,
+    emailPlugin: APP_VERSION,
+} as const;
+
+/**
+ * File/payload/ciphertext format versions.
+ */
+export const FILE_FORMAT_VERSIONS = {
+    identityStorage: 2,
+    publicIdentity: 1,
+    signature: 1,
+    signedMessage: 1,
+    encryptedMessage: 1,
+    encryptedSignedMessage: 1,
+    emergencyRevocationCertificate: 1,
+    aesCiphertext: 1,
+} as const;
+
+/**
  * Minimum protocol version that this implementation can read/process.
  * Used for backwards compatibility checks.
  */

@@ -2,7 +2,7 @@
 
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../core/Identity.ts";
-import { PROTOCOL_VERSION } from "../core/version.ts";
+import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../core/version.ts";
 import {
 	CLIContext,
 	updateState,
@@ -19,8 +19,6 @@ import {
 	ensureServer,
 	apiUrl,
 } from "./utils.ts";
-
-const VERSION = "0.1.0";
 
 // ============================================================================
 // Commands
@@ -96,7 +94,7 @@ async function cmdGenerate(args: ReturnType<typeof parseArgs>, ctx: CLIContext):
 		const emergencyCert = identity.generateEmergencyRevocationCertificate();
 		const certData = JSON.stringify({
 			type: "ebp-emergency-revocation-certificate",
-			version: 1,
+			version: FILE_FORMAT_VERSIONS.emergencyRevocationCertificate,
 			fingerprint: identity.toFingerprint(),
 			certificate: emergencyCert,
 			createdAt: new Date().toISOString(),
@@ -357,7 +355,7 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 		// Output just the signature
 		const output = JSON.stringify({
 			type: "ebp-signature",
-			version: 1,
+			version: FILE_FORMAT_VERSIONS.signature,
 			fingerprint: identity.toFingerprint(),
 			signature,
 		}, null, 2);
@@ -372,7 +370,7 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 		// Output message + signature together
 		const output = JSON.stringify({
 			type: "ebp-signed-message",
-			version: 1,
+			version: FILE_FORMAT_VERSIONS.signedMessage,
 			fingerprint: identity.toFingerprint(),
 			message,
 			signature,
@@ -483,7 +481,7 @@ async function cmdEncrypt(args: ReturnType<typeof parseArgs>, ctx: CLIContext): 
 		
 		output = JSON.stringify({
 			type: "ebp-encrypted-signed-message",
-			version: 1,
+			version: FILE_FORMAT_VERSIONS.encryptedSignedMessage,
 			recipientFingerprint: recipient.fingerprint,
 			senderFingerprint,
 			ciphertext,
@@ -493,7 +491,7 @@ async function cmdEncrypt(args: ReturnType<typeof parseArgs>, ctx: CLIContext): 
 		
 		output = JSON.stringify({
 			type: "ebp-encrypted-message",
-			version: 1,
+			version: FILE_FORMAT_VERSIONS.encryptedMessage,
 			recipientFingerprint: recipient.fingerprint,
 			ciphertext,
 		}, null, 2);
@@ -730,7 +728,7 @@ async function cmdGenerateRevocationCert(args: ReturnType<typeof parseArgs>, ctx
 	const emergencyCert = identity.generateEmergencyRevocationCertificate();
 	const certData = JSON.stringify({
 		type: "ebp-emergency-revocation-certificate",
-		version: 1,
+		version: FILE_FORMAT_VERSIONS.emergencyRevocationCertificate,
 		fingerprint: identity.toFingerprint(),
 		certificate: emergencyCert,
 		createdAt: new Date().toISOString(),
@@ -1063,7 +1061,7 @@ async function cmdServer(args: ReturnType<typeof parseArgs>, ctx: CLIContext): P
 // ============================================================================
 
 function printHelp(): void {
-	console.log(`ebp - Post-quantum cryptography CLI (v${VERSION}, protocol ${PROTOCOL_VERSION})
+	console.log(`ebp - Post-quantum cryptography CLI (v${COMPONENT_VERSIONS.cli}, protocol ${PROTOCOL_VERSION})
 
 USAGE:
   ebp <command> [options] [arguments]
@@ -1193,7 +1191,7 @@ async function main(): Promise<void> {
 	});
 
 	if (args.version) {
-		console.log(`ebp v${VERSION} (protocol ${PROTOCOL_VERSION})`);
+		console.log(`ebp v${COMPONENT_VERSIONS.cli} (protocol ${PROTOCOL_VERSION})`);
 		Deno.exit(0);
 	}
 

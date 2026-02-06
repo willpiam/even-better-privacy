@@ -5,7 +5,7 @@ import { Identity, ExternalIdentity, IdentityPublicData } from "../../core/Ident
 import { DilithiumSigningKey } from "../../core/Dilithium.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
 import { KyberEncryptionKey } from "../../core/Kyber.ts";
-import { PROTOCOL_VERSION } from "../../core/version.ts";
+import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import {
 	CLIContext,
 	buildStateFromExternal,
@@ -268,7 +268,11 @@ async function handleRequest(req: Request): Promise<Response> {
 		if (staticResponse) return staticResponse;
 
 		if (req.method === "GET" && url.pathname === "/api/v1/health") {
-			return json({ ok: true, protocolVersion: PROTOCOL_VERSION });
+			return json({
+				ok: true,
+				protocolVersion: PROTOCOL_VERSION,
+				componentVersion: COMPONENT_VERSIONS.guiLocalBackend,
+			});
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/context") {
@@ -281,6 +285,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				currentIdentity: ctx.currentIdentity,
 				server: state?.server ?? null,
 				protocolVersion: PROTOCOL_VERSION,
+				componentVersion: COMPONENT_VERSIONS.guiLocalBackend,
 			});
 		}
 
@@ -520,14 +525,14 @@ async function handleRequest(req: Request): Promise<Response> {
 			if (detached) {
 				return json({
 					type: "ebp-signature",
-					version: 1,
+					version: FILE_FORMAT_VERSIONS.signature,
 					fingerprint: identity.toFingerprint(),
 					signature,
 				});
 			}
 			return json({
 				type: "ebp-signed-message",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.signedMessage,
 				fingerprint: identity.toFingerprint(),
 				message,
 				signature,
@@ -646,7 +651,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				const ciphertext = identity.signAndEncryptFor(message, contact);
 				return json({
 					type: "ebp-encrypted-signed-message",
-					version: 1,
+					version: FILE_FORMAT_VERSIONS.encryptedSignedMessage,
 					recipientFingerprint: contact.fingerprint,
 					senderFingerprint: identity.toFingerprint(),
 					ciphertext,
@@ -656,7 +661,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			const ciphertext = Identity.EncryptFor(contact, message);
 			return json({
 				type: "ebp-encrypted-message",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.encryptedMessage,
 				recipientFingerprint: contact.fingerprint,
 				ciphertext,
 			});
@@ -1280,7 +1285,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			
 			return json({
 				type: "ebp-emergency-revocation-certificate",
-				version: 1,
+				version: FILE_FORMAT_VERSIONS.emergencyRevocationCertificate,
 				fingerprint: identity.toFingerprint(),
 				certificate: emergencyCert,
 				createdAt: new Date().toISOString(),

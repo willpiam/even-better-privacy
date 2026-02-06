@@ -1,6 +1,7 @@
 import { SigningKeyOptions, EncryptionKeyOptions } from "./Keys.ts";
 
 export type ExternalIdentity = {
+    version?: number;
     fingerprint: string;
     signingKeyType: SigningKeyOptions;
     encryptionKeyType: EncryptionKeyOptions;
