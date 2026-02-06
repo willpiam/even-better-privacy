@@ -144,11 +144,11 @@ function getPublicBaseUrl(req: Request): string | null {
   return null;
 }
 
-async function sendVerificationEmail(to: string, link: string): Promise<void> {
+async function sendVerificationEmail(to: string, link: string, fingerprint: string): Promise<void> {
   const host = Deno.env.get("SMTP_HOST");
   const from = Deno.env.get("SMTP_FROM");
   if (!host || !from) {
-    console.log(`[email-verification] ${to}: ${link}`);
+    console.log(`[email-verification] ${to}: ${link} (fingerprint: ${fingerprint})`);
     return;
   }
 
@@ -170,7 +170,10 @@ async function sendVerificationEmail(to: string, link: string): Promise<void> {
     from,
     to,
     subject: "Verify your email",
-    text: `Please verify your email by visiting this link:\n\n${link}\n\nIf you did not request this, you can ignore this message.`,
+    text:
+      `Please verify your email by visiting this link:\n\n${link}\n\n` +
+      `Identity fingerprint:\n${fingerprint}\n\n` +
+      `If you did not request this, you can ignore this message.`,
   });
 }
 
@@ -788,7 +791,7 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
 
       const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
       try {
-        await sendVerificationEmail(detail, link);
+        await sendVerificationEmail(detail, link, fingerprint);
       } catch (err) {
         console.error("failed to send verification email:", err);
       }
@@ -853,7 +856,7 @@ async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter): Prom
 
   const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
   try {
-    await sendVerificationEmail(record.detail, link);
+    await sendVerificationEmail(record.detail, link, fingerprint);
   } catch (err) {
     console.error("failed to send verification email:", err);
   }
