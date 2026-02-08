@@ -1,0 +1,31 @@
+{
+  "build": {
+    "beforeDevCommand": "deno task desktop:backend:dev",
+    "beforeBuildCommand": "deno task desktop:backend:build",
+    "devPath": "http://127.0.0.1:8787/",
+    "distDir": "../gui"
+  },
+  "package": {
+    "productName": "EBP",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "windows": [
+      {
+        "title": "Even Better Privacy",
+        "url": "http://127.0.0.1:8787/",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 600
+      }
+    ],
+    "bundle": {
+      "active": true,
+      "targets": "appimage",
+      "identifier": "com.ebp.app",
+      "icon": [],
+      "externalBin": ["bin/ebp-gui-backend"]
+    }
+  }
+}
