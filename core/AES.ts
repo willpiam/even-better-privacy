@@ -10,6 +10,11 @@ const PBKDF2_ITERATIONS = 310_000; // strong default as of 2024
 
 export class AES {
 	static async encrypt(password: string, plaintext: string): Promise<string> {
+		const versionTag = FILE_FORMAT_VERSIONS.aesCiphertext;
+		const versionBytes = encoder.encode(versionTag);
+		if (versionBytes.length > 255) {
+			throw new Error("Ciphertext version tag too long");
+		}
 		const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
 		const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
 		const key = await deriveKey(password, salt);
@@ -23,12 +28,15 @@ export class AES {
 			),
 		);
 
-		// [version(1)] [salt] [iv] [ciphertext]
-		const result = new Uint8Array(1 + salt.length + iv.length + ciphertext.length);
-		result[0] = FILE_FORMAT_VERSIONS.aesCiphertext; // version
-		result.set(salt, 1);
-		result.set(iv, 1 + salt.length);
-		result.set(ciphertext, 1 + salt.length + iv.length);
+		// [versionLen(1)] [version] [salt] [iv] [ciphertext]
+		const result = new Uint8Array(1 + versionBytes.length + salt.length + iv.length + ciphertext.length);
+		result[0] = versionBytes.length;
+		result.set(versionBytes, 1);
+		const saltOffset = 1 + versionBytes.length;
+		result.set(salt, saltOffset);
+		const ivOffset = saltOffset + salt.length;
+		result.set(iv, ivOffset);
+		result.set(ciphertext, ivOffset + iv.length);
 
 		return bytesToBase64(result);
 	}
@@ -39,12 +47,18 @@ export class AES {
 			throw new Error("Invalid ciphertext");
 		}
 
-		const version = data[0];
+		const versionLen = data[0];
+		if (data.length < 1 + versionLen + SALT_LENGTH + IV_LENGTH) {
+			throw new Error("Invalid ciphertext");
+		}
+		const versionStart = 1;
+		const versionEnd = versionStart + versionLen;
+		const version = decoder.decode(data.slice(versionStart, versionEnd));
 		if (version !== FILE_FORMAT_VERSIONS.aesCiphertext) {
 			throw new Error("Unsupported ciphertext version");
 		}
 
-		const saltStart = 1;
+		const saltStart = versionEnd;
 		const saltEnd = saltStart + SALT_LENGTH;
 		const ivEnd = saltEnd + IV_LENGTH;
 
