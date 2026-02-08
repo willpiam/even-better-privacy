@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "EBP Mail",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Encrypt/decrypt EBP messages in supported webmail via the local EBP backend.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": [
