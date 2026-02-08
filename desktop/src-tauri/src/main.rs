@@ -1,8 +1,10 @@
+use std::env;
+use std::path::{PathBuf, Path};
+use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
-use tauri::api::process::{Command, CommandChild};
 
 #[derive(Clone)]
-struct SidecarState(Arc<Mutex<Option<CommandChild>>>);
+struct SidecarState(Arc<Mutex<Option<Child>>>);
 
 fn main() {
   let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
@@ -10,8 +12,10 @@ fn main() {
   tauri::Builder::default()
     .setup({
       let sidecar_state = sidecar_state.clone();
-      move |_app| {
-        let (mut child, _rx) = Command::new_sidecar("ebp-gui-backend")?
+      move |app| {
+        let sidecar_path = resolve_sidecar(app)?;
+
+        let child = Command::new(sidecar_path)
           .env("GUI_BACKEND_HOST", "127.0.0.1")
           .env("GUI_BACKEND_PORT", "8787")
           .spawn()?;
@@ -35,4 +39,63 @@ fn main() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
+  let candidates = [
+    "bin/ebp-gui-backend-x86_64-unknown-linux-gnu",
+    "bin/ebp-gui-backend",
+  ];
+
+  for candidate in candidates {
+    if let Some(path) = app.path_resolver().resolve_resource(candidate) {
+      if path.exists() {
+        return Ok(path);
+      }
+    }
+  }
+
+  if let Some(resource_dir) = app.path_resolver().resource_dir() {
+    for candidate in candidates {
+      let path = resource_dir.join(candidate);
+      if path.exists() {
+        return Ok(path);
+      }
+    }
+  }
+
+  if let Ok(appdir) = env::var("APPDIR") {
+    let appdir_path = Path::new(&appdir);
+    for candidate in candidates {
+      let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
+      if path.exists() {
+        return Ok(path);
+      }
+    }
+  }
+
+  if let Ok(exe_path) = env::current_exe() {
+    if let Some(exe_dir) = exe_path.parent() {
+      for candidate in candidates {
+        let file_name = Path::new(candidate).file_name().unwrap();
+        let path = exe_dir.join(file_name);
+        if path.exists() {
+          return Ok(path);
+        }
+      }
+    }
+
+    if let Some(appdir_path) = exe_path.parent().and_then(|p| p.parent()) {
+      for candidate in candidates {
+        let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
+        if path.exists() {
+          return Ok(path);
+        }
+      }
+    }
+  }
+
+  Err(tauri::Error::AssetNotFound(
+    "sidecar binary not found in resources".into(),
+  ))
 }

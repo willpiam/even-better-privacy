@@ -1,9 +1,9 @@
 {
   "build": {
-    "beforeDevCommand": "deno task desktop:backend:dev",
-    "beforeBuildCommand": "deno task desktop:backend:build",
+    "beforeDevCommand": "deno task -c ../deno.json desktop:backend:dev",
+    "beforeBuildCommand": "deno task -c ../deno.json desktop:backend:build",
     "devPath": "http://127.0.0.1:8787/",
-    "distDir": "../gui"
+    "distDir": "../../gui"
   },
   "package": {
     "productName": "EBP",
@@ -24,7 +24,7 @@
       "active": true,
       "targets": "appimage",
       "identifier": "com.ebp.app",
-      "icon": [],
+      "icon": ["icons/icon.png"],
       "externalBin": ["bin/ebp-gui-backend"]
     }
   }

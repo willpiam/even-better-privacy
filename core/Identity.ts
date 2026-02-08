@@ -58,6 +58,8 @@ export type ExternalIdentity = {
     encryptionKeyType: EncryptionKeyOptions;
     details: {[key: string]: [string, string]}; // object with string keys and string values
     detailsMeta?: Record<string, { verified: boolean; verifiedAt: number | null }>;
+    revoked?: boolean;
+    revokedDetails?: string[];
     signingKey: string;
     encryptionKey: string;
     signingKeyDetails: any;

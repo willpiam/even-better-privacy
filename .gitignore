@@ -40,3 +40,6 @@ build/
 
 # Node
 node_modules/
+
+# for now because its likely to create some big files which will need to be identified and ignored 
+desktop

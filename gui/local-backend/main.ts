@@ -23,6 +23,7 @@ import {
 type JsonValue = Record<string, unknown>;
 
 const STATIC_ROOT = new URL("..", import.meta.url);
+const HOST = Deno.env.get("GUI_BACKEND_HOST") ?? "127.0.0.1";
 const PORT = Number(Deno.env.get("GUI_BACKEND_PORT") ?? "8787");
 const CORS_HEADERS = {
 	"access-control-allow-origin": "*",
@@ -614,8 +615,6 @@ async function handleRequest(req: Request): Promise<Response> {
 					encryptionKeyType: "kyber",
 					encryptionKeyDetails: candidate.encryptionKeyDetails,
 					details: (candidate.details as ExternalIdentity["details"]) ?? {},
-					revoked: false,
-					revokedDetails: [],
 				};
 			} else {
 				contact = await loadContact(ctx, sender ?? fingerprint.substring(0, 16));
@@ -1278,8 +1277,8 @@ async function handleRequest(req: Request): Promise<Response> {
 				throw new HttpError(STATUS.BadRequest, "password required");
 			}
 
-			const ctx = await getContext(home);
-			const { identity } = await loadAndMaybeUpgrade(ctx, password, identityName);
+			const ctx = await getContext(home, identityName);
+			const identity = await loadIdentity(ctx, password);
 
 			const emergencyCert = identity.generateEmergencyRevocationCertificate();
 			
@@ -1354,6 +1353,6 @@ async function handleRequest(req: Request): Promise<Response> {
 	}
 }
 
-serve(handleRequest, { port: PORT });
-console.log(`EBP GUI local backend listening on http://localhost:${PORT}`);
+serve(handleRequest, { port: PORT, hostname: HOST });
+console.log(`EBP GUI local backend listening on http://${HOST}:${PORT}`);
 
