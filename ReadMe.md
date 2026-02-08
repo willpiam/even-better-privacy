@@ -238,6 +238,17 @@ Supported email clients (web):
 
 See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md).
 
+## Support Development
+
+If you find EBP useful, consider supporting the project:
+
+| Network | Address/Handle | Link |
+| --- | --- | --- |
+| Ethereum (& more) | `williamdoyle.eth` | https://app.ens.domains/williamdoyle.eth |
+| Bitcoin | `bc1q6crw4wy7jecs05f4ytz68n6evuzlu7k3cnu7zy` | https://blockchair.com/bitcoin/address/bc1q6crw4wy7jecs05f4ytz68n6evuzlu7k3cnu7zy |
+| Cardano | `$wildoy` | https://handle.me/wildoy |
+| QRL | `Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db` | https://explorer.theqrl.org/a/Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db |
+
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for future plans and development notes.
