@@ -1,6 +1,6 @@
 # EBP: Even Better Privacy
 
-![logo](./logo/tiny-logo.png)
+![logo](./assets/tiny-logo.png)
 
 PGP supports no quantum secure standards and implementing those standards is going to be awkward. 
 

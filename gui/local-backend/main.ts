@@ -82,7 +82,7 @@ async function tryServeStatic(req: Request, url: URL): Promise<Response | null> 
 	if (target === "") target = "index.html";
 
 	let fileUrl: URL;
-	if (target.startsWith("logo/")) {
+	if (target.startsWith("assets/")) {
 		fileUrl = new URL(target, PROJECT_ROOT);
 	} else {
 		fileUrl = new URL(target, STATIC_ROOT);
