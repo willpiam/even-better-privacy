@@ -314,9 +314,6 @@ MIT — see [LICENSE](LICENSE) for details.
 - Better db interface layer
     - abstract on EBP actions instead of the db connection
     - this will allow us to have different SQL for the sqlite and psql implementations. It would also allow use to easily implement non-sql connections. 
-- Two way email endorsment
-    - key signs the email address
-    - email address verifies the key by responding to a request email
 - Sign files
     - CLI and GUI
 - end to end tests for the email plugin

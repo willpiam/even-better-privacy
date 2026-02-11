@@ -839,6 +839,15 @@
       word-break: break-all;
     }
 
+    .project-logo {
+      width: min(100%, 320px);
+      display: block;
+      margin: 0 auto;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-md);
+    }
+
     /* ─────────────────────────────────────────────────────────────────────────
        Identity List Item
     ───────────────────────────────────────────────────────────────────────── */
@@ -1914,6 +1923,14 @@
       <div class="page-header">
         <h2>Project Info</h2>
         <p>About the EBP (Even Better Privacy) project</p>
+      </div>
+
+      <div class="info-card">
+        <img
+          class="project-logo"
+          src="/logo/large-logo.png"
+          alt="Even Better Privacy watercolor logo"
+        />
       </div>
 
       <div class="info-card">

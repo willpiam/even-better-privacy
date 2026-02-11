@@ -23,6 +23,7 @@ import {
 type JsonValue = Record<string, unknown>;
 
 const STATIC_ROOT = new URL("..", import.meta.url);
+const PROJECT_ROOT = new URL("../..", import.meta.url);
 const HOST = Deno.env.get("GUI_BACKEND_HOST") ?? "127.0.0.1";
 const PORT = Number(Deno.env.get("GUI_BACKEND_PORT") ?? "8787");
 const CORS_HEADERS = {
@@ -62,6 +63,9 @@ function contentType(pathname: string): string {
 	if (lower.endsWith(".json")) return "application/json; charset=utf-8";
 	if (lower.endsWith(".txt")) return "text/plain; charset=utf-8";
 	if (lower.endsWith(".svg")) return "image/svg+xml";
+	if (lower.endsWith(".png")) return "image/png";
+	if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+	if (lower.endsWith(".webp")) return "image/webp";
 	return "application/octet-stream";
 }
 
@@ -77,7 +81,12 @@ async function tryServeStatic(req: Request, url: URL): Promise<Response | null> 
 	let target = decoded.replace(/^\/+/, "");
 	if (target === "") target = "index.html";
 
-	const fileUrl = new URL(target, STATIC_ROOT);
+	let fileUrl: URL;
+	if (target.startsWith("logo/")) {
+		fileUrl = new URL(target, PROJECT_ROOT);
+	} else {
+		fileUrl = new URL(target, STATIC_ROOT);
+	}
 	let data: Uint8Array;
 	try {
 		data = await Deno.readFile(fileUrl);
