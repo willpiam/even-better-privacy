@@ -41,5 +41,9 @@ build/
 # Node
 node_modules/
 
-# for now because its likely to create some big files which will need to be identified and ignored 
-desktop
+# Desktop
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/bin/ebp-gui-backend
+desktop/src-tauri/bin/ebp-gui-backend-x86_64-unknown-linux-gnu
+*.AppImage

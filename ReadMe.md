@@ -19,7 +19,7 @@ This is the EBP reference implementation.
 3. click on settings
 4. Set *server url* to https://ebp-cqyo.onrender.com
 
-### Desktop AppImage (Linux)
+### Desktop AppImage (Linux - In development)
 
 This is the easiest way for non-technical users to install and update EBP on Linux.
 
@@ -36,11 +36,15 @@ Build AppImage locally:
 1. Install dependencies: `sudo apt install libwebkit2gtk-4.0-dev libssl-dev build-essential`
 2. Install Node.js (for Tauri): https://nodejs.org/
 3. Install Rust: https://www.rust-lang.org/tools/install
-4. Build the AppImage:
-   - `cd desktop`
-   - `npm install`
-   - `npm run build`
-5. The AppImage will be in `desktop/src-tauri/target/release/bundle/appimage/`
+4. From the project root, run:
+   - `chmod +x build_desktop.sh`
+   - `./build_desktop.sh`
+5. The generated single-file AppImage will be:
+   - `./EBP.AppImage`
+6. Run it:
+   - `./EBP.AppImage`
+   - If your system does not support FUSE, use:
+     - `APPIMAGE_EXTRACT_AND_RUN=1 ./EBP.AppImage`
 
 ## Environment Configuration
 
@@ -62,7 +66,7 @@ SMTP_PORT=465
 SMTP_USER=<sender email address>
 SMTP_PASS="sender email password here"
 SMTP_FROM=<sender email address>
-SMTP_SECURE=tls
+SMTP_SECURE=true
 
 PUBLIC_BASE_URL=<base url of ebp key server>
 ```
@@ -258,6 +262,7 @@ controls to webmail using the local GUI backend API.
 Supported email clients (web):
 - Gmail
 - Outlook (Outlook on the web)
+- Proton Mail
 
 See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md).
 

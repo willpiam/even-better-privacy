@@ -1,4 +1,5 @@
 const statusEl = document.getElementById("status");
+const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
 const ctxCurrent = document.getElementById("ctx-current");
 const ctxServer = document.getElementById("ctx-server");
 const ctxIdir = document.getElementById("ctx-idir");
@@ -9,6 +10,7 @@ const identityDetailsList = document.getElementById("identity-details-list");
 const contactsList = document.getElementById("contacts-list");
 const serverIdentitiesList = document.getElementById("server-identities-list");
 
+let serverDefaultApplied = false;
 const state = {
   currentIdentity: null,
   currentFingerprint: null,
@@ -1304,11 +1306,13 @@ async function loadAll() {
     // Populate server URL input if we have a server
     const serverUrlInput = document.getElementById("server-url");
     const serverUrlPreset = document.getElementById("server-url-preset");
-    if (serverUrlInput && state.server) {
-      serverUrlInput.value = state.server;
-    }
-    if (serverUrlPreset) {
-      serverUrlPreset.value = state.server || "";
+    if (state.server) {
+      if (serverUrlInput) serverUrlInput.value = state.server;
+      if (serverUrlPreset) serverUrlPreset.value = state.server;
+    } else if (!serverDefaultApplied) {
+      if (serverUrlInput) serverUrlInput.value = DEFAULT_SERVER_URL;
+      if (serverUrlPreset) serverUrlPreset.value = DEFAULT_SERVER_URL;
+      serverDefaultApplied = true;
     }
     const serverIdentitiesSearchInput = document.getElementById("server-identities-search");
     if (serverIdentitiesSearchInput) {
