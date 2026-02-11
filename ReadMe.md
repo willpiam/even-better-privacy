@@ -1,5 +1,7 @@
 # EBP: Even Better Privacy
 
+![logo](./logo/tiny-logo.png)
+
 PGP supports no quantum secure standards and implementing those standards is going to be awkward. 
 
 EBP is a self declared successor to PGP. 
@@ -263,6 +265,24 @@ Supported email clients (web):
 - Gmail
 - Outlook (Outlook on the web)
 - Proton Mail
+
+Build the Chromium extension package (`.crx`) from project root:
+
+```bash
+chmod +x build_chrome_extension.sh
+./build_chrome_extension.sh
+```
+
+This creates:
+- `email/chrome-extension.crx`
+- `email/chrome-extension.pem` (keep this key to preserve extension ID on future builds)
+
+To create a store upload zip (`manifest.json` at archive root), run:
+
+```bash
+cd email/chrome-extension
+zip -r ../chrome-extension-0.1.0.zip . -x "*.DS_Store" -x "__MACOSX/*"
+```
 
 See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md).
 

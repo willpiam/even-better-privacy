@@ -47,3 +47,8 @@ desktop/src-tauri/target/
 desktop/src-tauri/bin/ebp-gui-backend
 desktop/src-tauri/bin/ebp-gui-backend-x86_64-unknown-linux-gnu
 *.AppImage
+
+# Email extension build artifacts
+/email/chrome-extension.crx
+/email/chrome-extension.pem
+/email/chrome-extension-*.zip
