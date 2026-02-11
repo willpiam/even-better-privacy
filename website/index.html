@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EBP — Even Better Privacy</title>
+  <meta
+    name="description"
+    content="EBP is a post-quantum identity and secure messaging system designed as a practical successor to PGP."
+  />
+  <link rel="preconnect" href="https://raw.githubusercontent.com" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <nav class="top-nav container">
+      <div class="brand">
+        <img
+          src="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/tiny-logo.png"
+          alt="EBP logo"
+          width="42"
+          height="42"
+        />
+        <span>Even Better Privacy</span>
+      </div>
+      <a class="button subtle" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
+        View on GitHub
+      </a>
+    </nav>
+
+    <section class="container hero-content">
+      <div class="hero-copy">
+        <p class="eyebrow">Post-Quantum Identity + Messaging</p>
+        <h1>A practical successor to PGP, built for the next era of cryptography.</h1>
+        <p class="lead">
+          EBP pairs modern post-quantum signing and encryption into one simple to use identity management tool.
+        </p>
+        <div class="actions">
+          <a class="button primary" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
+            Check Out the Project
+          </a>
+        </div>
+      </div>
+      <div class="hero-art">
+        <img
+          src="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/marquee-promo.png"
+          alt="EBP promotional visual"
+        />
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <section class="container panel">
+      <h2>Why EBP</h2>
+      <div class="grid three">
+        <article class="card">
+          <h3>Post-Quantum by Design</h3>
+          <p>
+            Uses ML-DSA / SPHINCS+ style signatures and ML-KEM style encryption workflows instead of legacy PGP assumptions.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Identity-Centered Security</h3>
+          <p>
+            Your identity combines signing and encryption keys, with a clear fingerprint for sharing and verification.
+          </p>
+        </article>
+        <article class="card">
+          <h3>Real-World Controls</h3>
+          <p>
+            Includes revocation support when keys or details need to be retired.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section class="container panel">
+      <h2>How It Works</h2>
+      <ol class="steps">
+        <li>Generate an identity (signing key + encryption key).</li>
+        <li>Share your public identity and fingerprint.</li>
+        <li>Import contacts, then sign/verify and encrypt/decrypt messages.</li>
+        <li>Use the Chromium email plugin to sign/encrypt and decrypt/verify in supported webmail.</li>
+        <li>Revoke details or full identities if trust changes.</li>
+      </ol>
+    </section>
+
+    <section class="container panel">
+      <h2>How to Get It</h2>
+      <p class="section-lead">Choose the interface that fits your workflow:</p>
+      <div class="grid three">
+         <article class="card">
+            <h3>Desktop Application</h3>
+            <p>Get the latest desktop builds from the GitHub releases page.</p>
+            <p><a href="https://github.com/willpiam/even-better-privacy/releases" target="_blank" rel="noreferrer">View Releases</a></p>
+          </article>
+        <article class="card">
+          <h3>GUI</h3>
+          <p>Run the graphical interface with local backend support for day-to-day use.</p>
+          <pre><code>deno task gui</code></pre>
+        </article>
+        <article class="card">
+          <h3>CLI</h3>
+          <p>Use the command line tools for scripting, automation, and fast key operations.</p>
+          <pre><code>deno task cli --help</code></pre>
+        </article>
+       
+      </div>
+    </section>
+
+    <section class="container panel cta">
+      <h2>Build trust that can adapt.</h2>
+      <p>
+        We believe it is important to build a flexible, adaptive post-quantum standard early so adoption can converge instead of fragment. A world where people agree on crypto standards is safer for everyone, so we welcome contributions and collaboration because it should be easier to join us than compete with us.
+      </p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
+          Join Us
+        </a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
