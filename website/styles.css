@@ -217,18 +217,18 @@ code {
 }
 
 .cta {
-  text-align: center;
+  text-align: left;
   padding: 1.8rem 0 0.8rem;
 }
 
 .cta p {
-  margin: 0.3rem auto 0;
-  max-width: 56ch;
+  margin: 0.3rem 0 0;
+  max-width: 54ch;
   color: var(--ink-soft);
 }
 
 .cta .actions {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 @media (max-width: 900px) {

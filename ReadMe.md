@@ -92,6 +92,13 @@ PUBLIC_BASE_URL=<base url of ebp key server>
 
 - ML-KEM (Kyber)
 
+| Name                      | Varient Used      | Public Key Size   | Purpose  |
+| --------------------------|-------------------|-------------------|----------|
+| ML-KEM (Kyber)            | ML-KEM-1024       | 1,568 bytes       | KEM      |
+| SLH-DSA (SPHINCS+)        | SLH-DSA SHA2-256s | 64 bytes          | Auth     |
+| ML-DSA (Dilithium)        | ml_dsa87          | 2,592 bytes       | Auth     |
+| FN-DSA (Falcon) (Planned) | NA                | NA                | Auth     |
+
 ## Scheme
 
 Unlike RSA or ECC, the new post quantum schemes support either encryption or message signing but not both in the same scheme. Therefore we insist signing and encryption (or rather KEM) keys never appear in isolation but always come in pairs; a signing key and an encryption key. The resulting object is called an Identity. The fingerprint of an identity is the hash of the two keys. 
@@ -301,3 +308,15 @@ MIT — see [LICENSE](LICENSE) for details.
 - Sign files
     - CLI and GUI
 - end to end tests for the email plugin
+- bech32 fingerprints
+    - indicate the type of keys used 
+    - 6e1fccc7b59096e28c269e7c8931ad818220225ff1139b2141a764be1f968acf
+    - prefixes indicate signing key type, then kem key type (for now always MK_KEM)
+        - dk1 -> dilithium+kyber
+        - sk1 -> Sphincs+kyber
+        - fk1 -> Falcon+kyber
+- fingerprint should be the merkle root of the two keys
+    - this will allow a signing key to prove it belongs to an identiy without also provinging the KEM key
+    - this is useful because these public keys are big and in some cases we can imagine a user not needing both
+    - for example if a smart contract could verify ML-DSA (Dilithium) you might use an EBP identity to control an ethereum wallet. But you wouldn't nessisairly need the ML-KEM (Kyber) key and providing it would needlessly increase your gas fees, only to allow you to compute your EBP fingerprint once?
+    
