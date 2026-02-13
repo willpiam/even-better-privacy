@@ -319,4 +319,7 @@ MIT — see [LICENSE](LICENSE) for details.
     - this will allow a signing key to prove it belongs to an identiy without also provinging the KEM key
     - this is useful because these public keys are big and in some cases we can imagine a user not needing both
     - for example if a smart contract could verify ML-DSA (Dilithium) you might use an EBP identity to control an ethereum wallet. But you wouldn't nessisairly need the ML-KEM (Kyber) key and providing it would needlessly increase your gas fees, only to allow you to compute your EBP fingerprint once?
-    
+- web interface to verify signatures:
+    - upload a signature file and a public key file (and type in a message if not provided in signature file) and see if the signature is valid and if it is we should check the backend server (https://ebp-cqyo.onrender.com) to see if the identity has been published, if it does we should show the signers details
+    - same with a pasted signature, public key, and message
+    - signature objects may or may not include a message or a public key 
