@@ -102,6 +102,8 @@ const LIMITS = {
   fingerprint: 128,         // SHA-256 hex = 64 chars, allow some margin
   path: 256,                // Detail path
   detail: 8192,             // Detail value (8KB)
+  message: 100_000,         // Message payload for signature verification
+  signature: 100_000,       // Post-quantum signatures are large
   proof: 100_000,           // Proof/certificate can be large due to signatures
   certificate: 100_000,     // Revocation certificate
   reason: 1024,             // Revocation reason
@@ -350,6 +352,160 @@ function validateStringLength(
   return { ok: true, value };
 }
 
+type VerifyInput = {
+  message: string;
+  signature: string;
+  fingerprint: string | null;
+  publicIdentity: {
+    signingKeyType: "dilithium" | "sphincs";
+    signingKey: string;
+    signingVariant: string;
+    fingerprint: string | null;
+  } | null;
+};
+
+function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: VerifyInput } | { ok: false; error: string } {
+  const bodyPayload = payload.payload;
+  const bodyMessage = payload.message;
+  const bodySignature = payload.signature;
+  const bodyPublicIdentity = payload.publicIdentity;
+
+  const messageOverride = typeof bodyMessage === "string" ? bodyMessage : "";
+  const signatureOverride = typeof bodySignature === "string" ? bodySignature : "";
+
+  let message = "";
+  let signature = "";
+  let fingerprint: string | null = null;
+  let payloadPublicIdentity: unknown = null;
+
+  if (bodyPayload && typeof bodyPayload === "object") {
+    const obj = bodyPayload as Record<string, unknown>;
+    payloadPublicIdentity = obj.publicIdentity ?? null;
+    const payloadMessage = typeof obj.message === "string" ? obj.message : "";
+    const payloadSignature = typeof obj.signature === "string" ? obj.signature : "";
+    const payloadFingerprint = typeof obj.fingerprint === "string" ? obj.fingerprint : "";
+    const payloadType = typeof obj.type === "string" ? obj.type : "";
+
+    if (payloadType === "ebp-signed-message") {
+      message = payloadMessage || messageOverride;
+      signature = payloadSignature || signatureOverride;
+      fingerprint = payloadFingerprint || null;
+      if (!message) return { ok: false, error: "missing message" };
+      if (!signature) return { ok: false, error: "missing signature" };
+    } else if (payloadType === "ebp-signature") {
+      message = payloadMessage || messageOverride;
+      signature = payloadSignature || signatureOverride;
+      fingerprint = payloadFingerprint || null;
+      if (!message) return { ok: false, error: "message is required for detached signatures" };
+      if (!signature) return { ok: false, error: "missing signature" };
+    } else {
+      // Generic payload fallback for custom signature object shapes.
+      message = payloadMessage || messageOverride;
+      signature = payloadSignature || signatureOverride;
+      fingerprint = payloadFingerprint || null;
+      if (!message || !signature) {
+        return { ok: false, error: "unsupported payload type or missing message/signature" };
+      }
+    }
+  } else {
+    message = messageOverride;
+    signature = signatureOverride;
+    fingerprint = typeof payload.fingerprint === "string" ? payload.fingerprint : null;
+    if (!message || !signature) {
+      return { ok: false, error: "message and signature required" };
+    }
+  }
+
+  const messageCheck = validateStringLength(message, "message", LIMITS.message);
+  if (!messageCheck.ok) return { ok: false, error: messageCheck.error };
+  const signatureCheck = validateStringLength(signature, "signature", LIMITS.signature);
+  if (!signatureCheck.ok) return { ok: false, error: signatureCheck.error };
+  const fingerprintCheck = validateStringLength(fingerprint, "fingerprint", LIMITS.fingerprint, false);
+  if (!fingerprintCheck.ok) return { ok: false, error: fingerprintCheck.error };
+
+  const chosenPublicIdentity = bodyPublicIdentity ?? payloadPublicIdentity;
+  let publicIdentity: VerifyInput["publicIdentity"] = null;
+  if (chosenPublicIdentity !== null && chosenPublicIdentity !== undefined) {
+    if (typeof chosenPublicIdentity !== "object") {
+      return { ok: false, error: "publicIdentity must be an object" };
+    }
+    const candidate = chosenPublicIdentity as Record<string, unknown>;
+    const signingKeyType = candidate.signingKeyType;
+    const signingKey = candidate.signingKey;
+    const signingKeyDetails = candidate.signingKeyDetails;
+    const fingerprintFromIdentity = candidate.fingerprint;
+
+    if (signingKeyType !== "dilithium" && signingKeyType !== "sphincs") {
+      return { ok: false, error: "publicIdentity has invalid signing key type" };
+    }
+    if (typeof signingKey !== "string" || !signingKey) {
+      return { ok: false, error: "publicIdentity missing signing key" };
+    }
+    if (!signingKeyDetails || typeof signingKeyDetails !== "object") {
+      return { ok: false, error: "publicIdentity missing signing key details" };
+    }
+    const signingVariant = (signingKeyDetails as Record<string, unknown>).variant;
+    if (typeof signingVariant !== "string" || !signingVariant) {
+      return { ok: false, error: "publicIdentity missing signing variant" };
+    }
+
+    let resolvedFingerprint = typeof fingerprintFromIdentity === "string" ? fingerprintFromIdentity : null;
+    const encryptionKeyType = candidate.encryptionKeyType;
+    const encryptionKey = candidate.encryptionKey;
+    if (!resolvedFingerprint && encryptionKeyType === "kyber" && typeof encryptionKey === "string" && encryptionKey) {
+      try {
+        resolvedFingerprint = computeIdentityFingerprint({
+          signingKeyType,
+          encryptionKeyType: "kyber",
+          signingKey,
+          encryptionKey,
+        });
+      } catch {
+        // Ignore compute failures; signing verification can still proceed.
+      }
+    }
+
+    const resolvedFingerprintCheck = validateStringLength(
+      resolvedFingerprint,
+      "publicIdentity fingerprint",
+      LIMITS.fingerprint,
+      false,
+    );
+    if (!resolvedFingerprintCheck.ok) return { ok: false, error: resolvedFingerprintCheck.error };
+
+    publicIdentity = {
+      signingKeyType,
+      signingKey,
+      signingVariant,
+      fingerprint: resolvedFingerprintCheck.value || null,
+    };
+  }
+
+  const resolvedFingerprint = publicIdentity?.fingerprint ?? (fingerprintCheck.value || null);
+  return {
+    ok: true,
+    data: {
+      message: messageCheck.value,
+      signature: signatureCheck.value,
+      fingerprint: resolvedFingerprint,
+      publicIdentity,
+    },
+  };
+}
+
+function verifySignatureWithIdentity(
+  signingKeyType: "dilithium" | "sphincs",
+  variant: string,
+  message: string,
+  signature: string,
+  signingKey: string,
+): boolean {
+  if (signingKeyType === "dilithium") {
+    return DilithiumSigningKey.verify(variant, message, signature, signingKey);
+  }
+  return SphincsSigningKey.verify(variant, message, signature, signingKey);
+}
+
 // =============================================================================
 // Configuration
 // =============================================================================
@@ -496,6 +652,10 @@ async function handleRequest(req: Request): Promise<Response> {
 
     if (req.method === "GET" && url.pathname === "/api/v1/verify-email") {
       return respond(attachCors(await handleVerifyEmailPage(url), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/verify-signature") {
+      return respond(attachCors(await handleVerifySignature(req, db), corsHeaders));
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/revoke") {
@@ -1020,6 +1180,113 @@ async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter): Prom
       title: "Email verified",
       message: "Your email address has been verified.",
     }));
+}
+
+async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) {
+    return json({ error: bodyResult.error }, bodyResult.status);
+  }
+
+  const parsed = parseVerifyInput(bodyResult.data);
+  if (!parsed.ok) {
+    return json({ error: parsed.error }, 400);
+  }
+
+  const { message, signature, fingerprint, publicIdentity } = parsed.data;
+
+  let signerIdentity: {
+    fingerprint: string;
+    signingKeyType: "dilithium" | "sphincs";
+    signingKey: string;
+    signingVariant: string;
+  } | null = null;
+
+  if (publicIdentity) {
+    signerIdentity = {
+      fingerprint: publicIdentity.fingerprint ?? (fingerprint ?? ""),
+      signingKeyType: publicIdentity.signingKeyType,
+      signingKey: publicIdentity.signingKey,
+      signingVariant: publicIdentity.signingVariant,
+    };
+  } else {
+    if (!fingerprint) {
+      return json({ error: "fingerprint or publicIdentity is required for verification" }, 400);
+    }
+    const identity = await getIdentity(db, fingerprint);
+    if (!identity) {
+      return json({ error: "identity not found" }, 404);
+    }
+    const signingVariant = (identity.signing_key_details as { variant?: string } | null)?.variant;
+    if (!signingVariant || typeof signingVariant !== "string") {
+      return json({ error: "missing signing variant for identity" }, 400);
+    }
+    signerIdentity = {
+      fingerprint,
+      signingKeyType: identity.signing_key_type as "dilithium" | "sphincs",
+      signingKey: identity.signing_key,
+      signingVariant,
+    };
+  }
+
+  let verified = false;
+  try {
+    verified = verifySignatureWithIdentity(
+      signerIdentity.signingKeyType,
+      signerIdentity.signingVariant,
+      message,
+      signature,
+      signerIdentity.signingKey,
+    );
+  } catch {
+    verified = false;
+  }
+
+  if (!verified) {
+    return json({
+      verified: false,
+      fingerprint: signerIdentity.fingerprint || null,
+      identityPublished: false,
+    });
+  }
+
+  const resolvedFingerprint = signerIdentity.fingerprint || null;
+  if (!resolvedFingerprint) {
+    return json({
+      verified: true,
+      fingerprint: null,
+      identityPublished: false,
+    });
+  }
+
+  const publishedIdentity = await getIdentity(db, resolvedFingerprint);
+  if (!publishedIdentity) {
+    return json({
+      verified: true,
+      fingerprint: resolvedFingerprint,
+      identityPublished: false,
+    });
+  }
+
+  const details = await getDetailsMap(db, resolvedFingerprint);
+  const detailsMeta = await getDetailsMetaMap(db, resolvedFingerprint);
+  const revoked = await isIdentityRevoked(db, resolvedFingerprint);
+  const revokedDetails = await getRevokedDetailPaths(db, resolvedFingerprint);
+
+  return json({
+    verified: true,
+    fingerprint: resolvedFingerprint,
+    identityPublished: true,
+    signer: {
+      fingerprint: resolvedFingerprint,
+      signingKeyType: publishedIdentity.signing_key_type,
+      encryptionKeyType: publishedIdentity.encryption_key_type,
+      details,
+      detailsMeta,
+      revoked,
+      revokedDetails,
+    },
+  });
 }
 
 async function handleGetIdentity(fingerprint: string, db: DatabaseAdapter): Promise<Response> {

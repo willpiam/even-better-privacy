@@ -73,6 +73,19 @@ async function postDetail(
   );
 }
 
+async function postVerifySignature(
+  mod: MainModule,
+  body: Record<string, unknown>,
+) {
+  return await mod.handleRequest(
+    new Request("http://localhost/api/v1/verify-signature", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
 Deno.test("POST /identity then GET /identity returns stored record", async () => {
   await withServer(async (mod) => {
     const { fingerprint } = await registerIdentity(mod);
@@ -360,3 +373,118 @@ Deno.test("Search endpoint filters revoked identities unless explicitly included
   });
 });
 
+
+
+Deno.test("POST /verify-signature verifies signed payload with provided public identity and returns published signer details", async () => {
+  await withServer(async (mod) => {
+    const { payload, fingerprint, signingKey } = createIdentityPayload();
+    const registerRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    assertEquals(registerRes.status, 200);
+
+    const detailRes = await postDetail(mod, fingerprint, signingKey, "name", "Alice", 0);
+    assertEquals(detailRes.status, 200);
+
+    const message = "hello from test";
+    const signature = signingKey.sign(message);
+    const verifyRes = await postVerifySignature(mod, {
+      payload: {
+        type: "ebp-signed-message",
+        message,
+        signature,
+        fingerprint,
+      },
+      publicIdentity: {
+        fingerprint,
+        signingKeyType: "sphincs",
+        signingKey: signingKey.publicKey,
+        signingKeyDetails: { variant: signingKey.variant },
+        encryptionKeyType: "kyber",
+        encryptionKey: payload.encryptionKey,
+      },
+    });
+    assertEquals(verifyRes.status, 200);
+    const verifyBody = await verifyRes.json();
+    assertEquals(verifyBody.verified, true);
+    assertEquals(verifyBody.identityPublished, true);
+    assertEquals(verifyBody.fingerprint, fingerprint);
+    assertEquals(verifyBody.signer.details.name[0], "Alice");
+  });
+});
+
+Deno.test("POST /verify-signature verifies detached signature via published identity lookup", async () => {
+  await withServer(async (mod) => {
+    const { payload, fingerprint, signingKey } = createIdentityPayload();
+    const registerRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    assertEquals(registerRes.status, 200);
+
+    const message = "detached payload message";
+    const signature = signingKey.sign(message);
+    const verifyRes = await postVerifySignature(mod, {
+      payload: {
+        type: "ebp-signature",
+        signature,
+        fingerprint,
+      },
+      message,
+    });
+    assertEquals(verifyRes.status, 200);
+    const verifyBody = await verifyRes.json();
+    assertEquals(verifyBody.verified, true);
+    assertEquals(verifyBody.identityPublished, true);
+    assertEquals(verifyBody.fingerprint, fingerprint);
+  });
+});
+
+Deno.test("POST /verify-signature rejects detached signatures without message", async () => {
+  await withServer(async (mod) => {
+    const verifyRes = await postVerifySignature(mod, {
+      payload: {
+        type: "ebp-signature",
+        signature: "deadbeef",
+        fingerprint: "abc",
+      },
+    });
+    assertEquals(verifyRes.status, 400);
+    const body = await verifyRes.json();
+    assert(String(body.error ?? "").includes("message"));
+  });
+});
+
+Deno.test("POST /verify-signature returns verified false for invalid signature", async () => {
+  await withServer(async (mod) => {
+    const { payload, fingerprint } = createIdentityPayload();
+    const registerRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    );
+    assertEquals(registerRes.status, 200);
+
+    const verifyRes = await postVerifySignature(mod, {
+      payload: {
+        type: "ebp-signed-message",
+        message: "tampered",
+        signature: "not-a-valid-signature",
+        fingerprint,
+      },
+    });
+    assertEquals(verifyRes.status, 200);
+    const body = await verifyRes.json();
+    assertEquals(body.verified, false);
+    assertEquals(body.identityPublished, false);
+  });
+});
