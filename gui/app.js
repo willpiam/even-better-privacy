@@ -1473,6 +1473,7 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
   const btn = e.target.querySelector('button[type="submit"]');
   const message = document.getElementById("sign-message").value;
   const detached = document.getElementById("sign-detached").checked;
+  const includeIdentity = document.getElementById("sign-include-identity").checked;
   await withLoading(btn, async () => {
     try {
       const password = await requestPassword("Enter password to sign this message");
@@ -1480,7 +1481,10 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
         setStatus("Password is required", "error");
         return;
       }
-      const res = await api("/sign", { method: "POST", body: JSON.stringify({ message, password, detached }) });
+      const res = await api("/sign", {
+        method: "POST",
+        body: JSON.stringify({ message, password, detached, includeIdentity }),
+      });
       document.getElementById("sign-output").value = JSON.stringify(res, null, 2);
       setStatus("Signed", "success");
       // Reload to pick up any format migration (and update fingerprint)

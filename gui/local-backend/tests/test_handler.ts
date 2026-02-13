@@ -431,24 +431,39 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				home?: unknown;
 				identity?: unknown;
 				detached?: unknown;
+				includeIdentity?: unknown;
 			}>(req);
 			const message = typeof body.message === "string" ? body.message : undefined;
 			const password = typeof body.password === "string" ? body.password : undefined;
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
 			const detached = Boolean(body.detached);
+			const includeIdentity = Boolean(body.includeIdentity);
 			if (!message) throw new HttpError(STATUS.BadRequest, "message is required");
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
 
 			const ctx = await getContext(home, identityName);
 			const identity = await loadIdentity(ctx, password);
 			const signature = identity.signMessage(message);
+			const summary = identity.summary;
+			const identityPayload = includeIdentity
+				? {
+					fingerprint: summary.fingerprint,
+					signingKeyType: summary.signingKeyType,
+					encryptionKeyType: summary.encryptionKeyType,
+					signingKey: summary.signingKey,
+					encryptionKey: summary.encryptionKey,
+					signingKeyDetails: summary.signingKeyDetails,
+					encryptionKeyDetails: summary.encryptionKeyDetails,
+				}
+				: undefined;
 			if (detached) {
 				return json({
 					type: "ebp-signature",
 					version: FILE_FORMAT_VERSIONS.signature,
 					fingerprint: identity.toFingerprint(),
 					signature,
+					identity: identityPayload,
 				});
 			}
 			return json({
@@ -457,6 +472,7 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				fingerprint: identity.toFingerprint(),
 				message,
 				signature,
+				identity: identityPayload,
 			});
 		}
 

@@ -463,6 +463,46 @@ Deno.test({
 });
 
 Deno.test({
+	name: "POST /api/v1/sign with includeIdentity embeds public key identity block",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const identity = await createTestIdentity(home, "test", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/sign",
+				jsonPost({
+					message: "Include identity keys",
+					password: "password123",
+					includeIdentity: true,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as {
+				type: string;
+				identity?: {
+					fingerprint?: string;
+					signingKey?: string;
+					encryptionKey?: string;
+					signingKeyType?: string;
+					encryptionKeyType?: string;
+				};
+			};
+			assertEquals(b.type, "ebp-signed-message");
+			assertExists(b.identity);
+			assertEquals(b.identity?.fingerprint, identity.toFingerprint());
+			assertExists(b.identity?.signingKey);
+			assertExists(b.identity?.encryptionKey);
+			assertEquals(b.identity?.signingKeyType, "dilithium");
+			assertEquals(b.identity?.encryptionKeyType, "kyber");
+		});
+	},
+});
+
+Deno.test({
 	name: "POST /api/v1/verify verifies valid signature",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {

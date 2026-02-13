@@ -6,6 +6,7 @@ const publicJsonInput = document.getElementById("public-json");
 const messageInput = document.getElementById("message");
 const verifyButton = document.getElementById("verify-btn");
 const resultSummary = document.getElementById("result-summary");
+const resultSection = document.getElementById("result-section");
 const resultJson = document.getElementById("result-json").querySelector("code");
 const signerDetails = document.getElementById("signer-details");
 
@@ -75,6 +76,7 @@ publicFileInput.addEventListener("change", async () => {
 
 verifyButton.addEventListener("click", async () => {
   verifyButton.disabled = true;
+  verifyButton.textContent = "Verifying...";
   resultSummary.textContent = "Verifying...";
   signerDetails.innerHTML = "";
 
@@ -120,8 +122,15 @@ verifyButton.addEventListener("click", async () => {
       resultSummary.textContent = "Signature is invalid.";
     }
   } catch (err) {
+    resultJson.textContent = JSON.stringify(
+      { error: err instanceof Error ? err.message : "Verification failed." },
+      null,
+      2,
+    );
     resultSummary.textContent = err instanceof Error ? err.message : "Verification failed.";
   } finally {
     verifyButton.disabled = false;
+    verifyButton.textContent = "Verify";
+    resultSection?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 });

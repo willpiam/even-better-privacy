@@ -1760,6 +1760,8 @@
             </label>
             <label class="inline"><input id="sign-detached" type="checkbox" /> Detached signature</label>
             <p class="help-text">Detached: outputs only the signature, not the message. Use when the recipient already has the original message.</p>
+            <label class="inline"><input id="sign-include-identity" type="checkbox" /> Include public identity (signing + KEM keys)</label>
+            <p class="help-text">Adds an <code>identity</code> object to the signature payload with your public signing and encryption keys.</p>
             <div>
               <button type="submit">Sign</button>
             </div>
