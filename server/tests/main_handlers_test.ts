@@ -201,7 +201,7 @@ Deno.test("Revoked detail rejects old proof but accepts new proof", async () => 
 });
 
 Deno.test("Email detail is unverified until verification endpoint is called", async () => {
-  await withServer(async (mod, dbPath) => {
+  await withServer(async (mod, _dbPath) => {
     const { fingerprint, signingKey } = await registerIdentity(mod);
     const detailRes = await postDetail(mod, fingerprint, signingKey, "email", "user@example.com", 0);
     assertEquals(detailRes.status, 200);
@@ -373,8 +373,6 @@ Deno.test("Search endpoint filters revoked identities unless explicitly included
   });
 });
 
-
-
 Deno.test("POST /verify-signature verifies signed payload with provided public identity and returns published signer details", async () => {
   await withServer(async (mod) => {
     const { payload, fingerprint, signingKey } = createIdentityPayload();
@@ -486,5 +484,39 @@ Deno.test("POST /verify-signature returns verified false for invalid signature",
     const body = await verifyRes.json();
     assertEquals(body.verified, false);
     assertEquals(body.identityPublished, false);
+  });
+});
+
+Deno.test("POST /verify-signature accepts embedded identity alias and reports valid-but-not-published", async () => {
+  await withServer(async (mod) => {
+    const { payload, fingerprint, signingKey } = createIdentityPayload();
+    const message = "this is a test ";
+    const signature = signingKey.sign(message);
+
+    // Do not publish identity to server. Verify should still pass with provided keys.
+    const verifyRes = await postVerifySignature(mod, {
+      payload: {
+        type: "ebp-signed-message",
+        version: 1,
+        fingerprint,
+        message,
+        signature,
+      },
+      identity: {
+        fingerprint,
+        signingKeyType: payload.signingKeyType,
+        encryptionKeyType: payload.encryptionKeyType,
+        signingKey: payload.signingKey,
+        encryptionKey: payload.encryptionKey,
+        signingKeyDetails: payload.signingKeyDetails,
+        encryptionKeyDetails: payload.encryptionKeyDetails,
+      },
+    });
+    assertEquals(verifyRes.status, 200);
+    const body = await verifyRes.json();
+    assertEquals(body.verified, true);
+    assertEquals(body.fingerprint, fingerprint);
+    assertEquals(body.identityPublished, false);
+    assert(String(body.message ?? "").includes("not found on this server"));
   });
 });

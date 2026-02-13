@@ -368,7 +368,7 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
   const bodyPayload = payload.payload;
   const bodyMessage = payload.message;
   const bodySignature = payload.signature;
-  const bodyPublicIdentity = payload.publicIdentity;
+  const bodyPublicIdentity = payload.publicIdentity ?? payload.identity;
 
   const messageOverride = typeof bodyMessage === "string" ? bodyMessage : "";
   const signatureOverride = typeof bodySignature === "string" ? bodySignature : "";
@@ -380,7 +380,7 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
 
   if (bodyPayload && typeof bodyPayload === "object") {
     const obj = bodyPayload as Record<string, unknown>;
-    payloadPublicIdentity = obj.publicIdentity ?? null;
+    payloadPublicIdentity = obj.publicIdentity ?? obj.identity ?? null;
     const payloadMessage = typeof obj.message === "string" ? obj.message : "";
     const payloadSignature = typeof obj.signature === "string" ? obj.signature : "";
     const payloadFingerprint = typeof obj.fingerprint === "string" ? obj.fingerprint : "";
@@ -449,20 +449,31 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
       return { ok: false, error: "publicIdentity missing signing variant" };
     }
 
-    let resolvedFingerprint = typeof fingerprintFromIdentity === "string" ? fingerprintFromIdentity : null;
+    const payloadFingerprint = fingerprintCheck.value || null;
+    const providedIdentityFingerprint = typeof fingerprintFromIdentity === "string" ? fingerprintFromIdentity : null;
+    let computedFingerprint: string | null = null;
     const encryptionKeyType = candidate.encryptionKeyType;
     const encryptionKey = candidate.encryptionKey;
-    if (!resolvedFingerprint && encryptionKeyType === "kyber" && typeof encryptionKey === "string" && encryptionKey) {
+    if (encryptionKeyType === "kyber" && typeof encryptionKey === "string" && encryptionKey) {
       try {
-        resolvedFingerprint = computeIdentityFingerprint({
+        computedFingerprint = computeIdentityFingerprint({
           signingKeyType,
           encryptionKeyType: "kyber",
           signingKey,
           encryptionKey,
         });
       } catch {
-        // Ignore compute failures; signing verification can still proceed.
+        return { ok: false, error: "failed to compute fingerprint from provided public identity keys" };
       }
+    }
+
+    if (providedIdentityFingerprint && computedFingerprint && providedIdentityFingerprint !== computedFingerprint) {
+      return { ok: false, error: "public identity fingerprint does not match provided public keys" };
+    }
+
+    const resolvedFingerprint = providedIdentityFingerprint ?? computedFingerprint;
+    if (resolvedFingerprint && payloadFingerprint && resolvedFingerprint !== payloadFingerprint) {
+      return { ok: false, error: "fingerprint mismatch between payload and provided public identity" };
     }
 
     const resolvedFingerprintCheck = validateStringLength(
@@ -1247,6 +1258,7 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
       verified: false,
       fingerprint: signerIdentity.fingerprint || null,
       identityPublished: false,
+      message: "Signature is invalid.",
     });
   }
 
@@ -1256,6 +1268,7 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
       verified: true,
       fingerprint: null,
       identityPublished: false,
+      message: "Signature verified, but signer fingerprint is unavailable.",
     });
   }
 
@@ -1265,6 +1278,7 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
       verified: true,
       fingerprint: resolvedFingerprint,
       identityPublished: false,
+      message: `Signature verified with ${resolvedFingerprint}, but identity was not found on this server.`,
     });
   }
 
@@ -1277,6 +1291,7 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
     verified: true,
     fingerprint: resolvedFingerprint,
     identityPublished: true,
+    message: `Signature verified with ${resolvedFingerprint}.`,
     signer: {
       fingerprint: resolvedFingerprint,
       signingKeyType: publishedIdentity.signing_key_type,

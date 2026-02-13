@@ -112,14 +112,18 @@ verifyButton.addEventListener("click", async () => {
     }
 
     if (body.verified) {
-      if (body.identityPublished) {
+      if (typeof body.message === "string" && body.message.length > 0) {
+        resultSummary.textContent = body.message;
+      } else if (body.identityPublished) {
         resultSummary.textContent = "Signature is valid. Signer identity is published on the server.";
       } else {
         resultSummary.textContent = "Signature is valid. Signer identity is not published on this server.";
       }
       renderSignerDetails(body.signer);
     } else {
-      resultSummary.textContent = "Signature is invalid.";
+      resultSummary.textContent = typeof body.message === "string" && body.message.length > 0
+        ? body.message
+        : "Signature is invalid.";
     }
   } catch (err) {
     resultJson.textContent = JSON.stringify(
