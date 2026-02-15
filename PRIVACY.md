@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Even Better Privacy is designed to keep data collection minimal.
+Even Better Privacy is designed to keep data collection minimal. 
 
 ## What We Store
 
@@ -17,3 +17,7 @@ We do not store private keys or private message content.
 ## Your Control
 
 You choose what to publish. If you do not publish information, we do not store it.
+
+## Updates
+
+This Privacy Policy may be updated without notice. Users are encouraged to review this document periodically.
