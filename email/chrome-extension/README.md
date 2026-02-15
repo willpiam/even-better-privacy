@@ -5,6 +5,8 @@ webmail clients by calling the local EBP GUI backend API.
 
 ## Features
 
+- Toolbar popup showing the currently selected local account.
+- One-click account switching between local identities.
 - Encrypt the current compose body into an EBP payload block.
 - Decrypt EBP payloads found in received messages.
 - Pick a recipient from your EBP contacts (loaded from the local backend).
@@ -23,6 +25,12 @@ webmail clients by calling the local EBP GUI backend API.
    `/home/william/projects/even-better-privacy/email/chrome-extension`
 
 ## Usage
+
+### Switch account (popup)
+
+1. Click the EBP Mail extension icon in Chrome's toolbar.
+2. The popup shows the currently active local account.
+3. Select another local account and click **Switch account**.
 
 ### Compose
 

@@ -22,6 +22,10 @@
   "background": {
     "service_worker": "background.js"
   },
+  "action": {
+    "default_title": "EBP Mail",
+    "default_popup": "popup.html"
+  },
   "content_scripts": [
     {
       "matches": [

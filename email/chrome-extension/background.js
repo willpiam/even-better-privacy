@@ -10,6 +10,12 @@ async function getSettings() {
   });
 }
 
+async function setSettings(nextSettings) {
+  return new Promise((resolve) => {
+    chrome.storage.sync.set(nextSettings, resolve);
+  });
+}
+
 function buildUrl(base, path, params) {
   const url = new URL(path, base);
   if (params) {
@@ -56,6 +62,49 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           { home: settings.home || undefined }
         );
         sendResponse({ ok: true, data });
+        return;
+      }
+
+      if (message?.type === "ebp-identities-list") {
+        const data = await apiFetch(
+          "/api/v1/identities",
+          { method: "GET" },
+          { home: settings.home || undefined }
+        );
+        const selectedIdentity = settings.identity || data?.currentIdentity || "";
+        sendResponse({
+          ok: true,
+          data: {
+            ...data,
+            selectedIdentity
+          }
+        });
+        return;
+      }
+
+      if (message?.type === "ebp-identity-switch") {
+        const name = typeof message?.name === "string" ? message.name.trim() : "";
+        if (!name) throw new Error("identity name is required");
+        const payload = {
+          name,
+          home: settings.home || undefined
+        };
+        const data = await apiFetch("/api/v1/identity/use", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        await setSettings({
+          ...settings,
+          identity: data?.currentIdentity || name
+        });
+        sendResponse({
+          ok: true,
+          data: {
+            ...data,
+            selectedIdentity: data?.currentIdentity || name
+          }
+        });
         return;
       }
 

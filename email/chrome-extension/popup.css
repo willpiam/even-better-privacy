@@ -1,0 +1,110 @@
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f7f8fb;
+}
+
+.popup {
+  width: 320px;
+  padding: 12px;
+  color: #1f1f1f;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: #616161;
+}
+
+.card {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #3f3f46;
+}
+
+.current-value {
+  font-size: 14px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+#identitySelect {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+}
+
+#switchButton {
+  width: 100%;
+  padding: 8px;
+  border: none;
+  border-radius: 6px;
+  background: #1a73e8;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#switchButton:disabled {
+  background: #9ca3af;
+  cursor: default;
+}
+
+.status {
+  min-height: 18px;
+  font-size: 12px;
+  margin-top: 4px;
+  color: #444;
+}
+
+.status.error {
+  color: #b00020;
+}
+
+.status.success {
+  color: #0f7a2f;
+}
+
+.footer {
+  margin-top: 8px;
+}
+
+.footer a {
+  font-size: 12px;
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
