@@ -3,7 +3,13 @@
   "name": "EBP Mail",
   "version": "0.1.0",
   "description": "Encrypt/decrypt EBP messages in supported webmail via the local EBP backend.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "icons": {
+    "16": "tiny-logo.png",
+    "32": "tiny-logo.png",
+    "48": "tiny-logo.png",
+    "128": "tiny-logo.png"
+  },
+  "permissions": ["storage"],
   "host_permissions": [
     "https://mail.google.com/*",
     "https://mail.proton.me/*",

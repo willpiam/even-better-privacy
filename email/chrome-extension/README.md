@@ -61,3 +61,15 @@ The decrypt button only appears when this marker is present.
   select an EBP contact by name.
 - The local backend API currently allows CORS from any origin. If you want
   tighter control, add a shared token header and validate it server-side.
+
+## Chrome Webstore justifications
+
+> storage
+
+Used to persist user settings so configuration survives browser restarts and syncs across the user's Chrome profile.
+
+> Host permissions
+
+Host permissions for supported webmail domains (mail.google.com, mail.proton.me, mail.protonmail.com, outlook.office.com, outlook.live.com, outlook.office365.com) are required so the extension can run its content script only on those sites, add EBP compose/read UI, and process message content in place when the user is actively using webmail.
+
+Host permission for http://localhost:8787/* is required to call the local EBP backend API for contact lookup and cryptographic operations (encrypt/sign/decrypt/verify). This endpoint is on the user's machine.
