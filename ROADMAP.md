@@ -50,7 +50,18 @@ Internal notes and future plans for EBP development.
     - What would this mean in practice?
     - What has been the PGP approach?
 - Server spam resistance
-- Endorse other identities as your own (two-way binding)
+- Endorse other EBP identities as your own (two-way binding)
+- plugin: Make it harder to accidentally send email without first encrypting
+- plugin: hide password inputs
+- hashed details
+    - hashed email endorsement
+        - take hash of your email address
+        - sign hash
+        - send hash & email address & signature to public key server
+        - server sends email for you to confirm your email
+        - server never makes unhashed email public. Perhaps even deletes raw email address after the user has confirmed it. 
+        - users who receive signed emails from you can still confrim that the email address is associated with the provided EBP identity. 
+        - reduce your exposure to spam
 
 ## Other
 

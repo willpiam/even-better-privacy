@@ -17,12 +17,46 @@ function toIdentityLabel(identity) {
   return `${identity.name} (${shortFp})`;
 }
 
+function shouldSuggestInstall(error, backendUrl) {
+  const errorText = String(error || "").toLowerCase();
+  if (!errorText.includes("failed to fetch") && !errorText.includes("networkerror")) {
+    return false;
+  }
+  try {
+    const url = new URL(String(backendUrl || ""));
+    const isLoopback = url.hostname === "127.0.0.1" || url.hostname === "localhost";
+    const isExpectedPort = url.port === "8787" || (!url.port && url.protocol === "http:");
+    return isLoopback && isExpectedPort;
+  } catch {
+    return false;
+  }
+}
+
+function setBackendHelp(show) {
+  const help = document.getElementById("backendHelp");
+  if (!help) return;
+
+  help.hidden = !show;
+  help.textContent = "";
+  if (!show) return;
+
+  help.append("EBP may not be running at http://127.0.0.1:8787/. Install or start it from ");
+  const link = document.createElement("a");
+  link.href = "https://github.com/willpiam/even-better-privacy";
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = "https://github.com/willpiam/even-better-privacy";
+  help.appendChild(link);
+  help.append(".");
+}
+
 async function loadPopup() {
   const currentIdentityEl = document.getElementById("currentIdentity");
   const identitySelect = document.getElementById("identitySelect");
   const switchButton = document.getElementById("switchButton");
 
   setStatus("");
+  setBackendHelp(false);
   switchButton.disabled = true;
 
   const response = await sendMessage({ type: "ebp-identities-list" });
@@ -30,6 +64,7 @@ async function loadPopup() {
     currentIdentityEl.textContent = "Unavailable";
     identitySelect.innerHTML = "";
     setStatus(`Failed to load accounts: ${response?.error || "unknown error"}`, "error");
+    setBackendHelp(shouldSuggestInstall(response?.error, response?.backendUrl));
     return;
   }
 

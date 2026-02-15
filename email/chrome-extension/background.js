@@ -53,8 +53,9 @@ function buildIdentityPayload(settings) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   (async () => {
+    let settings;
     try {
-      const settings = await getSettings();
+      settings = await getSettings();
       if (message?.type === "ebp-contacts") {
         const data = await apiFetch(
           "/api/v1/contacts",
@@ -195,7 +196,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
       sendResponse({ ok: false, error: "unknown message type" });
     } catch (error) {
-      sendResponse({ ok: false, error: error?.message || String(error) });
+      sendResponse({
+        ok: false,
+        error: error?.message || String(error),
+        backendUrl: settings?.backendUrl || DEFAULT_SETTINGS.backendUrl
+      });
     }
   })();
 
