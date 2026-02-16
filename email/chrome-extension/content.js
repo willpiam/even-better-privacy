@@ -10,6 +10,12 @@ const contactCache = {
   contacts: []
 };
 
+// Tracks whether any EBP <select> dropdown is currently open so the
+// MutationObserver can avoid DOM work that dismisses the native popup
+// on macOS Chrome.
+let ebpSelectOpen = false;
+let pendingObserverRun = false;
+
 function sendMessage(message) {
   return new Promise((resolve) => {
     chrome.runtime.sendMessage(message, resolve);
@@ -306,6 +312,21 @@ async function buildComposeControls(composeRoot, bodyEl) {
 
   const composeDoc = bodyEl.ownerDocument || document;
   const select = createSelect(composeDoc);
+
+  // Pause the MutationObserver while the native dropdown is shown so DOM
+  // work doesn't collapse it on macOS Chrome.
+  select.addEventListener("mousedown", () => { ebpSelectOpen = true; });
+  select.addEventListener("focus", () => { ebpSelectOpen = true; });
+  select.addEventListener("change", () => { ebpSelectOpen = false; });
+  select.addEventListener("blur", () => {
+    ebpSelectOpen = false;
+    if (pendingObserverRun) {
+      pendingObserverRun = false;
+      initComposeObservers();
+      initReadObservers();
+    }
+  });
+
   controls.appendChild(select);
 
   const recipientStatus = document.createElement("div");
@@ -384,10 +405,16 @@ async function buildComposeControls(composeRoot, bodyEl) {
   });
 
   select.addEventListener("change", () => updateRecipientStatus(contactCache.contacts));
-  composeRoot.addEventListener("input", () => updateRecipientStatus(contactCache.contacts), true);
-  composeRoot.addEventListener("change", () => updateRecipientStatus(contactCache.contacts), true);
-  // Avoid updating status on every click. On macOS Chrome this can cause native
-  // select popups to immediately collapse before an option can be chosen.
+  // Skip events that originate from EBP's own select to avoid DOM work
+  // that collapses the native dropdown on macOS Chrome.
+  composeRoot.addEventListener("input", (e) => {
+    if (e.target && e.target.closest && e.target.closest(".ebp-select")) return;
+    updateRecipientStatus(contactCache.contacts);
+  }, true);
+  composeRoot.addEventListener("change", (e) => {
+    if (e.target && e.target.closest && e.target.closest(".ebp-select")) return;
+    updateRecipientStatus(contactCache.contacts);
+  }, true);
   updateRecipientStatus(contacts);
 
   signEncryptButton.addEventListener("click", async () => {
@@ -653,9 +680,20 @@ function initReadObservers() {
   });
 }
 
+let observerTimer = null;
 const observer = new MutationObserver(() => {
-  initComposeObservers();
-  initReadObservers();
+  // While a native <select> dropdown is open, skip all DOM work so macOS
+  // Chrome doesn't collapse the popup.
+  if (ebpSelectOpen) {
+    pendingObserverRun = true;
+    return;
+  }
+  // Debounce: Gmail fires many rapid mutations; batch them into one pass.
+  clearTimeout(observerTimer);
+  observerTimer = setTimeout(() => {
+    initComposeObservers();
+    initReadObservers();
+  }, 200);
 });
 
 observer.observe(document.documentElement, { childList: true, subtree: true });
