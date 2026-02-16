@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="/home/william/projects/even-better-privacy"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="${ROOT}/desktop"
 BUNDLE_DIR="${DESKTOP_DIR}/src-tauri/target/release/bundle/msi"
 MSI_OUTPUT="${ROOT}/EBP.msi"

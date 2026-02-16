@@ -42,12 +42,26 @@ fn main() {
 }
 
 fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
-  let candidates = [
-    "bin/ebp-gui-backend-x86_64-unknown-linux-gnu",
-    "bin/ebp-gui-backend",
-  ];
+  let target_sidecar = if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    Some("bin/ebp-gui-backend-x86_64-unknown-linux-gnu")
+  } else if cfg!(all(target_os = "linux", target_arch = "aarch64")) {
+    Some("bin/ebp-gui-backend-aarch64-unknown-linux-gnu")
+  } else if cfg!(all(target_os = "macos", target_arch = "x86_64")) {
+    Some("bin/ebp-gui-backend-x86_64-apple-darwin")
+  } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
+    Some("bin/ebp-gui-backend-aarch64-apple-darwin")
+  } else if cfg!(all(target_os = "windows", target_arch = "x86_64")) {
+    Some("bin/ebp-gui-backend-x86_64-pc-windows-msvc")
+  } else {
+    None
+  };
 
-  for candidate in candidates {
+  let mut candidates = vec!["bin/ebp-gui-backend"];
+  if let Some(target_sidecar) = target_sidecar {
+    candidates.insert(0, target_sidecar);
+  }
+
+  for candidate in &candidates {
     if let Some(path) = app.path_resolver().resolve_resource(candidate) {
       if path.exists() {
         return Ok(path);
@@ -56,7 +70,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
   }
 
   if let Some(resource_dir) = app.path_resolver().resource_dir() {
-    for candidate in candidates {
+    for candidate in &candidates {
       let path = resource_dir.join(candidate);
       if path.exists() {
         return Ok(path);
@@ -66,7 +80,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
 
   if let Ok(appdir) = env::var("APPDIR") {
     let appdir_path = Path::new(&appdir);
-    for candidate in candidates {
+    for candidate in &candidates {
       let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
       if path.exists() {
         return Ok(path);
@@ -76,7 +90,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
 
   if let Ok(exe_path) = env::current_exe() {
     if let Some(exe_dir) = exe_path.parent() {
-      for candidate in candidates {
+      for candidate in &candidates {
         let file_name = Path::new(candidate).file_name().unwrap();
         let path = exe_dir.join(file_name);
         if path.exists() {
@@ -86,7 +100,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
     }
 
     if let Some(appdir_path) = exe_path.parent().and_then(|p| p.parent()) {
-      for candidate in candidates {
+      for candidate in &candidates {
         let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
         if path.exists() {
           return Ok(path);

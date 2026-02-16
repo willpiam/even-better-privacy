@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "Prereqs (once): sudo apt install libwebkit2gtk-4.0-dev libssl-dev build-essential"
 
-ROOT="/home/william/projects/even-better-privacy"
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APPIMAGE_DIR="${ROOT}/desktop/src-tauri/target/release/bundle/appimage"
 
 rm -rf "${APPIMAGE_DIR}/ebp.AppDir"
@@ -22,7 +22,7 @@ if [ ! -f "${APPIMAGE_DIR}/build_appimage.sh" ]; then
 fi
 
 # Patch the cached gtk plugin so 'ln -s' becomes 'ln -sf' (avoids "File exists" errors).
-GTK_PLUGIN="/home/william/.cache/tauri/linuxdeploy-plugin-gtk.sh"
+GTK_PLUGIN="${HOME}/.cache/tauri/linuxdeploy-plugin-gtk.sh"
 if [ -f "${GTK_PLUGIN}" ]; then
   sed -i 's/ln \$verbose -s /ln \$verbose -sf /g' "${GTK_PLUGIN}"
 fi
@@ -38,7 +38,19 @@ sed -i "s|OUTPUT=\"[^\"]*\"|OUTPUT=\"${APPIMAGE_OUTPUT}\"|" build_appimage.sh
 # Keep a copy of the original Deno-compiled sidecar binary.
 # linuxdeploy's patchelf will corrupt its embedded standalone section,
 # so we restore it after deployment but before final AppImage packaging.
-ORIGINAL_BACKEND="${ROOT}/desktop/src-tauri/bin/ebp-gui-backend-x86_64-unknown-linux-gnu"
+case "$(uname -m)" in
+  x86_64)
+    SIDECAR_TRIPLE="x86_64-unknown-linux-gnu"
+    ;;
+  aarch64|arm64)
+    SIDECAR_TRIPLE="aarch64-unknown-linux-gnu"
+    ;;
+  *)
+    echo "ERROR: Unsupported Linux architecture: $(uname -m)"
+    exit 1
+    ;;
+esac
+ORIGINAL_BACKEND="${ROOT}/desktop/src-tauri/bin/ebp-gui-backend-${SIDECAR_TRIPLE}"
 
 # Clean the AppDir left by the failed tauri build and rebuild from scratch.
 rm -rf ebp.AppDir
@@ -52,7 +64,7 @@ cp -f "${ORIGINAL_BACKEND}" "${APPIMAGE_DIR}/ebp.AppDir/usr/bin/ebp-gui-backend"
 chmod +x "${APPIMAGE_DIR}/ebp.AppDir/usr/bin/ebp-gui-backend"
 
 # Download appimagetool to repackage the fixed AppDir.
-APPIMAGETOOL="/home/william/.cache/tauri/appimagetool-x86_64.AppImage"
+APPIMAGETOOL="${HOME}/.cache/tauri/appimagetool-x86_64.AppImage"
 if [ ! -f "${APPIMAGETOOL}" ]; then
   echo "Downloading appimagetool…"
   wget -q -4 "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
