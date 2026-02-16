@@ -20,8 +20,28 @@ fi
 cd "${DESKTOP_DIR}"
 npm install
 
+# A previously mounted EBP volume can cause DMG bundling to fail.
+if [ -d "/Volumes/EBP" ]; then
+  echo "Unmounting stale /Volumes/EBP before packaging..."
+  hdiutil detach "/Volumes/EBP" >/dev/null 2>&1 || hdiutil detach -force "/Volumes/EBP" >/dev/null 2>&1 || true
+fi
+
 # Override tauri.conf bundle target and build mac artifacts.
-npm run build -- --bundles dmg
+if ! npm run build -- --bundles dmg; then
+  echo ""
+  echo "tauri build failed. Trying to rerun bundle_dmg.sh with debug output..."
+  BUNDLE_SCRIPT="$(find "${DESKTOP_DIR}/src-tauri/target/release/bundle" -type f -name "bundle_dmg.sh" | sort | tail -n 1 || true)"
+  if [ -n "${BUNDLE_SCRIPT}" ]; then
+    echo "Debug script: ${BUNDLE_SCRIPT}"
+    # Run with xtrace to expose the real failing command from Tauri's DMG bundler.
+    bash -x "${BUNDLE_SCRIPT}" || true
+  fi
+  echo ""
+  echo "ERROR: macOS DMG build failed."
+  echo "If the debug output mentions /Volumes/EBP in use, close Finder windows for it and run:"
+  echo "  hdiutil detach /Volumes/EBP || hdiutil detach -force /Volumes/EBP"
+  exit 1
+fi
 
 LATEST_DMG="$(find "${BUNDLE_DIR}" -maxdepth 1 -type f -name "*.dmg" | sort | tail -n 1 || true)"
 if [ -z "${LATEST_DMG}" ]; then
