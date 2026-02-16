@@ -1,5 +1,6 @@
 const statusEl = document.getElementById("status");
 const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
+const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
 const ctxCurrent = document.getElementById("ctx-current");
 const ctxServer = document.getElementById("ctx-server");
 const ctxIdir = document.getElementById("ctx-idir");
@@ -627,7 +628,7 @@ if (decryptPayloadFile) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function api(path, init = {}) {
-  const res = await fetch(`/api/v1${path}`, {
+  const res = await fetch(`${LOCAL_BACKEND_ORIGIN}/api/v1${path}`, {
     headers: { "content-type": "application/json" },
     ...init,
   });
@@ -1274,12 +1275,12 @@ async function loadAll() {
       api("/identities"),
       api("/contacts"),
     ]);
-    state.currentIdentity = ids.currentIdentity ?? ctx.currentIdentity ?? null;
-    state.server = ctx.server ?? null;
-    state.identityDir = ctx.identityDir ?? "";
-    state.protocolVersion = ctx.protocolVersion ?? null;
-    state.identities = ids.identities ?? [];
-    state.contacts = contacts.contacts ?? [];
+    state.currentIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
+    state.server = ctx?.server ?? null;
+    state.identityDir = ctx?.identityDir ?? "";
+    state.protocolVersion = ctx?.protocolVersion ?? null;
+    state.identities = ids?.identities ?? [];
+    state.contacts = contacts?.contacts ?? [];
     
     renderContext();
     renderContacts();
