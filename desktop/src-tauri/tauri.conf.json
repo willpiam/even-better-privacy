@@ -13,7 +13,6 @@
     "windows": [
       {
         "title": "Even Better Privacy",
-        "url": "http://127.0.0.1:8787/",
         "width": 1200,
         "height": 800,
         "minWidth": 900,
