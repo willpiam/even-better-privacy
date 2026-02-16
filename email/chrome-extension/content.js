@@ -386,7 +386,8 @@ async function buildComposeControls(composeRoot, bodyEl) {
   select.addEventListener("change", () => updateRecipientStatus(contactCache.contacts));
   composeRoot.addEventListener("input", () => updateRecipientStatus(contactCache.contacts), true);
   composeRoot.addEventListener("change", () => updateRecipientStatus(contactCache.contacts), true);
-  composeRoot.addEventListener("click", () => updateRecipientStatus(contactCache.contacts), true);
+  // Avoid updating status on every click. On macOS Chrome this can cause native
+  // select popups to immediately collapse before an option can be chosen.
   updateRecipientStatus(contacts);
 
   signEncryptButton.addEventListener("click", async () => {
