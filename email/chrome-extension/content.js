@@ -298,6 +298,10 @@ async function buildComposeControls(composeRoot, bodyEl) {
   const controls = document.createElement("div");
   controls.className = "ebp-compose-controls";
   controls.dataset.ebpComposeControls = "true";
+  controls.setAttribute("contenteditable", "false");
+  // Isolate EBP controls from compose host handlers that can steal focus.
+  controls.addEventListener("mousedown", (event) => event.stopPropagation(), true);
+  controls.addEventListener("click", (event) => event.stopPropagation(), true);
   if (IS_PROTON) {
     controls.style.display = "flex";
     controls.style.gap = "8px";
@@ -315,8 +319,16 @@ async function buildComposeControls(composeRoot, bodyEl) {
 
   // Pause the MutationObserver while the native dropdown is shown so DOM
   // work doesn't collapse it on macOS Chrome.
-  select.addEventListener("mousedown", () => { ebpSelectOpen = true; });
-  select.addEventListener("focus", () => { ebpSelectOpen = true; });
+  function markSelectOpen() {
+    ebpSelectOpen = true;
+    // Cancel any already-scheduled observer run; it might otherwise execute
+    // while the native dropdown is open and dismiss it.
+    clearTimeout(observerTimer);
+    observerTimer = null;
+  }
+  select.addEventListener("mousedown", markSelectOpen);
+  select.addEventListener("focus", markSelectOpen);
+  select.addEventListener("click", (event) => event.stopPropagation(), true);
   select.addEventListener("change", () => { ebpSelectOpen = false; });
   select.addEventListener("blur", () => {
     ebpSelectOpen = false;
@@ -691,6 +703,11 @@ const observer = new MutationObserver(() => {
   // Debounce: Gmail fires many rapid mutations; batch them into one pass.
   clearTimeout(observerTimer);
   observerTimer = setTimeout(() => {
+    // The dropdown may have opened after this timer was queued.
+    if (ebpSelectOpen) {
+      pendingObserverRun = true;
+      return;
+    }
     initComposeObservers();
     initReadObservers();
   }, 200);
