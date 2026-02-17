@@ -290,7 +290,11 @@ If you find EBP useful, consider supporting the project:
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for future plans and development notes.
+~~See [ROADMAP.md](ROADMAP.md) for future plans and development notes.~~
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md) for the project privacy policy.
 
 ## License
 
@@ -323,6 +327,7 @@ MIT — see [LICENSE](LICENSE) for details.
     - upload a signature file and a public key file (and type in a message if not provided in signature file) and see if the signature is valid and if it is we should check the backend server (https://ebp-cqyo.onrender.com) to see if the identity has been published, if it does we should show the signers details
     - same with a pasted signature, public key, and message
     - signature objects may or may not include a message or a public key 
+- email: enable ebp interface when a user directly replies to an email
 - email: select multiple recipients. Encrypt with same AES key. Send json object with one encrypted message and an object mapping the recipients fingerprint to a copy of the AES key encapsulated just for that recipient. 
 
 ```json
@@ -333,3 +338,27 @@ MIT — see [LICENSE](LICENSE) for details.
     "ciphertext":"<AES ciphertext of M + Sm, where M is a message and Sm is a signature on that message>"
 }
 ```
+- Support expiry dates for identities
+- Endorse other EBP identities as your own (two-way binding)
+- plugin: Make it harder to accidentally send email without first encrypting
+- plugin: hide password inputs
+- hashed details
+    - hashed email endorsement
+        - take hash of your email address
+        - sign hash
+        - send hash & email address & signature to public key server
+        - server sends email for you to confirm your email
+        - server never makes unhashed email public. Perhaps even deletes raw email address after the user has confirmed it. 
+        - users who receive signed emails from you can still confrim that the email address is associated with the provided EBP identity. 
+        - reduce your exposure to spam
+- Support identity hierarchy
+    - parent can revoke the relationship
+    - one pattern might look like this:
+
+```mermaid
+graph TD
+    M[Master Identity] -->|endorses| C[Cold Identity]
+    C -->|endorses| H[Hot Key]
+
+```
+
