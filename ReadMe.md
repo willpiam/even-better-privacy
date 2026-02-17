@@ -323,3 +323,13 @@ MIT — see [LICENSE](LICENSE) for details.
     - upload a signature file and a public key file (and type in a message if not provided in signature file) and see if the signature is valid and if it is we should check the backend server (https://ebp-cqyo.onrender.com) to see if the identity has been published, if it does we should show the signers details
     - same with a pasted signature, public key, and message
     - signature objects may or may not include a message or a public key 
+- email: select multiple recipients. Encrypt with same AES key. Send json object with one encrypted message and an object mapping the recipients fingerprint to a copy of the AES key encapsulated just for that recipient. 
+
+```json
+{
+    "encapsulated_key_map": {
+        "<recipient fingerprint>": "<ciphertext>"
+    }, 
+    "ciphertext":"<AES ciphertext of M + Sm, where M is a message and Sm is a signature on that message>"
+}
+```

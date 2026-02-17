@@ -147,6 +147,78 @@ function showModal(title, body, status, statusType, metaLines = []) {
   document.body.appendChild(overlay);
 }
 
+function requestPassword(promptText = "EBP identity password") {
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "ebp-modal-overlay";
+
+    const modal = document.createElement("div");
+    modal.className = "ebp-modal";
+    modal.style.maxWidth = "420px";
+
+    const header = document.createElement("div");
+    header.className = "ebp-modal-header";
+    header.textContent = promptText;
+
+    const input = document.createElement("input");
+    input.type = "password";
+    input.autocomplete = "current-password";
+    input.placeholder = "Password";
+    input.style.width = "100%";
+    input.style.boxSizing = "border-box";
+    input.style.border = "1px solid #dadce0";
+    input.style.borderRadius = "6px";
+    input.style.padding = "10px 12px";
+    input.style.fontSize = "13px";
+
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "8px";
+    actions.style.justifyContent = "flex-end";
+
+    const cancelButton = createButton("Cancel");
+    cancelButton.className += " ebp-button-secondary";
+    const submitButton = createButton("Continue");
+
+    function cleanupAndResolve(value) {
+      overlay.remove();
+      resolve(value);
+    }
+
+    cancelButton.addEventListener("click", () => cleanupAndResolve(null));
+    submitButton.addEventListener("click", () => {
+      const value = input.value;
+      if (!value) {
+        input.focus();
+        return;
+      }
+      cleanupAndResolve(value);
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) cleanupAndResolve(null);
+    });
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        submitButton.click();
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cleanupAndResolve(null);
+      }
+    });
+
+    actions.appendChild(cancelButton);
+    actions.appendChild(submitButton);
+    modal.appendChild(header);
+    modal.appendChild(input);
+    modal.appendChild(actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    setTimeout(() => input.focus(), 0);
+  });
+}
+
 function getDetailValue(details, key) {
   if (!details || typeof details !== "object") return "";
   const value = details[key];
@@ -299,9 +371,10 @@ async function buildComposeControls(composeRoot, bodyEl) {
   controls.className = "ebp-compose-controls";
   controls.dataset.ebpComposeControls = "true";
   controls.setAttribute("contenteditable", "false");
-  // Isolate EBP controls from compose host handlers that can steal focus.
-  controls.addEventListener("mousedown", (event) => event.stopPropagation(), true);
-  controls.addEventListener("click", (event) => event.stopPropagation(), true);
+  // Isolate EBP controls from compose host handlers without blocking target
+  // handlers on EBP buttons/select (do not use capture phase here).
+  controls.addEventListener("mousedown", (event) => event.stopPropagation());
+  controls.addEventListener("click", (event) => event.stopPropagation());
   if (IS_PROTON) {
     controls.style.display = "flex";
     controls.style.gap = "8px";
@@ -328,7 +401,7 @@ async function buildComposeControls(composeRoot, bodyEl) {
   }
   select.addEventListener("mousedown", markSelectOpen);
   select.addEventListener("focus", markSelectOpen);
-  select.addEventListener("click", (event) => event.stopPropagation(), true);
+  select.addEventListener("click", (event) => event.stopPropagation());
   select.addEventListener("change", () => { ebpSelectOpen = false; });
   select.addEventListener("blur", () => {
     ebpSelectOpen = false;
@@ -440,7 +513,7 @@ async function buildComposeControls(composeRoot, bodyEl) {
       showToast("Compose body is empty", true);
       return;
     }
-    const password = window.prompt("EBP identity password");
+    const password = await requestPassword("EBP identity password");
     if (!password) return;
     const response = await sendMessage({
       type: "ebp-encrypt",
@@ -465,7 +538,7 @@ async function buildComposeControls(composeRoot, bodyEl) {
           showToast("Compose body is empty", true);
           return;
         }
-        const password = window.prompt("EBP identity password");
+        const password = await requestPassword("EBP identity password");
         if (!password) return;
         const response = await sendMessage({
           type: "ebp-sign",
@@ -592,7 +665,7 @@ function createDecryptButton(messageBody) {
         showToast("No EBP payload found", true);
         return;
       }
-      const password = window.prompt("EBP identity password");
+      const password = await requestPassword("EBP identity password");
       if (!password) return;
       showToast("Decrypting...");
       const response = await sendMessage({
