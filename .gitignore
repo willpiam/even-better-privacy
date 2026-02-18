@@ -56,3 +56,6 @@ desktop/src-tauri/bin/ebp-gui-backend-x86_64-unknown-linux-gnu
 /email/chrome-extension-*.zip
 
 *.zip
+
+# Scripts
+/scripts/postgres/backups/

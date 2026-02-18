@@ -19,10 +19,18 @@ async function ensureDir(path: string): Promise<void> {
   await Deno.mkdir(path, { recursive: true });
 }
 
+function jsonWithBigInt(value: unknown): string {
+  return JSON.stringify(
+    value,
+    (_key, v) => (typeof v === "bigint" ? v.toString() : v),
+    2,
+  );
+}
+
 async function backupTable(client: Awaited<ReturnType<import("postgres").Pool["connect"]>>, table: string, backupDir: string): Promise<number> {
   const rows = await client.queryObject(`SELECT * FROM ${table}`);
   const path = `${backupDir}/${table}.json`;
-  await Deno.writeTextFile(path, JSON.stringify(rows.rows, null, 2));
+  await Deno.writeTextFile(path, jsonWithBigInt(rows.rows));
   return rows.rows.length;
 }
 
