@@ -410,6 +410,42 @@ Deno.test({
 });
 
 Deno.test({
+	name: "POST /api/v1/contacts/delete removes a local contact by name",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const validFingerprint = (await createTestIdentity(home, "seed", "password123")).toFingerprint();
+			const contact: ExternalIdentity = {
+				fingerprint: validFingerprint,
+				signingKeyType: "dilithium",
+				encryptionKeyType: "kyber",
+				signingKey: "pk-sign",
+				encryptionKey: "pk-enc",
+				details: {},
+				signingKeyDetails: undefined,
+				encryptionKeyDetails: undefined,
+			};
+			await createTestContact(home, "delete-me", contact);
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/contacts/delete",
+				jsonPost({ name: "delete-me", home })
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as { ok: boolean; name: string };
+			assertEquals(b.ok, true);
+			assertEquals(b.name, "delete-me");
+
+			const check = await makeRequest(handler, `/api/v1/contacts?home=${encodeURIComponent(home)}`);
+			assertEquals(check.status, STATUS.OK);
+			const list = check.body as { contacts: Array<{ name: string }> };
+			assertEquals(list.contacts.length, 0);
+		});
+	},
+});
+
+Deno.test({
 	name: "POST /api/v1/sign creates signed message",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {

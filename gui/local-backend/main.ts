@@ -228,6 +228,50 @@ async function listContacts(ctx: CLIContext): Promise<Array<{ name: string; cont
 	return contacts;
 }
 
+async function deleteContact(ctx: CLIContext, name?: string, fingerprint?: string): Promise<string> {
+	const byName = typeof name === "string" ? name.trim() : "";
+	const byFingerprint = typeof fingerprint === "string" ? fingerprint.trim() : "";
+
+	if (!byName && !byFingerprint) {
+		throw new HttpError(STATUS.BadRequest, "name or fingerprint is required");
+	}
+
+	if (byName) {
+		const contactPath = `${ctx.contactsDir}/${byName}.json`;
+		try {
+			await Deno.remove(contactPath);
+			return byName;
+		} catch (e) {
+			if (!(e instanceof Deno.errors.NotFound)) throw e;
+		}
+	}
+
+	if (!byFingerprint) {
+		throw new HttpError(STATUS.NotFound, "contact not found");
+	}
+
+	try {
+		for await (const entry of Deno.readDir(ctx.contactsDir)) {
+			if (!entry.isFile || !entry.name.endsWith(".json")) continue;
+			const contactName = entry.name.replace(".json", "");
+			const contactPath = `${ctx.contactsDir}/${entry.name}`;
+			const json = await Deno.readTextFile(contactPath);
+			const contact = JSON.parse(json) as ExternalIdentity;
+			if (
+				typeof contact.fingerprint === "string" &&
+				(contact.fingerprint === byFingerprint || contact.fingerprint.startsWith(byFingerprint))
+			) {
+				await Deno.remove(contactPath);
+				return contactName;
+			}
+		}
+	} catch (e) {
+		if (!(e instanceof Deno.errors.NotFound)) throw e;
+	}
+
+	throw new HttpError(STATUS.NotFound, "contact not found");
+}
+
 function computeExternalFingerprint(identity: ExternalIdentity): string | null {
 	try {
 		const shell = Object.create(Identity.prototype) as Identity;
@@ -515,6 +559,16 @@ async function handleRequest(req: Request): Promise<Response> {
 			await Deno.writeTextFile(contactPath, JSON.stringify(contact, null, 2));
 
 			return json({ ok: true, name: contactName, fingerprint: contact.fingerprint });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/contacts/delete") {
+			const body = await readJson<{ name?: unknown; fingerprint?: unknown; home?: unknown }>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const name = typeof body.name === "string" ? body.name : undefined;
+			const fingerprint = typeof body.fingerprint === "string" ? body.fingerprint : undefined;
+			const ctx = await getContext(home);
+			const deletedName = await deleteContact(ctx, name, fingerprint);
+			return json({ ok: true, name: deletedName });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/sign") {

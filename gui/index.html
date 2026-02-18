@@ -678,6 +678,19 @@
       animation: fadeInOverlay 0.2s ease;
     }
 
+    /* Keep global confirm/password modals above contextual modals (e.g. contact details). */
+    #contact-detail-modal {
+      z-index: 220;
+    }
+
+    #password-modal {
+      z-index: 230;
+    }
+
+    #confirm-modal {
+      z-index: 240;
+    }
+
     .modal-overlay.active {
       display: flex;
     }
@@ -2073,6 +2086,7 @@
       </div>
       <div class="modal-actions">
         <button class="secondary" id="contact-detail-close">Close</button>
+        <button class="danger" id="contact-detail-delete-btn">Delete Local Contact</button>
         <button id="contact-detail-sync-btn">Sync from Server</button>
       </div>
     </div>

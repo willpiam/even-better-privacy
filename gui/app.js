@@ -452,6 +452,13 @@ document.getElementById("contact-detail-sync-btn").addEventListener("click", asy
   await syncContact(fingerprint, name, btn);
 });
 
+document.getElementById("contact-detail-delete-btn").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const name = btn.dataset.name;
+  const fingerprint = btn.dataset.fingerprint;
+  await deleteLocalContact(name, fingerprint, btn);
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UI Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1047,6 +1054,8 @@ async function showContactDetails(contact) {
   document.getElementById("contact-detail-details").innerHTML = detailsHtml;
   document.getElementById("contact-detail-sync-btn").dataset.fingerprint = contact.fingerprint;
   document.getElementById("contact-detail-sync-btn").dataset.name = contact.name;
+  document.getElementById("contact-detail-delete-btn").dataset.fingerprint = contact.fingerprint;
+  document.getElementById("contact-detail-delete-btn").dataset.name = contact.name;
   
   // Show server API link if server is configured
   const serverLinkContainer = document.getElementById("contact-detail-server-link-container");
@@ -1061,6 +1070,35 @@ async function showContactDetails(contact) {
   }
   
   modal.classList.add("active");
+}
+
+async function deleteLocalContact(name, fingerprint, btn) {
+  if (!name && !fingerprint) {
+    setStatus("Contact identifier missing", "error");
+    return;
+  }
+
+  const confirmed = await showConfirmModal(
+    "Delete Local Contact",
+    `Delete "${name || fingerprint}" from local contacts? This only removes the local copy.`,
+    "Delete"
+  );
+  if (!confirmed) return;
+
+  if (btn) setButtonLoading(btn, true);
+  try {
+    await api("/contacts/delete", {
+      method: "POST",
+      body: JSON.stringify({ name: name || undefined, fingerprint: fingerprint || undefined }),
+    });
+    document.getElementById("contact-detail-modal").classList.remove("active");
+    setStatus(`Deleted local contact "${name || fingerprint}"`, "success");
+    await loadAll();
+  } catch (err) {
+    setStatus(err.message, "error");
+  } finally {
+    if (btn) setButtonLoading(btn, false);
+  }
 }
 
 async function syncContact(fingerprint, name, btn) {
