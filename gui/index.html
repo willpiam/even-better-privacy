@@ -304,6 +304,66 @@
       border-radius: 2px;
     }
 
+    .collapsible-section {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    .section-toggle {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid transparent;
+      border-radius: 0;
+      background: transparent;
+      color: inherit;
+      padding: 16px 20px;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      text-align: left;
+      font: inherit;
+      box-shadow: none;
+      min-width: 0;
+    }
+
+    .section-toggle:hover:not(:disabled),
+    .section-toggle:focus-visible {
+      background: var(--bg-hover);
+      box-shadow: none;
+      transform: none;
+    }
+
+    .section-toggle:focus-visible {
+      outline: 2px solid var(--border-focus);
+      outline-offset: -2px;
+    }
+
+    .section-toggle h3 {
+      margin: 0;
+    }
+
+    .section-chevron {
+      color: var(--text-muted);
+      font-size: 1rem;
+      transition: transform 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .collapsible-section:not(.is-collapsed) .section-chevron {
+      transform: rotate(180deg);
+    }
+
+    .section-content {
+      padding: 0 20px 20px;
+      border-top: 1px solid var(--border);
+    }
+
+    .collapsible-section.is-collapsed .section-content {
+      display: none;
+    }
+
     .row {
       display: flex;
       flex-wrap: wrap;
@@ -508,6 +568,10 @@
       display: grid;
       gap: 20px;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    .two.stack-vertical {
+      grid-template-columns: 1fr;
     }
 
     .small {
@@ -1764,7 +1828,7 @@
         <p>Create and verify cryptographic signatures</p>
       </div>
 
-      <div class="two">
+      <div class="two stack-vertical">
         <section>
           <h3>Sign Message</h3>
           <form id="sign-form" class="stack">
@@ -1839,7 +1903,7 @@
         <p>Secure message exchange using post-quantum cryptography</p>
       </div>
 
-      <div class="two">
+      <div class="two stack-vertical">
         <section>
           <h3>Encrypt Message</h3>
           <form id="encrypt-form" class="stack">

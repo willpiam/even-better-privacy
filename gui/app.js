@@ -313,6 +313,67 @@ function initNavigation() {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Collapsible section cards
+// ─────────────────────────────────────────────────────────────────────────────
+
+function setSectionCollapsed(section, collapsed) {
+  const toggle = section.querySelector(":scope > .section-toggle");
+  const content = section.querySelector(":scope > .section-content");
+  if (!toggle || !content) return;
+  section.classList.toggle("is-collapsed", collapsed);
+  toggle.setAttribute("aria-expanded", String(!collapsed));
+  content.style.display = collapsed ? "none" : "";
+}
+
+function makeSectionCollapsible(section) {
+  if (section.classList.contains("collapsible-section")) return;
+  const heading = section.querySelector(":scope > h3");
+  if (!heading) return;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "section-toggle";
+
+  const chevron = document.createElement("span");
+  chevron.className = "section-chevron";
+  chevron.textContent = "▾";
+  chevron.setAttribute("aria-hidden", "true");
+
+  toggle.appendChild(heading);
+  toggle.appendChild(chevron);
+
+  const content = document.createElement("div");
+  content.className = "section-content";
+
+  while (section.firstChild) {
+    if (section.firstChild !== toggle) {
+      content.appendChild(section.firstChild);
+    } else {
+      break;
+    }
+  }
+
+  section.innerHTML = "";
+  section.classList.add("collapsible-section");
+  section.appendChild(toggle);
+  section.appendChild(content);
+
+  const expandedByDefault = section.dataset.expandedByDefault === "true";
+  setSectionCollapsed(section, !expandedByDefault);
+
+  toggle.addEventListener("click", () => {
+    const isCollapsed = section.classList.contains("is-collapsed");
+    setSectionCollapsed(section, !isCollapsed);
+  });
+}
+
+function initCollapsibleSections() {
+  document.querySelectorAll(".page section").forEach((section) => {
+    makeSectionCollapsible(section);
+  });
+}
+
 window.addEventListener("hashchange", () => {
   const hash = window.location.hash.slice(1);
   const validPages = Array.from(navItems).map((item) => item.dataset.page);
@@ -1880,5 +1941,6 @@ document.getElementById("revoke-identity-form").addEventListener("submit", async
 // ─────────────────────────────────────────────────────────────────────────────
 
 initNavigation();
+initCollapsibleSections();
 initContactSearch();
 loadAll();
