@@ -559,6 +559,8 @@ function getPayloadDownloadName(payload, fallback) {
       return "ebp-signature.json";
     case "ebp-signed-message":
       return "ebp-signed-message.json";
+    case "ebp-signed-file":
+      return "ebp-signed-file.json";
     case "ebp-encrypted-message":
       return "ebp-encrypted-message.json";
     case "ebp-encrypted-signed-message":
@@ -605,6 +607,20 @@ async function loadJsonFileIntoTextarea(fileInput, textareaId) {
   } finally {
     fileInput.value = "";
   }
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashFileSha256Hex(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", arrayBuffer);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function buildFileSignMessage(fileHash, contextMessage) {
+  return `ebp::filehash::${fileHash}${contextMessage || ""}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -667,6 +683,14 @@ if (encDownloadBtn) {
   });
 }
 
+const signFileDownloadBtn = document.getElementById("sign-file-download-btn");
+if (signFileDownloadBtn) {
+  signFileDownloadBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    downloadJsonFromTextarea("sign-file-output", "ebp-signed-file.json");
+  });
+}
+
 const verifyPayloadFile = document.getElementById("verify-payload-file");
 if (verifyPayloadFile) {
   verifyPayloadFile.addEventListener("change", async () => {
@@ -688,6 +712,18 @@ if (decryptPayloadFile) {
   decryptPayloadFile.addEventListener("change", async () => {
     await loadJsonFileIntoTextarea(decryptPayloadFile, "dec-payload");
     updateVerifyResult("dec-verified", null, null);
+  });
+}
+
+const verifyFilePayloadFile = document.getElementById("verify-file-payload-file");
+if (verifyFilePayloadFile) {
+  verifyFilePayloadFile.addEventListener("change", async () => {
+    await loadJsonFileIntoTextarea(verifyFilePayloadFile, "verify-file-payload");
+    updateVerifyResult("verify-file-result", null, null);
+    const details = document.getElementById("verify-file-details");
+    const signedMessage = document.getElementById("verify-file-signed-message");
+    if (details) details.value = "";
+    if (signedMessage) signedMessage.value = "";
   });
 }
 
@@ -1351,6 +1387,22 @@ function updateVerifyResult(elementId, status, verifyStatus) {
   }
 }
 
+function setResultBadge(elementId, kind, text) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  el.className = "result-badge";
+  if (kind === "valid") {
+    el.classList.add("valid");
+  } else if (kind === "invalid") {
+    el.classList.add("invalid");
+  } else if (kind === "warning") {
+    el.classList.add("warning");
+  } else {
+    el.classList.add("pending");
+  }
+  el.textContent = text;
+}
+
 function escapeHtml(str) {
   if (typeof str !== "string") return "";
   return str
@@ -1623,6 +1675,213 @@ document.getElementById("verify-form").addEventListener("submit", async (e) => {
     } catch (err) {
       setStatus(err.message, "error");
       updateVerifyResult("verify-result", null, null);
+    }
+  });
+});
+
+document.getElementById("sign-file-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const fileInput = document.getElementById("sign-file-input");
+  const contextMessage = document.getElementById("sign-file-context").value;
+  const hashOutput = document.getElementById("sign-file-hash");
+  const payloadOutput = document.getElementById("sign-file-output");
+  const file = fileInput?.files?.[0];
+
+  await withLoading(btn, async () => {
+    try {
+      if (!file) {
+        throw new Error("Please select a file to sign");
+      }
+      const fileHash = await hashFileSha256Hex(file);
+      hashOutput.value = fileHash;
+      const message = buildFileSignMessage(fileHash, contextMessage);
+
+      const password = await requestPassword("Enter password to sign this file hash");
+      if (!password) {
+        setStatus("Password is required", "error");
+        return;
+      }
+
+      const signRes = await api("/sign", {
+        method: "POST",
+        body: JSON.stringify({
+          message,
+          password,
+          detached: true,
+          includeIdentity: true,
+        }),
+      });
+
+      if (!signRes?.signature || !signRes?.identity) {
+        throw new Error("Signing response missing signature or public identity");
+      }
+
+      const signedFilePayload = {
+        type: "ebp-signed-file",
+        fileName: file.name,
+        fileHash,
+        contextMessage: contextMessage || "",
+        fingerprint: signRes.fingerprint,
+        signature: signRes.signature,
+        identity: signRes.identity,
+      };
+      payloadOutput.value = JSON.stringify(signedFilePayload, null, 2);
+      setStatus("File hash signed", "success");
+      await loadPublicIdentityInfo();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("verify-file-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const fileInput = document.getElementById("verify-file-input");
+  const payloadRaw = document.getElementById("verify-file-payload").value;
+  const detailsOutput = document.getElementById("verify-file-details");
+  const signedMessageOutput = document.getElementById("verify-file-signed-message");
+  const file = fileInput?.files?.[0];
+
+  await withLoading(btn, async () => {
+    try {
+      if (!file) {
+        throw new Error("Please select the file to verify");
+      }
+      if (!payloadRaw.trim()) {
+        throw new Error("Signature JSON is required");
+      }
+
+      const payload = JSON.parse(payloadRaw);
+      if (!payload || typeof payload !== "object") {
+        throw new Error("Signature payload must be a JSON object");
+      }
+      if (payload.type !== "ebp-signed-file") {
+        throw new Error('Signature payload type must be "ebp-signed-file"');
+      }
+
+      const expectedHash = typeof payload.fileHash === "string" ? payload.fileHash : "";
+      if (!expectedHash) {
+        throw new Error("Signature payload missing fileHash");
+      }
+      const signature = typeof payload.signature === "string" ? payload.signature : "";
+      if (!signature) {
+        throw new Error("Signature payload missing signature");
+      }
+      const identity = payload.identity;
+      if (!identity || typeof identity !== "object") {
+        throw new Error("Signature payload missing identity public keys");
+      }
+
+      const computedHash = await hashFileSha256Hex(file);
+      const contextMessage = typeof payload.contextMessage === "string" ? payload.contextMessage : "";
+      const reconstructedMessage = buildFileSignMessage(computedHash, contextMessage);
+
+      if (detailsOutput) detailsOutput.value = "";
+      if (signedMessageOutput) signedMessageOutput.value = "";
+
+      if (computedHash !== expectedHash) {
+        setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+        if (detailsOutput) {
+          detailsOutput.value = [
+            "File hash mismatch.",
+            `Expected (from signature): ${expectedHash}`,
+            `Computed (uploaded file): ${computedHash}`,
+            "Verification stopped before key and signature checks."
+          ].join("\n");
+        }
+        setStatus("File hash mismatch", "error");
+        return;
+      }
+
+      const computedFingerprintRes = await api("/identity/fingerprint-from-public", {
+        method: "POST",
+        body: JSON.stringify({ publicIdentity: identity }),
+      });
+      const computedFingerprint = typeof computedFingerprintRes?.fingerprint === "string"
+        ? computedFingerprintRes.fingerprint
+        : "";
+      const payloadFingerprint = typeof payload.fingerprint === "string" ? payload.fingerprint : "";
+      const identityFingerprint = typeof identity.fingerprint === "string" ? identity.fingerprint : "";
+
+      if (payloadFingerprint && identityFingerprint && payloadFingerprint !== identityFingerprint) {
+        setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+        if (detailsOutput) {
+          detailsOutput.value = [
+            "Fingerprint mismatch inside signature JSON.",
+            `payload.fingerprint: ${payloadFingerprint}`,
+            `identity.fingerprint: ${identityFingerprint}`,
+            "Verification stopped before signature check."
+          ].join("\n");
+        }
+        setStatus("Fingerprint mismatch in signature JSON", "error");
+        return;
+      }
+
+      const expectedFingerprint = payloadFingerprint || identityFingerprint;
+      if (!expectedFingerprint) {
+        setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+        if (detailsOutput) {
+          detailsOutput.value = "Fingerprint missing from signature JSON (expected on payload or identity object).";
+        }
+        setStatus("Missing fingerprint in signature payload", "error");
+        return;
+      }
+
+      if (computedFingerprint !== expectedFingerprint) {
+        setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+        if (detailsOutput) {
+          detailsOutput.value = [
+            "Public keys do not match the expected fingerprint.",
+            `Expected fingerprint: ${expectedFingerprint}`,
+            `Computed from provided keys: ${computedFingerprint}`,
+            "Verification stopped before signature check."
+          ].join("\n");
+        }
+        setStatus("Public keys do not match fingerprint", "error");
+        return;
+      }
+
+      const verifyRes = await api("/verify", {
+        method: "POST",
+        body: JSON.stringify({
+          payload: {},
+          message: reconstructedMessage,
+          signature,
+          publicIdentity: identity,
+        }),
+      });
+
+      if (!verifyRes?.verified) {
+        setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+        if (detailsOutput) {
+          detailsOutput.value = [
+            "Signature verification failed.",
+            "File hash and fingerprint checks passed, but the signature is not valid for the reconstructed message."
+          ].join("\n");
+        }
+        setStatus("Signature verification failed", "error");
+        return;
+      }
+
+      setResultBadge("verify-file-result", "valid", "✓ Valid");
+      if (detailsOutput) {
+        detailsOutput.value = [
+          "Verification succeeded.",
+          `File hash: ${computedHash}`,
+          `Signer fingerprint: ${expectedFingerprint}`
+        ].join("\n");
+      }
+      if (signedMessageOutput) {
+        signedMessageOutput.value = reconstructedMessage;
+      }
+      setStatus("File signature verified", "success");
+    } catch (err) {
+      setResultBadge("verify-file-result", "invalid", "✗ Invalid");
+      if (detailsOutput) detailsOutput.value = err.message;
+      if (signedMessageOutput) signedMessageOutput.value = "";
+      setStatus(err.message, "error");
     }
   });
 });

@@ -1893,6 +1893,59 @@
             <div class="small">Result: <span id="verify-result" class="result-badge pending">-</span></div>
           </form>
         </section>
+
+        <section>
+          <h3>Sign File</h3>
+          <form id="sign-file-form" class="stack">
+            <label>Select file
+              <input id="sign-file-input" type="file" />
+            </label>
+            <label>Optional context message
+              <textarea id="sign-file-context" placeholder="Optional message to append after the file hash before signing..."></textarea>
+            </label>
+            <p class="help-text">The signed message format is: <code>ebp::filehash::&lt;filehash&gt;&lt;optional context message&gt;</code></p>
+            <label>Computed file hash (SHA-256 hex)
+              <input id="sign-file-hash" type="text" readonly placeholder="Calculated after selecting and signing a file..." />
+            </label>
+            <div>
+              <button type="submit">Sign File</button>
+            </div>
+            <label>Output
+              <div class="output-wrapper">
+                <textarea id="sign-file-output" readonly placeholder="Signed file payload will appear here..."></textarea>
+                <button type="button" class="copy-btn" data-target="sign-file-output">Copy</button>
+                <button type="button" class="secondary" id="sign-file-download-btn">Download JSON</button>
+              </div>
+            </label>
+          </form>
+        </section>
+
+        <section>
+          <h3>Verify File Signature</h3>
+          <form id="verify-file-form" class="stack">
+            <label>File
+              <input id="verify-file-input" type="file" />
+            </label>
+            <label>Signature JSON
+              <textarea id="verify-file-payload" placeholder='{"type":"ebp-signed-file", ...}'></textarea>
+            </label>
+            <div class="row">
+              <label>Import signature JSON file
+                <input id="verify-file-payload-file" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+            <div>
+              <button type="submit">Verify File Signature</button>
+            </div>
+            <div class="small">Result: <span id="verify-file-result" class="result-badge pending">-</span></div>
+            <label>Result details
+              <textarea id="verify-file-details" readonly placeholder="Verification details will appear here..."></textarea>
+            </label>
+            <label>Reconstructed signed message (shown on success)
+              <textarea id="verify-file-signed-message" readonly placeholder="Successful verification will show the exact signed message here..."></textarea>
+            </label>
+          </form>
+        </section>
       </div>
     </div>
 

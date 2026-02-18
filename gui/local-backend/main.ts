@@ -706,6 +706,46 @@ async function handleRequest(req: Request): Promise<Response> {
 			return json({ verified });
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/v1/identity/fingerprint-from-public") {
+			const body = await readJson<{ publicIdentity?: unknown }>(req);
+			const publicIdentity = body.publicIdentity;
+			if (!publicIdentity || typeof publicIdentity !== "object") {
+				throw new HttpError(STATUS.BadRequest, "publicIdentity object is required");
+			}
+			const candidate = publicIdentity as Record<string, unknown>;
+			const signingKey = typeof candidate.signingKey === "string" ? candidate.signingKey : "";
+			const signingKeyType = typeof candidate.signingKeyType === "string" ? candidate.signingKeyType : "";
+			const encryptionKey = typeof candidate.encryptionKey === "string" ? candidate.encryptionKey : "";
+			const encryptionKeyType = typeof candidate.encryptionKeyType === "string" ? candidate.encryptionKeyType : "";
+			if (!signingKey || !signingKeyType) {
+				throw new HttpError(STATUS.BadRequest, "public identity missing signing key");
+			}
+			if (!encryptionKey || !encryptionKeyType) {
+				throw new HttpError(STATUS.BadRequest, "public identity missing encryption key");
+			}
+			if (!["dilithium", "sphincs"].includes(signingKeyType)) {
+				throw new HttpError(STATUS.BadRequest, "public identity has invalid signing key type");
+			}
+			if (encryptionKeyType !== "kyber") {
+				throw new HttpError(STATUS.BadRequest, "public identity has invalid encryption key type");
+			}
+			const externalIdentity: ExternalIdentity = {
+				fingerprint: typeof candidate.fingerprint === "string" ? candidate.fingerprint : "",
+				signingKey,
+				signingKeyType: signingKeyType as ExternalIdentity["signingKeyType"],
+				signingKeyDetails: candidate.signingKeyDetails,
+				encryptionKey,
+				encryptionKeyType: "kyber",
+				encryptionKeyDetails: candidate.encryptionKeyDetails,
+				details: (candidate.details as ExternalIdentity["details"]) ?? {},
+			};
+			const computedFingerprint = computeExternalFingerprint(externalIdentity);
+			if (!computedFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "could not compute fingerprint from provided public identity");
+			}
+			return json({ fingerprint: computedFingerprint });
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/v1/encrypt") {
 			const body = await readJson<{
 				message?: unknown;
