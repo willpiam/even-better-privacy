@@ -6,6 +6,7 @@ import { DilithiumSigningKey } from "../../core/Dilithium.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
 import { KyberEncryptionKey } from "../../core/Kyber.ts";
 import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
+import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import {
 	CLIContext,
 	buildStateFromExternal,
@@ -502,6 +503,9 @@ async function handleRequest(req: Request): Promise<Response> {
 			if (!contact) throw new HttpError(STATUS.BadRequest, "contact payload is required");
 			if (!contact.fingerprint || !contact.signingKey || !contact.encryptionKey) {
 				throw new HttpError(STATUS.BadRequest, "contact missing required fields");
+			}
+			if (!isValidFingerprintBech32(contact.fingerprint)) {
+				throw new HttpError(STATUS.BadRequest, "contact fingerprint must be valid bech32");
 			}
 
 			const ctx = await getContext(home);
@@ -1097,6 +1101,9 @@ async function handleRequest(req: Request): Promise<Response> {
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const serverOverride = typeof body.server === "string" ? body.server : undefined;
 			if (!fingerprint) throw new HttpError(STATUS.BadRequest, "fingerprint is required");
+			if (!isValidFingerprintBech32(fingerprint)) {
+				throw new HttpError(STATUS.BadRequest, "fingerprint must be valid bech32");
+			}
 
 			const ctx = await getContext(home);
 			const server = resolveServer(ctx, serverOverride);

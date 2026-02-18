@@ -7,9 +7,9 @@ import { SphincsSigningKey } from "./Sphincs.ts";
 import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
 import { AES } from "./AES.ts";
-import { sha256 } from "@noble/hashes/sha2";
 import { Buffer } from "node:buffer";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
+import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
 import {
     createRevocationCertificate,
     getRevocationSignaturePayload,
@@ -437,13 +437,21 @@ export class Identity extends Key {
     }
 
     toRawFingerprint(): Uint8Array {
-        const a = this.signingKey.toRawFingerprint();
-        const b = this.encryptionKey.toRawFingerprint();
-        return sha256(Buffer.concat([a, b]));
+        return computeIdentityMerkleRootRaw({
+            signingKeyType: this.signingKeyType,
+            encryptionKeyType: this.encryptionKeyType,
+            signingKey: this.signingKey.publicKey,
+            encryptionKey: this.encryptionKey.publicKey,
+        });
     }
 
     toFingerprint(): string {
-        return Buffer.from(this.toRawFingerprint()).toString("hex");
+        return computeIdentityFingerprint({
+            signingKeyType: this.signingKeyType,
+            encryptionKeyType: this.encryptionKeyType,
+            signingKey: this.signingKey.publicKey,
+            encryptionKey: this.encryptionKey.publicKey,
+        });
     }
 
     toJSON(): string {

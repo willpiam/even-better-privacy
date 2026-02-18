@@ -4,25 +4,25 @@ overview: "Implement fingerprint upgrades in two controlled phases: first switch
 todos:
   - id: fp-core-merkle-phase1
     content: Implement shared merkle-root hex fingerprint computation and wire it into core/server/gui-local-backend fingerprint producers/validators.
-    status: pending
+    status: completed
   - id: fp-tests-phase1
     content: Update existing tests and add merkle-specific coverage; run core/cli-utils/gui-backend/server/e2e suites for phase 1.
-    status: pending
+    status: completed
     dependencies:
       - fp-core-merkle-phase1
   - id: fp-bech32-phase2
     content: Add bech32 utility (library-backed), apply hard cutover across core/cli/gui/server, and enforce custom HRPs + canonical validation rules.
-    status: pending
+    status: completed
     dependencies:
       - fp-tests-phase1
   - id: fp-tests-phase2
     content: Add bech32+merkle focused tests and run full suites again.
-    status: pending
+    status: completed
     dependencies:
       - fp-bech32-phase2
   - id: fp-migration-reset
     content: Create local file migration script and production DB reset script, then document operator runbook updates.
-    status: pending
+    status: completed
     dependencies:
       - fp-tests-phase2
 ---

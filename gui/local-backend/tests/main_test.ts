@@ -333,10 +333,11 @@ Deno.test({
 		await withTestEnv(async (home, handler) => {
 			// Create an identity first (to have a contacts dir)
 			const identity = await createTestIdentity(home, "test", "password123");
+			const validFingerprint = identity.toFingerprint();
 
 			// Create a contact
 			const contact: ExternalIdentity = {
-				fingerprint: "abc123",
+				fingerprint: validFingerprint,
 				signingKeyType: "dilithium",
 				encryptionKeyType: "kyber",
 				signingKey: "pk-sign",
@@ -352,7 +353,7 @@ Deno.test({
 			const b = body as { contacts: Array<{ name: string; fingerprint: string }> };
 			assertEquals(b.contacts.length, 1);
 			assertEquals(b.contacts[0].name, "friend");
-			assertEquals(b.contacts[0].fingerprint, "abc123");
+			assertEquals(b.contacts[0].fingerprint, validFingerprint);
 		});
 	},
 });
@@ -362,8 +363,9 @@ Deno.test({
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {
 		await withTestEnv(async (home, handler) => {
+			const validFingerprint = (await createTestIdentity(home, "seed", "password123")).toFingerprint();
 			const contact: ExternalIdentity = {
-				fingerprint: "newcontact123456",
+				fingerprint: validFingerprint,
 				signingKeyType: "dilithium",
 				encryptionKeyType: "kyber",
 				signingKey: "pk-sign",
@@ -382,7 +384,7 @@ Deno.test({
 			const b = body as { ok: boolean; name: string; fingerprint: string };
 			assertEquals(b.ok, true);
 			assertEquals(b.name, "newbuddy");
-			assertEquals(b.fingerprint, "newcontact123456");
+			assertEquals(b.fingerprint, validFingerprint);
 
 			// Verify file was created
 			const stat = await Deno.stat(`${home}/.ebp/contacts/newbuddy.json`);

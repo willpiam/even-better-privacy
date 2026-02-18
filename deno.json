@@ -4,6 +4,7 @@
     "@noble/hashes": "jsr:@noble/hashes@^1.8.0",
     "@noble/ciphers": "jsr:@noble/ciphers@^1.2.1",
     "@std/cli/parse-args": "jsr:@std/cli@^1.0.6/parse-args",
+    "bech32": "npm:bech32@^2.0.0",
     "nodemailer": "npm:nodemailer@^6.9.14",
     "postgres": "https://deno.land/x/postgres@v0.17.0/mod.ts",
     "sqlite": "https://deno.land/x/sqlite@v3.9.1/mod.ts",

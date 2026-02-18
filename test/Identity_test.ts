@@ -1,6 +1,8 @@
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert";
 import { Identity } from "../core/Identity.ts";
 import { Buffer } from "node:buffer";
+import { sha256 } from "@noble/hashes/sha2";
+import { computeIdentityFingerprint } from "../core/Fingerprint.ts";
 
 Deno.test("Identity: creation with dilithium signing key", () => {
 	const identity = new Identity("dilithium", "kyber");
@@ -40,8 +42,7 @@ Deno.test("Identity: fingerprint is deterministic", () => {
 	const fp2 = identity.toFingerprint();
 
 	assertEquals(fp1, fp2);
-	// SHA-256 produces 64 hex chars
-	assertEquals(fp1.length, 64);
+	assert(fp1.startsWith("ebpdk1"));
 });
 
 Deno.test("Identity: rawFingerprint returns Uint8Array", () => {
@@ -58,6 +59,30 @@ Deno.test("Identity: different identities have different fingerprints", () => {
 	const identity2 = new Identity("dilithium", "kyber");
 
 	assert(identity1.toFingerprint() !== identity2.toFingerprint());
+});
+
+Deno.test("Identity: fingerprint matches explicit merkle root construction", () => {
+	const identity = new Identity("dilithium", "kyber");
+	const expected = computeIdentityFingerprint({
+		signingKeyType: identity.signingKeyType,
+		encryptionKeyType: identity.encryptionKeyType,
+		signingKey: identity.signingKey.publicKey,
+		encryptionKey: identity.encryptionKey.publicKey,
+	});
+	assertEquals(identity.toFingerprint(), expected);
+});
+
+Deno.test("Identity: merkle root order is role-sensitive", () => {
+	const identity = new Identity("dilithium", "kyber");
+	const signingLeaf = identity.signingKey.toRawFingerprint();
+	const encryptionLeaf = identity.encryptionKey.toRawFingerprint();
+
+	const forwardHex = Buffer.from(sha256(Buffer.concat([signingLeaf, encryptionLeaf]))).toString("hex");
+	const reverseHex = Buffer.from(sha256(Buffer.concat([encryptionLeaf, signingLeaf]))).toString("hex");
+
+	assert(forwardHex !== reverseHex);
+	// toRawFingerprint is the binary merkle root before bech32 encoding.
+	assertEquals(Buffer.from(identity.toRawFingerprint()).toString("hex"), forwardHex);
 });
 
 Deno.test("Identity: signing and verification through signingKey", () => {
@@ -95,8 +120,8 @@ Deno.test("Identity: different signing key types produce different fingerprints"
 	const sphincsIdentity = new Identity("sphincs", "kyber");
 
 	// They should both work
-	assertEquals(dilithiumIdentity.toFingerprint().length, 64);
-	assertEquals(sphincsIdentity.toFingerprint().length, 64);
+	assert(dilithiumIdentity.toFingerprint().startsWith("ebpdk1"));
+	assert(sphincsIdentity.toFingerprint().startsWith("ebpsk1"));
 
 	// And be different
 	assert(dilithiumIdentity.toFingerprint() !== sphincsIdentity.toFingerprint());

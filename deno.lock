@@ -15,6 +15,7 @@
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@playwright/test@^1.43.1": "1.57.0",
     "npm:@types/node@*": "24.2.0",
+    "npm:bech32@2": "2.0.0",
     "npm:nodemailer@*": "6.10.1",
     "npm:nodemailer@^6.9.14": "6.10.1"
   },
@@ -70,6 +71,9 @@
       "dependencies": [
         "undici-types"
       ]
+    },
+    "bech32@2.0.0": {
+      "integrity": "sha512-LcknSilhIGatDAsY1ak2I8VtGaHNhgMSYVxFrGLXv+xLHytaKZKcaUJJUE7qmBr7h33o5YQwP55pMI0xmkpJwg=="
     },
     "fsevents@2.3.2": {
       "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
@@ -185,6 +189,7 @@
       "jsr:@noble/hashes@^1.8.0",
       "jsr:@noble/post-quantum@~0.5.2",
       "jsr:@std/cli@^1.0.6",
+      "npm:bech32@2",
       "npm:nodemailer@^6.9.14"
     ],
     "packageJson": {

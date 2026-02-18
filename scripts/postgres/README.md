@@ -28,6 +28,25 @@ Run scripts with Deno (each script includes a shebang):
 ./scripts/postgres/list-details.ts --fingerprint=abc123
 ./scripts/postgres/list-revocations.ts --fingerprint=abc123
 ./scripts/postgres/search-identities.ts --query=alice
+./scripts/postgres/reset-database.ts --yes
 ```
 
 Use `--help` on any script for options.
+
+## Resetting production data (post-fingerprint upgrade)
+
+If you choose to reset the production DB instead of migrating in place:
+
+```
+./scripts/postgres/reset-database.ts --yes
+```
+
+This script:
+- exports JSON backups of `identities`, `details`, and `revocations` to `./scripts/postgres/backups/reset-<timestamp>/`
+- truncates all three tables in one transaction (`RESTART IDENTITY CASCADE`)
+
+You can override backup output:
+
+```
+./scripts/postgres/reset-database.ts --yes --backup-dir=./tmp/pg-backup
+```

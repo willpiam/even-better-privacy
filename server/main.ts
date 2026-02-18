@@ -4,6 +4,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
 import { PROTOCOL_VERSION, COMPONENT_VERSIONS } from "../core/version.ts";
+import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
 import {
   ensureNewNonce,
   getDetailByVerificationToken,
@@ -99,7 +100,7 @@ const MAX_BODY_SIZE = 512 * 1024;
 
 /** Field length limits */
 const LIMITS = {
-  fingerprint: 128,         // SHA-256 hex = 64 chars, allow some margin
+  fingerprint: 128,         // Bech32 fingerprint (HRP + payload + checksum)
   path: 256,                // Detail path
   detail: 8192,             // Detail value (8KB)
   message: 100_000,         // Message payload for signature verification
@@ -422,6 +423,9 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
   if (!signatureCheck.ok) return { ok: false, error: signatureCheck.error };
   const fingerprintCheck = validateStringLength(fingerprint, "fingerprint", LIMITS.fingerprint, false);
   if (!fingerprintCheck.ok) return { ok: false, error: fingerprintCheck.error };
+  if (fingerprintCheck.value && !isValidFingerprintBech32(fingerprintCheck.value)) {
+    return { ok: false, error: "fingerprint must be valid bech32" };
+  }
 
   const chosenPublicIdentity = bodyPublicIdentity ?? payloadPublicIdentity;
   let publicIdentity: VerifyInput["publicIdentity"] = null;
@@ -483,6 +487,9 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
       false,
     );
     if (!resolvedFingerprintCheck.ok) return { ok: false, error: resolvedFingerprintCheck.error };
+    if (resolvedFingerprintCheck.value && !isValidFingerprintBech32(resolvedFingerprintCheck.value)) {
+      return { ok: false, error: "publicIdentity fingerprint must be valid bech32" };
+    }
 
     publicIdentity = {
       signingKeyType,
@@ -783,6 +790,9 @@ async function handlePostIdentity(req: Request, db: DatabaseAdapter): Promise<Re
   const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint, false);
   if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
   const providedFingerprint = fingerprintCheck.value || undefined;
+  if (providedFingerprint && !isValidFingerprintBech32(providedFingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
 
   const signingKeyDetails = payload.signingKeyDetails as Record<string, unknown> | undefined;
   const encryptionKeyDetails = payload.encryptionKeyDetails as Record<string, unknown> | undefined;
@@ -900,6 +910,9 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
   const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint);
   if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
   const fingerprint = fingerprintCheck.value;
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
 
   const pathCheck = validateStringLength(payload.path, "path", LIMITS.path);
   if (!pathCheck.ok) return json({ error: pathCheck.error }, 400);
@@ -992,6 +1005,9 @@ async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter): Prom
   const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint);
   if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
   const fingerprint = fingerprintCheck.value;
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
 
   const detailCheck = validateStringLength(payload.detail, "detail", LIMITS.detail, true);
   if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
@@ -1309,6 +1325,9 @@ async function handleGetIdentity(fingerprint: string, db: DatabaseAdapter): Prom
   if (fingerprint.length > LIMITS.fingerprint) {
     return json({ error: "fingerprint too long" }, 400);
   }
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
 
   const identity = await getIdentity(db, fingerprint);
   if (!identity) {
@@ -1347,6 +1366,9 @@ async function handlePostRevocation(req: Request, db: DatabaseAdapter): Promise<
   const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint);
   if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
   const fingerprint = fingerprintCheck.value;
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
 
   const type = payload.type;
   if (type !== "detail" && type !== "identity") {
@@ -1427,6 +1449,9 @@ async function handleGetRevocations(fingerprint: string, db: DatabaseAdapter): P
   // Validate fingerprint length
   if (fingerprint.length > LIMITS.fingerprint) {
     return json({ error: "fingerprint too long" }, 400);
+  }
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
   }
 
   const identity = await getIdentity(db, fingerprint);

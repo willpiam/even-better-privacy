@@ -262,6 +262,34 @@ then run
 
     deno task test:e2e:psql
 
+## Fingerprint Upgrade (Merkle Root + Bech32)
+
+EBP fingerprints now use:
+- a merkle root of the two public keys (signing leaf + encryption leaf)
+- bech32 encoding with signing-scheme specific HRPs
+
+Current prefixes:
+- `ebpdk1...` for Dilithium + Kyber identities
+- `ebpsk1...` for SPHINCS+ + Kyber identities
+
+### Upgrade local identity/contact files
+
+Dry run:
+
+    deno run --allow-read --allow-write --allow-env ./scripts/migrate_fingerprints_to_bech32.ts --dry-run
+
+Apply:
+
+    deno run --allow-read --allow-write --allow-env ./scripts/migrate_fingerprints_to_bech32.ts
+
+### Production DB reset option
+
+If your production DB has only a few records, you can back up and reset:
+
+    deno run --allow-read --allow-write --allow-env --allow-net ./scripts/postgres/reset-database.ts --yes
+
+This writes backups to `./scripts/postgres/backups/reset-<timestamp>/` before truncating tables.
+
 
 ## CLI
 
@@ -339,9 +367,9 @@ MIT — see [LICENSE](LICENSE) for details.
     - indicate the type of keys used 
     - 6e1fccc7b59096e28c269e7c8931ad818220225ff1139b2141a764be1f968acf
     - prefixes indicate signing key type, then kem key type (for now always MK_KEM)
-        - dk1 -> dilithium+kyber
-        - sk1 -> Sphincs+kyber
-        - fk1 -> Falcon+kyber
+        - ebpdk1 -> dilithium+kyber
+        - ebpsk1 -> Sphincs+kyber
+        - ebpfk1 -> Falcon+kyber
 - fingerprint should be the merkle root of the two keys
     - this will allow a signing key to prove it belongs to an identiy without also provinging the KEM key
     - this is useful because these public keys are big and in some cases we can imagine a user not needing both

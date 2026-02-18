@@ -28,9 +28,9 @@ const LIMITS = {
   searchQuery: 256,
 };
 
-Deno.test("LIMITS: fingerprint allows SHA-256 hex (64 chars)", () => {
-  const sha256Hex = "a".repeat(64); // Valid SHA-256 hex length
-  assert(sha256Hex.length <= LIMITS.fingerprint, "fingerprint limit should allow SHA-256 hex");
+Deno.test("LIMITS: fingerprint allows bech32 fingerprints", () => {
+  const bech32Fingerprint = "ebpdk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqsq2v3";
+  assert(bech32Fingerprint.length <= LIMITS.fingerprint, "fingerprint limit should allow bech32 fingerprints");
 });
 
 Deno.test("LIMITS: path allows reasonable path lengths", () => {

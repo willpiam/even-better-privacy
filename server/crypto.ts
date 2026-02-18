@@ -1,5 +1,10 @@
 import { sha256 } from "@noble/hashes/sha2";
-import { base64ToBytes } from "../core/Base64.ts";
+import {
+  computeEncryptionLeafRaw,
+  computeIdentityFingerprint as computeIdentityFingerprintBech32,
+  computeIdentityMerkleRootRaw,
+  computeSigningLeafRaw,
+} from "../core/Fingerprint.ts";
 import type { IdentityState } from "./types.ts";
 
 const textEncoder = new TextEncoder();
@@ -25,13 +30,11 @@ export function hexToBytes(hex: string): Uint8Array {
 }
 
 export function computeSigningRawFingerprint(_type: "dilithium" | "sphincs", publicKey: string): Uint8Array {
-  const bytes = base64ToBytes(publicKey);
-  return sha256(bytes);
+  return computeSigningLeafRaw(_type, publicKey);
 }
 
 export function computeEncryptionRawFingerprint(encryptionKey: string): Uint8Array {
-  // Kyber public key is hex-encoded string; the existing implementation hashes the string bytes.
-  return sha256(textEncoder.encode(encryptionKey));
+  return computeEncryptionLeafRaw("kyber", encryptionKey);
 }
 
 export function computeIdentityFingerprint(input: {
@@ -40,10 +43,16 @@ export function computeIdentityFingerprint(input: {
   signingKey: string;
   encryptionKey: string;
 }): string {
-  const signingRaw = computeSigningRawFingerprint(input.signingKeyType, input.signingKey);
-  const encryptionRaw = computeEncryptionRawFingerprint(input.encryptionKey);
-  const combined = concatBytes(signingRaw, encryptionRaw);
-  return toHex(sha256(combined));
+  return computeIdentityFingerprintBech32(input);
+}
+
+export function computeIdentityMerkleRoot(input: {
+  signingKeyType: "dilithium" | "sphincs";
+  encryptionKeyType: "kyber";
+  signingKey: string;
+  encryptionKey: string;
+}): Uint8Array {
+  return computeIdentityMerkleRootRaw(input);
 }
 
 export function canonicalize(value: unknown): unknown {
@@ -75,4 +84,3 @@ export function computeTokenHash(token: string): string {
   const data = textEncoder.encode(token);
   return toHex(sha256(data));
 }
-
