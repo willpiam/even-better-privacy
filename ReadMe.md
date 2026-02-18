@@ -12,14 +12,37 @@ Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
 
 ## Installation
 
+### For Linux
+
+- Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
+- Locate the latest release and click the "Assets" dropdown
+- Select the `.AppImage` file and download it
+- Once downloaded, make sure it has permission to run as a program
+- Double-click the downloaded file to launch the EBP program
+
+### For Mac
+
+- Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
+- Locate the latest release and click the "Assets" dropdown
+- Select the `.dmg` file and download it
+- TODO: Finish this section.
+
+### For Windows
+
+Pending...
+
+### From Source (Linux, Windows, & Mac)
+
+If you are comfortable with the CLI and or would like to contribute to this codebase you will likely want to run ebp from source. 
+
 1. Install [Deno](https://deno.land/)
 2. Clone this repository
 3. Run tests to verify everything works: `deno task test:core`
 
-### Quick Start (GUI + Public Server)
+#### Quick Start (GUI + Public Server)
 
 1. Run `deno task gui`
-2. navigate to [http://localhost:8787](http://localhost:8787) (or wherever the terminal points you to)
+2. navigate to [http://localhost:8787](http://localhost:8787) (or wherever the terminal points you to) in your browser
 3. click on settings
 4. Set *server url* to https://ebp-cqyo.onrender.com
 
@@ -361,4 +384,4 @@ graph TD
     C -->|endorses| H[Hot Key]
 
 ```
-
+- when adding a detail to an identity I want to take the input to a details path as a drop down with the first option being "custom" so users can provide thair own details path
