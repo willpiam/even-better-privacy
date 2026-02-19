@@ -36,7 +36,8 @@ const sql =
   `SELECT DISTINCT i.fingerprint, i.signing_key_type, i.encryption_key_type, i.created_at, i.revoked_at ` +
   `${baseJoin} WHERE ${matchClause} ${revokedFilter} ORDER BY i.created_at ASC LIMIT $3 OFFSET $4`;
 
-const rows = await withClient((client) => client.queryArray(sql, [like, like, limit, offset]));
+const result = await withClient((client) => client.queryArray(sql, [like, like, limit, offset]));
+const rows = result.rows;
 
 const formatted = rows.map(([fingerprint, signingKeyType, encryptionKeyType, createdAt, revokedAt]) => ({
   fingerprint: String(fingerprint),
@@ -46,4 +47,4 @@ const formatted = rows.map(([fingerprint, signingKeyType, encryptionKeyType, cre
   revoked_at: formatEpoch(revokedAt) ?? (coerceDbNumber(revokedAt) ?? null),
 }));
 
-console.table(formatted);
+console.log(JSON.stringify(formatted, null, 2));

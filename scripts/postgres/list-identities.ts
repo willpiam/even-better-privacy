@@ -31,7 +31,8 @@ const sql = `
   LIMIT $1 OFFSET $2
 `;
 
-const rows = await withClient((client) => client.queryArray(sql, [limit, offset]));
+const result = await withClient((client) => client.queryArray(sql, [limit, offset]));
+const rows = result.rows;
 
 const formatted = rows.map(([fingerprint, signingKeyType, encryptionKeyType, createdAt, revokedAt]) => ({
   fingerprint: String(fingerprint),
@@ -41,4 +42,4 @@ const formatted = rows.map(([fingerprint, signingKeyType, encryptionKeyType, cre
   revoked_at: formatEpoch(revokedAt) ?? (coerceDbNumber(revokedAt) ?? null),
 }));
 
-console.table(formatted);
+console.log(JSON.stringify(formatted, null, 2));

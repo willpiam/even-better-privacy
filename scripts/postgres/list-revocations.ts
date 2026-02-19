@@ -41,7 +41,8 @@ const sql = fingerprint
 
 const params = fingerprint ? [fingerprint, limit, offset] : [limit, offset];
 
-const rows = await withClient((client) => client.queryArray(sql, params));
+const result = await withClient((client) => client.queryArray(sql, params));
+const rows = result.rows;
 
 const formatted = rows.map(([id, identityFingerprint, type, target, nonce, certificate, createdAt]) => ({
   id: coerceDbNumber(id),
@@ -53,4 +54,4 @@ const formatted = rows.map(([id, identityFingerprint, type, target, nonce, certi
   created_at: formatEpoch(createdAt) ?? String(coerceDbNumber(createdAt) ?? ""),
 }));
 
-console.table(formatted);
+console.log(JSON.stringify(formatted, null, 2));
