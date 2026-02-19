@@ -68,6 +68,7 @@
 
       <div class="actions">
         <button class="button primary" id="verify-btn" type="button">Verify</button>
+        <button class="button subtle" id="clear-btn" type="button">Clear All</button>
       </div>
     </section>
 
@@ -79,6 +80,36 @@
     </section>
   </main>
 
-  <script src="./verify.js"></script>
+  <script src="./verify.js?v=3"></script>
+  <script>
+    (() => {
+      const clearButton = document.getElementById("clear-btn");
+      if (!clearButton) return;
+
+      clearButton.addEventListener("click", () => {
+        const payloadFile = document.getElementById("payload-file");
+        const verifyFile = document.getElementById("verify-file");
+        const publicFile = document.getElementById("public-file");
+        const payloadJson = document.getElementById("payload-json");
+        const publicJson = document.getElementById("public-json");
+        const message = document.getElementById("message");
+        const fileReconstructedMessage = document.getElementById("file-reconstructed-message");
+        const resultSummary = document.getElementById("result-summary");
+        const resultCode = document.querySelector("#result-json code");
+        const signerDetails = document.getElementById("signer-details");
+
+        if (payloadFile) payloadFile.value = "";
+        if (verifyFile) verifyFile.value = "";
+        if (publicFile) publicFile.value = "";
+        if (payloadJson) payloadJson.value = "";
+        if (publicJson) publicJson.value = "";
+        if (message) message.value = "";
+        if (fileReconstructedMessage) fileReconstructedMessage.value = "";
+        if (resultSummary) resultSummary.textContent = "No verification run yet.";
+        if (resultCode) resultCode.textContent = "{}";
+        if (signerDetails) signerDetails.innerHTML = "";
+      });
+    })();
+  </script>
 </body>
 </html>

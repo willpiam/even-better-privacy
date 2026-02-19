@@ -264,6 +264,17 @@ textarea {
   line-height: 1.4;
 }
 
+#signer-details,
+#signer-details ul,
+#signer-details li {
+  max-width: 100%;
+}
+
+#signer-details li {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @media (max-width: 900px) {
   .hero-content,
   .split,

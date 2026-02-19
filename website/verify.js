@@ -7,6 +7,7 @@ const publicJsonInput = document.getElementById("public-json");
 const messageInput = document.getElementById("message");
 const fileReconstructedMessageInput = document.getElementById("file-reconstructed-message");
 const verifyButton = document.getElementById("verify-btn");
+const clearButton = document.getElementById("clear-btn");
 const resultSummary = document.getElementById("result-summary");
 const resultSection = document.getElementById("result-section");
 const resultJson = document.getElementById("result-json").querySelector("code");
@@ -74,6 +75,19 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
+function resetVerifierForm() {
+  if (payloadFileInput) payloadFileInput.value = "";
+  if (verifyFileInput) verifyFileInput.value = "";
+  if (publicFileInput) publicFileInput.value = "";
+  if (payloadJsonInput) payloadJsonInput.value = "";
+  if (publicJsonInput) publicJsonInput.value = "";
+  if (messageInput) messageInput.value = "";
+  if (fileReconstructedMessageInput) fileReconstructedMessageInput.value = "";
+  if (resultSummary) resultSummary.textContent = "No verification run yet.";
+  if (resultJson) resultJson.textContent = "{}";
+  if (signerDetails) signerDetails.innerHTML = "";
+}
+
 payloadFileInput.addEventListener("change", async () => {
   const file = payloadFileInput.files?.[0];
   if (!file) return;
@@ -94,6 +108,10 @@ publicFileInput.addEventListener("change", async () => {
   } catch {
     resultSummary.textContent = "Failed to parse public identity file JSON.";
   }
+});
+
+clearButton?.addEventListener("click", () => {
+  resetVerifierForm();
 });
 
 verifyButton.addEventListener("click", async () => {
