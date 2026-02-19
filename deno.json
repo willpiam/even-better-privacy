@@ -30,7 +30,7 @@
     "test:e2e": "npm run test:e2e",
     "test:e2e:psql": "./scripts/e2e-with-postgres.sh",
     "test:e2e:inspect": "PWDEBUG=1 npx playwright test gui/e2e/identity.spec.ts --headed",
-    "unsafe:purge:all": "deno run --allow-read --allow-write --allow-env --allow-net ./scripts/postgres/reset-database.ts --yes",
+    "unsafe:purge:all": "deno run --allow-read --allow-write --allow-env --allow-net ./scripts/postgres/reset-database.ts",
     "query:prod:identities": "deno run -A scripts/postgres/list-identities.ts",
     "query:prod:all": "deno run -A scripts/postgres/list-all.ts --truncate-long-values"
   }

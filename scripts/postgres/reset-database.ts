@@ -36,8 +36,13 @@ async function backupTable(client: Awaited<ReturnType<import("postgres").Pool["c
 
 async function main(): Promise<void> {
   if (!args.yes) {
-    console.error("Refusing to reset database without --yes");
-    Deno.exit(1);
+    const confirmation = prompt(
+      "This will reset the database and delete all current rows after backup. Type yes to continue:",
+    );
+    if (confirmation !== "yes") {
+      console.error("Aborted. Confirmation was not exactly 'yes'.");
+      Deno.exit(1);
+    }
   }
 
   const backupDir = args["backup-dir"] ? String(args["backup-dir"]) : `./scripts/postgres/backups/reset-${timestampSlug()}`;

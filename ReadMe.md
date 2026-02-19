@@ -272,7 +272,6 @@ Current prefixes:
 - `ebpdk1...` for Dilithium + Kyber identities
 - `ebpsk1...` for SPHINCS+ + Kyber identities
 
-
 ## CLI
 
 **Note:** Where this section talks about a program called `ebp`, you will instead use `deno task cli`
@@ -321,10 +320,6 @@ If you find EBP useful, consider supporting the project:
 | Cardano | `$wildoy` | https://handle.me/wildoy |
 | QRL | `Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db` | https://explorer.theqrl.org/a/Q02070028dc6ca5f722f9646171cee25eff5d178907d0e05a7c343eeba77ef138fcc0da9a0074db |
 
-## Roadmap
-
-~~See [ROADMAP.md](ROADMAP.md) for future plans and development notes.~~
-
 ## Privacy
 
 See [PRIVACY.md](PRIVACY.md) for the project privacy policy.
@@ -342,8 +337,6 @@ MIT — see [LICENSE](LICENSE) for details.
 - Better db interface layer
     - abstract on EBP actions instead of the db connection
     - this will allow us to have different SQL for the sqlite and psql implementations. It would also allow use to easily implement non-sql connections. 
-- Sign files
-    - CLI and GUI
 - end to end tests for the email plugin 
 - email: enable ebp interface when a user directly replies to an email
 - email: select multiple recipients. Encrypt with same AES key. Send json object with one encrypted message and an object mapping the recipients fingerprint to a copy of the AES key encapsulated just for that recipient. 
