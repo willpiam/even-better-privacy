@@ -1,5 +1,6 @@
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
+import { buildMessageHashEnvelope } from "../core/MessageHash.ts";
 import { hexToBytes } from "./crypto.ts";
 import type { IdentityRow } from "./types.ts";
 
@@ -69,6 +70,7 @@ export function verifyRevocationCertificate(
     target: record.target,
     signature: null,
   });
+  const envelope = buildMessageHashEnvelope(signedPayload);
 
   const variant = (identity.signing_key_details as { variant?: string } | null)?.variant;
   if (!variant) {
@@ -78,9 +80,9 @@ export function verifyRevocationCertificate(
   let verified = false;
   try {
     if (identity.signing_key_type === "dilithium") {
-      verified = DilithiumSigningKey.verify(variant, signedPayload, record.signature, identity.signing_key);
+      verified = DilithiumSigningKey.verify(variant, envelope, record.signature, identity.signing_key);
     } else {
-      verified = SphincsSigningKey.verify(variant, signedPayload, record.signature, identity.signing_key);
+      verified = SphincsSigningKey.verify(variant, envelope, record.signature, identity.signing_key);
     }
   } catch {
     return { ok: false, error: "failed to verify signature" };

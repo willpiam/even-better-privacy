@@ -3,6 +3,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../core/Identity.ts";
 import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../core/version.ts";
+import { sha256Hex } from "../core/MessageHash.ts";
 import {
 	CLIContext,
 	updateState,
@@ -23,6 +24,12 @@ import {
 // ============================================================================
 // Commands
 // ============================================================================
+
+function randomHex(byteLength = 16): string {
+	const bytes = new Uint8Array(byteLength);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 async function cmdGenerate(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Promise<void> {
 	const identityName = (args._[0] as string | undefined) ?? ctx.currentIdentity;
@@ -341,6 +348,7 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 	const inputFile = args._[0] as string | undefined;
 	const outputFile = args["output"] as string | undefined;
 	const detached = args["detached"] ?? false;
+	const includeSalt = args["no-salt"] ? false : true;
 	
 	let message: string;
 	if (inputFile) {
@@ -349,7 +357,9 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 		message = await readStdin();
 	}
 	
-	const signature = identity.signMessage(message);
+	const salt = includeSalt ? randomHex(16) : "";
+	const messageHash = sha256Hex(message);
+	const signature = identity.signMessage(message, salt);
 	
 	if (detached) {
 		// Output just the signature
@@ -357,6 +367,8 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 			type: "ebp-signature",
 			version: FILE_FORMAT_VERSIONS.signature,
 			fingerprint: identity.toFingerprint(),
+			messageHash,
+			salt,
 			signature,
 		}, null, 2);
 		
@@ -373,6 +385,8 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 			version: FILE_FORMAT_VERSIONS.signedMessage,
 			fingerprint: identity.toFingerprint(),
 			message,
+			messageHash,
+			salt,
 			signature,
 		}, null, 2);
 		
@@ -400,6 +414,8 @@ async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLIContext): P
 	let message: string;
 	let signature: string;
 	let fingerprint: string;
+	let messageHash: string;
+	let salt = "";
 	
 	if (sigFile) {
 		// Detached signature mode
@@ -412,6 +428,8 @@ async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLIContext): P
 		}
 		signature = sigData.signature;
 		fingerprint = sigData.fingerprint;
+		messageHash = sigData.messageHash;
+		salt = typeof sigData.salt === "string" ? sigData.salt : "";
 	} else {
 		// Combined message + signature
 		const data = JSON.parse(input);
@@ -422,6 +440,17 @@ async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLIContext): P
 		message = data.message;
 		signature = data.signature;
 		fingerprint = data.fingerprint;
+		messageHash = data.messageHash;
+		salt = typeof data.salt === "string" ? data.salt : "";
+	}
+
+	if (typeof messageHash !== "string" || !/^[0-9a-f]{64}$/i.test(messageHash)) {
+		console.error("Invalid or missing messageHash.");
+		Deno.exit(1);
+	}
+	if (sha256Hex(message) !== messageHash) {
+		console.error("Message hash mismatch.");
+		Deno.exit(1);
 	}
 	
 	// Find the sender
@@ -440,7 +469,7 @@ async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLIContext): P
 		console.error(`  Got: ${fingerprint}`);
 	}
 	
-	const verified = Identity.VerifySignature(sender, message, signature);
+	const verified = Identity.VerifySignature(sender, message, signature, salt);
 	
 	if (verified) {
 		console.error("✓ Signature verified!");
@@ -1118,6 +1147,7 @@ COMMANDS:
   sign [file]           Sign a message
     --output <file>     Write to file instead of stdout
     --detached          Output signature only (not message)
+    --no-salt           Disable random salt in hash-envelope signing
 
   verify [file]         Verify a signed message
     --signature <file>  Detached signature file
@@ -1186,7 +1216,7 @@ EXAMPLES:
 async function main(): Promise<void> {
 	const args = parseArgs(Deno.args, {
 		string: ["signing", "encryption", "output", "name", "recipient", "sender", "signature", "password", "home", "identity", "server", "page", "reason", "revocation-output", "search"],
-		boolean: ["help", "version", "force", "detached", "sign", "push", "clear", "revocation-cert"],
+		boolean: ["help", "version", "force", "detached", "sign", "push", "clear", "revocation-cert", "no-salt"],
 		alias: { h: "help", v: "version", o: "output", r: "recipient", s: "sender" },
 	});
 

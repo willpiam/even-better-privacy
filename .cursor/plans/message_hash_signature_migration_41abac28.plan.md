@@ -4,25 +4,25 @@ overview: Migrate EBP to hash-first message signing with the new canonical envel
 todos:
   - id: core-hash-envelope
     content: Add canonical hash-envelope signing/verification helpers and switch core signing APIs
-    status: pending
+    status: completed
   - id: backend-sign-verify
     content: Update local-backend and server sign/verify parsers to new message-hash envelope (hard switch)
-    status: pending
+    status: completed
     dependencies:
       - core-hash-envelope
   - id: client-surfaces
     content: Update GUI, website, CLI, and extension payload builders/parsers and UX text for new format
-    status: pending
+    status: completed
     dependencies:
       - backend-sign-verify
   - id: internal-signatures
     content: Migrate internal state/detail/revocation signature flows to hash-envelope semantics
-    status: pending
+    status: completed
     dependencies:
       - core-hash-envelope
   - id: tests-fixtures
     content: Update protocol versions, tests, and fixtures; enforce old-format rejection
-    status: pending
+    status: completed
     dependencies:
       - backend-sign-verify
       - client-surfaces

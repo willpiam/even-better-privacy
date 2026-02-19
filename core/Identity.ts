@@ -10,6 +10,7 @@ import { AES } from "./AES.ts";
 import { Buffer } from "node:buffer";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
+import { buildMessageHashEnvelope } from "./MessageHash.ts";
 import {
     createRevocationCertificate,
     getRevocationSignaturePayload,
@@ -91,12 +92,13 @@ export class Identity extends Key {
         }
     }
 
-    static VerifySignature(sender: ExternalIdentity, message: string, signature: string) : boolean {
+    static VerifySignature(sender: ExternalIdentity, message: string, signature: string, salt?: string) : boolean {
+        const envelope = buildMessageHashEnvelope(message, salt);
         switch (sender.signingKeyType) {
             case 'dilithium':
-                return DilithiumSigningKey.verify(sender.signingKeyDetails.variant, message, signature, sender.signingKey);
+                return DilithiumSigningKey.verify(sender.signingKeyDetails.variant, envelope, signature, sender.signingKey);
             case 'sphincs':
-                return SphincsSigningKey.verify(sender.signingKeyDetails.variant, message, signature, sender.signingKey);
+                return SphincsSigningKey.verify(sender.signingKeyDetails.variant, envelope, signature, sender.signingKey);
             default:
                 throw new Error(`Unsupported signing key type: ${sender.signingKeyType}`);
         }
@@ -130,8 +132,9 @@ export class Identity extends Key {
         this.revocationCertificate = null;
     }
 
-    signMessage(message: string) : string {
-        return this.signingKey.sign(message);
+    signMessage(message: string, salt?: string) : string {
+        const envelope = buildMessageHashEnvelope(message, salt);
+        return this.signingKey.sign(envelope);
     }
 
     signAndEncryptMessage(message: string, recipient: Identity) : string {
@@ -151,8 +154,9 @@ export class Identity extends Key {
         return { message, verified };
     }
 
-    verifyMessage(message: string, signature: string) : boolean {
-        return this.signingKey.verify(message, signature);
+    verifyMessage(message: string, signature: string, salt?: string) : boolean {
+        const envelope = buildMessageHashEnvelope(message, salt);
+        return this.signingKey.verify(envelope, signature);
     }
 
     attachDetail(path: string, detail: string) {
@@ -163,7 +167,7 @@ export class Identity extends Key {
             timestamp: Date.now(),
             signature: null as string | null,
         }
-        const detailRecordSignature = this.signingKey.sign(JSON.stringify(detailRecord));
+        const detailRecordSignature = this.signMessage(JSON.stringify(detailRecord));
         detailRecord.signature = detailRecordSignature;
         const proof = Buffer.from(JSON.stringify(detailRecord)).toString("hex");
         this.details.set(path, [detail, proof]);
@@ -208,7 +212,7 @@ export class Identity extends Key {
                 signature: null,
             });
 
-            const isValid = this.signingKey.verify(signedPayload, signature);
+            const isValid = this.verifyMessage(signedPayload, signature);
             if (!isValid) {
                 return null;
             }
@@ -321,7 +325,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signingKey.sign(payload);
+        const signature = this.signMessage(payload);
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         const encoded = encodeRevocationCertificate(signedCert);
 
@@ -350,7 +354,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signingKey.sign(payload);
+        const signature = this.signMessage(payload);
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         const encoded = encodeRevocationCertificate(signedCert);
 
@@ -410,7 +414,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signingKey.sign(payload);
+        const signature = this.signMessage(payload);
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         
         return encodeRevocationCertificate(signedCert);

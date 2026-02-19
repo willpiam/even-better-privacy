@@ -33,8 +33,14 @@ async function hashFileSha256Hex(file) {
   return bytesToHex(new Uint8Array(digest));
 }
 
-function buildFileSignMessage(fileHash, contextMessage) {
-  return `ebp::filehash::${fileHash}${contextMessage || ""}`;
+async function hashTextSha256Hex(text) {
+  const encoded = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function buildFileSignMessage(fileHash, salt, contextMessage) {
+  return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 
 function renderSignerDetails(signer) {
@@ -118,8 +124,18 @@ verifyButton.addEventListener("click", async () => {
         throw new Error("ebp-signed-file payload is missing fileHash.");
       }
       const computedFileHash = await hashFileSha256Hex(file);
+      const salt = typeof payload.salt === "string" ? payload.salt : "";
       const contextMessage = typeof payload.contextMessage === "string" ? payload.contextMessage : "";
-      const reconstructedMessage = buildFileSignMessage(computedFileHash, contextMessage);
+      const reconstructedMessage = buildFileSignMessage(computedFileHash, salt, contextMessage);
+      const detachedPayload = {
+        type: "ebp-signature",
+        messageHash: await hashTextSha256Hex(reconstructedMessage),
+        salt: "",
+        signature: payload.signature,
+        fingerprint: payload.fingerprint,
+        identity: payload.identity,
+      };
+      requestBody.payload = detachedPayload;
       requestBody.message = reconstructedMessage;
       if (fileReconstructedMessageInput) {
         fileReconstructedMessageInput.value = reconstructedMessage;

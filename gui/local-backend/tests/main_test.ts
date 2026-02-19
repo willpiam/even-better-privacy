@@ -2,6 +2,7 @@ import { assertEquals, assert, assertExists, assertStringIncludes } from "jsr:@s
 import { Identity, ExternalIdentity } from "../../../core/Identity.ts";
 import { ensureDir, writeState } from "../../../cli/utils.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../../core/version.ts";
+import { sha256Hex } from "../../../core/MessageHash.ts";
 
 // We import the handler dynamically to avoid starting the server
 // Instead, we'll test the request handling logic directly
@@ -463,9 +464,10 @@ Deno.test({
 				})
 			);
 			assertEquals(status, STATUS.OK);
-			const b = body as { type: string; fingerprint: string; message: string; signature: string };
+			const b = body as { type: string; fingerprint: string; message: string; messageHash: string; salt: string; signature: string };
 			assertEquals(b.type, "ebp-signed-message");
 			assertEquals(b.message, "Hello, World!");
+			assertEquals(b.messageHash, sha256Hex("Hello, World!"));
 			assertEquals(b.fingerprint, identity.toFingerprint());
 			assertExists(b.signature);
 		});
@@ -491,8 +493,9 @@ Deno.test({
 				})
 			);
 			assertEquals(status, STATUS.OK);
-			const b = body as { type: string; signature: string };
+			const b = body as { type: string; messageHash: string; salt: string; signature: string };
 			assertEquals(b.type, "ebp-signature");
+			assertEquals(b.messageHash, sha256Hex("Hello, World!"));
 			assertExists(b.signature);
 			// detached should not include the message
 			assertEquals((b as Record<string, unknown>).message, undefined);
@@ -593,6 +596,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
+				messageHash: sha256Hex(message),
+				salt: "",
 				signature: identity.signMessage(message),
 			};
 
@@ -624,6 +629,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
+				messageHash: sha256Hex("message"),
+				salt: "",
 				signature: identity.signMessage("message"),
 			};
 
@@ -655,6 +662,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
+				messageHash: sha256Hex(message),
+				salt: "",
 				signature: identity.signMessage(message),
 			};
 
@@ -688,6 +697,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
+				messageHash: sha256Hex(message),
+				salt: "",
 				signature: identity.signMessage(message),
 			};
 
@@ -709,7 +720,7 @@ Deno.test({
 });
 
 Deno.test({
-	name: "POST /api/v1/verify returns false for detached signature with wrong message",
+	name: "POST /api/v1/verify rejects detached signature with wrong message hash",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {
 		await withTestEnv(async (home, handler) => {
@@ -720,6 +731,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: identity.toFingerprint(),
+				messageHash: sha256Hex("correct message"),
+				salt: "",
 				signature: identity.signMessage("correct message"),
 			};
 
@@ -733,8 +746,8 @@ Deno.test({
 					home,
 				})
 			);
-			assertEquals(status, STATUS.OK);
-			assertEquals((body as { verified: boolean }).verified, false);
+			assertEquals(status, STATUS.BadRequest);
+			assertStringIncludes((body as { error: string }).error, "hash mismatch");
 		});
 	},
 });
@@ -753,6 +766,8 @@ Deno.test({
 				type: "ebp-signature",
 				version: FILE_FORMAT_VERSIONS.signature,
 				fingerprint: signer.toFingerprint(),
+				messageHash: sha256Hex(message),
+				salt: "",
 				signature: signer.signMessage(message),
 			};
 

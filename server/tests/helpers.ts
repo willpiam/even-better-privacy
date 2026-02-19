@@ -6,6 +6,7 @@ import {
   toHex,
 } from "../crypto.ts";
 import type { IdentityRow } from "../types.ts";
+import { buildMessageHashEnvelope, buildMessageHashEnvelopeFromHash, sha256Hex } from "../../core/MessageHash.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -72,7 +73,7 @@ export function createIdentityPayload(): {
   });
 
   const transitionMessage = stableStringify({ fromState: null, toState });
-  const stateSignature = signingKey.sign(transitionMessage);
+  const stateSignature = signingKey.sign(buildMessageHashEnvelope(transitionMessage));
 
   return {
     payload: {
@@ -104,7 +105,7 @@ export function createSignedProof(
     signature: null as string | null,
   };
 
-  const signature = signingKey.sign(JSON.stringify(payload));
+  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
   const signedRecord = { ...payload, signature };
 
   return { proof: encodeProof(signedRecord), record: signedRecord };
@@ -131,9 +132,22 @@ export function createRevocationCertificate(
     signature: null,
   };
 
-  const signature = signingKey.sign(JSON.stringify(payload));
+  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
   const signedCert = { ...payload, signature };
 
   return toHex(textEncoder.encode(JSON.stringify(signedCert)));
 }
 
+export function signHashedMessage(
+  signingKey: SigningKeyLike,
+  message: string,
+  salt = "",
+): { messageHash: string; salt: string; signature: string } {
+  const messageHash = sha256Hex(message);
+  const envelope = buildMessageHashEnvelopeFromHash(messageHash, salt);
+  return {
+    messageHash,
+    salt,
+    signature: signingKey.sign(envelope),
+  };
+}

@@ -4,6 +4,14 @@ import {
   createRevocationCertificate,
   createSignedProof,
 } from "./helpers.ts";
+import { buildMessageHashEnvelopeFromHash, sha256Hex } from "../../core/MessageHash.ts";
+
+function signHashedMessageForTest(message: string, sign: (message: string) => string): { messageHash: string; salt: string; signature: string } {
+  const messageHash = sha256Hex(message);
+  const salt = "";
+  const envelope = buildMessageHashEnvelopeFromHash(messageHash, salt);
+  return { messageHash, salt, signature: sign(envelope) };
+}
 
 type MainModule = typeof import("../main.ts");
 
@@ -389,12 +397,14 @@ Deno.test("POST /verify-signature verifies signed payload with provided public i
     assertEquals(detailRes.status, 200);
 
     const message = "hello from test";
-    const signature = signingKey.sign(message);
+    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
     const verifyRes = await postVerifySignature(mod, {
       payload: {
         type: "ebp-signed-message",
         message,
-        signature,
+        messageHash: signed.messageHash,
+        salt: signed.salt,
+        signature: signed.signature,
         fingerprint,
       },
       publicIdentity: {
@@ -428,11 +438,13 @@ Deno.test("POST /verify-signature verifies detached signature via published iden
     assertEquals(registerRes.status, 200);
 
     const message = "detached payload message";
-    const signature = signingKey.sign(message);
+    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
     const verifyRes = await postVerifySignature(mod, {
       payload: {
         type: "ebp-signature",
-        signature,
+        messageHash: signed.messageHash,
+        salt: signed.salt,
+        signature: signed.signature,
         fingerprint,
       },
       message,
@@ -450,6 +462,8 @@ Deno.test("POST /verify-signature rejects detached signatures without message", 
     const verifyRes = await postVerifySignature(mod, {
       payload: {
         type: "ebp-signature",
+        messageHash: sha256Hex("x"),
+        salt: "",
         signature: "deadbeef",
         fingerprint: "abc",
       },
@@ -476,6 +490,8 @@ Deno.test("POST /verify-signature returns verified false for invalid signature",
       payload: {
         type: "ebp-signed-message",
         message: "tampered",
+        messageHash: sha256Hex("tampered"),
+        salt: "",
         signature: "not-a-valid-signature",
         fingerprint,
       },
@@ -491,7 +507,7 @@ Deno.test("POST /verify-signature accepts embedded identity alias and reports va
   await withServer(async (mod) => {
     const { payload, fingerprint, signingKey } = createIdentityPayload();
     const message = "this is a test ";
-    const signature = signingKey.sign(message);
+    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
 
     // Do not publish identity to server. Verify should still pass with provided keys.
     const verifyRes = await postVerifySignature(mod, {
@@ -500,7 +516,9 @@ Deno.test("POST /verify-signature accepts embedded identity alias and reports va
         version: 1,
         fingerprint,
         message,
-        signature,
+        messageHash: signed.messageHash,
+        salt: signed.salt,
+        signature: signed.signature,
       },
       identity: {
         fingerprint,

@@ -2,6 +2,7 @@ import { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
 import { verifyRevocationCertificate } from "../revocation.ts";
 import { createSphincsIdentity, encodeProof } from "./helpers.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
+import { buildMessageHashEnvelope } from "../../core/MessageHash.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -30,7 +31,7 @@ function createSignedRevocationCertificate(
     signature: null,
   };
 
-  const signature = signingKey.sign(JSON.stringify(payload));
+  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
   const signedCert = { ...payload, signature };
 
   return toHex(textEncoder.encode(JSON.stringify(signedCert)));
@@ -189,7 +190,7 @@ Deno.test("verifyRevocationCertificate rejects detail revocation without target"
     signature: null,
   };
 
-  const signature = signingKey.sign(JSON.stringify(payload));
+  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
   const signedCert = { ...payload, signature };
   const encoded = toHex(textEncoder.encode(JSON.stringify(signedCert)));
 
@@ -212,7 +213,7 @@ Deno.test("verifyRevocationCertificate rejects invalid nonce", () => {
     signature: null as string | null,
   };
 
-  const signature = signingKey.sign(JSON.stringify(payload));
+  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
   const signedCert = { ...payload, signature };
   const encoded = toHex(textEncoder.encode(JSON.stringify(signedCert)));
 

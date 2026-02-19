@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
+import { buildMessageHashEnvelope } from "./MessageHash.ts";
 
 /**
  * Types of revocations supported by the system
@@ -155,13 +156,14 @@ export function verifyRevocationCertificate(
 
 	// Verify signature
 	const payload = getRevocationSignaturePayload(cert);
+	const envelope = buildMessageHashEnvelope(payload);
 	let verified = false;
 
 	try {
 		if (signingKeyType === "dilithium") {
-			verified = DilithiumSigningKey.verify(variant, payload, cert.signature, signingKey);
+			verified = DilithiumSigningKey.verify(variant, envelope, cert.signature, signingKey);
 		} else {
-			verified = SphincsSigningKey.verify(variant, payload, cert.signature, signingKey);
+			verified = SphincsSigningKey.verify(variant, envelope, cert.signature, signingKey);
 		}
 	} catch {
 		return { ok: false, error: "signature verification failed" };

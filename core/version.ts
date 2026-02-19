@@ -31,8 +31,8 @@ export const COMPONENT_VERSIONS = {
 export const FILE_FORMAT_VERSIONS = {
     identityStorage: 2,
     publicIdentity: 1,
-    signature: 1,
-    signedMessage: 1,
+    signature: 2,
+    signedMessage: 2,
     encryptedMessage: 1,
     encryptedSignedMessage: 1,
     emergencyRevocationCertificate: 1,

@@ -5,6 +5,7 @@ import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
 import { PROTOCOL_VERSION, COMPONENT_VERSIONS } from "../core/version.ts";
 import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
+import { buildMessageHashEnvelopeFromHash, sha256Hex } from "../core/MessageHash.ts";
 import {
   ensureNewNonce,
   getDetailByVerificationToken,
@@ -355,6 +356,8 @@ function validateStringLength(
 
 type VerifyInput = {
   message: string;
+  messageHash: string;
+  salt: string;
   signature: string;
   fingerprint: string | null;
   publicIdentity: {
@@ -375,6 +378,8 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
   const signatureOverride = typeof bodySignature === "string" ? bodySignature : "";
 
   let message = "";
+  let messageHash = "";
+  let salt = "";
   let signature = "";
   let fingerprint: string | null = null;
   let payloadPublicIdentity: unknown = null;
@@ -383,42 +388,62 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
     const obj = bodyPayload as Record<string, unknown>;
     payloadPublicIdentity = obj.publicIdentity ?? obj.identity ?? null;
     const payloadMessage = typeof obj.message === "string" ? obj.message : "";
+    const payloadMessageHash = typeof obj.messageHash === "string" ? obj.messageHash : "";
+    const payloadSalt = typeof obj.salt === "string" ? obj.salt : "";
     const payloadSignature = typeof obj.signature === "string" ? obj.signature : "";
     const payloadFingerprint = typeof obj.fingerprint === "string" ? obj.fingerprint : "";
     const payloadType = typeof obj.type === "string" ? obj.type : "";
 
     if (payloadType === "ebp-signed-message") {
       message = payloadMessage || messageOverride;
+      messageHash = payloadMessageHash;
+      salt = payloadSalt;
       signature = payloadSignature || signatureOverride;
       fingerprint = payloadFingerprint || null;
       if (!message) return { ok: false, error: "missing message" };
+      if (!messageHash) return { ok: false, error: "missing messageHash" };
       if (!signature) return { ok: false, error: "missing signature" };
+      if (sha256Hex(message) !== messageHash) {
+        return { ok: false, error: "message hash mismatch" };
+      }
     } else if (payloadType === "ebp-signature") {
       message = payloadMessage || messageOverride;
+      messageHash = payloadMessageHash;
+      salt = payloadSalt;
       signature = payloadSignature || signatureOverride;
       fingerprint = payloadFingerprint || null;
       if (!message) return { ok: false, error: "message is required for detached signatures" };
+      if (!messageHash) return { ok: false, error: "missing messageHash" };
       if (!signature) return { ok: false, error: "missing signature" };
-    } else {
-      // Generic payload fallback for custom signature object shapes.
-      message = payloadMessage || messageOverride;
-      signature = payloadSignature || signatureOverride;
-      fingerprint = payloadFingerprint || null;
-      if (!message || !signature) {
-        return { ok: false, error: "unsupported payload type or missing message/signature" };
+      if (sha256Hex(message) !== messageHash) {
+        return { ok: false, error: "message hash mismatch" };
       }
+    } else {
+      return { ok: false, error: "unsupported payload type" };
     }
   } else {
     message = messageOverride;
+    messageHash = typeof payload.messageHash === "string" ? payload.messageHash : "";
+    salt = typeof payload.salt === "string" ? payload.salt : "";
     signature = signatureOverride;
     fingerprint = typeof payload.fingerprint === "string" ? payload.fingerprint : null;
-    if (!message || !signature) {
-      return { ok: false, error: "message and signature required" };
+    if (!message || !signature || !messageHash) {
+      return { ok: false, error: "message, messageHash, and signature required" };
+    }
+    if (sha256Hex(message) !== messageHash) {
+      return { ok: false, error: "message hash mismatch" };
     }
   }
 
   const messageCheck = validateStringLength(message, "message", LIMITS.message);
   if (!messageCheck.ok) return { ok: false, error: messageCheck.error };
+  const messageHashCheck = validateStringLength(messageHash, "messageHash", 64);
+  if (!messageHashCheck.ok) return { ok: false, error: messageHashCheck.error };
+  if (!/^[0-9a-f]{64}$/i.test(messageHashCheck.value)) {
+    return { ok: false, error: "messageHash must be a 64-character hex string" };
+  }
+  const saltCheck = validateStringLength(salt, "salt", 256, false);
+  if (!saltCheck.ok) return { ok: false, error: saltCheck.error };
   const signatureCheck = validateStringLength(signature, "signature", LIMITS.signature);
   if (!signatureCheck.ok) return { ok: false, error: signatureCheck.error };
   const fingerprintCheck = validateStringLength(fingerprint, "fingerprint", LIMITS.fingerprint, false);
@@ -504,6 +529,8 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
     ok: true,
     data: {
       message: messageCheck.value,
+      messageHash: messageHashCheck.value,
+      salt: saltCheck.value,
       signature: signatureCheck.value,
       fingerprint: resolvedFingerprint,
       publicIdentity,
@@ -514,14 +541,16 @@ function parseVerifyInput(payload: Record<string, unknown>): { ok: true; data: V
 function verifySignatureWithIdentity(
   signingKeyType: "dilithium" | "sphincs",
   variant: string,
-  message: string,
+  messageHash: string,
+  salt: string,
   signature: string,
   signingKey: string,
 ): boolean {
+  const envelope = buildMessageHashEnvelopeFromHash(messageHash, salt);
   if (signingKeyType === "dilithium") {
-    return DilithiumSigningKey.verify(variant, message, signature, signingKey);
+    return DilithiumSigningKey.verify(variant, envelope, signature, signingKey);
   }
-  return SphincsSigningKey.verify(variant, message, signature, signingKey);
+  return SphincsSigningKey.verify(variant, envelope, signature, signingKey);
 }
 
 // =============================================================================
@@ -866,12 +895,13 @@ async function handlePostIdentity(req: Request, db: DatabaseAdapter): Promise<Re
   }
 
   const transitionMessage = stableStringify({ fromState, toState });
+  const transitionEnvelope = buildMessageHashEnvelopeFromHash(sha256Hex(transitionMessage), "");
   let verified = false;
   try {
     if (signingKeyType === "dilithium") {
-      verified = DilithiumSigningKey.verify(variant, transitionMessage, stateSignature, signingKey);
+      verified = DilithiumSigningKey.verify(variant, transitionEnvelope, stateSignature, signingKey);
     } else {
-      verified = SphincsSigningKey.verify(variant, transitionMessage, stateSignature, signingKey);
+      verified = SphincsSigningKey.verify(variant, transitionEnvelope, stateSignature, signingKey);
     }
   } catch {
     return json({ error: "failed to verify stateSignature" }, 400);
@@ -1220,7 +1250,7 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
     return json({ error: parsed.error }, 400);
   }
 
-  const { message, signature, fingerprint, publicIdentity } = parsed.data;
+  const { messageHash, salt, signature, fingerprint, publicIdentity } = parsed.data;
 
   let signerIdentity: {
     fingerprint: string;
@@ -1261,7 +1291,8 @@ async function handleVerifySignature(req: Request, db: DatabaseAdapter): Promise
     verified = verifySignatureWithIdentity(
       signerIdentity.signingKeyType,
       signerIdentity.signingVariant,
-      message,
+      messageHash,
+      salt,
       signature,
       signerIdentity.signingKey,
     );

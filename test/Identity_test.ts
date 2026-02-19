@@ -88,11 +88,11 @@ Deno.test("Identity: merkle root order is role-sensitive", () => {
 Deno.test("Identity: signing and verification through signingKey", () => {
 	const identity = new Identity("dilithium", "kyber");
 	const msg = "hello identity";
-	const signature = identity.signingKey.sign(msg);
+	const signature = identity.signMessage(msg);
 
 	assertEquals(typeof signature, "string");
 	assert(signature.length > 0);
-	assert(identity.signingKey.verify(msg, signature));
+	assert(identity.verifyMessage(msg, signature));
 });
 
 Deno.test("Identity: encryption and decryption through encryptionKey", () => {
@@ -130,10 +130,10 @@ Deno.test("Identity: different signing key types produce different fingerprints"
 Deno.test("Identity: sphincs signing works correctly", () => {
 	const identity = new Identity("sphincs", "kyber");
 	const msg = "testing sphincs signing";
-	const signature = identity.signingKey.sign(msg);
+	const signature = identity.signMessage(msg);
 
-	assert(identity.signingKey.verify(msg, signature));
-	assert(!identity.signingKey.verify("wrong message", signature));
+	assert(identity.verifyMessage(msg, signature));
+	assert(!identity.verifyMessage("wrong message", signature));
 });
 
 Deno.test("Identity: JSON round-trip preserves keys", () => {
@@ -142,7 +142,7 @@ Deno.test("Identity: JSON round-trip preserves keys", () => {
 
 	// Sign a message with original identity
 	const msg = "test message";
-	const signature = original.signingKey.sign(msg);
+	const signature = original.signMessage(msg);
 
 	// Encrypt a message with original identity
 	const ciphertext = original.encryptionKey.encrypt(msg);
@@ -155,7 +155,7 @@ Deno.test("Identity: JSON round-trip preserves keys", () => {
 	assertEquals(restored.toFingerprint(), fingerprint);
 
 	// Restored identity should verify signatures from original
-	assert(restored.signingKey.verify(msg, signature));
+	assert(restored.verifyMessage(msg, signature));
 
 	// Restored identity should decrypt messages from original
 	assertEquals(restored.encryptionKey.decrypt(ciphertext), msg);
@@ -165,13 +165,13 @@ Deno.test("Identity: fromJSON works with sphincs key type", () => {
 	const original = new Identity("sphincs", "kyber");
 	const fingerprint = original.toFingerprint();
 	const msg = "sphincs test";
-	const signature = original.signingKey.sign(msg);
+	const signature = original.signMessage(msg);
 
 	const json = original.toJSON();
 	const restored = Identity.fromJSON(json);
 
 	assertEquals(restored.toFingerprint(), fingerprint);
-	assert(restored.signingKey.verify(msg, signature));
+	assert(restored.verifyMessage(msg, signature));
 });
 
 Deno.test("Identity: VerifyDetails validates correct history", () => {

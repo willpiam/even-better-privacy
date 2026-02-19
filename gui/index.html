@@ -1837,7 +1837,9 @@
             </label>
             <label class="inline"><input id="sign-detached" type="checkbox" /> Detached signature</label>
             <p class="help-text">Detached: outputs only the signature, not the message. Use when the recipient already has the original message.</p>
-            <label class="inline"><input id="sign-include-identity" type="checkbox" /> Include public identity (signing + KEM keys)</label>
+            <label class="inline"><input id="sign-include-salt" type="checkbox" checked /> Include random salt in message-hash envelope</label>
+            <p class="help-text">Signs <code>ebp::messagehash::&lt;sha256(message)&gt;::&lt;optional salt&gt;</code> rather than the raw message body.</p>
+            <label class="inline"><input id="sign-include-identity" type="checkbox" checked /> Include public identity (signing + KEM keys)</label>
             <p class="help-text">Adds an <code>identity</code> object to the signature payload with your public signing and encryption keys.</p>
             <div>
               <button type="submit">Sign</button>
@@ -1856,7 +1858,7 @@
           <h3>Verify Signature</h3>
           <form id="verify-form" class="stack">
             <label>Payload (signed JSON)
-              <textarea id="verify-payload" placeholder='{"type":"ebp-signed-message",...}'></textarea>
+              <textarea id="verify-payload" placeholder='{"type":"ebp-signed-message","message":"...","messageHash":"...","salt":"...","signature":"..."}'></textarea>
             </label>
             <label>Message (required for detached signatures)
               <textarea id="verify-message" placeholder="Paste the original message body here..."></textarea>
@@ -1903,7 +1905,11 @@
             <label>Optional context message
               <textarea id="sign-file-context" placeholder="Optional message to append after the file hash before signing..."></textarea>
             </label>
-            <p class="help-text">The signed message format is: <code>ebp::filehash::&lt;filehash&gt;&lt;optional context message&gt;</code></p>
+            <label class="inline"><input id="sign-file-include-salt" type="checkbox" checked /> Include random salt</label>
+            <label>Generated salt (when enabled)
+              <input id="sign-file-salt" type="text" readonly placeholder="Generated automatically when signing..." />
+            </label>
+            <p class="help-text">The signed message format is: <code>ebp::filehash::&lt;filehash&gt;::&lt;optional salt&gt;::&lt;optional context message&gt;</code></p>
             <label>Computed file hash (SHA-256 hex)
               <input id="sign-file-hash" type="text" readonly placeholder="Calculated after selecting and signing a file..." />
             </label>

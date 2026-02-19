@@ -7,6 +7,7 @@ import { SphincsSigningKey } from "../../core/Sphincs.ts";
 import { KyberEncryptionKey } from "../../core/Kyber.ts";
 import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
+import { sha256Hex } from "../../core/MessageHash.ts";
 import {
 	CLIContext,
 	buildStateFromExternal,
@@ -32,6 +33,12 @@ const CORS_HEADERS = {
 	"access-control-allow-headers": "content-type",
 	"access-control-allow-methods": "GET,POST,OPTIONS",
 };
+
+function randomHex(byteLength = 16): string {
+	const bytes = new Uint8Array(byteLength);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 const STATUS = {
 	OK: 200,
@@ -579,6 +586,8 @@ async function handleRequest(req: Request): Promise<Response> {
 				identity?: unknown;
 				detached?: unknown;
 				includeIdentity?: unknown;
+				includeSalt?: unknown;
+				salt?: unknown;
 			}>(req);
 			const message = typeof body.message === "string" ? body.message : undefined;
 			const password = typeof body.password === "string" ? body.password : undefined;
@@ -586,12 +595,17 @@ async function handleRequest(req: Request): Promise<Response> {
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
 			const detached = Boolean(body.detached);
 			const includeIdentity = Boolean(body.includeIdentity);
+			const includeSalt = body.includeSalt === undefined ? true : Boolean(body.includeSalt);
+			const providedSalt = typeof body.salt === "string" ? body.salt : undefined;
 			if (!message) throw new HttpError(STATUS.BadRequest, "message is required");
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
 
 			const ctx = await getContext(home, identityName);
 			const identity = await loadIdentity(ctx, password);
-			const signature = identity.signMessage(message);
+			const salt = providedSalt ?? (includeSalt ? randomHex(16) : "");
+			const signature = (identity as Identity & { signMessage: (value: string, optionalSalt?: string) => string })
+				.signMessage(message, salt);
+			const messageHash = sha256Hex(message);
 			const summary = identity.summary;
 			const identityPayload = includeIdentity
 				? {
@@ -609,6 +623,8 @@ async function handleRequest(req: Request): Promise<Response> {
 					type: "ebp-signature",
 					version: FILE_FORMAT_VERSIONS.signature,
 					fingerprint: identity.toFingerprint(),
+					messageHash,
+					salt,
 					signature,
 					identity: identityPayload,
 				});
@@ -618,6 +634,8 @@ async function handleRequest(req: Request): Promise<Response> {
 				version: FILE_FORMAT_VERSIONS.signedMessage,
 				fingerprint: identity.toFingerprint(),
 				message,
+				messageHash,
+				salt,
 				signature,
 				identity: identityPayload,
 			});
@@ -631,6 +649,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				sender?: unknown;
 				home?: unknown;
 				publicIdentity?: unknown;
+				salt?: unknown;
 			}>(req);
 			const payload = body.payload;
 			const messageOverride = typeof body.message === "string" ? body.message : undefined;
@@ -644,20 +663,38 @@ async function handleRequest(req: Request): Promise<Response> {
 			let message: string;
 			let signature: string;
 			let fingerprint: string;
+			let messageHash: string;
+			let salt = "";
 
 			if (typeof payload === "object" && payload && "type" in payload) {
 				const obj = payload as Record<string, unknown>;
 				if (obj.type === "ebp-signed-message") {
 					message = String(obj.message ?? "");
+					messageHash = String(obj.messageHash ?? "");
+					salt = String(obj.salt ?? "");
 					signature = String(obj.signature ?? "");
 					fingerprint = String(obj.fingerprint ?? "");
+					if (!message || !signature || !messageHash) {
+						throw new HttpError(STATUS.BadRequest, "signed message payload missing required fields");
+					}
+					if (sha256Hex(message) !== messageHash) {
+						throw new HttpError(STATUS.BadRequest, "message hash mismatch");
+					}
 				} else if (obj.type === "ebp-signature") {
 					if (!messageOverride) {
 						throw new HttpError(STATUS.BadRequest, "message is required for detached signatures");
 					}
 					message = messageOverride;
+					messageHash = String(obj.messageHash ?? "");
+					salt = String(obj.salt ?? "");
 					signature = String(obj.signature ?? "");
 					fingerprint = String(obj.fingerprint ?? "");
+					if (!signature || !messageHash) {
+						throw new HttpError(STATUS.BadRequest, "detached signature payload missing required fields");
+					}
+					if (sha256Hex(message) !== messageHash) {
+						throw new HttpError(STATUS.BadRequest, "message hash mismatch");
+					}
 				} else {
 					throw new HttpError(STATUS.BadRequest, "unsupported payload type");
 				}
@@ -666,6 +703,8 @@ async function handleRequest(req: Request): Promise<Response> {
 					throw new HttpError(STATUS.BadRequest, "message and signature required for detached verify");
 				}
 				message = messageOverride;
+				messageHash = sha256Hex(messageOverride);
+				salt = typeof body.salt === "string" ? body.salt : "";
 				signature = signatureOverride;
 				fingerprint = "";
 			}
@@ -702,7 +741,9 @@ async function handleRequest(req: Request): Promise<Response> {
 			} else {
 				contact = await loadContact(ctx, sender ?? fingerprint.substring(0, 16));
 			}
-			const verified = Identity.VerifySignature(contact, message, signature);
+			const verified = (Identity as typeof Identity & {
+				VerifySignature: (sender: ExternalIdentity, value: string, sig: string, optionalSalt?: string) => boolean;
+			}).VerifySignature(contact, message, signature, salt);
 			return json({ verified });
 		}
 

@@ -552,14 +552,31 @@ async function withLoading(btn, fn) {
   }
 }
 
-function getPayloadDownloadName(payload, fallback) {
+async function hashTextSha256Hex(text) {
+  const encoded = new TextEncoder().encode(text);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+async function getPayloadDownloadName(payload, fallback) {
   if (!payload || typeof payload !== "object") return fallback;
   switch (payload.type) {
     case "ebp-signature":
       return "ebp-signature.json";
     case "ebp-signed-message":
+      if (typeof payload.messageHash === "string" && payload.messageHash.length >= 8) {
+        return `ebp-signed-message-${payload.messageHash.slice(0, 8)}.json`;
+      }
+      if (typeof payload.message === "string" && payload.message.length > 0) {
+        const messageHash = await hashTextSha256Hex(payload.message);
+        return `ebp-signed-message-${messageHash.slice(0, 8)}.json`;
+      }
       return "ebp-signed-message.json";
     case "ebp-signed-file":
+      if (typeof payload.fileHash === "string" && payload.fileHash.length >= 8) {
+        const prefix = payload.fileHash.slice(0, 8);
+        return `ebp-signed-file-${prefix}.json`;
+      }
       return "ebp-signed-file.json";
     case "ebp-encrypted-message":
       return "ebp-encrypted-message.json";
@@ -570,13 +587,13 @@ function getPayloadDownloadName(payload, fallback) {
   }
 }
 
-function downloadJsonFromTextarea(textareaId, fallbackName) {
+async function downloadJsonFromTextarea(textareaId, fallbackName) {
   const textarea = document.getElementById(textareaId);
   if (!textarea || !textarea.value) return;
 
   try {
     const payload = JSON.parse(textarea.value);
-    const filename = getPayloadDownloadName(payload, fallbackName);
+    const filename = await getPayloadDownloadName(payload, fallbackName);
     const pretty = JSON.stringify(payload, null, 2) + "\n";
     const blob = new Blob([pretty], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -619,8 +636,14 @@ async function hashFileSha256Hex(file) {
   return bytesToHex(new Uint8Array(digest));
 }
 
-function buildFileSignMessage(fileHash, contextMessage) {
-  return `ebp::filehash::${fileHash}${contextMessage || ""}`;
+function generateRandomSaltHex(byteLength = 16) {
+  const bytes = new Uint8Array(byteLength);
+  crypto.getRandomValues(bytes);
+  return bytesToHex(bytes);
+}
+
+function buildFileSignMessage(fileHash, salt, contextMessage) {
+  return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -669,25 +692,25 @@ document.getElementById("copy-fingerprint-btn").addEventListener("click", async 
 
 const signDownloadBtn = document.getElementById("sign-download-btn");
 if (signDownloadBtn) {
-  signDownloadBtn.addEventListener("click", (e) => {
+  signDownloadBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    downloadJsonFromTextarea("sign-output", "ebp-signed-message.json");
+    await downloadJsonFromTextarea("sign-output", "ebp-signed-message.json");
   });
 }
 
 const encDownloadBtn = document.getElementById("enc-download-btn");
 if (encDownloadBtn) {
-  encDownloadBtn.addEventListener("click", (e) => {
+  encDownloadBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    downloadJsonFromTextarea("enc-output", "ebp-encrypted-message.json");
+    await downloadJsonFromTextarea("enc-output", "ebp-encrypted-message.json");
   });
 }
 
 const signFileDownloadBtn = document.getElementById("sign-file-download-btn");
 if (signFileDownloadBtn) {
-  signFileDownloadBtn.addEventListener("click", (e) => {
+  signFileDownloadBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    downloadJsonFromTextarea("sign-file-output", "ebp-signed-file.json");
+    await downloadJsonFromTextarea("sign-file-output", "ebp-signed-file.json");
   });
 }
 
@@ -1625,6 +1648,7 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
   const btn = e.target.querySelector('button[type="submit"]');
   const message = document.getElementById("sign-message").value;
   const detached = document.getElementById("sign-detached").checked;
+  const includeSalt = document.getElementById("sign-include-salt").checked;
   const includeIdentity = document.getElementById("sign-include-identity").checked;
   await withLoading(btn, async () => {
     try {
@@ -1635,7 +1659,7 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
       }
       const res = await api("/sign", {
         method: "POST",
-        body: JSON.stringify({ message, password, detached, includeIdentity }),
+        body: JSON.stringify({ message, password, detached, includeIdentity, includeSalt }),
       });
       document.getElementById("sign-output").value = JSON.stringify(res, null, 2);
       setStatus("Signed", "success");
@@ -1683,6 +1707,8 @@ document.getElementById("sign-file-form").addEventListener("submit", async (e) =
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
   const fileInput = document.getElementById("sign-file-input");
+  const includeSalt = document.getElementById("sign-file-include-salt").checked;
+  const saltOutput = document.getElementById("sign-file-salt");
   const contextMessage = document.getElementById("sign-file-context").value;
   const hashOutput = document.getElementById("sign-file-hash");
   const payloadOutput = document.getElementById("sign-file-output");
@@ -1695,7 +1721,9 @@ document.getElementById("sign-file-form").addEventListener("submit", async (e) =
       }
       const fileHash = await hashFileSha256Hex(file);
       hashOutput.value = fileHash;
-      const message = buildFileSignMessage(fileHash, contextMessage);
+      const salt = includeSalt ? generateRandomSaltHex() : "";
+      saltOutput.value = salt;
+      const message = buildFileSignMessage(fileHash, salt, contextMessage);
 
       const password = await requestPassword("Enter password to sign this file hash");
       if (!password) {
@@ -1710,6 +1738,7 @@ document.getElementById("sign-file-form").addEventListener("submit", async (e) =
           password,
           detached: true,
           includeIdentity: true,
+          includeSalt: false,
         }),
       });
 
@@ -1721,6 +1750,7 @@ document.getElementById("sign-file-form").addEventListener("submit", async (e) =
         type: "ebp-signed-file",
         fileName: file.name,
         fileHash,
+        salt,
         contextMessage: contextMessage || "",
         fingerprint: signRes.fingerprint,
         signature: signRes.signature,
@@ -1775,8 +1805,9 @@ document.getElementById("verify-file-form").addEventListener("submit", async (e)
       }
 
       const computedHash = await hashFileSha256Hex(file);
+      const salt = typeof payload.salt === "string" ? payload.salt : "";
       const contextMessage = typeof payload.contextMessage === "string" ? payload.contextMessage : "";
-      const reconstructedMessage = buildFileSignMessage(computedHash, contextMessage);
+      const reconstructedMessage = buildFileSignMessage(computedHash, salt, contextMessage);
 
       if (detailsOutput) detailsOutput.value = "";
       if (signedMessageOutput) signedMessageOutput.value = "";
@@ -1846,9 +1877,14 @@ document.getElementById("verify-file-form").addEventListener("submit", async (e)
       const verifyRes = await api("/verify", {
         method: "POST",
         body: JSON.stringify({
-          payload: {},
+          payload: {
+            type: "ebp-signature",
+            messageHash: await hashTextSha256Hex(reconstructedMessage),
+            salt: "",
+            signature,
+            fingerprint: expectedFingerprint,
+          },
           message: reconstructedMessage,
-          signature,
           publicIdentity: identity,
         }),
       });
