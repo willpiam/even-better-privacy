@@ -268,6 +268,8 @@ EBP fingerprints use:
 - a merkle root of the two public keys (signing leaf + encryption leaf)
 - bech32 encoding with signing-scheme specific HRPs
 
+We use a merkle tree of the two keys as a fingerprint because it allows the fingerprint to be verified without both keys. This could be useful in cases where data costs are high and both keys are not required. 
+
 Current prefixes:
 - `ebpdk1...` for Dilithium + Kyber identities
 - `ebpsk1...` for SPHINCS+ + Kyber identities
@@ -297,7 +299,7 @@ The `ebp` CLI manages post-quantum identities and secure messaging. You can gene
 1. Run the local backend: `deno task gui:local-backend`
 2. Navigate to [localhost:8787](http://localhost:8787/) 
 
-## Email
+## Email Chrome Extension
 
 EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
 controls to webmail using the local GUI backend API.
