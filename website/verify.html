@@ -23,7 +23,7 @@
   <main class="container panel">
     <h1 style="font-size: clamp(1.5rem, 4vw, 2.2rem); max-width: none;">Verify Signature</h1>
     <p class="lead">
-      Paste or upload a signature payload and optional public identity file. Detached signatures require a message.
+      Paste or upload a signature payload and optional public identity file. Detached signatures require a message. Signed files (`ebp-signed-file`) require uploading the file being verified.
     </p>
 
     <section class="card verifier-card">
@@ -35,6 +35,10 @@
         <label>
           Signature JSON file
           <input id="payload-file" type="file" accept=".json,application/json" />
+        </label>
+        <label>
+          File to verify (for ebp-signed-file)
+          <input id="verify-file" type="file" />
         </label>
         <label>
           Public identity JSON file (optional)
@@ -55,6 +59,11 @@
       <label>
         Message (for detached signatures)
         <textarea id="message" rows="6" placeholder="Original message text"></textarea>
+      </label>
+
+      <label>
+        Reconstructed signed message (for signed files)
+        <textarea id="file-reconstructed-message" rows="4" readonly placeholder="Shown when verifying ebp-signed-file payloads."></textarea>
       </label>
 
       <div class="actions">

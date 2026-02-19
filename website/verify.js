@@ -1,9 +1,11 @@
 const serverUrlInput = document.getElementById("server-url");
 const payloadFileInput = document.getElementById("payload-file");
+const verifyFileInput = document.getElementById("verify-file");
 const publicFileInput = document.getElementById("public-file");
 const payloadJsonInput = document.getElementById("payload-json");
 const publicJsonInput = document.getElementById("public-json");
 const messageInput = document.getElementById("message");
+const fileReconstructedMessageInput = document.getElementById("file-reconstructed-message");
 const verifyButton = document.getElementById("verify-btn");
 const resultSummary = document.getElementById("result-summary");
 const resultSection = document.getElementById("result-section");
@@ -19,6 +21,20 @@ function tryParseJson(text) {
   const trimmed = text.trim();
   if (!trimmed) return null;
   return JSON.parse(trimmed);
+}
+
+function bytesToHex(bytes) {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function hashFileSha256Hex(file) {
+  const fileBuffer = await file.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", fileBuffer);
+  return bytesToHex(new Uint8Array(digest));
+}
+
+function buildFileSignMessage(fileHash, contextMessage) {
+  return `ebp::filehash::${fileHash}${contextMessage || ""}`;
 }
 
 function renderSignerDetails(signer) {
@@ -79,6 +95,7 @@ verifyButton.addEventListener("click", async () => {
   verifyButton.textContent = "Verifying...";
   resultSummary.textContent = "Verifying...";
   signerDetails.innerHTML = "";
+  if (fileReconstructedMessageInput) fileReconstructedMessageInput.value = "";
 
   try {
     const serverBase = serverUrlInput.value.trim().replace(/\/+$/, "");
@@ -91,7 +108,37 @@ verifyButton.addEventListener("click", async () => {
 
     const publicIdentity = tryParseJson(publicJsonInput.value);
     const requestBody = { payload };
-    if (messageInput.value.trim()) {
+    if (payload.type === "ebp-signed-file") {
+      const file = verifyFileInput?.files?.[0];
+      if (!file) {
+        throw new Error("File upload is required for ebp-signed-file verification.");
+      }
+      const expectedFileHash = typeof payload.fileHash === "string" ? payload.fileHash : "";
+      if (!expectedFileHash) {
+        throw new Error("ebp-signed-file payload is missing fileHash.");
+      }
+      const computedFileHash = await hashFileSha256Hex(file);
+      const contextMessage = typeof payload.contextMessage === "string" ? payload.contextMessage : "";
+      const reconstructedMessage = buildFileSignMessage(computedFileHash, contextMessage);
+      requestBody.message = reconstructedMessage;
+      if (fileReconstructedMessageInput) {
+        fileReconstructedMessageInput.value = reconstructedMessage;
+      }
+
+      if (computedFileHash !== expectedFileHash) {
+        const failBody = {
+          verified: false,
+          reason: "file_hash_mismatch",
+          expectedFileHash,
+          computedFileHash,
+          reconstructedMessage,
+          message: "File hash mismatch. Uploaded file does not match the signed file hash.",
+        };
+        resultJson.textContent = JSON.stringify(failBody, null, 2);
+        resultSummary.textContent = failBody.message;
+        return;
+      }
+    } else if (messageInput.value.trim()) {
       requestBody.message = messageInput.value;
     }
     if (publicIdentity && typeof publicIdentity === "object") {
@@ -112,7 +159,9 @@ verifyButton.addEventListener("click", async () => {
     }
 
     if (body.verified) {
-      if (typeof body.message === "string" && body.message.length > 0) {
+      if (payload.type === "ebp-signed-file" && fileReconstructedMessageInput?.value) {
+        resultSummary.textContent = "Signature is valid and file hash matches.";
+      } else if (typeof body.message === "string" && body.message.length > 0) {
         resultSummary.textContent = body.message;
       } else if (body.identityPublished) {
         resultSummary.textContent = "Signature is valid. Signer identity is published on the server.";
