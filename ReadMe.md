@@ -262,33 +262,15 @@ then run
 
     deno task test:e2e:psql
 
-## Fingerprint Upgrade (Merkle Root + Bech32)
+## Fingerprint (Merkle Root + Bech32)
 
-EBP fingerprints now use:
+EBP fingerprints use:
 - a merkle root of the two public keys (signing leaf + encryption leaf)
 - bech32 encoding with signing-scheme specific HRPs
 
 Current prefixes:
 - `ebpdk1...` for Dilithium + Kyber identities
 - `ebpsk1...` for SPHINCS+ + Kyber identities
-
-### Upgrade local identity/contact files
-
-Dry run:
-
-    deno run --allow-read --allow-write --allow-env ./scripts/migrate_fingerprints_to_bech32.ts --dry-run
-
-Apply:
-
-    deno run --allow-read --allow-write --allow-env ./scripts/migrate_fingerprints_to_bech32.ts
-
-### Production DB reset option
-
-If your production DB has only a few records, you can back up and reset:
-
-    deno run --allow-read --allow-write --allow-env --allow-net ./scripts/postgres/reset-database.ts --yes
-
-This writes backups to `./scripts/postgres/backups/reset-<timestamp>/` before truncating tables.
 
 
 ## CLI
@@ -362,22 +344,7 @@ MIT — see [LICENSE](LICENSE) for details.
     - this will allow us to have different SQL for the sqlite and psql implementations. It would also allow use to easily implement non-sql connections. 
 - Sign files
     - CLI and GUI
-- end to end tests for the email plugin
-- bech32 fingerprints
-    - indicate the type of keys used 
-    - 6e1fccc7b59096e28c269e7c8931ad818220225ff1139b2141a764be1f968acf
-    - prefixes indicate signing key type, then kem key type (for now always MK_KEM)
-        - ebpdk1 -> dilithium+kyber
-        - ebpsk1 -> Sphincs+kyber
-        - ebpfk1 -> Falcon+kyber
-- fingerprint should be the merkle root of the two keys
-    - this will allow a signing key to prove it belongs to an identiy without also provinging the KEM key
-    - this is useful because these public keys are big and in some cases we can imagine a user not needing both
-    - for example if a smart contract could verify ML-DSA (Dilithium) you might use an EBP identity to control an ethereum wallet. But you wouldn't nessisairly need the ML-KEM (Kyber) key and providing it would needlessly increase your gas fees, only to allow you to compute your EBP fingerprint once?
-- web interface to verify signatures:
-    - upload a signature file and a public key file (and type in a message if not provided in signature file) and see if the signature is valid and if it is we should check the backend server (https://ebp-cqyo.onrender.com) to see if the identity has been published, if it does we should show the signers details
-    - same with a pasted signature, public key, and message
-    - signature objects may or may not include a message or a public key 
+- end to end tests for the email plugin 
 - email: enable ebp interface when a user directly replies to an email
 - email: select multiple recipients. Encrypt with same AES key. Send json object with one encrypted message and an object mapping the recipients fingerprint to a copy of the AES key encapsulated just for that recipient. 
 
