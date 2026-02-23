@@ -46,32 +46,14 @@ If you are comfortable with the CLI and or would like to contribute to this code
 3. click on settings
 4. Set *server url* to https://ebp-cqyo.onrender.com
 
-### Desktop AppImage (Linux - In development)
+### Build locally
 
-This is the easiest way for non-technical users to install and update EBP on Linux.
+If you wish to create your own build file you should be able to do so fairly easily. 
 
-Run a prebuilt AppImage:
+- install Node + NPM, Rust + Cargo
+- run the shell script for your OS (`build_desktop_mac.sh`, `build_desktop_windows.sh`, or `build_desktop_linux.sh`)
 
-1. Download the latest `EBP.AppImage`
-2. Make it executable: `chmod +x EBP.AppImage`
-3. Run it: `./EBP.AppImage`
-
-Update is just replacing the AppImage file with a newer one and running it again. All user data stays in `~/.ebp`.
-
-Build AppImage locally:
-
-1. Install dependencies: `sudo apt install libwebkit2gtk-4.0-dev libssl-dev build-essential`
-2. Install Node.js (for Tauri): https://nodejs.org/
-3. Install Rust: https://www.rust-lang.org/tools/install
-4. From the project root, run:
-   - `chmod +x build_desktop.sh`
-   - `./build_desktop.sh`
-5. The generated single-file AppImage will be:
-   - `./EBP.AppImage`
-6. Run it:
-   - `./EBP.AppImage`
-   - If your system does not support FUSE, use:
-     - `APPIMAGE_EXTRACT_AND_RUN=1 ./EBP.AppImage`
+If all goes well this should result in an executable file... EBP.AppImage on Linux, __ on Mac, or __ on Windows. 
 
 ## Environment Configuration
 
