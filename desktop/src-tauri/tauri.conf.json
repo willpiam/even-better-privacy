@@ -23,7 +23,7 @@
       "active": true,
       "targets": "appimage",
       "identifier": "com.ebp.app",
-      "icon": ["icons/icon.png"],
+      "icon": ["icons/icon.png", "icons/icon.ico"],
       "externalBin": ["bin/ebp-gui-backend"]
     }
   }
