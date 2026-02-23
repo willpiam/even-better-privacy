@@ -84,7 +84,7 @@ export async function getContext(
 	identityOverride?: string,
 	serverOverride?: string,
 ): Promise<CLIContext> {
-	const base = homeDir ?? Deno.env.get("HOME") ?? ".";
+	const base = resolveBaseDir(homeDir);
 	const identityDir = `${base}/.ebp`;
 	const state = await readState(identityDir);
 	const currentIdentity = identityOverride ?? state?.currentIdentity ?? "identity";
@@ -97,6 +97,22 @@ export async function getContext(
 		currentIdentity,
 		server,
 	};
+}
+
+function resolveBaseDir(homeDir?: string): string {
+	if (homeDir) return homeDir;
+
+	const home = Deno.env.get("HOME");
+	if (home && home.trim().length > 0) return home;
+
+	const userProfile = Deno.env.get("USERPROFILE");
+	if (userProfile && userProfile.trim().length > 0) return userProfile;
+
+	const homeDrive = Deno.env.get("HOMEDRIVE");
+	const homePath = Deno.env.get("HOMEPATH");
+	if (homeDrive && homePath) return `${homeDrive}${homePath}`;
+
+	return ".";
 }
 
 export async function ensureDir(path: string): Promise<void> {
