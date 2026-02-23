@@ -61,7 +61,15 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
     candidates.insert(0, target_sidecar);
   }
 
+  let mut expanded_candidates: Vec<String> = Vec::new();
   for candidate in &candidates {
+    expanded_candidates.push((*candidate).to_string());
+    if cfg!(target_os = "windows") {
+      expanded_candidates.push(format!("{candidate}.exe"));
+    }
+  }
+
+  for candidate in &expanded_candidates {
     if let Some(path) = app.path_resolver().resolve_resource(candidate) {
       if path.exists() {
         return Ok(path);
@@ -70,7 +78,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
   }
 
   if let Some(resource_dir) = app.path_resolver().resource_dir() {
-    for candidate in &candidates {
+    for candidate in &expanded_candidates {
       let path = resource_dir.join(candidate);
       if path.exists() {
         return Ok(path);
@@ -80,7 +88,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
 
   if let Ok(appdir) = env::var("APPDIR") {
     let appdir_path = Path::new(&appdir);
-    for candidate in &candidates {
+    for candidate in &expanded_candidates {
       let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
       if path.exists() {
         return Ok(path);
@@ -90,7 +98,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
 
   if let Ok(exe_path) = env::current_exe() {
     if let Some(exe_dir) = exe_path.parent() {
-      for candidate in &candidates {
+      for candidate in &expanded_candidates {
         let file_name = Path::new(candidate).file_name().unwrap();
         let path = exe_dir.join(file_name);
         if path.exists() {
@@ -100,7 +108,7 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
     }
 
     if let Some(appdir_path) = exe_path.parent().and_then(|p| p.parent()) {
-      for candidate in &candidates {
+      for candidate in &expanded_candidates {
         let path = appdir_path.join("usr/bin").join(Path::new(candidate).file_name().unwrap());
         if path.exists() {
           return Ok(path);
