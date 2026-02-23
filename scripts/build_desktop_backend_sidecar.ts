@@ -18,6 +18,18 @@ if (!target) {
 const sidecarBase = "./desktop/src-tauri/bin/ebp-gui-backend";
 const sidecarTargeted = `${sidecarBase}-${target}`;
 
+async function findExistingPath(candidates: string[]): Promise<string | null> {
+  for (const candidate of candidates) {
+    try {
+      const stat = await Deno.stat(candidate);
+      if (stat.isFile) return candidate;
+    } catch {
+      // Candidate doesn't exist; try next.
+    }
+  }
+  return null;
+}
+
 console.log(`Compiling desktop sidecar for target: ${target}`);
 
 const compile = new Deno.Command("deno", {
@@ -46,5 +58,21 @@ if (!compileResult.success) {
   Deno.exit(compileResult.code);
 }
 
-await Deno.copyFile(sidecarTargeted, sidecarBase);
+const builtSidecar = await findExistingPath([
+  sidecarTargeted,
+  `${sidecarTargeted}.exe`,
+]);
+
+if (!builtSidecar) {
+  console.error(
+    `ERROR: Could not find compiled sidecar output at ${sidecarTargeted} (or .exe variant).`,
+  );
+  Deno.exit(1);
+}
+
+const sidecarBaseOutput = builtSidecar.endsWith(".exe")
+  ? `${sidecarBase}.exe`
+  : sidecarBase;
+
+await Deno.copyFile(builtSidecar, sidecarBaseOutput);
 

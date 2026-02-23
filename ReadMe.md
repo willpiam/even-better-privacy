@@ -50,7 +50,7 @@ If you are comfortable with the CLI and or would like to contribute to this code
 
 If you wish to create your own build file you should be able to do so fairly easily. 
 
-- install Node + NPM, Rust + Cargo
+- install Node + NPM, Rust + Cargo, and Deno
 - run the shell script for your OS (`build_desktop_mac.sh`, `build_desktop_windows.sh`, or `build_desktop_linux.sh`)
 
 If all goes well this should result in an executable file... EBP.AppImage on Linux, __ on Mac, or __ on Windows. 
