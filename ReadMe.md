@@ -12,6 +12,8 @@ Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
 
 ## Installation
 
+All released application files will come with an EBP signature from [ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99](https://ebp-cqyo.onrender.com/api/v1/identity/ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99)
+
 ### For Linux
 
 - Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
@@ -29,7 +31,9 @@ Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
 
 ### For Windows
 
-Pending...
+- Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
+- Locate the latest release and click the "Assets" dropdown
+- Select and download the `.msi` file
 
 ### From Source (Linux, Windows, & Mac)
 
