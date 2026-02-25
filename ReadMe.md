@@ -34,6 +34,8 @@ All released application files will come with an EBP signature from [ebpdk1m6l96
 - Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
 - Locate the latest release and click the "Assets" dropdown
 - Select and download the `.msi` file
+- Run the `.msi` file and follow the wizard to install EBP on your system
+- Launch EBP like any other windows program. It can be found by searching for "EBP"
 
 ### From Source (Linux, Windows, & Mac)
 
@@ -59,9 +61,36 @@ If you wish to create your own build file you should be able to do so fairly eas
 
 If all goes well this should result in an executable file... EBP.AppImage on Linux, __ on Mac, or __ on Windows. 
 
+## Email Chrome Extension
+
+EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
+controls to webmail using the local GUI backend API.
+
+Supported email clients (web):
+- Gmail
+- Outlook (Outlook on the web)
+- Proton Mail
+
+### Install The Extension
+
+This extension will work on any chromium based browser. 
+
+#### Install The Extension From Source
+
+1. Open `chrome://extensions` or 
+2. Enable Developer Mode.
+3. Click **Load unpacked** and select this folder:
+   `/even-better-privacy/email/chrome-extension`
+
+~~See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md)~~
+
+#### Install The Extension from the Chrome Webstore
+
+I have not yet published the extension to the webstore. I intend to do this soon. 
+
 ## Environment Configuration
 
-Create a `.env` file in the project root (the same folder as this `ReadMe.md`). Example:
+If you intend to run your own key server you will need to create a `.env` file in the project root (the same folder as this `ReadMe.md`). Example:
 
 ```
 DB_TYPE=psql # options include sqlite | psql
@@ -85,6 +114,8 @@ PUBLIC_BASE_URL=<base url of ebp key server>
 ```
 
 ## Supported Crypto-Systems
+
+EBP uses quantum secure schemes approved by NIST. More information on NISTs post quantum cryptography standards can be found [here](https://csrc.nist.gov/projects/post-quantum-cryptography)
 
 ### Signing
 
@@ -285,17 +316,6 @@ The `ebp` CLI manages post-quantum identities and secure messaging. You can gene
 1. Run the local backend: `deno task gui:local-backend`
 2. Navigate to [localhost:8787](http://localhost:8787/) 
 
-## Email Chrome Extension
-
-EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
-controls to webmail using the local GUI backend API.
-
-Supported email clients (web):
-- Gmail
-- Outlook (Outlook on the web)
-- Proton Mail
-
-See the extension guide in [`email/chrome-extension/README.md`](email/chrome-extension/README.md).
 
 ## Support Development
 
@@ -361,3 +381,5 @@ graph TD
 
 ```
 - when adding a detail to an identity I want to take the input to a details path as a drop down with the first option being "custom" so users can provide thair own details path
+- tighten up `core`
+- tighten up `gui/local-backend`

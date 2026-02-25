@@ -45,6 +45,8 @@ const compile = new Deno.Command("deno", {
     "./gui/index.html",
     "--include",
     "./gui/app.js",
+    "--include",
+    "./gui/assets/large-logo.png",
     "--output",
     sidecarTargeted,
     "./gui/local-backend/main.ts",
