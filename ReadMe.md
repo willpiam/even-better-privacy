@@ -385,3 +385,5 @@ graph TD
 - tighten up `core`
 - tighten up `gui/local-backend`
 - create full inventory and plan for hardening
+- mobile application
+    - full feature parity with GUI
