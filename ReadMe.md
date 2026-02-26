@@ -384,3 +384,4 @@ graph TD
 - when adding a detail to an identity I want to take the input to a details path as a drop down with the first option being "custom" so users can provide thair own details path
 - tighten up `core`
 - tighten up `gui/local-backend`
+- create full inventory and plan for hardening
