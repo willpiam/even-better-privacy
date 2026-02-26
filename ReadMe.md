@@ -295,7 +295,7 @@ Current prefixes:
 
 **Note:** Where this section talks about a program called `ebp`, you will instead use `deno task cli`
 
-The `ebp` CLI manages post-quantum identities and secure messaging. You can generate multiple identities (stored under `~/.ebp/<name>.identity.json`), switch between them, inspect fingerprints and details, and exchange signed/encrypted messages with contacts.
+The `ebp` CLI manages post-quantum identities and secure messaging. You can generate multiple identities (stored under `~/.ebp/<name>.identity.json`), switch between them, inspect fingerprints and details, exchange signed/encrypted messages with contacts, and encrypt/decrypt full file payloads.
 
 - create and switch identities (`ebp generate [name]`, `ebp identities`, `ebp use <name>`)
 - view identity info and attached details (`ebp info`, `ebp details`)
@@ -303,6 +303,7 @@ The `ebp` CLI manages post-quantum identities and secure messaging. You can gene
 - import contacts and list them (`ebp import`, `ebp contacts`)
 - sign messages (`ebp sign`) and verify (`ebp verify`)
 - encrypt and decrypt for peers (`ebp encrypt`, `ebp decrypt`)
+- encrypt and decrypt files (`ebp encrypt-file`, `ebp decrypt-file`)
 - publish identities to the server and fetch contacts (`ebp server <url>`, `ebp publish`, `ebp fetch <fingerprint>`)
 - push attached details to the server when adding them (`ebp detail <path> <value> --push`)
 

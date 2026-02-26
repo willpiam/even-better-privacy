@@ -929,6 +929,86 @@ Deno.test({
 });
 
 Deno.test({
+	name: "POST /api/v1/encrypt-file creates encrypted file payload",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			await createTestIdentity(home, "sender", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "sender" });
+			const recipient = new Identity("dilithium", "kyber");
+			await createTestContact(home, "recipient", recipient.summary);
+			const fileDataBase64 = btoa(String.fromCharCode(0, 1, 2, 3, 250, 251));
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/encrypt-file",
+				jsonPost({
+					recipient: "recipient",
+					fileName: "hello.bin",
+					mimeType: "application/octet-stream",
+					fileDataBase64,
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as { type: string; fileName: string; fileSize: number; ciphertext: string };
+			assertEquals(b.type, "ebp-encrypted-file");
+			assertEquals(b.fileName, "hello.bin");
+			assertEquals(b.fileSize, 6);
+			assertExists(b.ciphertext);
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/decrypt-file decrypts signed file payload",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const sender = await createTestIdentity(home, "sender", "password123");
+			const recipient = await createTestIdentity(home, "recipient", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "recipient" });
+			await createTestContact(home, "sender", sender.summary);
+			await createTestContact(home, "recipient", recipient.summary);
+
+			const fileDataBase64 = btoa(String.fromCharCode(9, 8, 7, 6, 5));
+			const enc = await makeRequest(
+				handler,
+				"/api/v1/encrypt-file",
+				jsonPost({
+					recipient: "recipient",
+					fileName: "doc.bin",
+					mimeType: "application/octet-stream",
+					fileDataBase64,
+					sign: true,
+					password: "password123",
+					home,
+					identity: "sender",
+				})
+			);
+			assertEquals(enc.status, STATUS.OK);
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/decrypt-file",
+				jsonPost({
+					payload: enc.body,
+					sender: "sender",
+					password: "password123",
+					home,
+				})
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as { fileName: string; fileSize: number; verified: boolean; verifyStatus: string; fileDataBase64: string };
+			assertEquals(b.fileName, "doc.bin");
+			assertEquals(b.fileSize, 5);
+			assertEquals(b.verified, true);
+			assertEquals(b.verifyStatus, "valid");
+			assertEquals(b.fileDataBase64, fileDataBase64);
+		});
+	},
+});
+
+Deno.test({
 	name: "GET /api/v1/server returns configured server",
 	permissions: { read: true, write: true, env: true, net: true },
 	fn: async () => {

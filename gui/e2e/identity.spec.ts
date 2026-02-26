@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { Buffer } from "node:buffer";
 import { generateHumanName } from "./name_generator.ts";
 
 const testPassword = "smoke-test-password";
@@ -301,6 +302,37 @@ test.describe.serial("multi-user encrypted messaging flow", () => {
       return await page.locator("#dec-output").inputValue();
     }).toContain(messageText);
     await expect(page.locator("#dec-verified")).toHaveText(/Valid/);
+  });
+
+  test("encrypts and decrypts signed file payloads", async ({ page }) => {
+    await page.goto("/");
+    await ensureIdentitySelected(page, aliceIdentity);
+    await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+    await expandSection(page, "Encrypt File");
+    await page.setInputFiles("#enc-file-input", {
+      name: "tiny.bin",
+      mimeType: "application/octet-stream",
+      buffer: Buffer.from([1, 2, 3, 4, 5, 6]),
+    });
+    await page.fill("#enc-file-recipient", bobFingerprint);
+    await page.keyboard.press("Escape");
+    await page.locator("#enc-file-sign").setChecked(true);
+    await page.getByRole("button", { name: "Encrypt File", exact: true }).click();
+    await submitPassword(page);
+    await expect(page.locator("#enc-file-output")).not.toHaveValue("");
+    const encryptedPayload = await page.locator("#enc-file-output").inputValue();
+
+    await ensureIdentitySelected(page, bobIdentity);
+    await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+    await expandSection(page, "Decrypt File");
+    await page.fill("#dec-file-payload", encryptedPayload);
+    await page.fill("#dec-file-sender", aliceFingerprint);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Decrypt File", exact: true }).click();
+    await submitPassword(page);
+    await expect(page.locator("#dec-file-verified")).toHaveText(/Valid/);
+    await expect(page.locator("#dec-file-info")).toContainText("tiny.bin");
+    await expect(page.locator("#dec-file-download-btn")).toBeEnabled();
   });
 });
 

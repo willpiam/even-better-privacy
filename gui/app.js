@@ -29,6 +29,7 @@ const state = {
   isRevoked: false,
   revokedDetails: [],
 };
+let decryptedFileResult = null;
 
 // Helper to extract name/email from details
 function getDetailValue(details, path) {
@@ -582,6 +583,10 @@ async function getPayloadDownloadName(payload, fallback) {
       return "ebp-encrypted-message.json";
     case "ebp-encrypted-signed-message":
       return "ebp-encrypted-signed-message.json";
+    case "ebp-encrypted-file":
+      return `ebp-encrypted-file-${safeDownloadFileName(payload.fileName || "file")}.json`;
+    case "ebp-encrypted-signed-file":
+      return `ebp-encrypted-signed-file-${safeDownloadFileName(payload.fileName || "file")}.json`;
     default:
       return fallback;
   }
@@ -646,6 +651,35 @@ function buildFileSignMessage(fileHash, salt, contextMessage) {
   return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 
+async function readFileAsBase64(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+
+function base64ToUint8Array(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+function safeDownloadFileName(fileName) {
+  if (!fileName || typeof fileName !== "string") return "decrypted.bin";
+  return fileName
+    .replace(/\\/g, "/")
+    .split("/")
+    .pop()
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(/\.\./g, "_") || "decrypted.bin";
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Copy to clipboard
 // ─────────────────────────────────────────────────────────────────────────────
@@ -706,6 +740,14 @@ if (encDownloadBtn) {
   });
 }
 
+const encFileDownloadBtn = document.getElementById("enc-file-download-btn");
+if (encFileDownloadBtn) {
+  encFileDownloadBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    await downloadJsonFromTextarea("enc-file-output", "ebp-encrypted-file.json");
+  });
+}
+
 const signFileDownloadBtn = document.getElementById("sign-file-download-btn");
 if (signFileDownloadBtn) {
   signFileDownloadBtn.addEventListener("click", async (e) => {
@@ -735,6 +777,19 @@ if (decryptPayloadFile) {
   decryptPayloadFile.addEventListener("change", async () => {
     await loadJsonFileIntoTextarea(decryptPayloadFile, "dec-payload");
     updateVerifyResult("dec-verified", null, null);
+  });
+}
+
+const decryptFilePayloadFile = document.getElementById("dec-file-payload-file");
+if (decryptFilePayloadFile) {
+  decryptFilePayloadFile.addEventListener("change", async () => {
+    await loadJsonFileIntoTextarea(decryptFilePayloadFile, "dec-file-payload");
+    updateVerifyResult("dec-file-verified", null, null);
+    const info = document.getElementById("dec-file-info");
+    const downloadBtn = document.getElementById("dec-file-download-btn");
+    if (info) info.value = "";
+    if (downloadBtn) downloadBtn.disabled = true;
+    decryptedFileResult = null;
   });
 }
 
@@ -780,6 +835,8 @@ const contactSearchFields = [
   { inputId: "enc-recipient", dropdownId: "enc-recipient-dropdown" },
   { inputId: "verify-sender", dropdownId: "verify-sender-dropdown" },
   { inputId: "dec-sender", dropdownId: "dec-sender-dropdown" },
+  { inputId: "enc-file-recipient", dropdownId: "enc-file-recipient-dropdown" },
+  { inputId: "dec-file-sender", dropdownId: "dec-file-sender-dropdown" },
 ];
 
 let activeDropdown = null;
@@ -1988,6 +2045,100 @@ document.getElementById("decrypt-form").addEventListener("submit", async (e) => 
     }
   });
 });
+
+document.getElementById("encrypt-file-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const fileInput = document.getElementById("enc-file-input");
+  const recipient = document.getElementById("enc-file-recipient").value.trim();
+  const sign = document.getElementById("enc-file-sign").checked;
+  const file = fileInput?.files?.[0];
+  await withLoading(btn, async () => {
+    try {
+      if (!file) throw new Error("Please select a file to encrypt");
+      if (!recipient) throw new Error("Recipient is required");
+      const fileDataBase64 = await readFileAsBase64(file);
+      const body = {
+        recipient,
+        sign,
+        fileName: file.name,
+        mimeType: file.type || "application/octet-stream",
+        fileDataBase64,
+      };
+      if (sign) {
+        const password = await requestPassword("Enter password to sign encrypted file payload");
+        if (!password) {
+          setStatus("Password is required to sign", "error");
+          return;
+        }
+        body.password = password;
+      }
+      const res = await api("/encrypt-file", { method: "POST", body: JSON.stringify(body) });
+      document.getElementById("enc-file-output").value = JSON.stringify(res, null, 2);
+      setStatus("File encrypted", "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("decrypt-file-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const payloadRaw = document.getElementById("dec-file-payload").value;
+  const sender = document.getElementById("dec-file-sender").value.trim();
+  const info = document.getElementById("dec-file-info");
+  const downloadBtn = document.getElementById("dec-file-download-btn");
+  await withLoading(btn, async () => {
+    try {
+      const password = await requestPassword("Enter password to decrypt file payload");
+      if (!password) {
+        setStatus("Password is required", "error");
+        updateVerifyResult("dec-file-verified", null, null);
+        return;
+      }
+      const payload = JSON.parse(payloadRaw);
+      const res = await api("/decrypt-file", {
+        method: "POST",
+        body: JSON.stringify({ payload, password, sender: sender || undefined }),
+      });
+      decryptedFileResult = res;
+      if (downloadBtn) downloadBtn.disabled = false;
+      if (info) {
+        info.value = `${res.fileName || "decrypted.bin"} (${res.fileSize || 0} bytes, ${res.mimeType || "application/octet-stream"})`;
+      }
+      updateVerifyResult("dec-file-verified", res.verified, res.verifyStatus);
+      setStatus("File decrypted payload ready for download", "success");
+    } catch (err) {
+      decryptedFileResult = null;
+      if (downloadBtn) downloadBtn.disabled = true;
+      if (info) info.value = "";
+      updateVerifyResult("dec-file-verified", null, null);
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+const decFileDownloadBtn = document.getElementById("dec-file-download-btn");
+if (decFileDownloadBtn) {
+  decFileDownloadBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!decryptedFileResult?.fileDataBase64) {
+      setStatus("No decrypted file available to download", "error");
+      return;
+    }
+    const bytes = base64ToUint8Array(decryptedFileResult.fileDataBase64);
+    const blob = new Blob([bytes], { type: decryptedFileResult.mimeType || "application/octet-stream" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = safeDownloadFileName(decryptedFileResult.fileName);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  });
+}
 
 
 document.getElementById("publish-form").addEventListener("submit", async (e) => {

@@ -9,6 +9,11 @@ import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../.
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
+	createFileCleartextEnvelope,
+	parseFileCleartextEnvelope,
+	MAX_ENCRYPTED_FILE_BYTES,
+} from "../../core/FilePayload.ts";
+import {
 	CLIContext,
 	buildStateFromExternal,
 	computeStateHash,
@@ -38,6 +43,18 @@ function randomHex(byteLength = 16): string {
 	const bytes = new Uint8Array(byteLength);
 	crypto.getRandomValues(bytes);
 	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function safeFileName(fileName: string): string {
+	const normalized = fileName.replace(/\\/g, "/");
+	const base = normalized.split("/").pop() || "encrypted.bin";
+	return base.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\.\./g, "_");
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+	let binary = "";
+	for (const b of bytes) binary += String.fromCharCode(b);
+	return btoa(binary);
 }
 
 const STATUS = {
@@ -1019,6 +1036,135 @@ async function handleRequest(req: Request): Promise<Response> {
 			}
 
 			throw new HttpError(STATUS.BadRequest, "unsupported payload type");
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/encrypt-file") {
+			const body = await readJson<{
+				recipient?: unknown;
+				sign?: unknown;
+				password?: unknown;
+				home?: unknown;
+				identity?: unknown;
+				fileName?: unknown;
+				mimeType?: unknown;
+				fileDataBase64?: unknown;
+			}>(req);
+			const recipient = typeof body.recipient === "string" ? body.recipient : undefined;
+			const sign = Boolean(body.sign);
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const fileNameRaw = typeof body.fileName === "string" ? body.fileName : "encrypted.bin";
+			const mimeType = typeof body.mimeType === "string" && body.mimeType.length > 0
+				? body.mimeType
+				: "application/octet-stream";
+			const fileDataBase64 = typeof body.fileDataBase64 === "string" ? body.fileDataBase64 : undefined;
+			if (!recipient) throw new HttpError(STATUS.BadRequest, "recipient is required");
+			if (!fileDataBase64) throw new HttpError(STATUS.BadRequest, "fileDataBase64 is required");
+			const fileBytes = Uint8Array.from(atob(fileDataBase64), (c) => c.charCodeAt(0));
+			if (fileBytes.length > MAX_ENCRYPTED_FILE_BYTES) {
+				throw new HttpError(STATUS.BadRequest, `file exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`);
+			}
+
+			const ctx = await getContext(home, identityName);
+			const contact = await loadContact(ctx, recipient);
+			const fileName = safeFileName(fileNameRaw);
+			const envelope = createFileCleartextEnvelope(fileBytes, fileName, mimeType);
+			const cleartext = JSON.stringify(envelope);
+
+			if (sign) {
+				if (!password) throw new HttpError(STATUS.BadRequest, "password is required when signing");
+				const identity = await loadIdentity(ctx, password);
+				const ciphertext = identity.signAndEncryptFor(cleartext, contact);
+				return json({
+					type: "ebp-encrypted-signed-file",
+					version: FILE_FORMAT_VERSIONS.encryptedSignedFile,
+					recipientFingerprint: contact.fingerprint,
+					senderFingerprint: identity.toFingerprint(),
+					fileName,
+					mimeType,
+					fileSize: fileBytes.length,
+					ciphertext,
+				});
+			}
+
+			const ciphertext = Identity.EncryptFor(contact, cleartext);
+			return json({
+				type: "ebp-encrypted-file",
+				version: FILE_FORMAT_VERSIONS.encryptedFile,
+				recipientFingerprint: contact.fingerprint,
+				fileName,
+				mimeType,
+				fileSize: fileBytes.length,
+				ciphertext,
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/decrypt-file") {
+			const body = await readJson<{
+				payload?: unknown;
+				password?: unknown;
+				sender?: unknown;
+				home?: unknown;
+				identity?: unknown;
+			}>(req);
+			const payload = body.payload as Record<string, unknown> | undefined;
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const sender = typeof body.sender === "string" ? body.sender : undefined;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			if (!payload) throw new HttpError(STATUS.BadRequest, "payload is required");
+			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+			const ciphertext = String(payload.ciphertext ?? "");
+			if (!ciphertext) throw new HttpError(STATUS.BadRequest, "payload missing ciphertext");
+
+			const ctx = await getContext(home, identityName);
+			const identity = await loadIdentity(ctx, password);
+
+			let cleartextEnvelopeRaw = "";
+			let verified: boolean | null = null;
+			let verifyStatus = "unsigned";
+			if (payload.type === "ebp-encrypted-file") {
+				try {
+					cleartextEnvelopeRaw = identity.encryptionKey.decrypt(ciphertext);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - payload may be corrupted or not intended for this identity");
+				}
+			} else if (payload.type === "ebp-encrypted-signed-file") {
+				let contact: ExternalIdentity;
+				if (sender) {
+					contact = await loadContact(ctx, sender);
+				} else if (typeof payload.senderFingerprint === "string") {
+					contact = await loadContact(ctx, payload.senderFingerprint.substring(0, 16));
+				} else {
+					throw new HttpError(STATUS.BadRequest, "sender is required for signed file payloads");
+				}
+				let result: { message: string; verified: boolean };
+				try {
+					result = identity.decryptAndVerify(ciphertext, contact);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - payload may be corrupted or not intended for this identity");
+				}
+				cleartextEnvelopeRaw = result.message;
+				verified = result.verified;
+				verifyStatus = result.verified ? "valid" : "invalid";
+			} else {
+				throw new HttpError(STATUS.BadRequest, "unsupported file payload type");
+			}
+
+			const envelope = parseFileCleartextEnvelope(cleartextEnvelopeRaw);
+			if (envelope.fileSize > MAX_ENCRYPTED_FILE_BYTES) {
+				throw new HttpError(STATUS.BadRequest, `decrypted file exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`);
+			}
+			const fileDataBase64 = bytesToBase64(envelope.fileBytes);
+			return json({
+				fileName: safeFileName(envelope.fileName),
+				mimeType: envelope.mimeType || "application/octet-stream",
+				fileSize: envelope.fileSize,
+				fileDataBase64,
+				verified,
+				verifyStatus,
+			});
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/detail") {

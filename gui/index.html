@@ -571,6 +571,10 @@
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     }
 
+    .two > section {
+      margin-bottom: 0;
+    }
+
     .two.stack-vertical {
       grid-template-columns: 1fr;
     }
@@ -995,6 +999,32 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    @media (max-width: 900px) {
+      .context-bar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 10px;
+      }
+
+      .context-item {
+        width: 100%;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
+      .context-item-fingerprint {
+        flex: 0 0 auto;
+      }
+
+      .context-item-value,
+      .fingerprint-value {
+        min-width: 0;
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
     }
 
     /* Server identity list items */
@@ -1462,7 +1492,7 @@
        Responsive
     ───────────────────────────────────────────────────────────────────────── */
 
-    @media (max-width: 768px) {
+    @media (max-width: 1000px) {
       .sidebar {
         width: 100%;
         height: auto;
@@ -2019,6 +2049,64 @@
               </div>
             </label>
             <div class="small">Signature verified: <span id="dec-verified" class="result-badge pending">-</span></div>
+          </form>
+        </section>
+      </div>
+
+      <div class="two stack-vertical" style="margin-top: 1rem;">
+        <section>
+          <h3>Encrypt File</h3>
+          <form id="encrypt-file-form" class="stack">
+            <label>Select file
+              <input id="enc-file-input" type="file" />
+            </label>
+            <label>Recipient (contact name or fingerprint)
+              <div class="contact-search-wrapper">
+                <input id="enc-file-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="enc-file-recipient" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="enc-file-recipient-dropdown"></div>
+              </div>
+            </label>
+            <label class="inline"><input id="enc-file-sign" type="checkbox" /> Also sign file payload</label>
+            <div>
+              <button type="submit">Encrypt File</button>
+            </div>
+            <label>Output
+              <div class="output-wrapper">
+                <textarea id="enc-file-output" readonly placeholder="Encrypted file payload will appear here..."></textarea>
+                <button type="button" class="copy-btn" data-target="enc-file-output">Copy</button>
+                <button type="button" class="secondary" id="enc-file-download-btn">Download JSON</button>
+              </div>
+            </label>
+          </form>
+        </section>
+
+        <section>
+          <h3>Decrypt File</h3>
+          <form id="decrypt-file-form" class="stack">
+            <label>Payload (encrypted file JSON)
+              <textarea id="dec-file-payload" placeholder='{"type":"ebp-encrypted-file",...}'></textarea>
+            </label>
+            <div class="row">
+              <label>Import JSON file
+                <input id="dec-file-payload-file" type="file" accept="application/json,.json" />
+              </label>
+            </div>
+            <label>Sender (for signed payloads)
+              <div class="contact-search-wrapper">
+                <input id="dec-file-sender" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="dec-file-sender" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="dec-file-sender-dropdown"></div>
+              </div>
+            </label>
+            <div>
+              <button type="submit">Decrypt File</button>
+              <button type="button" class="secondary" id="dec-file-download-btn" disabled>Download Decrypted File</button>
+            </div>
+            <div class="small">Signature verified: <span id="dec-file-verified" class="result-badge pending">-</span></div>
+            <label>Decrypted file info
+              <input id="dec-file-info" type="text" readonly placeholder="No decrypted file loaded yet..." />
+            </label>
           </form>
         </section>
       </div>

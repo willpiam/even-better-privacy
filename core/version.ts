@@ -35,6 +35,9 @@ export const FILE_FORMAT_VERSIONS = {
     signedMessage: 2,
     encryptedMessage: 1,
     encryptedSignedMessage: 1,
+    encryptedFile: 1,
+    encryptedSignedFile: 1,
+    fileCleartextEnvelope: 1,
     emergencyRevocationCertificate: 1,
     aesCiphertext: 1,
 } as const;

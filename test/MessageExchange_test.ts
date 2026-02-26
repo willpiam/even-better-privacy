@@ -1,5 +1,6 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import { Identity } from "../core/Identity.ts";
+import { createFileCleartextEnvelope, parseFileCleartextEnvelope } from "../core/FilePayload.ts";
 
 Deno.test("Alice and Bob: exchange signed encrypted messages using external identities", () => {
 	// Create identities for Alice and Bob
@@ -229,3 +230,28 @@ Deno.test("Alice and Bob: encrypted but not signed - sender anonymity", () => {
 	// (there's no signature to verify - that's the point of unsigned messages)
 });
 
+
+Deno.test("Alice and Bob: encrypted file roundtrip with envelope", () => {
+	const bob = new Identity("dilithium", "kyber");
+	const fileBytes = new Uint8Array([0, 1, 2, 128, 250, 255, 64, 32]);
+	const envelope = createFileCleartextEnvelope(fileBytes, "report.bin", "application/octet-stream");
+	const ciphertext = Identity.EncryptFor(bob.summary, JSON.stringify(envelope));
+	const decryptedEnvelopeRaw = bob.encryptionKey.decrypt(ciphertext);
+	const parsed = parseFileCleartextEnvelope(decryptedEnvelopeRaw);
+	assertEquals(parsed.fileName, "report.bin");
+	assertEquals(parsed.fileSize, fileBytes.length);
+	assertEquals(Array.from(parsed.fileBytes), Array.from(fileBytes));
+});
+
+Deno.test("Alice and Bob: signed encrypted file verifies sender", () => {
+	const alice = new Identity("dilithium", "kyber");
+	const bob = new Identity("dilithium", "kyber");
+	const fileBytes = new Uint8Array([42, 43, 44, 45, 46]);
+	const envelope = createFileCleartextEnvelope(fileBytes, "signed.bin", "application/octet-stream");
+	const ciphertext = alice.signAndEncryptFor(JSON.stringify(envelope), bob.summary);
+	const result = bob.decryptAndVerify(ciphertext, alice.summary);
+	assertEquals(result.verified, true);
+	const parsed = parseFileCleartextEnvelope(result.message);
+	assertEquals(parsed.fileName, "signed.bin");
+	assertEquals(Array.from(parsed.fileBytes), Array.from(fileBytes));
+});
