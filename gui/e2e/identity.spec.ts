@@ -61,9 +61,11 @@ async function addDetail(
   path: string,
   detail: string,
   password = testPassword,
+  options?: { push?: boolean },
 ): Promise<{ pushed: boolean }> {
-  await addLocalDetail(page, path, detail, password);
-  return { pushed: false };
+  const pushed = options?.push ?? false;
+  await addLocalDetail(page, path, detail, password, pushed);
+  return { pushed };
 }
 
 async function addLocalDetail(
@@ -71,15 +73,24 @@ async function addLocalDetail(
   path: string,
   detail: string,
   password = testPassword,
+  push = false,
 ) {
   await page.locator(".nav-item", { hasText: "Identities" }).click();
   await expandSection(page, "Identity Details");
   await page.fill("#detail-path", path);
   await page.fill("#detail-value", detail);
-  await page.locator("#detail-push").setChecked(false);
+  await page.locator("#detail-push").setChecked(push);
   await page.getByRole("button", { name: "Add Detail", exact: true }).click();
   await submitPassword(page, password);
   await expect(page.locator("#identity-details-list")).toContainText(detail);
+}
+
+async function expectStatus(page: Page, expectedText: RegExp, kind?: string) {
+  const status = page.locator("#status");
+  await expect(status).toContainText(expectedText);
+  if (kind) {
+    await expect(status).toHaveAttribute("data-kind", kind);
+  }
 }
 
 async function ensureIdentitySelected(page: Page, identityName: string) {
@@ -154,6 +165,24 @@ test("creates and publishes a new identity", async ({ page }) => {
   }
 });
 
+test("pushes identity detail to server and it becomes searchable", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-detail-push-${runId}`;
+  const email = `push-${runId}@example.com`;
+
+  await generateIdentity(page, identityName);
+  await setServer(page, testServerUrl);
+  await publishIdentity(page, testServerUrl);
+  const { pushed } = await addDetail(page, "email", email, testPassword, { push: true });
+  expect(pushed).toBe(true);
+
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(fingerprint).toBeTruthy();
+
+  await expectServerIdentitiesContains(page, fingerprint, fingerprint);
+  await expectServerIdentitiesContains(page, fingerprint, email);
+});
+
 test("refreshes server identities and searches in contacts", async ({ page }) => {
   const identityName = `e2e-${Date.now()}`;
   const serverUrl = testServerUrl;
@@ -216,6 +245,121 @@ test("verifies detached signature with provided public keys", async ({ page }) =
   await page.locator("#verify-payload").click();
   await page.getByRole("button", { name: "Verify", exact: true }).click();
   await expect(page.locator("#verify-result")).toHaveText(/Valid/);
+});
+
+test("rejects tampered detached signature payload", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-tamper-${runId}`;
+  const messageText = `Tamper check message ${runId}`;
+
+  await generateIdentity(page, identityName);
+  await ensureIdentitySelected(page, identityName);
+
+  await page.locator(".nav-item", { hasText: "Sign / Verify" }).click();
+  await expandSection(page, "Sign Message");
+  await page.fill("#sign-message", messageText);
+  await page.locator("#sign-detached").setChecked(true);
+  await page.getByRole("button", { name: "Sign", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#sign-output")).not.toHaveValue("");
+  const detachedPayload = await page.locator("#sign-output").inputValue();
+  expect(detachedPayload).toBeTruthy();
+
+  const parsed = JSON.parse(detachedPayload) as {
+    signature: string;
+    identity?: Record<string, unknown>;
+  };
+  const publicIdentity = JSON.stringify(parsed.identity ?? {});
+  expect(parsed.identity).toBeTruthy();
+  parsed.signature = `${parsed.signature.slice(0, -1)}${parsed.signature.endsWith("A") ? "B" : "A"}`;
+  const tamperedPayload = JSON.stringify(parsed, null, 2);
+
+  await page.locator(".nav-item", { hasText: "Sign / Verify" }).click();
+  await expandSection(page, "Verify Signature");
+  await page.fill("#verify-payload", tamperedPayload);
+  await page.fill("#verify-message", messageText);
+  await page.locator("#verify-use-public-keys").setChecked(true);
+  await page.fill("#verify-public-keys", publicIdentity);
+  await page.fill("#verify-sender", "nonexistent-contact");
+  await page.keyboard.press("Escape");
+  await page.locator("#verify-payload").click();
+  await page.getByRole("button", { name: "Verify", exact: true }).click();
+  await expectStatus(page, /decode base64|invalid|failed|error/i, "error");
+  await expect(page.locator("#verify-result")).toHaveText("-");
+});
+
+test("shows sender validation failure when decrypting signed payload with wrong sender context", async ({
+  page,
+}) => {
+  const runId = Date.now();
+  const aliceIdentity = `e2e-wrong-sender-alice-${runId}`;
+  const bobIdentity = `e2e-wrong-sender-bob-${runId}`;
+  const messageText = `Wrong sender flow ${runId}`;
+
+  await generateIdentity(page, aliceIdentity);
+  await setServer(page, testServerUrl);
+  await publishIdentity(page, testServerUrl);
+  const aliceFingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(aliceFingerprint).toBeTruthy();
+
+  await generateIdentity(page, bobIdentity);
+  await setServer(page, testServerUrl);
+  await publishIdentity(page, testServerUrl);
+  const bobFingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(bobFingerprint).toBeTruthy();
+
+  // Alice needs Bob as a contact to encrypt for him.
+  await ensureIdentitySelected(page, aliceIdentity);
+  await expectServerIdentitiesContains(page, bobFingerprint, bobFingerprint);
+  const bobEntry = page.locator("#server-identities-list .server-identity-item", {
+    hasText: bobFingerprint,
+  });
+  await bobEntry.getByRole("button", { name: "Import as Contact", exact: true }).click();
+  await expect(page.locator("#contacts-list")).toContainText(bobFingerprint);
+
+  await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+  await expandSection(page, "Encrypt Message");
+  await page.fill("#enc-message", messageText);
+  await page.fill("#enc-recipient", bobFingerprint);
+  await page.keyboard.press("Escape");
+  await page.locator("#enc-message").click();
+  await page.locator("#enc-sign").setChecked(true);
+  await page.getByRole("button", { name: "Encrypt", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#enc-output")).not.toHaveValue("");
+  const encryptedPayload = await page.locator("#enc-output").inputValue();
+  expect(encryptedPayload).toBeTruthy();
+
+  // Bob intentionally has no server configured and no Alice contact; wrong sender should not verify.
+  await ensureIdentitySelected(page, bobIdentity);
+  await page.locator(".nav-item", { hasText: "Settings" }).click();
+  await expandSection(page, "Server Configuration");
+  await page.getByRole("button", { name: "Clear Server", exact: true }).click();
+
+  await page.locator(".nav-item", { hasText: "Encrypt / Decrypt" }).click();
+  await expandSection(page, "Decrypt Message");
+  await page.fill("#dec-payload", encryptedPayload);
+  await page.fill("#dec-sender", "definitely-not-a-contact");
+  await page.keyboard.press("Escape");
+  await page.locator("#dec-payload").click();
+  await page.getByRole("button", { name: "Decrypt", exact: true }).click();
+  await submitPassword(page);
+  await expect.poll(async () => page.locator("#dec-output").inputValue()).toContain(messageText);
+  await expect(page.locator("#dec-verified")).toHaveText(/Sender not in contacts/);
+});
+
+test("wrong password blocks publish and does not push identity to server", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-wrong-password-${runId}`;
+
+  await generateIdentity(page, identityName);
+  await setServer(page, testServerUrl);
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(fingerprint).toBeTruthy();
+
+  await publishIdentity(page, testServerUrl, "definitely-wrong-password");
+  await expectStatus(page, /error|failed|invalid|decrypt/i, "error");
+  await expectServerIdentitiesNotContains(page, fingerprint, fingerprint);
 });
 
 test.describe.serial("multi-user encrypted messaging flow", () => {
@@ -317,7 +461,7 @@ test.describe.serial("multi-user encrypted messaging flow", () => {
     await page.fill("#enc-file-recipient", bobFingerprint);
     await page.keyboard.press("Escape");
     await page.locator("#enc-file-sign").setChecked(true);
-    await page.getByRole("button", { name: "Encrypt File", exact: true }).click();
+    await page.locator("#encrypt-file-form").getByRole("button", { name: "Encrypt File", exact: true }).click();
     await submitPassword(page);
     await expect(page.locator("#enc-file-output")).not.toHaveValue("");
     const encryptedPayload = await page.locator("#enc-file-output").inputValue();
@@ -328,10 +472,10 @@ test.describe.serial("multi-user encrypted messaging flow", () => {
     await page.fill("#dec-file-payload", encryptedPayload);
     await page.fill("#dec-file-sender", aliceFingerprint);
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Decrypt File", exact: true }).click();
+    await page.locator("#decrypt-file-form").getByRole("button", { name: "Decrypt File", exact: true }).click();
     await submitPassword(page);
     await expect(page.locator("#dec-file-verified")).toHaveText(/Valid/);
-    await expect(page.locator("#dec-file-info")).toContainText("tiny.bin");
+    await expect(page.locator("#dec-file-info")).toHaveValue(/tiny\.bin/);
     await expect(page.locator("#dec-file-download-btn")).toBeEnabled();
   });
 });
@@ -454,4 +598,38 @@ test("revoked identitiy is removed from search results", async ({ page }) => {
   // the list of identites should now have one element and it should contain the text "(none found)"
   await expect(page.locator("#server-identities-list")).toContainText("(none found)");
   console.log("Revoked identity not found in search results");
+});
+
+test("revoked identity is blocked from browse/import trust path after propagation", async ({ page }) => {
+  const runId = Date.now();
+  const identityName = `e2e-revoke-blocked-${runId}`;
+
+  await generateIdentity(page, identityName);
+  await setServer(page, testServerUrl);
+  await publishIdentity(page, testServerUrl);
+  const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
+  expect(fingerprint).toBeTruthy();
+
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await expandSection(page, "Revocation");
+  await page.locator("summary", { hasText: "Revoke Entire Identity" }).click();
+  await page.fill("#revoke-identity-reason", "critical e2e trust-path check");
+  await page.locator("#revoke-identity-push").setChecked(true);
+  await page.getByRole("button", { name: "Revoke Identity", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, Revoke My Identity", exact: true }).click();
+  await page.getByRole("button", { name: "I Understand, Revoke", exact: true }).click();
+  await submitPassword(page);
+
+  await expectServerIdentitiesNotContains(page, fingerprint, fingerprint);
+
+  await page.locator(".nav-item", { hasText: "Contacts" }).click();
+  await expandSection(page, "Browse Server Identities");
+  await page.fill("#server-identities-override", testServerUrl);
+  await page.fill("#server-identities-search", fingerprint);
+  await page.getByRole("button", { name: "Load from Server", exact: true }).click();
+  await expect(page.locator("#server-identities-list")).toContainText("(none found)");
+  await expect(
+    page.locator("#server-identities-list").getByRole("button", { name: "Import as Contact", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator("#contacts-list")).not.toContainText(fingerprint);
 });
