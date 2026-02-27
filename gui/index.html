@@ -1588,10 +1588,6 @@
       </div>
       <div class="nav-section">
         <div class="nav-section-title">System</div>
-        <div class="nav-item" data-page="use-existing-email">
-          <span class="nav-item-icon">🧭</span>
-          Use Existing Email
-        </div>
         <div class="nav-item" data-page="settings">
           <span class="nav-item-icon">⚙️</span>
           Settings
@@ -2189,32 +2185,31 @@
         </form>
       </section>
 
-      <div class="two stack-vertical">
-        <section>
-          <h3>Inbox</h3>
-          <form id="mail-inbox-form" class="row" style="margin-bottom: 12px;">
-            <label>Folder
-              <input id="mail-folder" type="text" value="INBOX" />
-            </label>
-            <label>Limit
-              <input id="mail-limit" type="number" min="1" max="100" value="20" />
-            </label>
-            <button type="submit">Refresh</button>
-          </form>
-          <ul id="mail-message-list" class="small"></ul>
-        </section>
-        <section>
-          <h3>Message Reader</h3>
-          <label>Selected message
-            <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
+      <section>
+        <h3>Inbox</h3>
+        <form id="mail-inbox-form" class="row" style="margin-bottom: 12px;">
+          <label>Folder
+            <input id="mail-folder" type="text" value="INBOX" />
           </label>
-          <div class="row">
-            <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
-            <button type="button" class="secondary" id="mail-decrypt-btn">Decrypt EBP Payload</button>
-          </div>
-          <div class="small">Verification: <span id="mail-verify-result" class="result-badge pending">-</span></div>
-        </section>
-      </div>
+          <label>Limit
+            <input id="mail-limit" type="number" min="1" max="100" value="20" />
+          </label>
+          <button type="submit">Refresh</button>
+        </form>
+        <ul id="mail-message-list" class="small"></ul>
+      </section>
+
+      <section>
+        <h3>Message Reader</h3>
+        <label>Selected message
+          <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
+        </label>
+        <div class="row">
+          <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
+          <button type="button" class="secondary" id="mail-decrypt-btn">Decrypt EBP Payload</button>
+        </div>
+        <div class="small">Verification: <span id="mail-verify-result" class="result-badge pending">-</span></div>
+      </section>
 
       <section>
         <h3>Compose</h3>
@@ -2248,49 +2243,12 @@
           </div>
         </form>
       </section>
-    </div>
 
-    <!-- Page: Use Existing Email -->
-    <div class="page" id="page-use-existing-email">
-      <div class="page-header">
-        <h2>Use Existing Email</h2>
-        <p>How to connect your current mailbox to EBP from this app.</p>
-      </div>
       <section>
-        <h3>1) What You Need</h3>
-        <p class="small muted">Your existing mailbox credentials (often an app password), IMAP + SMTP enabled, and an EBP identity in this app.</p>
-      </section>
-      <section>
-        <h3>2) Connect Your Account</h3>
-        <p class="small muted">Open the <strong>Mail</strong> page and enter IMAP + SMTP host/port/TLS, username, and From address. Test the connection before sending.</p>
-      </section>
-      <section>
-        <h3>3) Send With EBP</h3>
-        <p class="small muted">In Compose, choose <strong>EBP sign + encrypt</strong>, pick a recipient contact, and send. The encrypted payload is embedded in the email body between EBP markers.</p>
-      </section>
-      <section>
-        <h3>4) Read and Decrypt</h3>
-        <p class="small muted">Open Inbox messages on the Mail page. If a message contains EBP markers, click <strong>Decrypt EBP Payload</strong> and provide your password.</p>
-      </section>
-      <section>
-        <h3>Troubleshooting</h3>
-        <p class="small muted">Authentication failed: verify app password. TLS errors: check secure toggle and correct ports. Decrypt failures: verify recipient/sender contact and correct identity password.</p>
-      </section>
-      <section>
-        <h3>Gmail Setup</h3>
-        <p class="small muted">Use an App Password (Google Account 2FA required). IMAP: <code>imap.gmail.com</code>:993 TLS on. SMTP: <code>smtp.gmail.com</code>:465 TLS on (or 587 with TLS upgrade).</p>
-      </section>
-      <section>
-        <h3>Outlook Setup</h3>
-        <p class="small muted">Outlook.com/Hotmail usually works with IMAP <code>imap-mail.outlook.com</code>:993 TLS on and SMTP <code>smtp-mail.outlook.com</code>:587 TLS upgrade (set SMTP secure off in this app).</p>
-      </section>
-      <section>
-        <h3>Proton Setup</h3>
-        <p class="small muted">Proton Mail requires Proton Mail Bridge for IMAP/SMTP desktop access. Configure this app with the local Bridge host/ports and Bridge-provided username/password.</p>
-      </section>
-      <section>
-        <h3>Security Boundary</h3>
-        <p class="small muted">Mailbox operations run locally on your PC through the GUI backend. Your remote `/server` remains for identity directory/revocation workflows, not mailbox transport.</p>
+        <h3>How to Connect Your Email</h3>
+        <p class="small muted"><strong>Gmail:</strong> turn on 2FA in your Google account, then create an App Password and use that in EBP as your IMAP/SMTP password. Typical settings: <code>imap.gmail.com:993</code> (TLS on) and <code>smtp.gmail.com:465</code> (TLS on).</p>
+        <p class="small muted"><strong>Proton Mail:</strong> use Proton Mail Bridge for desktop IMAP/SMTP access. Enter the Bridge host/ports and the Bridge-generated username/password in EBP.</p>
+        <p class="small muted"><strong>All Others:</strong> this works with most providers the same way. Use your provider's IMAP + SMTP settings, enable secure ports/TLS, and use an app-specific password if your provider requires it.</p>
       </section>
     </div>
 
