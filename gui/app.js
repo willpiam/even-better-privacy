@@ -1,6 +1,8 @@
 const statusEl = document.getElementById("status");
 const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
 const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
+const STARTUP_RETRY_ATTEMPTS = 12;
+const STARTUP_RETRY_DELAY_MS = 500;
 const ctxCurrent = document.getElementById("ctx-current");
 const ctxServer = document.getElementById("ctx-server");
 const ctxIdir = document.getElementById("ctx-idir");
@@ -840,6 +842,10 @@ async function api(path, init = {}) {
   return body;
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Contact Search Autocomplete
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1567,18 +1573,32 @@ function renderMailVerifyMeta(result) {
 async function loadAll() {
   try {
     setStatus("Loading…");
-    const [health, ctx, ids, contacts] = await Promise.all([
-      api("/health"),
-      api("/context"),
-      api("/identities"),
-      api("/contacts"),
-    ]);
-    state.currentIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
-    state.server = ctx?.server ?? null;
-    state.identityDir = ctx?.identityDir ?? "";
-    state.protocolVersion = ctx?.protocolVersion ?? null;
-    state.identities = ids?.identities ?? [];
-    state.contacts = contacts?.contacts ?? [];
+    let startupError = null;
+    for (let attempt = 1; attempt <= STARTUP_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        const [health, ctx, ids, contacts] = await Promise.all([
+          api("/health"),
+          api("/context"),
+          api("/identities"),
+          api("/contacts"),
+        ]);
+        startupError = null;
+        state.currentIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
+        state.server = ctx?.server ?? null;
+        state.identityDir = ctx?.identityDir ?? "";
+        state.protocolVersion = ctx?.protocolVersion ?? null;
+        state.identities = ids?.identities ?? [];
+        state.contacts = contacts?.contacts ?? [];
+        break;
+      } catch (err) {
+        startupError = err;
+        if (attempt < STARTUP_RETRY_ATTEMPTS) {
+          setStatus(`Starting local backend… (${attempt}/${STARTUP_RETRY_ATTEMPTS})`);
+          await sleep(STARTUP_RETRY_DELAY_MS);
+        }
+      }
+    }
+    if (startupError) throw startupError;
     
     renderContext();
     renderContacts();
@@ -1626,7 +1646,9 @@ async function loadAll() {
 
     setStatus("Ready", "success");
   } catch (e) {
-    setStatus(e.message, "error");
+    const base = e?.message ? String(e.message) : String(e);
+    setStatus(`Load failed: ${base} (backend: ${LOCAL_BACKEND_ORIGIN})`, "error");
+    console.error("loadAll failed", e);
   }
 }
 

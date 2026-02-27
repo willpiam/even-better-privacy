@@ -1,6 +1,8 @@
 use std::env;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::{PathBuf, Path};
-use std::process::{Child, Command};
+use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 #[derive(Clone)]
@@ -14,15 +16,30 @@ fn main() {
       let sidecar_state = sidecar_state.clone();
       move |app| {
         let sidecar_path = resolve_sidecar(app)?;
+        let mut log_file = init_sidecar_log(app).ok();
+        append_log_line(log_file.as_mut(), &format!("resolved sidecar: {}", sidecar_path.display()));
 
-        let child = Command::new(&sidecar_path)
+        let mut cmd = Command::new(&sidecar_path);
+        cmd
           .env("GUI_BACKEND_HOST", "127.0.0.1")
-          .env("GUI_BACKEND_PORT", "8787")
+          .env("GUI_BACKEND_PORT", "8787");
+
+        if let Some(log) = &log_file {
+          if let Ok(stdout_log) = log.try_clone() {
+            cmd.stdout(Stdio::from(stdout_log));
+          }
+          if let Ok(stderr_log) = log.try_clone() {
+            cmd.stderr(Stdio::from(stderr_log));
+          }
+        }
+
+        let child = cmd
           .spawn()
           .map_err(|e| tauri::Error::AssetNotFound(format!(
             "failed to spawn sidecar at {}: {e}",
             sidecar_path.display(),
           )))?;
+        append_log_line(log_file.as_mut(), &format!("spawned sidecar pid={}", child.id()));
 
         let mut guard = sidecar_state.0.lock().expect("sidecar lock");
         *guard = Some(child);
@@ -43,6 +60,23 @@ fn main() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+fn init_sidecar_log(app: &tauri::App) -> std::io::Result<std::fs::File> {
+  let log_dir = app
+    .path_resolver()
+    .app_log_dir()
+    .or_else(|| app.path_resolver().app_data_dir())
+    .unwrap_or_else(std::env::temp_dir);
+  fs::create_dir_all(&log_dir)?;
+  let log_path = log_dir.join("sidecar.log");
+  OpenOptions::new().create(true).append(true).open(log_path)
+}
+
+fn append_log_line(log_file: Option<&mut std::fs::File>, line: &str) {
+  if let Some(file) = log_file {
+    let _ = writeln!(file, "{line}");
+  }
 }
 
 fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
