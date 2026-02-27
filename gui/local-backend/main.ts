@@ -68,6 +68,9 @@ const STATUS = {
 	InternalServerError: 500,
 } as const;
 type StatusCode = (typeof STATUS)[keyof typeof STATUS];
+const VERSION_MAP = FILE_FORMAT_VERSIONS as Readonly<Record<string, number>>;
+const ENCRYPTED_FILE_FORMAT_VERSION = VERSION_MAP.encryptedFile ?? 1;
+const ENCRYPTED_SIGNED_FILE_FORMAT_VERSION = VERSION_MAP.encryptedSignedFile ?? 1;
 
 class HttpError extends Error {
 	status: StatusCode;
@@ -1078,7 +1081,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				const ciphertext = identity.signAndEncryptFor(cleartext, contact);
 				return json({
 					type: "ebp-encrypted-signed-file",
-					version: FILE_FORMAT_VERSIONS.encryptedSignedFile,
+					version: ENCRYPTED_SIGNED_FILE_FORMAT_VERSION,
 					recipientFingerprint: contact.fingerprint,
 					senderFingerprint: identity.toFingerprint(),
 					fileName,
@@ -1091,7 +1094,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			const ciphertext = Identity.EncryptFor(contact, cleartext);
 			return json({
 				type: "ebp-encrypted-file",
-				version: FILE_FORMAT_VERSIONS.encryptedFile,
+				version: ENCRYPTED_FILE_FORMAT_VERSION,
 				recipientFingerprint: contact.fingerprint,
 				fileName,
 				mimeType,
