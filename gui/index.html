@@ -1581,9 +1581,17 @@
           <span class="nav-item-icon">🔒</span>
           Encrypt / Decrypt
         </div>
+        <div class="nav-item" data-page="mail">
+          <span class="nav-item-icon">📧</span>
+          Mail
+        </div>
       </div>
       <div class="nav-section">
         <div class="nav-section-title">System</div>
+        <div class="nav-item" data-page="use-existing-email">
+          <span class="nav-item-icon">🧭</span>
+          Use Existing Email
+        </div>
         <div class="nav-item" data-page="settings">
           <span class="nav-item-icon">⚙️</span>
           Settings
@@ -2110,6 +2118,151 @@
           </form>
         </section>
       </div>
+    </div>
+
+    <!-- Page: Mail -->
+    <div class="page" id="page-mail">
+      <div class="page-header">
+        <h2>Mail</h2>
+        <p>Connect your existing mailbox locally (IMAP/SMTP) and send EBP-secured mail.</p>
+      </div>
+
+      <section>
+        <h3>Account Setup (Local Device)</h3>
+        <form id="mail-account-form" class="stack">
+          <div class="two">
+            <label>IMAP Host
+              <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
+            </label>
+            <label>IMAP Port
+              <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
+            </label>
+          </div>
+          <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
+          <div class="two">
+            <label>SMTP Host
+              <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
+            </label>
+            <label>SMTP Port
+              <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
+            </label>
+          </div>
+          <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
+          <div class="two">
+            <label>Username
+              <input id="mail-username" type="text" placeholder="you@example.com" />
+            </label>
+            <label>From Email
+              <input id="mail-from-email" type="text" placeholder="you@example.com" />
+            </label>
+          </div>
+          <label>From Name (optional)
+            <input id="mail-from-name" type="text" placeholder="Your Name" />
+          </label>
+          <div class="two">
+            <label>IMAP Password
+              <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
+            </label>
+            <label>SMTP Password
+              <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
+            </label>
+          </div>
+          <label class="inline"><input id="mail-persist-secrets" type="checkbox" /> Persist mail passwords on this device</label>
+          <div class="row">
+            <button type="submit">Save Mail Account</button>
+            <button type="button" class="secondary" id="mail-test-btn">Test IMAP + SMTP</button>
+          </div>
+          <p class="small muted">Mail credentials are used by the local backend on this PC. They are not sent to your remote EBP key server.</p>
+        </form>
+      </section>
+
+      <div class="two stack-vertical">
+        <section>
+          <h3>Inbox</h3>
+          <form id="mail-inbox-form" class="row" style="margin-bottom: 12px;">
+            <label>Folder
+              <input id="mail-folder" type="text" value="INBOX" />
+            </label>
+            <label>Limit
+              <input id="mail-limit" type="number" min="1" max="100" value="20" />
+            </label>
+            <button type="submit">Refresh</button>
+          </form>
+          <ul id="mail-message-list" class="small"></ul>
+        </section>
+        <section>
+          <h3>Message Reader</h3>
+          <label>Selected message
+            <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
+          </label>
+          <div class="row">
+            <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
+            <button type="button" class="secondary" id="mail-decrypt-btn">Decrypt EBP Payload</button>
+          </div>
+          <div class="small">Verification: <span id="mail-verify-result" class="result-badge pending">-</span></div>
+        </section>
+      </div>
+
+      <section>
+        <h3>Compose</h3>
+        <form id="mail-compose-form" class="stack">
+          <div class="two">
+            <label>To
+              <input id="mail-compose-to" type="text" placeholder="recipient@example.com" />
+            </label>
+            <label>Subject
+              <input id="mail-compose-subject" type="text" placeholder="Subject" />
+            </label>
+          </div>
+          <label>Mode
+            <select id="mail-compose-mode">
+              <option value="plain">Plaintext email</option>
+              <option value="ebp-encrypt">EBP sign + encrypt payload in email body</option>
+            </select>
+          </label>
+          <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
+            <input id="mail-compose-recipient" type="text" placeholder="alice or ebp1..." />
+          </label>
+          <label>Body
+            <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
+          </label>
+          <div>
+            <button type="submit">Send Email</button>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <!-- Page: Use Existing Email -->
+    <div class="page" id="page-use-existing-email">
+      <div class="page-header">
+        <h2>Use Existing Email</h2>
+        <p>How to connect your current mailbox to EBP from this app.</p>
+      </div>
+      <section>
+        <h3>1) What You Need</h3>
+        <p class="small muted">Your existing mailbox credentials (often an app password), IMAP + SMTP enabled, and an EBP identity in this app.</p>
+      </section>
+      <section>
+        <h3>2) Connect Your Account</h3>
+        <p class="small muted">Open the <strong>Mail</strong> page and enter IMAP + SMTP host/port/TLS, username, and From address. Test the connection before sending.</p>
+      </section>
+      <section>
+        <h3>3) Send With EBP</h3>
+        <p class="small muted">In Compose, choose <strong>EBP sign + encrypt</strong>, pick a recipient contact, and send. The encrypted payload is embedded in the email body between EBP markers.</p>
+      </section>
+      <section>
+        <h3>4) Read and Decrypt</h3>
+        <p class="small muted">Open Inbox messages on the Mail page. If a message contains EBP markers, click <strong>Decrypt EBP Payload</strong> and provide your password.</p>
+      </section>
+      <section>
+        <h3>Troubleshooting</h3>
+        <p class="small muted">Authentication failed: verify app password. TLS errors: check secure toggle and correct ports. Decrypt failures: verify recipient/sender contact and correct identity password.</p>
+      </section>
+      <section>
+        <h3>Security Boundary</h3>
+        <p class="small muted">Mailbox operations run locally on your PC through the GUI backend. Your remote `/server` remains for identity directory/revocation workflows, not mailbox transport.</p>
+      </section>
     </div>
 
     <!-- Page: Settings -->

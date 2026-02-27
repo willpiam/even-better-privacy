@@ -1,6 +1,9 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { serve } from "std/http/server";
+import nodemailer from "nodemailer";
+import { ImapFlow } from "imapflow";
+import { simpleParser } from "mailparser";
 import { Identity, ExternalIdentity, IdentityPublicData } from "../../core/Identity.ts";
 import { DilithiumSigningKey } from "../../core/Dilithium.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
@@ -19,7 +22,6 @@ import {
 	computeStateHash,
 	getContext,
 	listIdentityNames,
-	getIdentityPath,
 	readState,
 	stableStringify,
 	updateState,
@@ -28,6 +30,35 @@ import {
 } from "../../cli/utils.ts";
 
 type JsonValue = Record<string, unknown>;
+type MailAuthSecrets = { imapPassword: string; smtpPassword: string };
+type MailAccountConfig = {
+	imapHost: string;
+	imapPort: number;
+	imapSecure: boolean;
+	smtpHost: string;
+	smtpPort: number;
+	smtpSecure: boolean;
+	username: string;
+	fromEmail: string;
+	fromName: string;
+	persistSecrets: boolean;
+};
+
+const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
+	imapHost: "",
+	imapPort: 993,
+	imapSecure: true,
+	smtpHost: "",
+	smtpPort: 465,
+	smtpSecure: true,
+	username: "",
+	fromEmail: "",
+	fromName: "",
+	persistSecrets: false,
+};
+const MAIL_ACCOUNT_FILE = "mail-account.json";
+const MAIL_SECRET_FILE = "mail-account.secrets.json";
+const mailSecretCache = new Map<string, MailAuthSecrets>();
 
 const STATIC_ROOT = new URL("..", import.meta.url);
 const PROJECT_ROOT = new URL("../..", import.meta.url);
@@ -48,7 +79,11 @@ function randomHex(byteLength = 16): string {
 function safeFileName(fileName: string): string {
 	const normalized = fileName.replace(/\\/g, "/");
 	const base = normalized.split("/").pop() || "encrypted.bin";
-	return base.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\.\./g, "_");
+	const withoutControl = Array.from(base).filter((ch) => {
+		const code = ch.charCodeAt(0);
+		return !(code <= 31 || code === 127);
+	}).join("");
+	return withoutControl.replace(/\.\./g, "_");
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -239,6 +274,114 @@ function resolveServer(ctx: CLIContext, override?: string): string {
 	return server.replace(/\/+$/, "");
 }
 
+function toSafeString(value: unknown, max = 512): string {
+	return typeof value === "string" ? value.trim().slice(0, max) : "";
+}
+
+function clampPort(value: unknown, fallback: number): number {
+	const n = Number(value);
+	if (!Number.isInteger(n) || n < 1 || n > 65535) return fallback;
+	return n;
+}
+
+function asBool(value: unknown, fallback = false): boolean {
+	return typeof value === "boolean" ? value : fallback;
+}
+
+function mailboxPath(identityDir: string, fileName: string): string {
+	return `${identityDir}/${fileName}`;
+}
+
+async function readJsonFile<T>(path: string): Promise<T | null> {
+	try {
+		const raw = await Deno.readTextFile(path);
+		return JSON.parse(raw) as T;
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) return null;
+		return null;
+	}
+}
+
+async function writePrivateJson(path: string, value: unknown): Promise<void> {
+	await Deno.writeTextFile(path, JSON.stringify(value, null, 2));
+	try {
+		await Deno.chmod(path, 0o600);
+	} catch {
+		// Best effort on platforms where chmod may not be supported.
+	}
+}
+
+async function normalizeMailConfig(
+	identityDir: string,
+	payload?: Record<string, unknown> | null,
+): Promise<MailAccountConfig> {
+	const stored = await readJsonFile<MailAccountConfig>(mailboxPath(identityDir, MAIL_ACCOUNT_FILE));
+	const base = stored ?? DEFAULT_MAIL_ACCOUNT;
+	const p = payload ?? {};
+	const next: MailAccountConfig = {
+		imapHost: toSafeString(p.imapHost ?? base.imapHost),
+		imapPort: clampPort(p.imapPort ?? base.imapPort, 993),
+		imapSecure: asBool(p.imapSecure, base.imapSecure),
+		smtpHost: toSafeString(p.smtpHost ?? base.smtpHost),
+		smtpPort: clampPort(p.smtpPort ?? base.smtpPort, 465),
+		smtpSecure: asBool(p.smtpSecure, base.smtpSecure),
+		username: toSafeString(p.username ?? base.username),
+		fromEmail: toSafeString(p.fromEmail ?? base.fromEmail),
+		fromName: toSafeString(p.fromName ?? base.fromName),
+		persistSecrets: asBool(p.persistSecrets, base.persistSecrets),
+	};
+	if (!next.imapHost || !next.smtpHost || !next.username || !next.fromEmail) {
+		throw new HttpError(STATUS.BadRequest, "imapHost, smtpHost, username, and fromEmail are required");
+	}
+	return next;
+}
+
+async function loadMailSecrets(identityDir: string): Promise<MailAuthSecrets | null> {
+	const cached = mailSecretCache.get(identityDir);
+	if (cached?.imapPassword && cached?.smtpPassword) return cached;
+	const diskSecrets = await readJsonFile<Partial<MailAuthSecrets>>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	if (!diskSecrets?.imapPassword || !diskSecrets?.smtpPassword) return null;
+	const normalized = { imapPassword: diskSecrets.imapPassword, smtpPassword: diskSecrets.smtpPassword };
+	mailSecretCache.set(identityDir, normalized);
+	return normalized;
+}
+
+function getAddressText(addr: unknown): string {
+	if (!Array.isArray(addr) || addr.length === 0) return "";
+	const first = addr[0] as Record<string, unknown>;
+	const name = typeof first.name === "string" ? first.name : "";
+	const address = typeof first.address === "string" ? first.address : "";
+	if (!name) return address;
+	return `${name} <${address}>`;
+}
+
+function extractEbpPayload(text: string): Record<string, unknown> | null {
+	const start = "-----BEGIN EBP MESSAGE-----";
+	const end = "-----END EBP MESSAGE-----";
+	const s = text.indexOf(start);
+	const e = text.indexOf(end);
+	if (s < 0 || e < 0 || e <= s) return null;
+	const raw = text.slice(s + start.length, e).trim();
+	try {
+		const parsed = JSON.parse(raw);
+		if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+function buildImapClient(config: MailAccountConfig, secrets: MailAuthSecrets): ImapFlow {
+	return new ImapFlow({
+		host: config.imapHost,
+		port: config.imapPort,
+		secure: config.imapSecure,
+		auth: { user: config.username, pass: secrets.imapPassword },
+		socketTimeout: 20_000,
+		greetingTimeout: 20_000,
+	});
+}
+
 async function listContacts(ctx: CLIContext): Promise<Array<{ name: string; contact: ExternalIdentity }>> {
 	const contacts: Array<{ name: string; contact: ExternalIdentity }> = [];
 	try {
@@ -369,6 +512,222 @@ async function handleRequest(req: Request): Promise<Response> {
 				protocolVersion: PROTOCOL_VERSION,
 				componentVersion: COMPONENT_VERSIONS.guiLocalBackend,
 			});
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/account") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const ctx = await getContext(home ?? undefined);
+			const config = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
+			const secrets = await loadMailSecrets(ctx.identityDir);
+			return json({
+				account: config ?? null,
+				hasImapPassword: Boolean(secrets?.imapPassword),
+				hasSmtpPassword: Boolean(secrets?.smtpPassword),
+				localOnly: true,
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/account") {
+			const body = await readJson<{
+				home?: unknown;
+				account?: unknown;
+				imapPassword?: unknown;
+				smtpPassword?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const ctx = await getContext(home ?? undefined);
+			const accountPayload = body.account && typeof body.account === "object"
+				? body.account as Record<string, unknown>
+				: null;
+			const account = await normalizeMailConfig(ctx.identityDir, accountPayload);
+			await writePrivateJson(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE), account);
+
+			const existingSecrets = (await loadMailSecrets(ctx.identityDir)) ?? {
+				imapPassword: "",
+				smtpPassword: "",
+			};
+			const nextSecrets: MailAuthSecrets = {
+				imapPassword: typeof body.imapPassword === "string" && body.imapPassword.length > 0
+					? body.imapPassword
+					: existingSecrets.imapPassword,
+				smtpPassword: typeof body.smtpPassword === "string" && body.smtpPassword.length > 0
+					? body.smtpPassword
+					: existingSecrets.smtpPassword,
+			};
+			mailSecretCache.set(ctx.identityDir, nextSecrets);
+			const secretPath = mailboxPath(ctx.identityDir, MAIL_SECRET_FILE);
+			if (account.persistSecrets && nextSecrets.imapPassword && nextSecrets.smtpPassword) {
+				await writePrivateJson(secretPath, nextSecrets);
+			} else {
+				try {
+					await Deno.remove(secretPath);
+				} catch (e) {
+					if (!(e instanceof Deno.errors.NotFound)) throw e;
+				}
+			}
+			return json({
+				ok: true,
+				account,
+				hasImapPassword: Boolean(nextSecrets.imapPassword),
+				hasSmtpPassword: Boolean(nextSecrets.smtpPassword),
+				localOnly: true,
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/test") {
+			const body = await readJson<{ home?: unknown }>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const ctx = await getContext(home ?? undefined);
+			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
+			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
+			const secrets = await loadMailSecrets(ctx.identityDir);
+			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+
+			const imap = buildImapClient(account, secrets);
+			try {
+				await imap.connect();
+				await imap.mailboxOpen("INBOX", { readOnly: true });
+			} finally {
+				await imap.logout().catch(() => undefined);
+			}
+
+			const transport = nodemailer.createTransport({
+				host: account.smtpHost,
+				port: account.smtpPort,
+				secure: account.smtpSecure,
+				auth: { user: account.username, pass: secrets.smtpPassword },
+			});
+			await transport.verify();
+			return json({ ok: true });
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/messages") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
+			const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "20") || 20));
+			const ctx = await getContext(home ?? undefined);
+			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
+			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
+			const secrets = await loadMailSecrets(ctx.identityDir);
+			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+
+			const imap = buildImapClient(account, secrets);
+			try {
+				await imap.connect();
+				const mailbox = await imap.mailboxOpen(folder, { readOnly: true });
+				if (!mailbox.exists) return json({ folder, messages: [] });
+				const start = Math.max(1, mailbox.exists - limit + 1);
+				const range = `${start}:${mailbox.exists}`;
+				const results: Array<Record<string, unknown>> = [];
+				for await (const msg of imap.fetch(range, {
+					uid: true,
+					envelope: true,
+					internalDate: true,
+					flags: true,
+				})) {
+					results.push({
+						uid: msg.uid,
+						subject: msg.envelope?.subject ?? "(no subject)",
+						from: getAddressText(msg.envelope?.from),
+						to: getAddressText(msg.envelope?.to),
+						date: msg.internalDate ? new Date(msg.internalDate).getTime() : null,
+						seen: Array.isArray(msg.flags) ? msg.flags.includes("\\Seen") : false,
+					});
+				}
+				results.reverse();
+				return json({ folder, messages: results });
+			} finally {
+				await imap.logout().catch(() => undefined);
+			}
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
+			const uidRaw = url.searchParams.get("uid");
+			const uid = Number(uidRaw);
+			if (!Number.isInteger(uid) || uid <= 0) {
+				throw new HttpError(STATUS.BadRequest, "uid must be a positive integer");
+			}
+			const ctx = await getContext(home ?? undefined);
+			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
+			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
+			const secrets = await loadMailSecrets(ctx.identityDir);
+			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+
+			const imap = buildImapClient(account, secrets);
+			try {
+				await imap.connect();
+				await imap.mailboxOpen(folder, { readOnly: true });
+				const one = await imap.fetchOne(uid, {
+					uid: true,
+					envelope: true,
+					internalDate: true,
+					flags: true,
+					source: true,
+				}, { uid: true });
+				if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
+				const parsed = await simpleParser(one.source);
+				const textBody = parsed.text ?? "";
+				const htmlBody = parsed.html ? String(parsed.html) : "";
+				const ebpPayload = extractEbpPayload(textBody || htmlBody);
+				return json({
+					uid: one.uid,
+					subject: one.envelope?.subject ?? "(no subject)",
+					from: getAddressText(one.envelope?.from),
+					to: getAddressText(one.envelope?.to),
+					date: one.internalDate ? new Date(one.internalDate).getTime() : null,
+					text: textBody,
+					html: htmlBody,
+					attachments: parsed.attachments.map((att: { filename?: string; contentType?: string; size?: number }) => ({
+						filename: att.filename ?? "attachment",
+						contentType: att.contentType ?? "application/octet-stream",
+						size: att.size ?? 0,
+					})),
+					ebpPayload,
+				});
+			} finally {
+				await imap.logout().catch(() => undefined);
+			}
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/send") {
+			const body = await readJson<{
+				home?: unknown;
+				to?: unknown;
+				subject?: unknown;
+				text?: unknown;
+				html?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const to = toSafeString(body.to, 512);
+			const subject = toSafeString(body.subject, 512);
+			const text = typeof body.text === "string" ? body.text : "";
+			const htmlText = typeof body.html === "string" ? body.html : "";
+			if (!to || !subject) throw new HttpError(STATUS.BadRequest, "to and subject are required");
+			if (!text && !htmlText) throw new HttpError(STATUS.BadRequest, "text or html body is required");
+			const ctx = await getContext(home ?? undefined);
+			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
+			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
+			const secrets = await loadMailSecrets(ctx.identityDir);
+			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+			const transport = nodemailer.createTransport({
+				host: account.smtpHost,
+				port: account.smtpPort,
+				secure: account.smtpSecure,
+				auth: { user: account.username, pass: secrets.smtpPassword },
+			});
+			const from = account.fromName
+				? `"${account.fromName.replace(/"/g, "")}" <${account.fromEmail}>`
+				: account.fromEmail;
+			const info = await transport.sendMail({
+				from,
+				to,
+				subject,
+				text: text || undefined,
+				html: htmlText || undefined,
+			});
+			return json({ ok: true, messageId: info.messageId ?? null });
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/identities") {
@@ -876,7 +1235,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				let message: string;
 				try {
 					message = identity.encryptionKey.decrypt(ciphertext);
-				} catch (e) {
+				} catch {
 					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
 				}
 				return json({ message, verified: null, verifyStatus: "unsigned", signerFingerprint: null });
@@ -1033,7 +1392,7 @@ async function handleRequest(req: Request): Promise<Response> {
 							signerFingerprint,
 						});
 					}
-				} catch (e) {
+				} catch {
 					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
 				}
 			}

@@ -28,6 +28,9 @@ const state = {
   identityDir: "",
   isRevoked: false,
   revokedDetails: [],
+  mailAccount: null,
+  mailMessages: [],
+  selectedMailMessage: null,
 };
 let decryptedFileResult = null;
 
@@ -1493,6 +1496,21 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+function extractEbpPayloadFromText(text) {
+  const start = "-----BEGIN EBP MESSAGE-----";
+  const end = "-----END EBP MESSAGE-----";
+  const startIdx = text.indexOf(start);
+  const endIdx = text.indexOf(end);
+  if (startIdx < 0 || endIdx < 0 || endIdx <= startIdx) return null;
+  const raw = text.slice(startIdx + start.length, endIdx).trim();
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data loading
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1553,10 +1571,221 @@ async function loadAll() {
 
     // Render server identities (already loaded above)
     renderServerIdentities();
+    await loadMailAccount();
 
     setStatus("Ready", "success");
   } catch (e) {
     setStatus(e.message, "error");
+  }
+}
+
+async function loadMailAccount() {
+  try {
+    const res = await api("/mail/account");
+    state.mailAccount = res?.account || null;
+    if (!state.mailAccount) return;
+    document.getElementById("mail-imap-host").value = state.mailAccount.imapHost || "";
+    document.getElementById("mail-imap-port").value = String(state.mailAccount.imapPort || 993);
+    document.getElementById("mail-imap-secure").checked = Boolean(state.mailAccount.imapSecure);
+    document.getElementById("mail-smtp-host").value = state.mailAccount.smtpHost || "";
+    document.getElementById("mail-smtp-port").value = String(state.mailAccount.smtpPort || 465);
+    document.getElementById("mail-smtp-secure").checked = Boolean(state.mailAccount.smtpSecure);
+    document.getElementById("mail-username").value = state.mailAccount.username || "";
+    document.getElementById("mail-from-email").value = state.mailAccount.fromEmail || "";
+    document.getElementById("mail-from-name").value = state.mailAccount.fromName || "";
+    document.getElementById("mail-persist-secrets").checked = Boolean(state.mailAccount.persistSecrets);
+  } catch (err) {
+    console.warn("Could not load mail account", err);
+  }
+}
+
+function renderMailMessages() {
+  const list = document.getElementById("mail-message-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!state.mailMessages.length) {
+    list.innerHTML = "<li class='muted'>(no messages)</li>";
+    return;
+  }
+  for (const msg of state.mailMessages) {
+    const li = document.createElement("li");
+    li.className = "clickable";
+    li.innerHTML = `
+      <div><strong>${escapeHtml(msg.subject || "(no subject)")}</strong></div>
+      <div class="small muted">${escapeHtml(msg.from || "(unknown sender)")}</div>
+      <div class="small muted">${msg.date ? new Date(msg.date).toLocaleString() : ""}</div>
+    `;
+    li.addEventListener("click", async () => {
+      try {
+        const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
+        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}`);
+        state.selectedMailMessage = detail;
+        const body = detail.text || detail.html || "";
+        document.getElementById("mail-message-body").value = body;
+        updateVerifyResult("mail-verify-result", null, null);
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+    list.appendChild(li);
+  }
+}
+
+function initMailPage() {
+  const mailAccountForm = document.getElementById("mail-account-form");
+  if (mailAccountForm) {
+    mailAccountForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      await withLoading(btn, async () => {
+        try {
+          const account = {
+            imapHost: document.getElementById("mail-imap-host").value.trim(),
+            imapPort: Number(document.getElementById("mail-imap-port").value || 993),
+            imapSecure: document.getElementById("mail-imap-secure").checked,
+            smtpHost: document.getElementById("mail-smtp-host").value.trim(),
+            smtpPort: Number(document.getElementById("mail-smtp-port").value || 465),
+            smtpSecure: document.getElementById("mail-smtp-secure").checked,
+            username: document.getElementById("mail-username").value.trim(),
+            fromEmail: document.getElementById("mail-from-email").value.trim(),
+            fromName: document.getElementById("mail-from-name").value.trim(),
+            persistSecrets: document.getElementById("mail-persist-secrets").checked,
+          };
+          const imapPassword = document.getElementById("mail-imap-password").value;
+          const smtpPassword = document.getElementById("mail-smtp-password").value;
+          await api("/mail/account", {
+            method: "POST",
+            body: JSON.stringify({
+              account,
+              imapPassword: imapPassword || undefined,
+              smtpPassword: smtpPassword || undefined,
+            }),
+          });
+          setStatus("Mail account saved", "success");
+          document.getElementById("mail-imap-password").value = "";
+          document.getElementById("mail-smtp-password").value = "";
+          await loadMailAccount();
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+    });
+  }
+
+  const testBtn = document.getElementById("mail-test-btn");
+  if (testBtn) {
+    testBtn.addEventListener("click", async (e) => {
+      await withLoading(testBtn, async () => {
+        try {
+          await api("/mail/test", { method: "POST", body: JSON.stringify({}) });
+          setStatus("Mail connection test passed", "success");
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+    });
+  }
+
+  const inboxForm = document.getElementById("mail-inbox-form");
+  if (inboxForm) {
+    inboxForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      await withLoading(btn, async () => {
+        try {
+          const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
+          const limit = Number(document.getElementById("mail-limit").value || 20);
+          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}`);
+          state.mailMessages = res?.messages || [];
+          renderMailMessages();
+          setStatus("Inbox refreshed", "success");
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+    });
+  }
+
+  const decryptBtn = document.getElementById("mail-decrypt-btn");
+  if (decryptBtn) {
+    decryptBtn.addEventListener("click", async () => {
+      try {
+        if (!state.selectedMailMessage) throw new Error("Select a message first");
+        const text = state.selectedMailMessage.text || state.selectedMailMessage.html || "";
+        const payload = state.selectedMailMessage.ebpPayload || extractEbpPayloadFromText(text);
+        if (!payload) throw new Error("No EBP payload markers found in this message");
+        const sender = document.getElementById("mail-sender-contact").value.trim();
+        const password = await requestPassword("Enter password to decrypt EBP payload from email");
+        if (!password) return;
+        const res = await api("/decrypt", {
+          method: "POST",
+          body: JSON.stringify({
+            payload,
+            password,
+            sender: sender || undefined,
+          }),
+        });
+        document.getElementById("mail-message-body").value = res.message || "";
+        updateVerifyResult("mail-verify-result", res.verified, res.verifyStatus);
+        setStatus("EBP payload decrypted", "success");
+      } catch (err) {
+        updateVerifyResult("mail-verify-result", null, null);
+        setStatus(err.message, "error");
+      }
+    });
+  }
+
+  const composeForm = document.getElementById("mail-compose-form");
+  if (composeForm) {
+    composeForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const btn = e.target.querySelector('button[type="submit"]');
+      await withLoading(btn, async () => {
+        try {
+          const to = document.getElementById("mail-compose-to").value.trim();
+          const subject = document.getElementById("mail-compose-subject").value.trim();
+          const mode = document.getElementById("mail-compose-mode").value;
+          const body = document.getElementById("mail-compose-body").value;
+          const recipient = document.getElementById("mail-compose-recipient").value.trim();
+          if (!to || !subject) throw new Error("To and subject are required");
+
+          let outboundBody = body;
+          if (mode === "ebp-encrypt") {
+            if (!recipient) throw new Error("EBP recipient contact is required for EBP mode");
+            const password = await requestPassword("Enter password to sign/encrypt this email body");
+            if (!password) return;
+            const encrypted = await api("/encrypt", {
+              method: "POST",
+              body: JSON.stringify({
+                message: body,
+                recipient,
+                sign: true,
+                password,
+              }),
+            });
+            outboundBody = [
+              "-----BEGIN EBP MESSAGE-----",
+              JSON.stringify(encrypted, null, 2),
+              "-----END EBP MESSAGE-----",
+            ].join("\n");
+          }
+
+          await api("/mail/send", {
+            method: "POST",
+            body: JSON.stringify({
+              to,
+              subject,
+              text: outboundBody,
+            }),
+          });
+          setStatus("Email sent", "success");
+          document.getElementById("mail-compose-subject").value = "";
+          document.getElementById("mail-compose-body").value = "";
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+    });
   }
 }
 
@@ -2389,4 +2618,5 @@ document.getElementById("revoke-identity-form").addEventListener("submit", async
 initNavigation();
 initCollapsibleSections();
 initContactSearch();
+initMailPage();
 loadAll();

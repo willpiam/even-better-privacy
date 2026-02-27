@@ -1,6 +1,10 @@
 {
   "name": "ebp",
   "private": true,
+  "dependencies": {
+    "imapflow": "^1.2.10",
+    "mailparser": "^3.9.3"
+  },
   "devDependencies": {
     "@playwright/test": "^1.43.1"
   },
