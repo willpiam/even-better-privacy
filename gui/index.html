@@ -2139,7 +2139,9 @@
           <div class="row">
             <button type="button" class="secondary" id="mail-account-new">New Account</button>
           </div>
-          <label class="inline"><input id="mail-gmail-mode" type="checkbox" /> Gmail mode</label>
+          <div class="row">
+            <label class="inline"><input id="mail-gmail-mode" type="checkbox" /> Gmail mode</label>
+          </div>
           <div class="two">
             <label id="mail-imap-host-wrap">IMAP Host
               <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
@@ -2219,6 +2221,9 @@
       <section>
         <h3>Compose</h3>
         <form id="mail-compose-form" class="stack">
+          <label>From
+            <input id="mail-compose-from" type="text" readonly placeholder="No sender account selected" />
+          </label>
           <div class="two">
             <label>To
               <input id="mail-compose-to" type="text" placeholder="recipient@example.com" />
@@ -2230,7 +2235,7 @@
           <label>Mode
             <select id="mail-compose-mode">
               <option value="plain">Plaintext email</option>
-              <option value="ebp-encrypt">EBP sign + encrypt payload in email body</option>
+              <option value="ebp-encrypt" selected>EBP sign + encrypt payload in email body</option>
             </select>
           </label>
           <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
@@ -2244,7 +2249,7 @@
             <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
           </label>
           <div>
-            <button type="submit">Send Email</button>
+            <button id="mail-compose-send-btn" type="submit">Send Email</button>
           </div>
         </form>
       </section>

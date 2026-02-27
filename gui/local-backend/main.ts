@@ -892,6 +892,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				home?: unknown;
 				account?: unknown;
 				accountId?: unknown;
+				createNew?: unknown;
 				accountName?: unknown;
 				imapPassword?: unknown;
 				smtpPassword?: unknown;
@@ -903,10 +904,13 @@ async function handleRequest(req: Request): Promise<Response> {
 				? body.account as Record<string, unknown>
 				: null;
 			const requestedAccountId = toSafeString(body.accountId, 128);
+			const createNew = Boolean(body.createNew);
 			const accountName = toSafeString(body.accountName, 128) || "Mail account";
 			const pin = typeof body.pin === "string" ? body.pin : "";
 			const store = await getMailStore(ctx.identityDir);
-			const current = requestedAccountId
+			const current = createNew
+				? null
+				: requestedAccountId
 				? store.accounts.find((entry) => entry.id === requestedAccountId)
 				: (store.selectedAccountId ? store.accounts.find((entry) => entry.id === store.selectedAccountId) : null);
 			const accountConfig = normalizeMailConfig(current?.config ?? DEFAULT_MAIL_ACCOUNT, accountPayload);

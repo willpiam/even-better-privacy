@@ -31,6 +31,7 @@ const state = {
   mailAccount: null,
   mailAccounts: [],
   selectedMailAccountId: null,
+  mailCreatingNewAccount: false,
   mailSecretsInMemory: false,
   mailSecretsLocked: false,
   settingsMailCredentials: [],
@@ -1011,6 +1012,7 @@ function selectContact(input, contact) {
   // Use the contact name as the value (the backend resolves by name or fingerprint)
   input.value = contact.name;
   closeAllDropdowns();
+  updateMailComposeSendState();
 }
 
 function handleSearchKeydown(e, input, dropdown) {
@@ -1053,6 +1055,16 @@ function closeAllDropdowns() {
   });
   activeDropdown = null;
   highlightedIndex = -1;
+}
+
+function updateMailComposeSendState() {
+  const modeEl = document.getElementById("mail-compose-mode");
+  const recipientEl = document.getElementById("mail-compose-recipient");
+  const sendBtn = document.getElementById("mail-compose-send-btn");
+  if (!modeEl || !recipientEl || !sendBtn) return;
+  const requiresRecipient = modeEl.value === "ebp-encrypt";
+  const hasRecipient = recipientEl.value.trim().length > 0;
+  sendBtn.disabled = requiresRecipient && !hasRecipient;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1623,6 +1635,7 @@ async function loadMailAccount() {
     const res = await api("/mail/account");
     state.mailAccounts = res?.accounts || [];
     state.selectedMailAccountId = res?.selectedAccountId || res?.accountId || null;
+    state.mailCreatingNewAccount = false;
     state.mailSecretsInMemory = Boolean(res?.secretsInMemory);
     state.mailSecretsLocked = Boolean(res?.secretsLocked);
     state.mailAccount = res?.account || null;
@@ -1646,6 +1659,8 @@ async function loadMailAccount() {
     }
     if (!state.mailAccount) {
       document.getElementById("mail-account-name").value = "";
+      const composeFrom = document.getElementById("mail-compose-from");
+      if (composeFrom) composeFrom.value = "";
       return;
     }
     document.getElementById("mail-account-name").value = res?.accountName || "";
@@ -1657,6 +1672,7 @@ async function loadMailAccount() {
     document.getElementById("mail-smtp-secure").checked = Boolean(state.mailAccount.smtpSecure);
     document.getElementById("mail-username").value = state.mailAccount.username || "";
     document.getElementById("mail-from-email").value = state.mailAccount.fromEmail || "";
+    document.getElementById("mail-compose-from").value = state.mailAccount.fromEmail || "";
     document.getElementById("mail-from-name").value = state.mailAccount.fromName || "";
     document.getElementById("mail-persist-secrets").checked = Boolean(state.mailAccount.persistSecrets);
     document.getElementById("mail-gmail-mode").checked = Boolean(state.mailAccount.gmailMode);
@@ -1853,6 +1869,7 @@ function initMailPage() {
           method: "POST",
           body: JSON.stringify({ accountId }),
         });
+        state.mailCreatingNewAccount = false;
         await loadMailAccount();
         state.mailMessages = [];
         state.selectedMailMessage = null;
@@ -1870,6 +1887,7 @@ function initMailPage() {
   if (newAccountBtn) {
     newAccountBtn.addEventListener("click", () => {
       state.selectedMailAccountId = null;
+      state.mailCreatingNewAccount = true;
       if (accountSelect) accountSelect.value = "";
       document.getElementById("mail-account-name").value = "";
       document.getElementById("mail-imap-host").value = "";
@@ -1936,6 +1954,7 @@ function initMailPage() {
             method: "POST",
             body: JSON.stringify({
               accountId: state.selectedMailAccountId || undefined,
+              createNew: state.mailCreatingNewAccount,
               accountName: accountName || undefined,
               account,
               imapPassword: imapPassword || undefined,
@@ -2028,6 +2047,12 @@ function initMailPage() {
 
   const composeForm = document.getElementById("mail-compose-form");
   if (composeForm) {
+    const modeEl = document.getElementById("mail-compose-mode");
+    const recipientEl = document.getElementById("mail-compose-recipient");
+    if (modeEl) modeEl.addEventListener("change", updateMailComposeSendState);
+    if (recipientEl) recipientEl.addEventListener("input", updateMailComposeSendState);
+    updateMailComposeSendState();
+
     composeForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       const btn = e.target.querySelector('button[type="submit"]');

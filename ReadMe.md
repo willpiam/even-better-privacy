@@ -61,6 +61,23 @@ If you wish to create your own build file you should be able to do so fairly eas
 
 If all goes well this should result in an executable file... EBP.AppImage on Linux, __ on Mac, or __ on Windows. 
 
+## Native Email
+
+The EBP GUI includes a built-in interface for sending and receiving email.
+It connects directly over standard SMTP and IMAP protocols, making it compatible with most email providers.
+
+### Gmail Native Email
+
+Gmail users must enable 2-factor authentication and create an App Password for their Gmail account.
+
+### Proton Native Email
+
+Proton users must install and run Proton Mail Bridge to use EBP Native Email.
+
+### Outlook Native Email
+
+
+
 ## Email Chrome Extension
 
 EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
