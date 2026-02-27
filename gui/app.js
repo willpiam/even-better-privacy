@@ -1514,6 +1514,33 @@ function extractEbpPayloadFromText(text) {
   }
 }
 
+function extractEmailAddress(text) {
+  const raw = (text || "").trim();
+  const angle = raw.match(/<([^>]+)>/);
+  const candidate = angle ? angle[1] : raw;
+  const match = candidate.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0].toLowerCase() : "";
+}
+
+function renderMailVerifyMeta(result) {
+  const metaEl = document.getElementById("mail-verify-meta");
+  if (!metaEl) return;
+  if (!result) {
+    metaEl.textContent = "";
+    return;
+  }
+  const lines = [];
+  if (result.signerFingerprint) lines.push(`Signer fingerprint: ${result.signerFingerprint}`);
+  if (result.signerEmail) lines.push(`Signer email detail: ${result.signerEmail}`);
+  if (typeof result.signerEmailVerified === "boolean") {
+    lines.push(`Signer email verified: ${result.signerEmailVerified ? "yes" : "no"}`);
+  }
+  if (typeof result.signerMatchesSenderEmail === "boolean") {
+    lines.push(`Signer email matches sender address: ${result.signerMatchesSenderEmail ? "yes" : "no"}`);
+  }
+  metaEl.textContent = lines.join(" • ");
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Data loading
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1651,6 +1678,7 @@ function renderMailMessages() {
         const body = detail.text || detail.html || "";
         document.getElementById("mail-message-body").value = body;
         updateVerifyResult("mail-verify-result", null, null);
+        renderMailVerifyMeta(null);
       } catch (err) {
         setStatus(err.message, "error");
       }
@@ -1794,6 +1822,7 @@ function initMailPage() {
         const payload = state.selectedMailMessage.ebpPayload || extractEbpPayloadFromText(text);
         if (!payload) throw new Error("No EBP payload markers found in this message");
         const sender = document.getElementById("mail-sender-contact").value.trim();
+        const senderEmail = extractEmailAddress(state.selectedMailMessage.from || "");
         const password = await requestPassword("Enter password to decrypt EBP payload from email");
         if (!password) return;
         const res = await api("/decrypt", {
@@ -1802,13 +1831,16 @@ function initMailPage() {
             payload,
             password,
             sender: sender || undefined,
+            senderEmail: senderEmail || undefined,
           }),
         });
         document.getElementById("mail-message-body").value = res.message || "";
         updateVerifyResult("mail-verify-result", res.verified, res.verifyStatus);
+        renderMailVerifyMeta(res);
         setStatus("EBP payload decrypted", "success");
       } catch (err) {
         updateVerifyResult("mail-verify-result", null, null);
+        renderMailVerifyMeta(null);
         setStatus(err.message, "error");
       }
     });

@@ -441,6 +441,30 @@ function getAddressText(addr: unknown): string {
 	return `${name} <${address}>`;
 }
 
+function getIdentityDetailValue(details: unknown, path: string): string | null {
+	if (!details || typeof details !== "object") return null;
+	const record = details as Record<string, unknown>;
+	const raw = record[path];
+	if (typeof raw === "string") return raw;
+	if (Array.isArray(raw) && typeof raw[0] === "string") return raw[0];
+	return null;
+}
+
+function getIdentityDetailMeta(detailsMeta: unknown, path: string): Record<string, unknown> | null {
+	if (!detailsMeta || typeof detailsMeta !== "object") return null;
+	const raw = (detailsMeta as Record<string, unknown>)[path];
+	if (!raw || typeof raw !== "object") return null;
+	return raw as Record<string, unknown>;
+}
+
+function extractEmailAddress(value: string): string {
+	const text = (value ?? "").trim();
+	const angle = text.match(/<([^>]+)>/);
+	const candidate = angle ? angle[1] : text;
+	const match = candidate.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+	return match ? match[0].toLowerCase() : "";
+}
+
 function extractEbpPayload(text: string): Record<string, unknown> | null {
 	const start = "-----BEGIN EBP MESSAGE-----";
 	const end = "-----END EBP MESSAGE-----";
@@ -1377,12 +1401,14 @@ async function handleRequest(req: Request): Promise<Response> {
 				payload?: unknown;
 				password?: unknown;
 				sender?: unknown;
+				senderEmail?: unknown;
 				home?: unknown;
 				identity?: unknown;
 			}>(req);
 			const payload = body.payload as Record<string, unknown> | undefined;
 			const password = typeof body.password === "string" ? body.password : undefined;
 			const sender = typeof body.sender === "string" ? body.sender : undefined;
+			const senderEmail = typeof body.senderEmail === "string" ? body.senderEmail : undefined;
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
 			if (!payload) throw new HttpError(STATUS.BadRequest, "payload is required");
@@ -1401,7 +1427,15 @@ async function handleRequest(req: Request): Promise<Response> {
 				} catch {
 					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
 				}
-				return json({ message, verified: null, verifyStatus: "unsigned", signerFingerprint: null });
+				return json({
+					message,
+					verified: null,
+					verifyStatus: "unsigned",
+					signerFingerprint: null,
+					signerEmail: null,
+					signerEmailVerified: null,
+					signerMatchesSenderEmail: null,
+				});
 			}
 
 			if (type === "ebp-encrypted-signed-message") {
@@ -1410,6 +1444,9 @@ async function handleRequest(req: Request): Promise<Response> {
 				let contact: ExternalIdentity | undefined;
 				let isKnownContact = false;
 				let signerFingerprint: string | null = senderFp ?? null;
+				let signerEmail: string | null = null;
+				let signerEmailVerified: boolean | null = null;
+				let signerMatchesSenderEmail: boolean | null = null;
 				
 				// Helper to safely decrypt
 				const safeDecrypt = (ct: string): string => {
@@ -1437,6 +1474,7 @@ async function handleRequest(req: Request): Promise<Response> {
 							signingKeyDetails: data.signingKeyDetails,
 							encryptionKeyDetails: data.encryptionKeyDetails,
 							details: data.details ?? {},
+							detailsMeta: data.detailsMeta ?? {},
 						};
 					} catch {
 						return null;
@@ -1462,9 +1500,20 @@ async function handleRequest(req: Request): Promise<Response> {
 									verified: null,
 									verifyStatus: "sender_not_found",
 									signerFingerprint,
+									signerEmail,
+									signerEmailVerified,
+									signerMatchesSenderEmail,
 								});
 							} catch {
-								return json({ message, verified: null, verifyStatus: "sender_not_found", signerFingerprint });
+								return json({
+									message,
+									verified: null,
+									verifyStatus: "sender_not_found",
+									signerFingerprint,
+									signerEmail,
+									signerEmailVerified,
+									signerMatchesSenderEmail,
+								});
 							}
 						}
 					}
@@ -1484,9 +1533,20 @@ async function handleRequest(req: Request): Promise<Response> {
 									verified: null,
 									verifyStatus: "sender_not_in_contacts",
 									signerFingerprint,
+									signerEmail,
+									signerEmailVerified,
+									signerMatchesSenderEmail,
 								});
 							} catch {
-								return json({ message, verified: null, verifyStatus: "sender_not_in_contacts", signerFingerprint });
+								return json({
+									message,
+									verified: null,
+									verifyStatus: "sender_not_in_contacts",
+									signerFingerprint,
+									signerEmail,
+									signerEmailVerified,
+									signerMatchesSenderEmail,
+								});
 							}
 						}
 					}
@@ -1500,15 +1560,39 @@ async function handleRequest(req: Request): Promise<Response> {
 							verified: null,
 							verifyStatus: "sender_not_specified",
 							signerFingerprint,
+							signerEmail,
+							signerEmailVerified,
+							signerMatchesSenderEmail,
 						});
 					} catch {
-						return json({ message, verified: null, verifyStatus: "sender_not_specified", signerFingerprint });
+						return json({
+							message,
+							verified: null,
+							verifyStatus: "sender_not_specified",
+							signerFingerprint,
+							signerEmail,
+							signerEmailVerified,
+							signerMatchesSenderEmail,
+						});
 					}
 				}
 				
 				try {
 					const computedFingerprint = computeExternalFingerprint(contact);
 					signerFingerprint = contact.fingerprint ?? signerFingerprint;
+					signerEmail = getIdentityDetailValue(contact.details, "email");
+					const emailMeta = getIdentityDetailMeta(
+						(contact as ExternalIdentity & { detailsMeta?: unknown }).detailsMeta,
+						"email",
+					);
+					signerEmailVerified = emailMeta && typeof emailMeta.verified === "boolean"
+						? Boolean(emailMeta.verified)
+						: null;
+					const senderEmailNormalized = extractEmailAddress(senderEmail ?? "");
+					const signerEmailNormalized = extractEmailAddress(signerEmail ?? "");
+					if (senderEmailNormalized && signerEmailNormalized) {
+						signerMatchesSenderEmail = senderEmailNormalized === signerEmailNormalized;
+					}
 					if (!computedFingerprint || computedFingerprint !== contact.fingerprint) {
 						const message = safeDecrypt(ciphertext);
 						try {
@@ -1518,9 +1602,20 @@ async function handleRequest(req: Request): Promise<Response> {
 								verified: false,
 								verifyStatus: "fingerprint_mismatch",
 								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
 							});
 						} catch {
-							return json({ message, verified: false, verifyStatus: "fingerprint_mismatch", signerFingerprint });
+							return json({
+								message,
+								verified: false,
+								verifyStatus: "fingerprint_mismatch",
+								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
+							});
 						}
 					}
 					if (senderFp && computedFingerprint !== senderFp) {
@@ -1532,9 +1627,20 @@ async function handleRequest(req: Request): Promise<Response> {
 								verified: false,
 								verifyStatus: "fingerprint_mismatch",
 								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
 							});
 						} catch {
-							return json({ message, verified: false, verifyStatus: "fingerprint_mismatch", signerFingerprint });
+							return json({
+								message,
+								verified: false,
+								verifyStatus: "fingerprint_mismatch",
+								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
+							});
 						}
 					}
 					const result = identity.decryptAndVerify(ciphertext, contact);
@@ -1546,6 +1652,9 @@ async function handleRequest(req: Request): Promise<Response> {
 							verified: result.verified,
 							verifyStatus: status,
 							signerFingerprint,
+							signerEmail,
+							signerEmailVerified,
+							signerMatchesSenderEmail,
 						});
 					} else {
 						return json({
@@ -1553,6 +1662,9 @@ async function handleRequest(req: Request): Promise<Response> {
 							verified: false,
 							verifyStatus: "invalid",
 							signerFingerprint,
+							signerEmail,
+							signerEmailVerified,
+							signerMatchesSenderEmail,
 						});
 					}
 				} catch {
