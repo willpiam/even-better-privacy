@@ -2,11 +2,9 @@
 
 ![logo](./assets/tiny-logo.png)
 
-PGP supports no quantum secure standards and implementing those standards is going to be awkward. 
+EBP is a self-declared successor to PGP, built from the ground up to be quantum-secure.
 
-EBP is a self declared successor to PGP. 
-
-This is the EBP reference implementation.
+This repository contains the reference implementation of EBP. Its purpose is to demonstrate the architecture, protocols, and intended usage model of the system rather than to serve as a production-hardened security solution.
 
 Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
 
@@ -27,7 +25,8 @@ All released application files will come with an EBP signature from [ebpdk1m6l96
 - Navigate to [the releases page](https://github.com/willpiam/even-better-privacy/releases)
 - Locate the latest release and click the "Assets" dropdown
 - Select the `.dmg` file and download it
-- TODO: Finish this section.
+- Run the file, drag the image of the fox into the applications icon
+- EBP is now installed on your mac and can be run like any other application
 
 ### For Windows
 
