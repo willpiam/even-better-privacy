@@ -74,10 +74,6 @@ Gmail users must enable 2-factor authentication and create an App Password for t
 
 Proton users must install and run Proton Mail Bridge to use EBP Native Email.
 
-### Outlook Native Email
-
-
-
 ## Email Chrome Extension
 
 EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
