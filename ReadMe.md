@@ -400,3 +400,10 @@ graph TD
 - create full inventory and plan for hardening
 - mobile application
     - full feature parity with GUI
+- advanced email features
+    - search the inbox
+    - write and save drafts (encrypted with the same pin/password)
+    - render emails: images, layout, font, everything
+        - what is usually used? HTML? Markdown?
+    - scheduled send
+    - more traditional "email inbox" layout for the email page
