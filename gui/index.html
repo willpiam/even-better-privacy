@@ -2234,7 +2234,11 @@
             </select>
           </label>
           <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
-            <input id="mail-compose-recipient" type="text" placeholder="alice or ebp1..." />
+            <div class="contact-search-wrapper">
+              <input id="mail-compose-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
+              <button type="button" class="contact-search-clear" data-target="mail-compose-recipient" title="Clear">×</button>
+              <div class="contact-search-dropdown" id="mail-compose-recipient-dropdown"></div>
+            </div>
           </label>
           <label>Body
             <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>

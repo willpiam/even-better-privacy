@@ -842,6 +842,7 @@ const contactSearchFields = [
   { inputId: "dec-sender", dropdownId: "dec-sender-dropdown" },
   { inputId: "enc-file-recipient", dropdownId: "enc-file-recipient-dropdown" },
   { inputId: "dec-file-sender", dropdownId: "dec-file-sender-dropdown" },
+  { inputId: "mail-compose-recipient", dropdownId: "mail-compose-recipient-dropdown" },
 ];
 
 let activeDropdown = null;
