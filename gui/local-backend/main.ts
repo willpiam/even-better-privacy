@@ -458,14 +458,35 @@ function extractEbpPayload(text: string): Record<string, unknown> | null {
 }
 
 function buildImapClient(config: MailAccountConfig, secrets: MailAuthSecrets): ImapFlow {
-	return new ImapFlow({
+	const client = new ImapFlow({
 		host: config.imapHost,
 		port: config.imapPort,
 		secure: config.imapSecure,
 		auth: { user: config.username, pass: secrets.imapPassword },
+		// Deno's node:zlib compatibility can intermittently fail with COMPRESS=DEFLATE on some providers.
+		// Keep transport uncompressed for stability when fetching full message bodies.
+		disableCompression: true,
+		logger: false,
 		socketTimeout: 20_000,
 		greetingTimeout: 20_000,
 	});
+	// Some providers close TLS sockets without close_notify; don't let transport-level errors crash the process.
+	client.on("error", (_err) => {
+		// Swallow here; request handlers surface operation failures via caught await errors.
+	});
+	return client;
+}
+
+async function safeImapDisconnect(imap: ImapFlow): Promise<void> {
+	try {
+		await imap.logout();
+	} catch {
+		try {
+			imap.close();
+		} catch {
+			// ignore
+		}
+	}
 }
 
 async function listContacts(ctx: CLIContext): Promise<Array<{ name: string; contact: ExternalIdentity }>> {
@@ -728,7 +749,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				await imap.connect();
 				await imap.mailboxOpen("INBOX", { readOnly: true });
 			} finally {
-				await imap.logout().catch(() => undefined);
+				await safeImapDisconnect(imap);
 			}
 
 			const transport = nodemailer.createTransport({
@@ -777,7 +798,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				results.reverse();
 				return json({ accountId: resolved.account.id, folder, messages: results });
 			} finally {
-				await imap.logout().catch(() => undefined);
+				await safeImapDisconnect(imap);
 			}
 		}
 
@@ -828,7 +849,7 @@ async function handleRequest(req: Request): Promise<Response> {
 					ebpPayload,
 				});
 			} finally {
-				await imap.logout().catch(() => undefined);
+				await safeImapDisconnect(imap);
 			}
 		}
 
