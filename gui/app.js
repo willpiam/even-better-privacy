@@ -31,6 +31,9 @@ const state = {
   mailAccount: null,
   mailAccounts: [],
   selectedMailAccountId: null,
+  mailSecretsInMemory: false,
+  mailSecretsLocked: false,
+  settingsMailCredentials: [],
   mailMessages: [],
   selectedMailMessage: null,
 };
@@ -300,6 +303,10 @@ function navigateTo(pageId) {
 
   // Store in URL hash for bookmarking
   window.location.hash = pageId;
+
+  if (pageId === "mail") {
+    void ensureMailPageUnlocked();
+  }
 }
 
 navItems.forEach((item) => {
@@ -1602,6 +1609,8 @@ async function loadAll() {
     // Render server identities (already loaded above)
     renderServerIdentities();
     await loadMailAccount();
+    await loadStoredMailCredentials();
+    renderStoredMailCredentials();
 
     setStatus("Ready", "success");
   } catch (e) {
@@ -1614,6 +1623,8 @@ async function loadMailAccount() {
     const res = await api("/mail/account");
     state.mailAccounts = res?.accounts || [];
     state.selectedMailAccountId = res?.selectedAccountId || res?.accountId || null;
+    state.mailSecretsInMemory = Boolean(res?.secretsInMemory);
+    state.mailSecretsLocked = Boolean(res?.secretsLocked);
     state.mailAccount = res?.account || null;
     const accountSelect = document.getElementById("mail-account-select");
     if (accountSelect) {
@@ -1648,9 +1659,137 @@ async function loadMailAccount() {
     document.getElementById("mail-from-email").value = state.mailAccount.fromEmail || "";
     document.getElementById("mail-from-name").value = state.mailAccount.fromName || "";
     document.getElementById("mail-persist-secrets").checked = Boolean(state.mailAccount.persistSecrets);
+    document.getElementById("mail-gmail-mode").checked = Boolean(state.mailAccount.gmailMode);
+    applyGmailModeUi();
   } catch (err) {
     console.warn("Could not load mail account", err);
   }
+}
+
+function applyGmailModeUi() {
+  const gmailMode = document.getElementById("mail-gmail-mode")?.checked === true;
+  const fromEmail = document.getElementById("mail-from-email");
+  const username = document.getElementById("mail-username");
+  const imapHost = document.getElementById("mail-imap-host");
+  const smtpHost = document.getElementById("mail-smtp-host");
+  const imapPort = document.getElementById("mail-imap-port");
+  const smtpPort = document.getElementById("mail-smtp-port");
+
+  const toggleIds = [
+    "mail-imap-host-wrap",
+    "mail-imap-port-wrap",
+    "mail-smtp-host-wrap",
+    "mail-smtp-port-wrap",
+    "mail-username-wrap",
+    "mail-password-pair-wrap",
+  ];
+  for (const id of toggleIds) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = gmailMode ? "none" : "";
+  }
+  const appWrap = document.getElementById("mail-application-password-wrap");
+  if (appWrap) appWrap.style.display = gmailMode ? "" : "none";
+
+  if (gmailMode) {
+    if (imapHost) imapHost.value = "imap.gmail.com";
+    if (smtpHost) smtpHost.value = "smtp.gmail.com";
+    if (imapPort) imapPort.value = "993";
+    if (smtpPort) smtpPort.value = "465";
+    if (username && fromEmail) username.value = fromEmail.value.trim();
+  }
+}
+
+async function ensureMailPageUnlocked() {
+  await loadMailAccount();
+  return ensureMailSecretsUnlocked("Enter email PIN to unlock stored IMAP/SMTP passwords");
+}
+
+async function ensureMailSecretsUnlocked(promptText) {
+  if (!state.mailSecretsLocked || state.mailSecretsInMemory) return true;
+  const pin = await requestPassword(promptText);
+  if (!pin) {
+    setStatus("Email PIN is required", "error");
+    return false;
+  }
+  try {
+    await api("/mail/unlock", {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    });
+    await loadMailAccount();
+    setStatus("Mail passwords unlocked for this session", "success");
+    return true;
+  } catch (err) {
+    setStatus(err.message, "error");
+    return false;
+  }
+}
+
+async function loadStoredMailCredentials() {
+  try {
+    const res = await api("/mail/accounts");
+    state.settingsMailCredentials = res?.accounts || [];
+    if (typeof res?.secretsInMemory === "boolean") state.mailSecretsInMemory = res.secretsInMemory;
+    if (typeof res?.secretsLocked === "boolean") state.mailSecretsLocked = res.secretsLocked;
+  } catch {
+    state.settingsMailCredentials = [];
+  }
+}
+
+function renderStoredMailCredentials() {
+  const list = document.getElementById("settings-mail-credentials-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!state.settingsMailCredentials.length) {
+    list.innerHTML = "<li class='muted'>(no stored mail credentials)</li>";
+    return;
+  }
+  for (const item of state.settingsMailCredentials) {
+    const li = document.createElement("li");
+    const lockedLabel = item.hasStoredSecret === null ? "locked (PIN required)" : (item.hasStoredSecret ? "stored" : "not stored");
+    li.innerHTML = `
+      <div class="server-identity-item">
+        <div class="server-identity-info">
+          <strong>${escapeHtml(item.name || item.id)}</strong>
+          <div class="small muted">User: ${escapeHtml(item.username || "-")} • From: ${escapeHtml(item.fromEmail || "-")}</div>
+          <div class="small muted">IMAP: ${escapeHtml(item.imapHost || "-")} • SMTP: ${escapeHtml(item.smtpHost || "-")} • Secrets: ${escapeHtml(lockedLabel)}</div>
+        </div>
+        <div class="server-identity-actions">
+          <button class="danger btn-delete-mail-credential" data-account-id="${escapeHtml(item.id)}">Delete</button>
+        </div>
+      </div>
+    `;
+    list.appendChild(li);
+  }
+
+  list.querySelectorAll(".btn-delete-mail-credential").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const accountId = btn.dataset.accountId;
+      const target = state.settingsMailCredentials.find((entry) => entry.id === accountId);
+      const label = target?.name || accountId;
+      const confirmed = await showConfirmModal(
+        "Delete Stored Mail Credential",
+        `Delete stored mail credential "${label}" from this device?`,
+        "Delete"
+      );
+      if (!confirmed) return;
+      await withLoading(btn, async () => {
+        try {
+          const unlocked = await ensureMailSecretsUnlocked("Enter email PIN to manage stored mail credentials");
+          if (!unlocked) return;
+          await api("/mail/account/delete", {
+            method: "POST",
+            body: JSON.stringify({ accountId }),
+          });
+          setStatus(`Deleted stored mail credential "${label}"`, "success");
+          await loadAll();
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+    });
+  });
 }
 
 function renderMailMessages() {
@@ -1688,6 +1827,22 @@ function renderMailMessages() {
 }
 
 function initMailPage() {
+  const gmailModeToggle = document.getElementById("mail-gmail-mode");
+  if (gmailModeToggle) {
+    gmailModeToggle.addEventListener("change", () => {
+      applyGmailModeUi();
+    });
+  }
+  const fromEmailInput = document.getElementById("mail-from-email");
+  if (fromEmailInput) {
+    fromEmailInput.addEventListener("input", () => {
+      if (document.getElementById("mail-gmail-mode")?.checked) {
+        const username = document.getElementById("mail-username");
+        if (username) username.value = fromEmailInput.value.trim();
+      }
+    });
+  }
+
   const accountSelect = document.getElementById("mail-account-select");
   if (accountSelect) {
     accountSelect.addEventListener("change", async () => {
@@ -1728,6 +1883,9 @@ function initMailPage() {
       document.getElementById("mail-from-name").value = "";
       document.getElementById("mail-imap-password").value = "";
       document.getElementById("mail-smtp-password").value = "";
+      document.getElementById("mail-application-password").value = "";
+      document.getElementById("mail-gmail-mode").checked = false;
+      applyGmailModeUi();
       setStatus("Creating new mail account profile", "success");
     });
   }
@@ -1739,21 +1897,41 @@ function initMailPage() {
       const btn = e.target.querySelector('button[type="submit"]');
       await withLoading(btn, async () => {
         try {
+          const gmailMode = document.getElementById("mail-gmail-mode").checked;
+          const fromEmail = document.getElementById("mail-from-email").value.trim();
           const account = {
+            gmailMode,
             imapHost: document.getElementById("mail-imap-host").value.trim(),
             imapPort: Number(document.getElementById("mail-imap-port").value || 993),
             imapSecure: document.getElementById("mail-imap-secure").checked,
             smtpHost: document.getElementById("mail-smtp-host").value.trim(),
             smtpPort: Number(document.getElementById("mail-smtp-port").value || 465),
             smtpSecure: document.getElementById("mail-smtp-secure").checked,
-            username: document.getElementById("mail-username").value.trim(),
-            fromEmail: document.getElementById("mail-from-email").value.trim(),
+            username: gmailMode ? fromEmail : document.getElementById("mail-username").value.trim(),
+            fromEmail,
             fromName: document.getElementById("mail-from-name").value.trim(),
             persistSecrets: document.getElementById("mail-persist-secrets").checked,
           };
-          const imapPassword = document.getElementById("mail-imap-password").value;
-          const smtpPassword = document.getElementById("mail-smtp-password").value;
+          if (gmailMode) {
+            account.imapHost = "imap.gmail.com";
+            account.smtpHost = "smtp.gmail.com";
+            account.imapPort = 993;
+            account.smtpPort = 465;
+            account.imapSecure = true;
+            account.smtpSecure = true;
+          }
+          const appPassword = document.getElementById("mail-application-password").value;
+          const imapPassword = gmailMode ? appPassword : document.getElementById("mail-imap-password").value;
+          const smtpPassword = gmailMode ? appPassword : document.getElementById("mail-smtp-password").value;
           const accountName = document.getElementById("mail-account-name").value.trim();
+          let pin;
+          if (account.persistSecrets && !state.mailSecretsInMemory) {
+            pin = await requestPassword("Set or enter email PIN (used to encrypt mail passwords at rest)");
+            if (!pin) {
+              setStatus("Email PIN is required to persist encrypted mail passwords", "error");
+              return;
+            }
+          }
           await api("/mail/account", {
             method: "POST",
             body: JSON.stringify({
@@ -1762,11 +1940,13 @@ function initMailPage() {
               account,
               imapPassword: imapPassword || undefined,
               smtpPassword: smtpPassword || undefined,
+              pin: pin || undefined,
             }),
           });
           setStatus("Mail account saved", "success");
           document.getElementById("mail-imap-password").value = "";
           document.getElementById("mail-smtp-password").value = "";
+          document.getElementById("mail-application-password").value = "";
           await loadMailAccount();
         } catch (err) {
           setStatus(err.message, "error");

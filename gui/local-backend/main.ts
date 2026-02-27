@@ -32,6 +32,7 @@ import {
 type JsonValue = Record<string, unknown>;
 type MailAuthSecrets = { imapPassword: string; smtpPassword: string };
 type MailAccountConfig = {
+	gmailMode: boolean;
 	imapHost: string;
 	imapPort: number;
 	imapSecure: boolean;
@@ -55,8 +56,18 @@ type MailAccountStore = {
 	accounts: MailAccountRecord[];
 };
 type MailSecretsStore = Record<string, MailAuthSecrets>;
+type EncryptedMailSecretsEnvelope = {
+	version: 1;
+	algorithm: "AES-GCM";
+	kdf: "PBKDF2-SHA-256";
+	iterations: number;
+	salt: string;
+	iv: string;
+	ciphertext: string;
+};
 
 const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
+	gmailMode: false,
 	imapHost: "",
 	imapPort: 993,
 	imapSecure: true,
@@ -71,7 +82,9 @@ const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
 const MAIL_ACCOUNT_FILE = "mail-account.json";
 const MAIL_SECRET_FILE = "mail-account.secrets.json";
 const mailSecretCache = new Map<string, MailSecretsStore>();
+const mailPinCache = new Map<string, string>();
 const DEFAULT_MAIL_STORE: MailAccountStore = { selectedAccountId: null, accounts: [] };
+const MAIL_SECRETS_KDF_ITERATIONS = 210_000;
 
 const STATIC_ROOT = new URL("..", import.meta.url);
 const PROJECT_ROOT = new URL("../..", import.meta.url);
@@ -103,6 +116,19 @@ function bytesToBase64(bytes: Uint8Array): string {
 	let binary = "";
 	for (const b of bytes) binary += String.fromCharCode(b);
 	return btoa(binary);
+}
+
+function base64ToBytes(base64: string): Uint8Array {
+	const binary = atob(base64);
+	const out = new Uint8Array(binary.length);
+	for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
+	return out;
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+	const out = new Uint8Array(bytes.length);
+	out.set(bytes);
+	return out.buffer;
 }
 
 const STATUS = {
@@ -336,6 +362,7 @@ function normalizeMailConfig(
 ): MailAccountConfig {
 	const p = payload ?? {};
 	const next: MailAccountConfig = {
+		gmailMode: asBool(p.gmailMode, base.gmailMode),
 		imapHost: toSafeString(p.imapHost ?? base.imapHost),
 		imapPort: clampPort(p.imapPort ?? base.imapPort, 993),
 		imapSecure: asBool(p.imapSecure, base.imapSecure),
@@ -386,36 +413,149 @@ async function saveMailStore(identityDir: string, store: MailAccountStore): Prom
 	await writePrivateJson(mailboxPath(identityDir, MAIL_ACCOUNT_FILE), store);
 }
 
+function isEncryptedSecretsEnvelope(value: unknown): value is EncryptedMailSecretsEnvelope {
+	if (!value || typeof value !== "object") return false;
+	const v = value as Record<string, unknown>;
+	return v.version === 1 &&
+		v.algorithm === "AES-GCM" &&
+		v.kdf === "PBKDF2-SHA-256" &&
+		typeof v.iterations === "number" &&
+		typeof v.salt === "string" &&
+		typeof v.iv === "string" &&
+		typeof v.ciphertext === "string";
+}
+
+function parseLegacySecretsStore(raw: unknown): MailSecretsStore {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+	const maybeLegacy = raw as Partial<MailAuthSecrets>;
+	if (typeof maybeLegacy.imapPassword === "string" && typeof maybeLegacy.smtpPassword === "string") {
+		return { default: { imapPassword: maybeLegacy.imapPassword, smtpPassword: maybeLegacy.smtpPassword } };
+	}
+	const out: MailSecretsStore = {};
+	for (const [accountId, value] of Object.entries(raw as Record<string, unknown>)) {
+		if (!value || typeof value !== "object") continue;
+		const sec = value as Partial<MailAuthSecrets>;
+		if (typeof sec.imapPassword === "string" && typeof sec.smtpPassword === "string") {
+			out[accountId] = { imapPassword: sec.imapPassword, smtpPassword: sec.smtpPassword };
+		}
+	}
+	return out;
+}
+
+async function deriveMailSecretsKey(pin: string, salt: Uint8Array, iterations: number): Promise<CryptoKey> {
+	const baseKey = await crypto.subtle.importKey(
+		"raw",
+		new TextEncoder().encode(pin),
+		{ name: "PBKDF2" },
+		false,
+		["deriveKey"],
+	);
+	return crypto.subtle.deriveKey(
+		{ name: "PBKDF2", hash: "SHA-256", salt: toArrayBuffer(salt), iterations },
+		baseKey,
+		{ name: "AES-GCM", length: 256 },
+		false,
+		["encrypt", "decrypt"],
+	);
+}
+
+async function encryptSecretsStore(store: MailSecretsStore, pin: string): Promise<EncryptedMailSecretsEnvelope> {
+	const salt = crypto.getRandomValues(new Uint8Array(16));
+	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const key = await deriveMailSecretsKey(pin, salt, MAIL_SECRETS_KDF_ITERATIONS);
+	const plaintext = new TextEncoder().encode(JSON.stringify(store));
+	const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext);
+	return {
+		version: 1,
+		algorithm: "AES-GCM",
+		kdf: "PBKDF2-SHA-256",
+		iterations: MAIL_SECRETS_KDF_ITERATIONS,
+		salt: bytesToBase64(salt),
+		iv: bytesToBase64(iv),
+		ciphertext: bytesToBase64(new Uint8Array(cipherBuf)),
+	};
+}
+
+async function decryptSecretsEnvelope(envelope: EncryptedMailSecretsEnvelope, pin: string): Promise<MailSecretsStore> {
+	try {
+		const key = await deriveMailSecretsKey(pin, base64ToBytes(envelope.salt), envelope.iterations);
+		const iv = base64ToBytes(envelope.iv);
+		const ciphertext = base64ToBytes(envelope.ciphertext);
+		const plaintext = await crypto.subtle.decrypt(
+			{ name: "AES-GCM", iv: toArrayBuffer(iv) },
+			key,
+			toArrayBuffer(ciphertext),
+		);
+		return parseLegacySecretsStore(JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext))));
+	} catch {
+		throw new HttpError(STATUS.Unauthorized, "invalid email pin");
+	}
+}
+
+async function getMailSecretsStatus(identityDir: string): Promise<{ inMemory: boolean; locked: boolean; store: MailSecretsStore | null }> {
+	const cached = mailSecretCache.get(identityDir);
+	if (cached) return { inMemory: true, locked: false, store: cached };
+	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	if (!diskSecrets) return { inMemory: false, locked: false, store: {} };
+	if (isEncryptedSecretsEnvelope(diskSecrets)) return { inMemory: false, locked: true, store: null };
+	return { inMemory: false, locked: false, store: parseLegacySecretsStore(diskSecrets) };
+}
+
 async function getMailSecretsStore(identityDir: string): Promise<MailSecretsStore> {
 	const cached = mailSecretCache.get(identityDir);
 	if (cached) return cached;
 	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
-	if (diskSecrets && typeof diskSecrets === "object" && !Array.isArray(diskSecrets)) {
-		const maybeLegacy = diskSecrets as Partial<MailAuthSecrets>;
-		if (typeof maybeLegacy.imapPassword === "string" && typeof maybeLegacy.smtpPassword === "string") {
-			const legacy = { default: { imapPassword: maybeLegacy.imapPassword, smtpPassword: maybeLegacy.smtpPassword } };
-			mailSecretCache.set(identityDir, legacy);
-			return legacy;
-		}
-		const out: MailSecretsStore = {};
-		for (const [accountId, value] of Object.entries(diskSecrets as Record<string, unknown>)) {
-			if (!value || typeof value !== "object") continue;
-			const sec = value as Partial<MailAuthSecrets>;
-			if (typeof sec.imapPassword === "string" && typeof sec.smtpPassword === "string") {
-				out[accountId] = { imapPassword: sec.imapPassword, smtpPassword: sec.smtpPassword };
-			}
-		}
-		mailSecretCache.set(identityDir, out);
-		return out;
+	if (!diskSecrets) {
+		const empty: MailSecretsStore = {};
+		mailSecretCache.set(identityDir, empty);
+		return empty;
 	}
-	const empty: MailSecretsStore = {};
-	mailSecretCache.set(identityDir, empty);
-	return empty;
+	if (isEncryptedSecretsEnvelope(diskSecrets)) {
+		const pin = mailPinCache.get(identityDir);
+		if (!pin) throw new HttpError(STATUS.Unauthorized, "email pin required");
+		const decrypted = await decryptSecretsEnvelope(diskSecrets, pin);
+		mailSecretCache.set(identityDir, decrypted);
+		return decrypted;
+	}
+	const legacy = parseLegacySecretsStore(diskSecrets);
+	mailSecretCache.set(identityDir, legacy);
+	return legacy;
+}
+
+async function unlockMailSecretsWithPin(identityDir: string, pin: string): Promise<MailSecretsStore> {
+	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	if (!diskSecrets) {
+		const empty: MailSecretsStore = {};
+		mailSecretCache.set(identityDir, empty);
+		mailPinCache.set(identityDir, pin);
+		return empty;
+	}
+	if (isEncryptedSecretsEnvelope(diskSecrets)) {
+		const decrypted = await decryptSecretsEnvelope(diskSecrets, pin);
+		mailSecretCache.set(identityDir, decrypted);
+		mailPinCache.set(identityDir, pin);
+		return decrypted;
+	}
+	const legacy = parseLegacySecretsStore(diskSecrets);
+	mailSecretCache.set(identityDir, legacy);
+	mailPinCache.set(identityDir, pin);
+	return legacy;
 }
 
 async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {
 	mailSecretCache.set(identityDir, store);
-	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), store);
+	if (Object.keys(store).length === 0) {
+		try {
+			await Deno.remove(mailboxPath(identityDir, MAIL_SECRET_FILE));
+		} catch (e) {
+			if (!(e instanceof Deno.errors.NotFound)) throw e;
+		}
+		return;
+	}
+	const pin = mailPinCache.get(identityDir);
+	if (!pin) throw new HttpError(STATUS.Unauthorized, "email pin required");
+	const encrypted = await encryptSecretsStore(store, pin);
+	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), encrypted);
 }
 
 async function resolveMailAccount(identityDir: string, accountId?: string): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets }> {
@@ -652,8 +792,8 @@ async function handleRequest(req: Request): Promise<Response> {
 			const store = await getMailStore(ctx.identityDir);
 			const selectedId = requestedAccountId ?? store.selectedAccountId ?? store.accounts[0]?.id ?? null;
 			const account = selectedId ? (store.accounts.find((entry) => entry.id === selectedId) ?? null) : null;
-			const secretStore = await getMailSecretsStore(ctx.identityDir);
-			const secrets = account ? secretStore[account.id] : undefined;
+			const secretStatus = await getMailSecretsStatus(ctx.identityDir);
+			const secrets = account && secretStatus.store ? secretStatus.store[account.id] : undefined;
 			return json({
 				accountId: account?.id ?? null,
 				accountName: account?.name ?? null,
@@ -662,6 +802,8 @@ async function handleRequest(req: Request): Promise<Response> {
 				accounts: store.accounts.map((entry) => ({ id: entry.id, name: entry.name })),
 				hasImapPassword: Boolean(secrets?.imapPassword),
 				hasSmtpPassword: Boolean(secrets?.smtpPassword),
+				secretsInMemory: secretStatus.inMemory,
+				secretsLocked: secretStatus.locked,
 				localOnly: true,
 			});
 		}
@@ -670,12 +812,22 @@ async function handleRequest(req: Request): Promise<Response> {
 			const home = url.searchParams.get("home") ?? undefined;
 			const ctx = await getContext(home ?? undefined);
 			const store = await getMailStore(ctx.identityDir);
+			const secretStatus = await getMailSecretsStatus(ctx.identityDir);
+			const secretStore = secretStatus.store ?? {};
 			return json({
 				selectedAccountId: store.selectedAccountId,
+				secretsInMemory: secretStatus.inMemory,
+				secretsLocked: secretStatus.locked,
 				accounts: store.accounts.map((entry) => ({
 					id: entry.id,
 					name: entry.name,
 					updatedAt: entry.updatedAt,
+					username: entry.config.username,
+					fromEmail: entry.config.fromEmail,
+					imapHost: entry.config.imapHost,
+					smtpHost: entry.config.smtpHost,
+					persistSecrets: entry.config.persistSecrets,
+					hasStoredSecret: secretStatus.locked ? null : Boolean(secretStore[entry.id]),
 				})),
 			});
 		}
@@ -694,6 +846,47 @@ async function handleRequest(req: Request): Promise<Response> {
 			return json({ ok: true, selectedAccountId: accountId });
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/account/delete") {
+			const body = await readJson<{ home?: unknown; accountId?: unknown }>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const accountId = toSafeString(body.accountId, 128);
+			if (!accountId) throw new HttpError(STATUS.BadRequest, "accountId is required");
+			const ctx = await getContext(home ?? undefined);
+			const store = await getMailStore(ctx.identityDir);
+			const exists = store.accounts.some((entry) => entry.id === accountId);
+			if (!exists) throw new HttpError(STATUS.NotFound, "mail account not found");
+
+			const secretStatus = await getMailSecretsStatus(ctx.identityDir);
+			if (secretStatus.locked) {
+				throw new HttpError(STATUS.Unauthorized, "email pin required");
+			}
+			store.accounts = store.accounts.filter((entry) => entry.id !== accountId);
+			if (store.selectedAccountId === accountId) {
+				store.selectedAccountId = store.accounts[0]?.id ?? null;
+			}
+			await saveMailStore(ctx.identityDir, store);
+			const secretStore = secretStatus.store ?? {};
+			if (secretStore[accountId]) {
+				delete secretStore[accountId];
+				await saveMailSecretsStore(ctx.identityDir, secretStore);
+			}
+			return json({ ok: true, deletedAccountId: accountId, selectedAccountId: store.selectedAccountId });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/unlock") {
+			const body = await readJson<{ home?: unknown; pin?: unknown }>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const pin = typeof body.pin === "string" ? body.pin : "";
+			if (!pin) throw new HttpError(STATUS.BadRequest, "email pin is required");
+			const ctx = await getContext(home ?? undefined);
+			const store = await unlockMailSecretsWithPin(ctx.identityDir, pin);
+			return json({
+				ok: true,
+				unlocked: true,
+				accountCount: Object.keys(store).length,
+			});
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/account") {
 			const body = await readJson<{
 				home?: unknown;
@@ -702,6 +895,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				accountName?: unknown;
 				imapPassword?: unknown;
 				smtpPassword?: unknown;
+				pin?: unknown;
 			}>(req);
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const ctx = await getContext(home ?? undefined);
@@ -710,6 +904,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				: null;
 			const requestedAccountId = toSafeString(body.accountId, 128);
 			const accountName = toSafeString(body.accountName, 128) || "Mail account";
+			const pin = typeof body.pin === "string" ? body.pin : "";
 			const store = await getMailStore(ctx.identityDir);
 			const current = requestedAccountId
 				? store.accounts.find((entry) => entry.id === requestedAccountId)
@@ -732,6 +927,9 @@ async function handleRequest(req: Request): Promise<Response> {
 			store.selectedAccountId = accountId;
 			await saveMailStore(ctx.identityDir, store);
 
+			if (pin) {
+				mailPinCache.set(ctx.identityDir, pin);
+			}
 			const secretStore = await getMailSecretsStore(ctx.identityDir);
 			const existingSecrets = secretStore[accountId] ?? { imapPassword: "", smtpPassword: "" };
 			const nextSecrets: MailAuthSecrets = {

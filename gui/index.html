@@ -2139,26 +2139,27 @@
           <div class="row">
             <button type="button" class="secondary" id="mail-account-new">New Account</button>
           </div>
+          <label class="inline"><input id="mail-gmail-mode" type="checkbox" /> Gmail mode</label>
           <div class="two">
-            <label>IMAP Host
+            <label id="mail-imap-host-wrap">IMAP Host
               <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
             </label>
-            <label>IMAP Port
+            <label id="mail-imap-port-wrap">IMAP Port
               <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
             </label>
           </div>
           <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
           <div class="two">
-            <label>SMTP Host
+            <label id="mail-smtp-host-wrap">SMTP Host
               <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
             </label>
-            <label>SMTP Port
+            <label id="mail-smtp-port-wrap">SMTP Port
               <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
             </label>
           </div>
           <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
           <div class="two">
-            <label>Username
+            <label id="mail-username-wrap">Username
               <input id="mail-username" type="text" placeholder="you@example.com" />
             </label>
             <label>From Email
@@ -2168,14 +2169,17 @@
           <label>From Name (optional)
             <input id="mail-from-name" type="text" placeholder="Your Name" />
           </label>
-          <div class="two">
-            <label>IMAP Password
+          <div class="two" id="mail-password-pair-wrap">
+            <label id="mail-imap-password-wrap">IMAP Password
               <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
             </label>
-            <label>SMTP Password
+            <label id="mail-smtp-password-wrap">SMTP Password
               <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
             </label>
           </div>
+          <label id="mail-application-password-wrap" style="display: none;">Application Password
+            <input id="mail-application-password" type="password" placeholder="Google App Password" />
+          </label>
           <label class="inline"><input id="mail-persist-secrets" type="checkbox" /> Persist mail passwords on this device</label>
           <div class="row">
             <button type="submit">Save Mail Account</button>
@@ -2283,6 +2287,11 @@
         <div class="stack small">
           <div>Identity directory: <span class="mono muted" id="ctx-idir">-</span></div>
         </div>
+      </section>
+      <section>
+        <h3>Stored Mail Credentials</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Saved mail account entries on this device. Deleting an entry removes its stored credentials.</p>
+        <ul id="settings-mail-credentials-list" class="small"></ul>
       </section>
     </div>
 
