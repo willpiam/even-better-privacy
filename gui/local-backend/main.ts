@@ -43,6 +43,18 @@ type MailAccountConfig = {
 	fromName: string;
 	persistSecrets: boolean;
 };
+type MailAccountRecord = {
+	id: string;
+	name: string;
+	config: MailAccountConfig;
+	createdAt: number;
+	updatedAt: number;
+};
+type MailAccountStore = {
+	selectedAccountId: string | null;
+	accounts: MailAccountRecord[];
+};
+type MailSecretsStore = Record<string, MailAuthSecrets>;
 
 const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
 	imapHost: "",
@@ -58,7 +70,8 @@ const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
 };
 const MAIL_ACCOUNT_FILE = "mail-account.json";
 const MAIL_SECRET_FILE = "mail-account.secrets.json";
-const mailSecretCache = new Map<string, MailAuthSecrets>();
+const mailSecretCache = new Map<string, MailSecretsStore>();
+const DEFAULT_MAIL_STORE: MailAccountStore = { selectedAccountId: null, accounts: [] };
 
 const STATIC_ROOT = new URL("..", import.meta.url);
 const PROJECT_ROOT = new URL("../..", import.meta.url);
@@ -311,12 +324,16 @@ async function writePrivateJson(path: string, value: unknown): Promise<void> {
 	}
 }
 
-async function normalizeMailConfig(
-	identityDir: string,
+function isMailAccountConfig(value: unknown): value is MailAccountConfig {
+	if (!value || typeof value !== "object") return false;
+	const v = value as Record<string, unknown>;
+	return typeof v.imapHost === "string" && typeof v.smtpHost === "string" && typeof v.username === "string";
+}
+
+function normalizeMailConfig(
+	base: MailAccountConfig,
 	payload?: Record<string, unknown> | null,
-): Promise<MailAccountConfig> {
-	const stored = await readJsonFile<MailAccountConfig>(mailboxPath(identityDir, MAIL_ACCOUNT_FILE));
-	const base = stored ?? DEFAULT_MAIL_ACCOUNT;
+): MailAccountConfig {
 	const p = payload ?? {};
 	const next: MailAccountConfig = {
 		imapHost: toSafeString(p.imapHost ?? base.imapHost),
@@ -336,14 +353,83 @@ async function normalizeMailConfig(
 	return next;
 }
 
-async function loadMailSecrets(identityDir: string): Promise<MailAuthSecrets | null> {
+async function getMailStore(identityDir: string): Promise<MailAccountStore> {
+	const raw = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_ACCOUNT_FILE));
+	if (!raw) return { ...DEFAULT_MAIL_STORE };
+	if (isMailAccountConfig(raw)) {
+		const now = Date.now();
+		return {
+			selectedAccountId: "default",
+			accounts: [{
+				id: "default",
+				name: "Default account",
+				config: raw,
+				createdAt: now,
+				updatedAt: now,
+			}],
+		};
+	}
+	if (typeof raw === "object" && raw) {
+		const parsed = raw as Partial<MailAccountStore>;
+		const accounts = Array.isArray(parsed.accounts) ? parsed.accounts.filter((item) => {
+			if (!item || typeof item !== "object") return false;
+			const rec = item as Partial<MailAccountRecord>;
+			return typeof rec.id === "string" && typeof rec.name === "string" && isMailAccountConfig(rec.config);
+		}).map((item) => item as MailAccountRecord) : [];
+		const selectedAccountId = typeof parsed.selectedAccountId === "string" ? parsed.selectedAccountId : null;
+		return { selectedAccountId, accounts };
+	}
+	return { ...DEFAULT_MAIL_STORE };
+}
+
+async function saveMailStore(identityDir: string, store: MailAccountStore): Promise<void> {
+	await writePrivateJson(mailboxPath(identityDir, MAIL_ACCOUNT_FILE), store);
+}
+
+async function getMailSecretsStore(identityDir: string): Promise<MailSecretsStore> {
 	const cached = mailSecretCache.get(identityDir);
-	if (cached?.imapPassword && cached?.smtpPassword) return cached;
-	const diskSecrets = await readJsonFile<Partial<MailAuthSecrets>>(mailboxPath(identityDir, MAIL_SECRET_FILE));
-	if (!diskSecrets?.imapPassword || !diskSecrets?.smtpPassword) return null;
-	const normalized = { imapPassword: diskSecrets.imapPassword, smtpPassword: diskSecrets.smtpPassword };
-	mailSecretCache.set(identityDir, normalized);
-	return normalized;
+	if (cached) return cached;
+	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	if (diskSecrets && typeof diskSecrets === "object" && !Array.isArray(diskSecrets)) {
+		const maybeLegacy = diskSecrets as Partial<MailAuthSecrets>;
+		if (typeof maybeLegacy.imapPassword === "string" && typeof maybeLegacy.smtpPassword === "string") {
+			const legacy = { default: { imapPassword: maybeLegacy.imapPassword, smtpPassword: maybeLegacy.smtpPassword } };
+			mailSecretCache.set(identityDir, legacy);
+			return legacy;
+		}
+		const out: MailSecretsStore = {};
+		for (const [accountId, value] of Object.entries(diskSecrets as Record<string, unknown>)) {
+			if (!value || typeof value !== "object") continue;
+			const sec = value as Partial<MailAuthSecrets>;
+			if (typeof sec.imapPassword === "string" && typeof sec.smtpPassword === "string") {
+				out[accountId] = { imapPassword: sec.imapPassword, smtpPassword: sec.smtpPassword };
+			}
+		}
+		mailSecretCache.set(identityDir, out);
+		return out;
+	}
+	const empty: MailSecretsStore = {};
+	mailSecretCache.set(identityDir, empty);
+	return empty;
+}
+
+async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {
+	mailSecretCache.set(identityDir, store);
+	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), store);
+}
+
+async function resolveMailAccount(identityDir: string, accountId?: string): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets }> {
+	const store = await getMailStore(identityDir);
+	if (!store.accounts.length) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
+	const selected = accountId ?? store.selectedAccountId ?? store.accounts[0].id;
+	const account = store.accounts.find((entry) => entry.id === selected);
+	if (!account) throw new HttpError(STATUS.NotFound, "mail account not found");
+	const secretStore = await getMailSecretsStore(identityDir);
+	const secrets = secretStore[account.id];
+	if (!secrets?.imapPassword || !secrets?.smtpPassword) {
+		throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+	}
+	return { account, secrets };
 }
 
 function getAddressText(addr: unknown): string {
@@ -516,21 +602,59 @@ async function handleRequest(req: Request): Promise<Response> {
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/account") {
 			const home = url.searchParams.get("home") ?? undefined;
+			const requestedAccountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const ctx = await getContext(home ?? undefined);
-			const config = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
-			const secrets = await loadMailSecrets(ctx.identityDir);
+			const store = await getMailStore(ctx.identityDir);
+			const selectedId = requestedAccountId ?? store.selectedAccountId ?? store.accounts[0]?.id ?? null;
+			const account = selectedId ? (store.accounts.find((entry) => entry.id === selectedId) ?? null) : null;
+			const secretStore = await getMailSecretsStore(ctx.identityDir);
+			const secrets = account ? secretStore[account.id] : undefined;
 			return json({
-				account: config ?? null,
+				accountId: account?.id ?? null,
+				accountName: account?.name ?? null,
+				account: account?.config ?? null,
+				selectedAccountId: store.selectedAccountId ?? account?.id ?? null,
+				accounts: store.accounts.map((entry) => ({ id: entry.id, name: entry.name })),
 				hasImapPassword: Boolean(secrets?.imapPassword),
 				hasSmtpPassword: Boolean(secrets?.smtpPassword),
 				localOnly: true,
 			});
 		}
 
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/accounts") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const ctx = await getContext(home ?? undefined);
+			const store = await getMailStore(ctx.identityDir);
+			return json({
+				selectedAccountId: store.selectedAccountId,
+				accounts: store.accounts.map((entry) => ({
+					id: entry.id,
+					name: entry.name,
+					updatedAt: entry.updatedAt,
+				})),
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/account/select") {
+			const body = await readJson<{ home?: unknown; accountId?: unknown }>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const accountId = toSafeString(body.accountId, 128);
+			if (!accountId) throw new HttpError(STATUS.BadRequest, "accountId is required");
+			const ctx = await getContext(home ?? undefined);
+			const store = await getMailStore(ctx.identityDir);
+			const exists = store.accounts.some((entry) => entry.id === accountId);
+			if (!exists) throw new HttpError(STATUS.NotFound, "mail account not found");
+			store.selectedAccountId = accountId;
+			await saveMailStore(ctx.identityDir, store);
+			return json({ ok: true, selectedAccountId: accountId });
+		}
+
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/account") {
 			const body = await readJson<{
 				home?: unknown;
 				account?: unknown;
+				accountId?: unknown;
+				accountName?: unknown;
 				imapPassword?: unknown;
 				smtpPassword?: unknown;
 			}>(req);
@@ -539,13 +663,32 @@ async function handleRequest(req: Request): Promise<Response> {
 			const accountPayload = body.account && typeof body.account === "object"
 				? body.account as Record<string, unknown>
 				: null;
-			const account = await normalizeMailConfig(ctx.identityDir, accountPayload);
-			await writePrivateJson(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE), account);
-
-			const existingSecrets = (await loadMailSecrets(ctx.identityDir)) ?? {
-				imapPassword: "",
-				smtpPassword: "",
+			const requestedAccountId = toSafeString(body.accountId, 128);
+			const accountName = toSafeString(body.accountName, 128) || "Mail account";
+			const store = await getMailStore(ctx.identityDir);
+			const current = requestedAccountId
+				? store.accounts.find((entry) => entry.id === requestedAccountId)
+				: (store.selectedAccountId ? store.accounts.find((entry) => entry.id === store.selectedAccountId) : null);
+			const accountConfig = normalizeMailConfig(current?.config ?? DEFAULT_MAIL_ACCOUNT, accountPayload);
+			const accountId = current?.id ?? `mail-${randomHex(8)}`;
+			const now = Date.now();
+			const nextRecord: MailAccountRecord = {
+				id: accountId,
+				name: accountName,
+				config: accountConfig,
+				createdAt: current?.createdAt ?? now,
+				updatedAt: now,
 			};
+			if (current) {
+				store.accounts = store.accounts.map((entry) => entry.id === accountId ? nextRecord : entry);
+			} else {
+				store.accounts.push(nextRecord);
+			}
+			store.selectedAccountId = accountId;
+			await saveMailStore(ctx.identityDir, store);
+
+			const secretStore = await getMailSecretsStore(ctx.identityDir);
+			const existingSecrets = secretStore[accountId] ?? { imapPassword: "", smtpPassword: "" };
 			const nextSecrets: MailAuthSecrets = {
 				imapPassword: typeof body.imapPassword === "string" && body.imapPassword.length > 0
 					? body.imapPassword
@@ -554,20 +697,17 @@ async function handleRequest(req: Request): Promise<Response> {
 					? body.smtpPassword
 					: existingSecrets.smtpPassword,
 			};
-			mailSecretCache.set(ctx.identityDir, nextSecrets);
-			const secretPath = mailboxPath(ctx.identityDir, MAIL_SECRET_FILE);
-			if (account.persistSecrets && nextSecrets.imapPassword && nextSecrets.smtpPassword) {
-				await writePrivateJson(secretPath, nextSecrets);
-			} else {
-				try {
-					await Deno.remove(secretPath);
-				} catch (e) {
-					if (!(e instanceof Deno.errors.NotFound)) throw e;
-				}
+			secretStore[accountId] = nextSecrets;
+			if (!accountConfig.persistSecrets) {
+				delete secretStore[accountId];
 			}
+			await saveMailSecretsStore(ctx.identityDir, secretStore);
 			return json({
 				ok: true,
-				account,
+				accountId,
+				accountName: nextRecord.name,
+				account: accountConfig,
+				selectedAccountId: store.selectedAccountId,
 				hasImapPassword: Boolean(nextSecrets.imapPassword),
 				hasSmtpPassword: Boolean(nextSecrets.smtpPassword),
 				localOnly: true,
@@ -575,13 +715,13 @@ async function handleRequest(req: Request): Promise<Response> {
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/test") {
-			const body = await readJson<{ home?: unknown }>(req);
+			const body = await readJson<{ home?: unknown; accountId?: unknown }>(req);
 			const home = typeof body.home === "string" ? body.home : undefined;
+			const accountId = toSafeString(body.accountId, 128) || undefined;
 			const ctx = await getContext(home ?? undefined);
-			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
-			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
-			const secrets = await loadMailSecrets(ctx.identityDir);
-			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
 
 			const imap = buildImapClient(account, secrets);
 			try {
@@ -603,13 +743,13 @@ async function handleRequest(req: Request): Promise<Response> {
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/messages") {
 			const home = url.searchParams.get("home") ?? undefined;
+			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
 			const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "20") || 20));
 			const ctx = await getContext(home ?? undefined);
-			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
-			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
-			const secrets = await loadMailSecrets(ctx.identityDir);
-			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
 
 			const imap = buildImapClient(account, secrets);
 			try {
@@ -635,7 +775,7 @@ async function handleRequest(req: Request): Promise<Response> {
 					});
 				}
 				results.reverse();
-				return json({ folder, messages: results });
+				return json({ accountId: resolved.account.id, folder, messages: results });
 			} finally {
 				await imap.logout().catch(() => undefined);
 			}
@@ -643,6 +783,7 @@ async function handleRequest(req: Request): Promise<Response> {
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
 			const home = url.searchParams.get("home") ?? undefined;
+			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
 			const uidRaw = url.searchParams.get("uid");
 			const uid = Number(uidRaw);
@@ -650,10 +791,9 @@ async function handleRequest(req: Request): Promise<Response> {
 				throw new HttpError(STATUS.BadRequest, "uid must be a positive integer");
 			}
 			const ctx = await getContext(home ?? undefined);
-			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
-			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
-			const secrets = await loadMailSecrets(ctx.identityDir);
-			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
 
 			const imap = buildImapClient(account, secrets);
 			try {
@@ -672,6 +812,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				const htmlBody = parsed.html ? String(parsed.html) : "";
 				const ebpPayload = extractEbpPayload(textBody || htmlBody);
 				return json({
+					accountId: resolved.account.id,
 					uid: one.uid,
 					subject: one.envelope?.subject ?? "(no subject)",
 					from: getAddressText(one.envelope?.from),
@@ -694,12 +835,14 @@ async function handleRequest(req: Request): Promise<Response> {
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/send") {
 			const body = await readJson<{
 				home?: unknown;
+				accountId?: unknown;
 				to?: unknown;
 				subject?: unknown;
 				text?: unknown;
 				html?: unknown;
 			}>(req);
 			const home = typeof body.home === "string" ? body.home : undefined;
+			const accountId = toSafeString(body.accountId, 128) || undefined;
 			const to = toSafeString(body.to, 512);
 			const subject = toSafeString(body.subject, 512);
 			const text = typeof body.text === "string" ? body.text : "";
@@ -707,10 +850,9 @@ async function handleRequest(req: Request): Promise<Response> {
 			if (!to || !subject) throw new HttpError(STATUS.BadRequest, "to and subject are required");
 			if (!text && !htmlText) throw new HttpError(STATUS.BadRequest, "text or html body is required");
 			const ctx = await getContext(home ?? undefined);
-			const account = await readJsonFile<MailAccountConfig>(mailboxPath(ctx.identityDir, MAIL_ACCOUNT_FILE));
-			if (!account) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
-			const secrets = await loadMailSecrets(ctx.identityDir);
-			if (!secrets) throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
 			const transport = nodemailer.createTransport({
 				host: account.smtpHost,
 				port: account.smtpPort,
@@ -727,7 +869,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				text: text || undefined,
 				html: htmlText || undefined,
 			});
-			return json({ ok: true, messageId: info.messageId ?? null });
+			return json({ ok: true, accountId: resolved.account.id, messageId: info.messageId ?? null });
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/identities") {

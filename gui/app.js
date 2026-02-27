@@ -29,6 +29,8 @@ const state = {
   isRevoked: false,
   revokedDetails: [],
   mailAccount: null,
+  mailAccounts: [],
+  selectedMailAccountId: null,
   mailMessages: [],
   selectedMailMessage: null,
 };
@@ -1582,8 +1584,32 @@ async function loadAll() {
 async function loadMailAccount() {
   try {
     const res = await api("/mail/account");
+    state.mailAccounts = res?.accounts || [];
+    state.selectedMailAccountId = res?.selectedAccountId || res?.accountId || null;
     state.mailAccount = res?.account || null;
-    if (!state.mailAccount) return;
+    const accountSelect = document.getElementById("mail-account-select");
+    if (accountSelect) {
+      accountSelect.innerHTML = "";
+      if (!state.mailAccounts.length) {
+        const option = document.createElement("option");
+        option.value = "";
+        option.textContent = "(none)";
+        accountSelect.appendChild(option);
+      } else {
+        for (const account of state.mailAccounts) {
+          const option = document.createElement("option");
+          option.value = account.id;
+          option.textContent = account.name;
+          accountSelect.appendChild(option);
+        }
+      }
+      accountSelect.value = state.selectedMailAccountId || "";
+    }
+    if (!state.mailAccount) {
+      document.getElementById("mail-account-name").value = "";
+      return;
+    }
+    document.getElementById("mail-account-name").value = res?.accountName || "";
     document.getElementById("mail-imap-host").value = state.mailAccount.imapHost || "";
     document.getElementById("mail-imap-port").value = String(state.mailAccount.imapPort || 993);
     document.getElementById("mail-imap-secure").checked = Boolean(state.mailAccount.imapSecure);
@@ -1618,7 +1644,8 @@ function renderMailMessages() {
     li.addEventListener("click", async () => {
       try {
         const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
-        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}`);
+        const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
         state.selectedMailMessage = detail;
         const body = detail.text || detail.html || "";
         document.getElementById("mail-message-body").value = body;
@@ -1632,6 +1659,50 @@ function renderMailMessages() {
 }
 
 function initMailPage() {
+  const accountSelect = document.getElementById("mail-account-select");
+  if (accountSelect) {
+    accountSelect.addEventListener("change", async () => {
+      const accountId = accountSelect.value || "";
+      if (!accountId) return;
+      try {
+        await api("/mail/account/select", {
+          method: "POST",
+          body: JSON.stringify({ accountId }),
+        });
+        await loadMailAccount();
+        state.mailMessages = [];
+        state.selectedMailMessage = null;
+        renderMailMessages();
+        document.getElementById("mail-message-body").value = "";
+        updateVerifyResult("mail-verify-result", null, null);
+        setStatus("Mail account selected", "success");
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  }
+
+  const newAccountBtn = document.getElementById("mail-account-new");
+  if (newAccountBtn) {
+    newAccountBtn.addEventListener("click", () => {
+      state.selectedMailAccountId = null;
+      if (accountSelect) accountSelect.value = "";
+      document.getElementById("mail-account-name").value = "";
+      document.getElementById("mail-imap-host").value = "";
+      document.getElementById("mail-imap-port").value = "993";
+      document.getElementById("mail-imap-secure").checked = true;
+      document.getElementById("mail-smtp-host").value = "";
+      document.getElementById("mail-smtp-port").value = "465";
+      document.getElementById("mail-smtp-secure").checked = true;
+      document.getElementById("mail-username").value = "";
+      document.getElementById("mail-from-email").value = "";
+      document.getElementById("mail-from-name").value = "";
+      document.getElementById("mail-imap-password").value = "";
+      document.getElementById("mail-smtp-password").value = "";
+      setStatus("Creating new mail account profile", "success");
+    });
+  }
+
   const mailAccountForm = document.getElementById("mail-account-form");
   if (mailAccountForm) {
     mailAccountForm.addEventListener("submit", async (e) => {
@@ -1653,9 +1724,12 @@ function initMailPage() {
           };
           const imapPassword = document.getElementById("mail-imap-password").value;
           const smtpPassword = document.getElementById("mail-smtp-password").value;
+          const accountName = document.getElementById("mail-account-name").value.trim();
           await api("/mail/account", {
             method: "POST",
             body: JSON.stringify({
+              accountId: state.selectedMailAccountId || undefined,
+              accountName: accountName || undefined,
               account,
               imapPassword: imapPassword || undefined,
               smtpPassword: smtpPassword || undefined,
@@ -1677,7 +1751,10 @@ function initMailPage() {
     testBtn.addEventListener("click", async (e) => {
       await withLoading(testBtn, async () => {
         try {
-          await api("/mail/test", { method: "POST", body: JSON.stringify({}) });
+          await api("/mail/test", {
+            method: "POST",
+            body: JSON.stringify({ accountId: state.selectedMailAccountId || undefined }),
+          });
           setStatus("Mail connection test passed", "success");
         } catch (err) {
           setStatus(err.message, "error");
@@ -1695,7 +1772,8 @@ function initMailPage() {
         try {
           const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
           const limit = Number(document.getElementById("mail-limit").value || 20);
-          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}`);
+          const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}`);
           state.mailMessages = res?.messages || [];
           renderMailMessages();
           setStatus("Inbox refreshed", "success");
@@ -1773,6 +1851,7 @@ function initMailPage() {
           await api("/mail/send", {
             method: "POST",
             body: JSON.stringify({
+              accountId: state.selectedMailAccountId || undefined,
               to,
               subject,
               text: outboundBody,
