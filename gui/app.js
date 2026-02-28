@@ -39,6 +39,7 @@ const state = {
   settingsMailCredentials: [],
   mailMessages: [],
   selectedMailMessage: null,
+  selectedMailMessageUid: null,
 };
 let decryptedFileResult = null;
 
@@ -1838,20 +1839,28 @@ function renderMailMessages() {
     list.innerHTML = "<li class='muted'>(no messages)</li>";
     return;
   }
+  const selectedUid = state.selectedMailMessageUid != null
+    ? String(state.selectedMailMessageUid)
+    : (state.selectedMailMessage?.uid != null ? String(state.selectedMailMessage.uid) : null);
   for (const msg of state.mailMessages) {
     const li = document.createElement("li");
-    li.className = "clickable";
+    const isSelected = selectedUid !== null && String(msg.uid) === selectedUid;
+    li.className = isSelected ? "clickable current" : "clickable";
     li.innerHTML = `
       <div><strong>${escapeHtml(msg.subject || "(no subject)")}</strong></div>
       <div class="small muted">${escapeHtml(msg.from || "(unknown sender)")}</div>
       <div class="small muted">${msg.date ? new Date(msg.date).toLocaleString() : ""}</div>
     `;
     li.addEventListener("click", async () => {
+      state.selectedMailMessageUid = String(msg.uid);
+      renderMailMessages();
       try {
         const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
         const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
         const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
         state.selectedMailMessage = detail;
+        if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
+        renderMailMessages();
         const body = detail.text || detail.html || "";
         document.getElementById("mail-message-body").value = body;
         updateVerifyResult("mail-verify-result", null, null);
@@ -1895,6 +1904,7 @@ function initMailPage() {
         await loadMailAccount();
         state.mailMessages = [];
         state.selectedMailMessage = null;
+        state.selectedMailMessageUid = null;
         renderMailMessages();
         document.getElementById("mail-message-body").value = "";
         updateVerifyResult("mail-verify-result", null, null);

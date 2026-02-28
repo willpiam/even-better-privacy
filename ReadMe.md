@@ -73,6 +73,26 @@ Gmail users must enable 2-factor authentication and create an App Password for t
 
 Proton users must install and run Proton Mail Bridge to use EBP Native Email.
 
+### Testing Native Email
+
+Add two test email accounts two the dotenv file in order to test email functionality in the e2e test suite. 
+
+```ini
+TEST_EMAIL_ONE=""
+TEST_EMAIL_ONE_PWORD=""
+TEST_EMAIL_ONE_SMTP_PORT="465"
+TEST_EMAIL_ONE_SMTP_HOST=""
+TEST_EMAIL_ONE_IMAP_PORT="993"
+TEST_EMAIL_ONE_IMAP_HOST=""
+
+TEST_EMAIL_TWO=""
+TEST_EMAIL_TWO_PWORD=""
+TEST_EMAIL_TWO_SMTP_PORT="465"
+TEST_EMAIL_TWO_SMTP_HOST=""
+TEST_EMAIL_TWO_IMAP_PORT="993"
+TEST_EMAIL_TWO_IMAP_HOST=""
+```
+
 ## Email Chrome Extension
 
 EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
