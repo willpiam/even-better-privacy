@@ -1042,6 +1042,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
 			const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "20") || 20));
 			const searchQuery = toSafeString(url.searchParams.get("search"), 256) || "";
+			const pageRaw = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
 			const ctx = await getContext(home ?? undefined);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
 			const account = resolved.account.config;
@@ -1053,7 +1054,7 @@ async function handleRequest(req: Request): Promise<Response> {
 					const mailboxExists = mailboxRaw && typeof mailboxRaw === "object"
 						? Number(mailboxRaw.exists ?? 0)
 						: 0;
-					if (!mailboxExists) return json({ folder, messages: [] });
+					if (!mailboxExists) return json({ folder, messages: [], pagination: { page: 1, totalPages: 1, total: 0 } });
 
 					const fetchOpts = {
 						uid: true,
@@ -1084,25 +1085,34 @@ async function handleRequest(req: Request): Promise<Response> {
 							{ uid: true },
 						);
 						if (!uids || uids.length === 0) {
-							return json({ accountId: resolved.account.id, folder, messages: [] });
+							return json({ accountId: resolved.account.id, folder, messages: [], pagination: { page: 1, totalPages: 1, total: 0 } });
 						}
-						const uidSlice = uids.slice(-limit);
+						const total = uids.length;
+						const totalPages = Math.ceil(total / limit);
+						const page = Math.min(pageRaw, totalPages);
+						const sliceEnd = total - (page - 1) * limit;
+						const sliceStart = Math.max(0, sliceEnd - limit);
+						const uidSlice = uids.slice(sliceStart, sliceEnd);
 						const results: Array<Record<string, unknown>> = [];
 						for await (const msg of imap.fetch(uidSlice.join(","), fetchOpts, { uid: true })) {
 							results.push(buildResult(msg));
 						}
 						results.reverse();
-						return json({ accountId: resolved.account.id, folder, messages: results });
+						return json({ accountId: resolved.account.id, folder, messages: results, pagination: { page, totalPages, total } });
 					}
 
-					const start = Math.max(1, mailboxExists - limit + 1);
-					const range = `${start}:${mailboxExists}`;
+					const total = mailboxExists;
+					const totalPages = Math.ceil(total / limit);
+					const page = Math.min(pageRaw, totalPages);
+					const end = total - (page - 1) * limit;
+					const start = Math.max(1, end - limit + 1);
+					const range = `${start}:${end}`;
 					const results: Array<Record<string, unknown>> = [];
 					for await (const msg of imap.fetch(range, fetchOpts)) {
 						results.push(buildResult(msg));
 					}
 					results.reverse();
-					return json({ accountId: resolved.account.id, folder, messages: results });
+					return json({ accountId: resolved.account.id, folder, messages: results, pagination: { page, totalPages, total } });
 				});
 			});
 		}

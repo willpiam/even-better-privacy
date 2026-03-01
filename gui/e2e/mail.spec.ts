@@ -699,3 +699,137 @@ test("inbox search passes search param and filters displayed messages", async ({
   await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
 });
+
+test("inbox pagination navigates between pages", async ({ page }) => {
+  const now = Date.now();
+  const page1Messages = [
+    { uid: 3, subject: "Newest msg", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 1000, seen: false, size: 100 },
+    { uid: 2, subject: "Middle msg", from: "Bob <bob@example.com>", to: "Me <me@example.com>", date: now - 2000, seen: true, size: 200 },
+  ];
+  const page2Messages = [
+    { uid: 1, subject: "Oldest msg", from: "Carol <carol@example.com>", to: "Me <me@example.com>", date: now - 3000, seen: true, size: 150 },
+  ];
+
+  let lastPageParam: string | null = null;
+
+  await page.route("http://127.0.0.1:8787/api/v1/**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const { pathname } = url;
+
+    const json = (body: unknown) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+
+    if (pathname === "/api/v1/health") {
+      return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
+    }
+    if (pathname === "/api/v1/context") {
+      return json({
+        identityDir: "/tmp/ebp-test",
+        contactsDir: "/tmp/ebp-test/contacts",
+        currentIdentity: null,
+        server: null,
+        protocolVersion: "test",
+      });
+    }
+    if (pathname === "/api/v1/identities") {
+      return json({ identities: [], currentIdentity: null });
+    }
+    if (pathname === "/api/v1/contacts") {
+      return json({ contacts: [] });
+    }
+    if (pathname === "/api/v1/server/identities") {
+      return json({ identities: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    }
+    if (pathname === "/api/v1/mail/account") {
+      return json({
+        accountId: "mock-account",
+        accountName: "Mock account",
+        account: {
+          gmailMode: false,
+          imapHost: "imap.example.com",
+          imapPort: 993,
+          imapSecure: true,
+          smtpHost: "smtp.example.com",
+          smtpPort: 465,
+          smtpSecure: true,
+          username: "user@example.com",
+          fromEmail: "user@example.com",
+          fromName: "Mock User",
+          persistSecrets: false,
+        },
+        selectedAccountId: "mock-account",
+        accounts: [{ id: "mock-account", name: "Mock account" }],
+        hasImapPassword: true,
+        hasSmtpPassword: true,
+        secretsInMemory: true,
+        secretsLocked: false,
+      });
+    }
+    if (pathname === "/api/v1/mail/accounts") {
+      return json({
+        selectedAccountId: "mock-account",
+        secretsInMemory: true,
+        secretsLocked: false,
+        accounts: [],
+      });
+    }
+    if (pathname === "/api/v1/mail/messages") {
+      lastPageParam = url.searchParams.get("page");
+      const pg = Number(lastPageParam ?? "1") || 1;
+      if (pg === 2) {
+        return json({
+          accountId: "mock-account",
+          folder: "INBOX",
+          messages: page2Messages,
+          pagination: { page: 2, totalPages: 2, total: 3 },
+        });
+      }
+      return json({
+        accountId: "mock-account",
+        folder: "INBOX",
+        messages: page1Messages,
+        pagination: { page: 1, totalPages: 2, total: 3 },
+      });
+    }
+    if (request.method() === "POST") {
+      return json({ ok: true });
+    }
+    return route.fulfill({ status: 404, body: "not mocked" });
+  });
+
+  await goToMailPage(page);
+
+  // Initial refresh – page 1
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  await expect(page.locator("#mail-message-list")).toContainText("Newest msg");
+  await expect(page.locator("#mail-message-list")).toContainText("Middle msg");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Oldest msg");
+
+  // Pagination controls visible with correct info
+  await expect(page.locator("#mail-pagination")).toBeVisible();
+  await expect(page.locator("#mail-page-info")).toContainText("Page 1 of 2");
+  await expect(page.locator("#mail-prev")).toBeDisabled();
+  await expect(page.locator("#mail-next")).toBeEnabled();
+
+  // Navigate to page 2
+  await page.locator("#mail-next").click();
+  expect(lastPageParam).toBe("2");
+  await expect(page.locator("#mail-message-list")).toContainText("Oldest msg");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Newest msg");
+  await expect(page.locator("#mail-page-info")).toContainText("Page 2 of 2");
+  await expect(page.locator("#mail-prev")).toBeEnabled();
+  await expect(page.locator("#mail-next")).toBeDisabled();
+
+  // Navigate back to page 1
+  await page.locator("#mail-prev").click();
+  expect(lastPageParam).toBe("1");
+  await expect(page.locator("#mail-message-list")).toContainText("Newest msg");
+  await expect(page.locator("#mail-message-list")).toContainText("Middle msg");
+  await expect(page.locator("#mail-page-info")).toContainText("Page 1 of 2");
+  await expect(page.locator("#mail-prev")).toBeDisabled();
+  await expect(page.locator("#mail-next")).toBeEnabled();
+});

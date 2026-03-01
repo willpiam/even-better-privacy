@@ -39,6 +39,7 @@ const state = {
   mailSecretsLocked: false,
   settingsMailCredentials: [],
   mailMessages: [],
+  mailPagination: { page: 1, totalPages: 1, total: 0 },
   selectedMailMessage: null,
   selectedMailMessageUid: null,
   mailMessageLoading: false,
@@ -1990,6 +1991,54 @@ function renderMailMessages() {
   }
 }
 
+async function loadMailMessages(page = 1) {
+  const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
+  const limit = Number(document.getElementById("mail-limit").value || 20);
+  const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
+  const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+  const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
+  const pageQ = `&page=${encodeURIComponent(String(page))}`;
+  const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}${pageQ}`);
+  state.mailMessages = res?.messages || [];
+  if (res?.pagination) {
+    state.mailPagination = {
+      page: res.pagination.page ?? page,
+      totalPages: res.pagination.totalPages ?? 1,
+      total: res.pagination.total ?? state.mailMessages.length,
+    };
+  } else {
+    state.mailPagination = { page: 1, totalPages: 1, total: state.mailMessages.length };
+  }
+  renderMailMessages();
+  renderMailPagination();
+}
+
+function renderMailPagination() {
+  const container = document.getElementById("mail-pagination");
+  const pageInfo = document.getElementById("mail-page-info");
+  const prevBtn = document.getElementById("mail-prev");
+  const nextBtn = document.getElementById("mail-next");
+  if (!container) return;
+
+  const { page, totalPages, total } = state.mailPagination;
+
+  if (total === 0) {
+    container.style.display = "none";
+    return;
+  }
+
+  container.style.display = "flex";
+
+  if (totalPages <= 1) {
+    pageInfo.textContent = `${total} ${total === 1 ? "message" : "messages"}`;
+  } else {
+    pageInfo.textContent = `Page ${page} of ${totalPages} (${total} total)`;
+  }
+
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= totalPages;
+}
+
 function initMailPage() {
   const renderHtmlToggle = document.getElementById("settings-mail-render-html");
   if (renderHtmlToggle) {
@@ -2159,19 +2208,42 @@ function initMailPage() {
       const btn = e.target.querySelector('button[type="submit"]');
       await withLoading(btn, async () => {
         try {
-          const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
-          const limit = Number(document.getElementById("mail-limit").value || 20);
-          const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
-          const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
-          const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
-          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}`);
-          state.mailMessages = res?.messages || [];
-          renderMailMessages();
+          await loadMailMessages(1);
           setStatus("Inbox refreshed", "success");
         } catch (err) {
           setStatus(err.message, "error");
         }
       });
+    });
+  }
+
+  const mailPrevBtn = document.getElementById("mail-prev");
+  if (mailPrevBtn) {
+    mailPrevBtn.addEventListener("click", async () => {
+      const { page } = state.mailPagination;
+      if (page <= 1) return;
+      try {
+        setStatus("Loading...");
+        await loadMailMessages(page - 1);
+        setStatus("Ready", "success");
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  }
+
+  const mailNextBtn = document.getElementById("mail-next");
+  if (mailNextBtn) {
+    mailNextBtn.addEventListener("click", async () => {
+      const { page, totalPages } = state.mailPagination;
+      if (page >= totalPages) return;
+      try {
+        setStatus("Loading...");
+        await loadMailMessages(page + 1);
+        setStatus("Ready", "success");
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
     });
   }
 
