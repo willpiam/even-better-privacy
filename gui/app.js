@@ -40,6 +40,8 @@ const state = {
   mailMessages: [],
   selectedMailMessage: null,
   selectedMailMessageUid: null,
+  mailMessageLoading: false,
+  mailMessageLoadRequestId: 0,
 };
 let decryptedFileResult = null;
 
@@ -649,6 +651,21 @@ async function loadJsonFileIntoTextarea(fileInput, textareaId) {
 
 function bytesToHex(bytes) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function formatByteSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = bytes / 1024;
+  let unitIdx = 0;
+  while (size >= 1024 && unitIdx < units.length - 1) {
+    size /= 1024;
+    unitIdx += 1;
+  }
+  const rounded = size >= 100 ? size.toFixed(0) : size >= 10 ? size.toFixed(1) : size.toFixed(2);
+  return `${rounded.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")} ${units[unitIdx]}`;
 }
 
 async function hashFileSha256Hex(file) {
@@ -1831,6 +1848,12 @@ function renderStoredMailCredentials() {
   });
 }
 
+function setMailMessageLoading(loading) {
+  state.mailMessageLoading = loading;
+  const loadingEl = document.getElementById("mail-message-loading");
+  if (loadingEl) loadingEl.style.display = loading ? "block" : "none";
+}
+
 function renderMailMessages() {
   const list = document.getElementById("mail-message-list");
   if (!list) return;
@@ -1845,27 +1868,49 @@ function renderMailMessages() {
   for (const msg of state.mailMessages) {
     const li = document.createElement("li");
     const isSelected = selectedUid !== null && String(msg.uid) === selectedUid;
+    const dateText = msg.date ? new Date(msg.date).toLocaleString() : "";
+    const sizeText = formatByteSize(msg.size);
+    const readState = msg.seen ? "Read" : "Unread";
+    const metaParts = [
+      `To: ${escapeHtml(msg.to || "(unknown recipient)")}`,
+      `UID: ${escapeHtml(String(msg.uid ?? "-"))}`,
+      readState,
+      sizeText ? `Size: ${sizeText}` : "",
+    ].filter(Boolean);
     li.className = isSelected ? "clickable current" : "clickable";
     li.innerHTML = `
       <div><strong>${escapeHtml(msg.subject || "(no subject)")}</strong></div>
       <div class="small muted">${escapeHtml(msg.from || "(unknown sender)")}</div>
-      <div class="small muted">${msg.date ? new Date(msg.date).toLocaleString() : ""}</div>
+      <div class="small muted">${metaParts.join(" • ")}</div>
+      <div class="small muted">${escapeHtml(dateText)}</div>
     `;
     li.addEventListener("click", async () => {
+      const bodyEl = document.getElementById("mail-message-body");
+      const requestId = state.mailMessageLoadRequestId + 1;
+      state.mailMessageLoadRequestId = requestId;
+      state.selectedMailMessage = null;
       state.selectedMailMessageUid = String(msg.uid);
+      if (bodyEl) bodyEl.value = "";
+      updateVerifyResult("mail-verify-result", null, null);
+      renderMailVerifyMeta(null);
+      setMailMessageLoading(true);
       renderMailMessages();
       try {
         const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
         const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
         const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
+        if (requestId !== state.mailMessageLoadRequestId) return;
         state.selectedMailMessage = detail;
         if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
+        setMailMessageLoading(false);
         renderMailMessages();
         const body = detail.text || detail.html || "";
-        document.getElementById("mail-message-body").value = body;
+        if (bodyEl) bodyEl.value = body;
         updateVerifyResult("mail-verify-result", null, null);
         renderMailVerifyMeta(null);
       } catch (err) {
+        if (requestId !== state.mailMessageLoadRequestId) return;
+        setMailMessageLoading(false);
         setStatus(err.message, "error");
       }
     });
@@ -1905,8 +1950,11 @@ function initMailPage() {
         state.mailMessages = [];
         state.selectedMailMessage = null;
         state.selectedMailMessageUid = null;
+        state.mailMessageLoadRequestId += 1;
+        setMailMessageLoading(false);
         renderMailMessages();
-        document.getElementById("mail-message-body").value = "";
+        const bodyEl = document.getElementById("mail-message-body");
+        if (bodyEl) bodyEl.value = "";
         updateVerifyResult("mail-verify-result", null, null);
         setStatus("Mail account selected", "success");
       } catch (err) {

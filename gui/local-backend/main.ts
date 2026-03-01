@@ -631,7 +631,9 @@ function buildImapClient(config: MailAccountConfig, secrets: MailAuthSecrets): I
 		// Keep transport uncompressed for stability when fetching full message bodies.
 		disableCompression: true,
 		logger: false,
-		socketTimeout: 20_000,
+		// ImapFlow docs describe socketTimeout as inactivity timeout with a much higher default (300_000ms).
+		// Keep close to upstream behavior; 20s is too aggressive and causes spurious NoConnection errors.
+		socketTimeout: 300_000,
 		greetingTimeout: 20_000,
 	});
 	// Some providers close TLS sockets without close_notify; don't let transport-level errors crash the process.
@@ -641,15 +643,59 @@ function buildImapClient(config: MailAccountConfig, secrets: MailAuthSecrets): I
 	return client;
 }
 
-async function safeImapDisconnect(imap: ImapFlow): Promise<void> {
+function safeImapDisconnect(imap: ImapFlow): void {
 	try {
-		await imap.logout();
+		// LOGOUT can fail on already dropped sockets; close is safest for short-lived request-scoped clients.
+		imap.close();
 	} catch {
+		// ignore
+	}
+}
+
+function isNoConnectionError(err: unknown): boolean {
+	if (!err || typeof err !== "object") return false;
+	const e = err as { code?: unknown; message?: unknown; name?: unknown };
+	if (e.code === "NoConnection") return true;
+	if (e.name === "NoConnectionError") return true;
+	const message = typeof e.message === "string" ? e.message.toLowerCase() : "";
+	return message.includes("connection not available");
+}
+
+async function withImapReconnect<T>(
+	config: MailAccountConfig,
+	secrets: MailAuthSecrets,
+	work: (imap: ImapFlow) => Promise<T>,
+): Promise<T> {
+	let lastErr: unknown = null;
+	for (let attempt = 0; attempt < 2; attempt += 1) {
+		const imap = buildImapClient(config, secrets);
 		try {
-			imap.close();
-		} catch {
-			// ignore
+			await imap.connect();
+			return await work(imap);
+		} catch (err) {
+			lastErr = err;
+			if (attempt === 0 && isNoConnectionError(err)) {
+				continue;
+			}
+			throw err;
+		} finally {
+			safeImapDisconnect(imap);
 		}
+	}
+	throw lastErr;
+}
+
+async function withMailboxLock<T>(
+	imap: ImapFlow,
+	folder: string,
+	work: () => Promise<T>,
+): Promise<T> {
+	// ImapFlow recommends getMailboxLock() over mailboxOpen() for safer transactional mailbox operations.
+	const lock = await imap.getMailboxLock(folder, { readOnly: true });
+	try {
+		return await work();
+	} finally {
+		lock.release();
 	}
 }
 
@@ -973,9 +1019,11 @@ async function handleRequest(req: Request): Promise<Response> {
 			const imap = buildImapClient(account, secrets);
 			try {
 				await imap.connect();
-				await imap.mailboxOpen("INBOX", { readOnly: true });
+				await withMailboxLock(imap, "INBOX", async () => {
+					// lock acquire itself validates mailbox open/access
+				});
 			} finally {
-				await safeImapDisconnect(imap);
+				safeImapDisconnect(imap);
 			}
 
 			const transport = nodemailer.createTransport({
@@ -998,34 +1046,37 @@ async function handleRequest(req: Request): Promise<Response> {
 			const account = resolved.account.config;
 			const secrets = resolved.secrets;
 
-			const imap = buildImapClient(account, secrets);
-			try {
-				await imap.connect();
-				const mailbox = await imap.mailboxOpen(folder, { readOnly: true });
-				if (!mailbox.exists) return json({ folder, messages: [] });
-				const start = Math.max(1, mailbox.exists - limit + 1);
-				const range = `${start}:${mailbox.exists}`;
-				const results: Array<Record<string, unknown>> = [];
-				for await (const msg of imap.fetch(range, {
-					uid: true,
-					envelope: true,
-					internalDate: true,
-					flags: true,
-				})) {
-					results.push({
-						uid: msg.uid,
-						subject: msg.envelope?.subject ?? "(no subject)",
-						from: getAddressText(msg.envelope?.from),
-						to: getAddressText(msg.envelope?.to),
-						date: msg.internalDate ? new Date(msg.internalDate).getTime() : null,
-						seen: Array.isArray(msg.flags) ? msg.flags.includes("\\Seen") : false,
-					});
-				}
-				results.reverse();
-				return json({ accountId: resolved.account.id, folder, messages: results });
-			} finally {
-				await safeImapDisconnect(imap);
-			}
+			return await withImapReconnect(account, secrets, async (imap) => {
+				return await withMailboxLock(imap, folder, async () => {
+					const mailboxRaw = imap.mailbox as { exists?: number } | false | undefined;
+					const mailboxExists = mailboxRaw && typeof mailboxRaw === "object"
+						? Number(mailboxRaw.exists ?? 0)
+						: 0;
+					if (!mailboxExists) return json({ folder, messages: [] });
+					const start = Math.max(1, mailboxExists - limit + 1);
+					const range = `${start}:${mailboxExists}`;
+					const results: Array<Record<string, unknown>> = [];
+					for await (const msg of imap.fetch(range, {
+						uid: true,
+						envelope: true,
+						internalDate: true,
+						flags: true,
+						size: true,
+					})) {
+						results.push({
+							uid: msg.uid,
+							subject: msg.envelope?.subject ?? "(no subject)",
+							from: getAddressText(msg.envelope?.from),
+							to: getAddressText(msg.envelope?.to),
+							date: msg.internalDate ? new Date(msg.internalDate).getTime() : null,
+							seen: Array.isArray(msg.flags) ? msg.flags.includes("\\Seen") : false,
+							size: typeof msg.size === "number" ? msg.size : null,
+						});
+					}
+					results.reverse();
+					return json({ accountId: resolved.account.id, folder, messages: results });
+				});
+			});
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
@@ -1042,41 +1093,40 @@ async function handleRequest(req: Request): Promise<Response> {
 			const account = resolved.account.config;
 			const secrets = resolved.secrets;
 
-			const imap = buildImapClient(account, secrets);
-			try {
-				await imap.connect();
-				await imap.mailboxOpen(folder, { readOnly: true });
-				const one = await imap.fetchOne(uid, {
-					uid: true,
-					envelope: true,
-					internalDate: true,
-					flags: true,
-					source: true,
-				}, { uid: true });
-				if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
-				const parsed = await simpleParser(one.source);
-				const textBody = parsed.text ?? "";
-				const htmlBody = parsed.html ? String(parsed.html) : "";
-				const ebpPayload = extractEbpPayload(textBody || htmlBody);
-				return json({
-					accountId: resolved.account.id,
-					uid: one.uid,
-					subject: one.envelope?.subject ?? "(no subject)",
-					from: getAddressText(one.envelope?.from),
-					to: getAddressText(one.envelope?.to),
-					date: one.internalDate ? new Date(one.internalDate).getTime() : null,
-					text: textBody,
-					html: htmlBody,
-					attachments: parsed.attachments.map((att: { filename?: string; contentType?: string; size?: number }) => ({
-						filename: att.filename ?? "attachment",
-						contentType: att.contentType ?? "application/octet-stream",
-						size: att.size ?? 0,
-					})),
-					ebpPayload,
+			return await withImapReconnect(account, secrets, async (imap) => {
+				return await withMailboxLock(imap, folder, async () => {
+					const one = await imap.fetchOne(uid, {
+						uid: true,
+						envelope: true,
+						internalDate: true,
+						flags: true,
+						size: true,
+						source: true,
+					}, { uid: true });
+					if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
+					const parsed = await simpleParser(one.source);
+					const textBody = parsed.text ?? "";
+					const htmlBody = parsed.html ? String(parsed.html) : "";
+					const ebpPayload = extractEbpPayload(textBody || htmlBody);
+					return json({
+						accountId: resolved.account.id,
+						uid: one.uid,
+						subject: one.envelope?.subject ?? "(no subject)",
+						from: getAddressText(one.envelope?.from),
+						to: getAddressText(one.envelope?.to),
+						date: one.internalDate ? new Date(one.internalDate).getTime() : null,
+						size: typeof one.size === "number" ? one.size : null,
+						text: textBody,
+						html: htmlBody,
+						attachments: parsed.attachments.map((att: { filename?: string; contentType?: string; size?: number }) => ({
+							filename: att.filename ?? "attachment",
+							contentType: att.contentType ?? "application/octet-stream",
+							size: att.size ?? 0,
+						})),
+						ebpPayload,
+					});
 				});
-			} finally {
-				await safeImapDisconnect(imap);
-			}
+			});
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/send") {
