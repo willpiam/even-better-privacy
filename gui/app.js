@@ -2161,8 +2161,10 @@ function initMailPage() {
         try {
           const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
           const limit = Number(document.getElementById("mail-limit").value || 20);
+          const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
           const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
-          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}`);
+          const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
+          const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}`);
           state.mailMessages = res?.messages || [];
           renderMailMessages();
           setStatus("Inbox refreshed", "success");

@@ -569,3 +569,133 @@ test("adds two mail accounts, sends encrypted mail between identities, decrypts,
     }
   }
 });
+
+test("inbox search passes search param and filters displayed messages", async ({ page }) => {
+  const now = Date.now();
+  const allMessages = [
+    { uid: 1, subject: "Meeting notes", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 3000, seen: true, size: 200 },
+    { uid: 2, subject: "Invoice #42", from: "Bob <bob@example.com>", to: "Me <me@example.com>", date: now - 2000, seen: false, size: 350 },
+    { uid: 3, subject: "Hello world", from: "Carol <carol@example.com>", to: "Me <me@example.com>", date: now - 1000, seen: false, size: 100 },
+  ];
+
+  let lastSearchParam: string | null = null;
+
+  await page.route("http://127.0.0.1:8787/api/v1/**", (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const { pathname } = url;
+
+    const json = (body: unknown) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+
+    if (pathname === "/api/v1/health") {
+      return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
+    }
+    if (pathname === "/api/v1/context") {
+      return json({
+        identityDir: "/tmp/ebp-test",
+        contactsDir: "/tmp/ebp-test/contacts",
+        currentIdentity: null,
+        server: null,
+        protocolVersion: "test",
+      });
+    }
+    if (pathname === "/api/v1/identities") {
+      return json({ identities: [], currentIdentity: null });
+    }
+    if (pathname === "/api/v1/contacts") {
+      return json({ contacts: [] });
+    }
+    if (pathname === "/api/v1/server/identities") {
+      return json({ identities: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    }
+    if (pathname === "/api/v1/mail/account") {
+      return json({
+        accountId: "mock-account",
+        accountName: "Mock account",
+        account: {
+          gmailMode: false,
+          imapHost: "imap.example.com",
+          imapPort: 993,
+          imapSecure: true,
+          smtpHost: "smtp.example.com",
+          smtpPort: 465,
+          smtpSecure: true,
+          username: "user@example.com",
+          fromEmail: "user@example.com",
+          fromName: "Mock User",
+          persistSecrets: false,
+        },
+        selectedAccountId: "mock-account",
+        accounts: [{ id: "mock-account", name: "Mock account" }],
+        hasImapPassword: true,
+        hasSmtpPassword: true,
+        secretsInMemory: true,
+        secretsLocked: false,
+      });
+    }
+    if (pathname === "/api/v1/mail/accounts") {
+      return json({
+        selectedAccountId: "mock-account",
+        secretsInMemory: true,
+        secretsLocked: false,
+        accounts: [],
+      });
+    }
+    if (pathname === "/api/v1/mail/messages") {
+      lastSearchParam = url.searchParams.get("search");
+      const search = (lastSearchParam ?? "").toLowerCase();
+      const filtered = search
+        ? allMessages.filter(
+            (m) =>
+              m.subject.toLowerCase().includes(search) ||
+              m.from.toLowerCase().includes(search),
+          )
+        : allMessages;
+      return json({
+        accountId: "mock-account",
+        folder: "INBOX",
+        messages: filtered,
+      });
+    }
+    if (request.method() === "POST") {
+      return json({ ok: true });
+    }
+    return route.fulfill({ status: 404, body: "not mocked" });
+  });
+
+  await goToMailPage(page);
+
+  // Initial refresh without search – all messages shown
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  await expect(page.locator("#mail-message-list")).toContainText("Meeting notes");
+  await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
+  await expect(page.locator("#mail-message-list")).toContainText("Hello world");
+  expect(lastSearchParam).toBeNull();
+
+  // Type a search term and refresh – only matching message shown and param sent
+  await page.fill("#mail-search", "invoice");
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  expect(lastSearchParam).toBe("invoice");
+  await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Meeting notes");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Hello world");
+
+  // Search by sender
+  await page.fill("#mail-search", "carol");
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  expect(lastSearchParam).toBe("carol");
+  await expect(page.locator("#mail-message-list")).toContainText("Hello world");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Invoice #42");
+
+  // Clear search – all messages shown again
+  await page.fill("#mail-search", "");
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  expect(lastSearchParam).toBeNull();
+  await expect(page.locator("#mail-message-list")).toContainText("Meeting notes");
+  await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
+  await expect(page.locator("#mail-message-list")).toContainText("Hello world");
+});

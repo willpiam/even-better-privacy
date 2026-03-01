@@ -1041,6 +1041,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
 			const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "20") || 20));
+			const searchQuery = toSafeString(url.searchParams.get("search"), 256) || "";
 			const ctx = await getContext(home ?? undefined);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
 			const account = resolved.account.config;
@@ -1053,25 +1054,52 @@ async function handleRequest(req: Request): Promise<Response> {
 						? Number(mailboxRaw.exists ?? 0)
 						: 0;
 					if (!mailboxExists) return json({ folder, messages: [] });
-					const start = Math.max(1, mailboxExists - limit + 1);
-					const range = `${start}:${mailboxExists}`;
-					const results: Array<Record<string, unknown>> = [];
-					for await (const msg of imap.fetch(range, {
+
+					const fetchOpts = {
 						uid: true,
 						envelope: true,
 						internalDate: true,
 						flags: true,
 						size: true,
-					})) {
-						results.push({
-							uid: msg.uid,
-							subject: msg.envelope?.subject ?? "(no subject)",
-							from: getAddressText(msg.envelope?.from),
-							to: getAddressText(msg.envelope?.to),
-							date: msg.internalDate ? new Date(msg.internalDate).getTime() : null,
-							seen: Array.isArray(msg.flags) ? msg.flags.includes("\\Seen") : false,
-							size: typeof msg.size === "number" ? msg.size : null,
-						});
+					};
+					const buildResult = (msg: Record<string, unknown>) => ({
+						uid: (msg as { uid?: number }).uid,
+						subject: (msg as { envelope?: { subject?: string } }).envelope?.subject ?? "(no subject)",
+						from: getAddressText((msg as { envelope?: { from?: unknown } }).envelope?.from),
+						to: getAddressText((msg as { envelope?: { to?: unknown } }).envelope?.to),
+						date: (msg as { internalDate?: string | Date }).internalDate
+							? new Date((msg as { internalDate: string | Date }).internalDate).getTime()
+							: null,
+						seen: Array.isArray((msg as { flags?: string[] }).flags)
+							? (msg as { flags: string[] }).flags.includes("\\Seen")
+							: false,
+						size: typeof (msg as { size?: number }).size === "number"
+							? (msg as { size: number }).size
+							: null,
+					});
+
+					if (searchQuery) {
+						const uids = await imap.search(
+							{ or: [{ from: searchQuery }, { subject: searchQuery }, { body: searchQuery }] },
+							{ uid: true },
+						);
+						if (!uids || uids.length === 0) {
+							return json({ accountId: resolved.account.id, folder, messages: [] });
+						}
+						const uidSlice = uids.slice(-limit);
+						const results: Array<Record<string, unknown>> = [];
+						for await (const msg of imap.fetch(uidSlice.join(","), fetchOpts, { uid: true })) {
+							results.push(buildResult(msg));
+						}
+						results.reverse();
+						return json({ accountId: resolved.account.id, folder, messages: results });
+					}
+
+					const start = Math.max(1, mailboxExists - limit + 1);
+					const range = `${start}:${mailboxExists}`;
+					const results: Array<Record<string, unknown>> = [];
+					for await (const msg of imap.fetch(range, fetchOpts)) {
+						results.push(buildResult(msg));
 					}
 					results.reverse();
 					return json({ accountId: resolved.account.id, folder, messages: results });
