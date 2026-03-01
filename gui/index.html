@@ -1494,6 +1494,19 @@
       text-align: center;
     }
 
+    .mail-message-html-wrap {
+      display: none;
+      margin-top: 6px;
+    }
+
+    .mail-message-html-frame {
+      width: 100%;
+      min-height: 360px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: #ffffff;
+    }
+
     /* ─────────────────────────────────────────────────────────────────────────
        Responsive
     ───────────────────────────────────────────────────────────────────────── */
@@ -2213,9 +2226,19 @@
 
       <section>
         <h3>Message Reader</h3>
-        <label>Selected message
+        <label id="mail-message-body-wrap">Selected message
           <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
         </label>
+        <div class="mail-message-html-wrap" id="mail-message-html-wrap">
+          <div class="small muted" style="margin-bottom: 8px;">Rendered HTML preview (scripts and remote resources are blocked).</div>
+          <iframe
+            id="mail-message-html-frame"
+            class="mail-message-html-frame"
+            sandbox=""
+            referrerpolicy="no-referrer"
+            title="Rendered email body"
+          ></iframe>
+        </div>
         <div id="mail-message-loading" class="small muted" style="display: none;">Loading selected message...</div>
         <div class="row">
           <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
@@ -2299,6 +2322,14 @@
         <div class="stack small">
           <div>Identity directory: <span class="mono muted" id="ctx-idir">-</span></div>
         </div>
+      </section>
+      <section>
+        <h3>Mail Reader</h3>
+        <label class="inline">
+          <input id="settings-mail-render-html" type="checkbox" />
+          Render HTML emails when opening messages
+        </label>
+        <p class="small muted" style="margin-top: 8px;">Disabled by default. Leave off to view emails as plaintext.</p>
       </section>
       <section>
         <h3>Stored Mail Credentials</h3>

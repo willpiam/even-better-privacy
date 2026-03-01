@@ -1,6 +1,7 @@
 const statusEl = document.getElementById("status");
 const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
 const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
+const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
 const STARTUP_RETRY_ATTEMPTS = 12;
 const STARTUP_RETRY_DELAY_MS = 500;
 const ctxCurrent = document.getElementById("ctx-current");
@@ -42,8 +43,31 @@ const state = {
   selectedMailMessageUid: null,
   mailMessageLoading: false,
   mailMessageLoadRequestId: 0,
+  mailRenderHtml: false,
 };
 let decryptedFileResult = null;
+
+function loadBooleanPreference(key, fallback = false) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    return raw === "true";
+  } catch {
+    return fallback;
+  }
+}
+
+function saveBooleanPreference(key, value) {
+  try {
+    localStorage.setItem(key, value ? "true" : "false");
+  } catch {
+    // Ignore localStorage failures in restricted environments.
+  }
+}
+
+function loadUiPreferences() {
+  state.mailRenderHtml = loadBooleanPreference(MAIL_RENDER_HTML_PREF_KEY, false);
+}
 
 // Helper to extract name/email from details
 function getDetailValue(details, path) {
@@ -1848,6 +1872,56 @@ function renderStoredMailCredentials() {
   });
 }
 
+function buildSandboxedEmailSrcDoc(html) {
+  const csp = "default-src 'none'; img-src data: cid:; style-src 'unsafe-inline'; font-src data:;";
+  return [
+    "<!doctype html>",
+    "<html>",
+    "<head>",
+    '<meta charset="utf-8" />',
+    `<meta http-equiv="Content-Security-Policy" content="${csp}" />`,
+    '<style>html,body{margin:0;padding:12px;font-family:system-ui,-apple-system,sans-serif;color:#111;line-height:1.4;word-break:break-word;}img{max-width:100%;height:auto;}pre{white-space:pre-wrap;overflow-wrap:anywhere;}table{max-width:100%;}</style>',
+    "</head>",
+    `<body>${html || ""}</body>`,
+    "</html>",
+  ].join("");
+}
+
+function setMailReaderPlaintext(text) {
+  const bodyWrap = document.getElementById("mail-message-body-wrap");
+  const bodyEl = document.getElementById("mail-message-body");
+  const htmlWrap = document.getElementById("mail-message-html-wrap");
+  const frame = document.getElementById("mail-message-html-frame");
+  if (bodyWrap) bodyWrap.style.display = "";
+  if (htmlWrap) htmlWrap.style.display = "none";
+  if (bodyEl) bodyEl.value = text || "";
+  if (frame) frame.removeAttribute("srcdoc");
+}
+
+function setMailReaderHtml(html) {
+  const bodyWrap = document.getElementById("mail-message-body-wrap");
+  const htmlWrap = document.getElementById("mail-message-html-wrap");
+  const frame = document.getElementById("mail-message-html-frame");
+  if (bodyWrap) bodyWrap.style.display = "none";
+  if (htmlWrap) htmlWrap.style.display = "block";
+  if (frame) frame.setAttribute("srcdoc", buildSandboxedEmailSrcDoc(html));
+}
+
+function renderSelectedMailMessageBody() {
+  const detail = state.selectedMailMessage;
+  if (!detail) {
+    setMailReaderPlaintext("");
+    return;
+  }
+  const textBody = typeof detail.text === "string" ? detail.text : "";
+  const htmlBody = typeof detail.html === "string" ? detail.html : "";
+  if (state.mailRenderHtml && htmlBody.trim()) {
+    setMailReaderHtml(htmlBody);
+    return;
+  }
+  setMailReaderPlaintext(textBody || htmlBody || "");
+}
+
 function setMailMessageLoading(loading) {
   state.mailMessageLoading = loading;
   const loadingEl = document.getElementById("mail-message-loading");
@@ -1885,12 +1959,11 @@ function renderMailMessages() {
       <div class="small muted">${escapeHtml(dateText)}</div>
     `;
     li.addEventListener("click", async () => {
-      const bodyEl = document.getElementById("mail-message-body");
       const requestId = state.mailMessageLoadRequestId + 1;
       state.mailMessageLoadRequestId = requestId;
       state.selectedMailMessage = null;
       state.selectedMailMessageUid = String(msg.uid);
-      if (bodyEl) bodyEl.value = "";
+      renderSelectedMailMessageBody();
       updateVerifyResult("mail-verify-result", null, null);
       renderMailVerifyMeta(null);
       setMailMessageLoading(true);
@@ -1904,8 +1977,7 @@ function renderMailMessages() {
         if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
         setMailMessageLoading(false);
         renderMailMessages();
-        const body = detail.text || detail.html || "";
-        if (bodyEl) bodyEl.value = body;
+        renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", null, null);
         renderMailVerifyMeta(null);
       } catch (err) {
@@ -1919,6 +1991,16 @@ function renderMailMessages() {
 }
 
 function initMailPage() {
+  const renderHtmlToggle = document.getElementById("settings-mail-render-html");
+  if (renderHtmlToggle) {
+    renderHtmlToggle.checked = Boolean(state.mailRenderHtml);
+    renderHtmlToggle.addEventListener("change", () => {
+      state.mailRenderHtml = renderHtmlToggle.checked;
+      saveBooleanPreference(MAIL_RENDER_HTML_PREF_KEY, state.mailRenderHtml);
+      renderSelectedMailMessageBody();
+    });
+  }
+
   const gmailModeToggle = document.getElementById("mail-gmail-mode");
   if (gmailModeToggle) {
     gmailModeToggle.addEventListener("change", () => {
@@ -1953,8 +2035,7 @@ function initMailPage() {
         state.mailMessageLoadRequestId += 1;
         setMailMessageLoading(false);
         renderMailMessages();
-        const bodyEl = document.getElementById("mail-message-body");
-        if (bodyEl) bodyEl.value = "";
+        renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", null, null);
         setStatus("Mail account selected", "success");
       } catch (err) {
@@ -2113,7 +2194,12 @@ function initMailPage() {
             senderEmail: senderEmail || undefined,
           }),
         });
-        document.getElementById("mail-message-body").value = res.message || "";
+        state.selectedMailMessage = {
+          ...(state.selectedMailMessage || {}),
+          text: res.message || "",
+          html: "",
+        };
+        renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", res.verified, res.verifyStatus);
         renderMailVerifyMeta(res);
         setStatus("EBP payload decrypted", "success");
@@ -3012,6 +3098,7 @@ document.getElementById("revoke-identity-form").addEventListener("submit", async
 // Initialize
 // ─────────────────────────────────────────────────────────────────────────────
 
+loadUiPreferences();
 initNavigation();
 initCollapsibleSections();
 initContactSearch();
