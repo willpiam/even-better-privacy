@@ -45,6 +45,9 @@ const state = {
   mailMessageLoading: false,
   mailMessageLoadRequestId: 0,
   mailRenderHtml: false,
+  mailOAuthPendingState: "",
+  mailOAuthProvider: "",
+  mailOAuthEmail: "",
 };
 let decryptedFileResult = null;
 
@@ -1726,6 +1729,17 @@ async function loadMailAccount() {
       document.getElementById("mail-account-name").value = "";
       const composeFrom = document.getElementById("mail-compose-from");
       if (composeFrom) composeFrom.value = "";
+      const authTypeEl = document.getElementById("mail-auth-type");
+      if (authTypeEl) authTypeEl.value = "oauth";
+      state.mailOAuthProvider = "";
+      state.mailOAuthEmail = "";
+      const providerInput = document.getElementById("mail-oauth-provider");
+      const emailInput = document.getElementById("mail-oauth-email");
+      if (providerInput) providerInput.value = "";
+      if (emailInput) emailInput.value = "";
+      const oauthStatus = document.getElementById("mail-oauth-status");
+      if (oauthStatus) oauthStatus.textContent = "Choose a provider to connect this account.";
+      applyMailAuthTypeUi();
       return;
     }
     document.getElementById("mail-account-name").value = res?.accountName || "";
@@ -1740,43 +1754,100 @@ async function loadMailAccount() {
     document.getElementById("mail-compose-from").value = state.mailAccount.fromEmail || "";
     document.getElementById("mail-from-name").value = state.mailAccount.fromName || "";
     document.getElementById("mail-persist-secrets").checked = Boolean(state.mailAccount.persistSecrets);
-    document.getElementById("mail-gmail-mode").checked = Boolean(state.mailAccount.gmailMode);
-    applyGmailModeUi();
+    const authType = state.mailAccount.authType || "password";
+    const authTypeEl = document.getElementById("mail-auth-type");
+    if (authTypeEl) authTypeEl.value = authType;
+    state.mailOAuthProvider = state.mailAccount.oauthProvider || "";
+    state.mailOAuthEmail = state.mailAccount.fromEmail || "";
+    const providerInput = document.getElementById("mail-oauth-provider");
+    const emailInput = document.getElementById("mail-oauth-email");
+    if (providerInput) providerInput.value = state.mailOAuthProvider || "";
+    if (emailInput) emailInput.value = state.mailOAuthEmail || "";
+    const oauthStatus = document.getElementById("mail-oauth-status");
+    if (oauthStatus) {
+      oauthStatus.textContent = authType === "oauth" && state.mailOAuthEmail
+        ? `Connected as ${state.mailOAuthEmail}`
+        : "Choose a provider to connect this account.";
+    }
+    applyMailAuthTypeUi();
   } catch (err) {
     console.warn("Could not load mail account", err);
   }
 }
 
-function applyGmailModeUi() {
-  const gmailMode = document.getElementById("mail-gmail-mode")?.checked === true;
-  const fromEmail = document.getElementById("mail-from-email");
-  const username = document.getElementById("mail-username");
-  const imapHost = document.getElementById("mail-imap-host");
-  const smtpHost = document.getElementById("mail-smtp-host");
-  const imapPort = document.getElementById("mail-imap-port");
-  const smtpPort = document.getElementById("mail-smtp-port");
-
-  const toggleIds = [
-    "mail-imap-host-wrap",
-    "mail-imap-port-wrap",
-    "mail-smtp-host-wrap",
-    "mail-smtp-port-wrap",
-    "mail-username-wrap",
-    "mail-password-pair-wrap",
-  ];
-  for (const id of toggleIds) {
-    const el = document.getElementById(id);
-    if (el) el.style.display = gmailMode ? "none" : "";
+function applyMailAuthTypeUi() {
+  const authType = document.getElementById("mail-auth-type")?.value || "oauth";
+  const oauthWrap = document.getElementById("mail-oauth-fields");
+  const manualWrap = document.getElementById("mail-manual-fields");
+  const reauthBtn = document.getElementById("mail-oauth-reauth-btn");
+  if (oauthWrap) oauthWrap.style.display = authType === "oauth" ? "" : "none";
+  if (manualWrap) manualWrap.style.display = authType === "password" ? "" : "none";
+  if (reauthBtn) {
+    const showReauth = authType === "oauth" && Boolean(state.mailAccount && state.mailAccount.authType === "oauth");
+    reauthBtn.style.display = showReauth ? "" : "none";
   }
-  const appWrap = document.getElementById("mail-application-password-wrap");
-  if (appWrap) appWrap.style.display = gmailMode ? "" : "none";
+}
 
-  if (gmailMode) {
-    if (imapHost) imapHost.value = "imap.gmail.com";
-    if (smtpHost) smtpHost.value = "smtp.gmail.com";
-    if (imapPort) imapPort.value = "993";
-    if (smtpPort) smtpPort.value = "465";
-    if (username && fromEmail) username.value = fromEmail.value.trim();
+async function beginMailOAuth(provider) {
+  const oauthStatus = document.getElementById("mail-oauth-status");
+  try {
+    const start = await api("/mail/oauth/start", {
+      method: "POST",
+      body: JSON.stringify({ provider }),
+    });
+    state.mailOAuthPendingState = start.oauthState || "";
+    if (oauthStatus) oauthStatus.textContent = `Opening ${provider} OAuth sign-in...`;
+    const popup = window.open(start.authUrl, "ebpMailOAuth", "width=560,height=740");
+    if (!popup) {
+      throw new Error("Popup blocked by browser. Please allow popups and try again.");
+    }
+  } catch (err) {
+    if (oauthStatus) oauthStatus.textContent = err.message || "OAuth start failed";
+    throw err;
+  }
+}
+
+async function completeMailOAuth(eventData) {
+  if (!eventData || eventData.type !== "ebp-mail-oauth-complete") return;
+  const oauthStatus = document.getElementById("mail-oauth-status");
+  try {
+    const oauthState = eventData.oauthState || "";
+    if (!oauthState) throw new Error("OAuth callback did not include state");
+    const accountName = document.getElementById("mail-account-name").value.trim();
+    const pinNeeded = !state.mailSecretsInMemory;
+    let pin;
+    if (pinNeeded) {
+      pin = await requestPassword("Set or enter email PIN (used to encrypt OAuth tokens at rest)");
+      if (!pin) throw new Error("Email PIN is required to persist OAuth tokens");
+    }
+    await api("/mail/oauth/complete", {
+      method: "POST",
+      body: JSON.stringify({
+        oauthState,
+        accountId: state.selectedMailAccountId || undefined,
+        createNew: state.mailCreatingNewAccount,
+        accountName: accountName || undefined,
+        pin: pin || undefined,
+      }),
+    });
+    if (oauthStatus) oauthStatus.textContent = `Connected as ${eventData.email || ""}`;
+    state.mailOAuthProvider = eventData.provider || "";
+    state.mailOAuthEmail = eventData.email || "";
+    const providerInput = document.getElementById("mail-oauth-provider");
+    const emailInput = document.getElementById("mail-oauth-email");
+    const fromEmailInput = document.getElementById("mail-from-email");
+    if (providerInput) providerInput.value = state.mailOAuthProvider;
+    if (emailInput) emailInput.value = state.mailOAuthEmail;
+    if (fromEmailInput) fromEmailInput.value = state.mailOAuthEmail;
+    document.getElementById("mail-auth-type").value = "oauth";
+    applyMailAuthTypeUi();
+    await loadMailAccount();
+    await loadStoredMailCredentials();
+    renderStoredMailCredentials();
+    setStatus("OAuth account connected", "success");
+  } catch (err) {
+    if (oauthStatus) oauthStatus.textContent = err.message || "OAuth completion failed";
+    setStatus(err.message, "error");
   }
 }
 
@@ -1828,12 +1899,15 @@ function renderStoredMailCredentials() {
   for (const item of state.settingsMailCredentials) {
     const li = document.createElement("li");
     const lockedLabel = item.hasStoredSecret === null ? "locked (PIN required)" : (item.hasStoredSecret ? "stored" : "not stored");
+    const authLabel = item.authType === "oauth"
+      ? `OAuth (${item.oauthProvider || "provider"})`
+      : "Manual IMAP/SMTP";
     li.innerHTML = `
       <div class="server-identity-item">
         <div class="server-identity-info">
           <strong>${escapeHtml(item.name || item.id)}</strong>
           <div class="small muted">User: ${escapeHtml(item.username || "-")} • From: ${escapeHtml(item.fromEmail || "-")}</div>
-          <div class="small muted">IMAP: ${escapeHtml(item.imapHost || "-")} • SMTP: ${escapeHtml(item.smtpHost || "-")} • Secrets: ${escapeHtml(lockedLabel)}</div>
+          <div class="small muted">Auth: ${escapeHtml(authLabel)} • IMAP: ${escapeHtml(item.imapHost || "-")} • SMTP: ${escapeHtml(item.smtpHost || "-")} • Secrets: ${escapeHtml(lockedLabel)}</div>
         </div>
         <div class="server-identity-actions">
           <button class="danger btn-delete-mail-credential" data-account-id="${escapeHtml(item.id)}">Delete</button>
@@ -2050,21 +2124,48 @@ function initMailPage() {
     });
   }
 
-  const gmailModeToggle = document.getElementById("mail-gmail-mode");
-  if (gmailModeToggle) {
-    gmailModeToggle.addEventListener("change", () => {
-      applyGmailModeUi();
+  const authTypeToggle = document.getElementById("mail-auth-type");
+  if (authTypeToggle) {
+    authTypeToggle.addEventListener("change", () => {
+      applyMailAuthTypeUi();
     });
   }
-  const fromEmailInput = document.getElementById("mail-from-email");
-  if (fromEmailInput) {
-    fromEmailInput.addEventListener("input", () => {
-      if (document.getElementById("mail-gmail-mode")?.checked) {
-        const username = document.getElementById("mail-username");
-        if (username) username.value = fromEmailInput.value.trim();
+  const oauthGmailBtn = document.getElementById("mail-oauth-gmail-btn");
+  if (oauthGmailBtn) {
+    oauthGmailBtn.addEventListener("click", async () => {
+      await withLoading(oauthGmailBtn, async () => {
+        await beginMailOAuth("gmail");
+      });
+    });
+  }
+  const oauthOutlookBtn = document.getElementById("mail-oauth-outlook-btn");
+  if (oauthOutlookBtn) {
+    oauthOutlookBtn.addEventListener("click", async () => {
+      await withLoading(oauthOutlookBtn, async () => {
+        await beginMailOAuth("outlook");
+      });
+    });
+  }
+  const oauthReauthBtn = document.getElementById("mail-oauth-reauth-btn");
+  if (oauthReauthBtn) {
+    oauthReauthBtn.addEventListener("click", async () => {
+      const provider = (state.mailAccount?.oauthProvider || state.mailOAuthProvider || "").trim();
+      if (!provider) {
+        setStatus("No OAuth provider is set for this account", "error");
+        return;
       }
+      await withLoading(oauthReauthBtn, async () => {
+        await beginMailOAuth(provider);
+      });
     });
   }
+  window.addEventListener("message", async (event) => {
+    const isLocalBackendOrigin = event.origin === LOCAL_BACKEND_ORIGIN;
+    const isSameOrigin = event.origin === window.location.origin;
+    if (!isLocalBackendOrigin && !isSameOrigin) return;
+    if (!event.data || event.data.type !== "ebp-mail-oauth-complete") return;
+    await completeMailOAuth(event.data);
+  });
 
   const accountSelect = document.getElementById("mail-account-select");
   if (accountSelect) {
@@ -2111,9 +2212,14 @@ function initMailPage() {
       document.getElementById("mail-from-name").value = "";
       document.getElementById("mail-imap-password").value = "";
       document.getElementById("mail-smtp-password").value = "";
-      document.getElementById("mail-application-password").value = "";
-      document.getElementById("mail-gmail-mode").checked = false;
-      applyGmailModeUi();
+      document.getElementById("mail-auth-type").value = "oauth";
+      document.getElementById("mail-oauth-provider").value = "";
+      document.getElementById("mail-oauth-email").value = "";
+      const oauthStatus = document.getElementById("mail-oauth-status");
+      if (oauthStatus) oauthStatus.textContent = "Choose a provider to connect this account.";
+      state.mailOAuthProvider = "";
+      state.mailOAuthEmail = "";
+      applyMailAuthTypeUi();
       setStatus("Creating new mail account profile", "success");
     });
   }
@@ -2125,33 +2231,33 @@ function initMailPage() {
       const btn = e.target.querySelector('button[type="submit"]');
       await withLoading(btn, async () => {
         try {
-          const gmailMode = document.getElementById("mail-gmail-mode").checked;
+          const authType = document.getElementById("mail-auth-type").value || "oauth";
           const fromEmail = document.getElementById("mail-from-email").value.trim();
           const account = {
-            gmailMode,
+            gmailMode: false,
+            authType,
+            oauthProvider: authType === "oauth" ? (state.mailOAuthProvider || state.mailAccount?.oauthProvider || "") : "",
             imapHost: document.getElementById("mail-imap-host").value.trim(),
             imapPort: Number(document.getElementById("mail-imap-port").value || 993),
             imapSecure: document.getElementById("mail-imap-secure").checked,
             smtpHost: document.getElementById("mail-smtp-host").value.trim(),
             smtpPort: Number(document.getElementById("mail-smtp-port").value || 465),
             smtpSecure: document.getElementById("mail-smtp-secure").checked,
-            username: gmailMode ? fromEmail : document.getElementById("mail-username").value.trim(),
+            username: authType === "oauth"
+              ? (state.mailOAuthEmail || fromEmail || state.mailAccount?.username || "")
+              : document.getElementById("mail-username").value.trim(),
             fromEmail,
             fromName: document.getElementById("mail-from-name").value.trim(),
             persistSecrets: document.getElementById("mail-persist-secrets").checked,
           };
-          if (gmailMode) {
-            account.imapHost = "imap.gmail.com";
-            account.smtpHost = "smtp.gmail.com";
-            account.imapPort = 993;
-            account.smtpPort = 465;
-            account.imapSecure = true;
-            account.smtpSecure = true;
-          }
-          const appPassword = document.getElementById("mail-application-password").value;
-          const imapPassword = gmailMode ? appPassword : document.getElementById("mail-imap-password").value;
-          const smtpPassword = gmailMode ? appPassword : document.getElementById("mail-smtp-password").value;
+          const imapPassword = document.getElementById("mail-imap-password").value;
+          const smtpPassword = document.getElementById("mail-smtp-password").value;
           const accountName = document.getElementById("mail-account-name").value.trim();
+          if (authType === "oauth") {
+            if (!account.oauthProvider || !account.username || !fromEmail) {
+              throw new Error("Complete OAuth sign-in before saving this account");
+            }
+          }
           let pin;
           if (account.persistSecrets && !state.mailSecretsInMemory) {
             pin = await requestPassword("Set or enter email PIN (used to encrypt mail passwords at rest)");
@@ -2175,7 +2281,6 @@ function initMailPage() {
           setStatus("Mail account saved", "success");
           document.getElementById("mail-imap-password").value = "";
           document.getElementById("mail-smtp-password").value = "";
-          document.getElementById("mail-application-password").value = "";
           await loadMailAccount();
         } catch (err) {
           setStatus(err.message, "error");

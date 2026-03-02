@@ -2158,48 +2158,64 @@
           <div class="row">
             <button type="button" class="secondary" id="mail-account-new">New Account</button>
           </div>
-          <div class="row">
-            <label class="inline"><input id="mail-gmail-mode" type="checkbox" /> Gmail mode</label>
+          <label>Auth Method
+            <select id="mail-auth-type">
+              <option value="oauth" selected>OAuth (recommended)</option>
+              <option value="password">Manual IMAP/SMTP</option>
+            </select>
+          </label>
+          <div id="mail-oauth-fields" class="stack">
+            <div class="row">
+              <button type="button" id="mail-oauth-gmail-btn">Sign in with Gmail</button>
+              <button type="button" id="mail-oauth-outlook-btn">Sign in with Outlook</button>
+              <button type="button" class="secondary" id="mail-oauth-reauth-btn" style="display: none;">Re-authenticate</button>
+            </div>
+            <div class="two">
+              <label>OAuth Provider
+                <input id="mail-oauth-provider" type="text" readonly placeholder="Not connected" />
+              </label>
+              <label>OAuth Email
+                <input id="mail-oauth-email" type="text" readonly placeholder="Not connected" />
+              </label>
+            </div>
+            <div id="mail-oauth-status" class="small muted">Choose a provider to connect this account.</div>
           </div>
-          <div class="two">
-            <label id="mail-imap-host-wrap">IMAP Host
-              <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
-            </label>
-            <label id="mail-imap-port-wrap">IMAP Port
-              <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
-            </label>
-          </div>
-          <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
-          <div class="two">
-            <label id="mail-smtp-host-wrap">SMTP Host
-              <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
-            </label>
-            <label id="mail-smtp-port-wrap">SMTP Port
-              <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
-            </label>
-          </div>
-          <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
-          <div class="two">
+          <div id="mail-manual-fields" class="stack">
+            <div class="two">
+              <label id="mail-imap-host-wrap">IMAP Host
+                <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
+              </label>
+              <label id="mail-imap-port-wrap">IMAP Port
+                <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
+              </label>
+            </div>
+            <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
+            <div class="two">
+              <label id="mail-smtp-host-wrap">SMTP Host
+                <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
+              </label>
+              <label id="mail-smtp-port-wrap">SMTP Port
+                <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
+              </label>
+            </div>
+            <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
             <label id="mail-username-wrap">Username
               <input id="mail-username" type="text" placeholder="you@example.com" />
             </label>
-            <label>From Email
-              <input id="mail-from-email" type="text" placeholder="you@example.com" />
-            </label>
+            <div class="two" id="mail-password-pair-wrap">
+              <label id="mail-imap-password-wrap">IMAP Password
+                <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
+              </label>
+              <label id="mail-smtp-password-wrap">SMTP Password
+                <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
+              </label>
+            </div>
           </div>
+          <label id="mail-from-email-wrap">From Email
+            <input id="mail-from-email" type="text" placeholder="you@example.com" />
+          </label>
           <label>From Name (optional)
             <input id="mail-from-name" type="text" placeholder="Your Name" />
-          </label>
-          <div class="two" id="mail-password-pair-wrap">
-            <label id="mail-imap-password-wrap">IMAP Password
-              <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
-            </label>
-            <label id="mail-smtp-password-wrap">SMTP Password
-              <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
-            </label>
-          </div>
-          <label id="mail-application-password-wrap" style="display: none;">Application Password
-            <input id="mail-application-password" type="password" placeholder="Google App Password" />
           </label>
           <label class="inline"><input id="mail-persist-secrets" type="checkbox" /> Persist mail passwords on this device</label>
           <div class="row">

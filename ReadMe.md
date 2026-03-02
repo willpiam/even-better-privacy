@@ -63,11 +63,19 @@ If all goes well this should result in an executable file... EBP.AppImage on Lin
 ## Native Email
 
 The EBP GUI includes a built-in interface for sending and receiving email.
-It connects directly over standard SMTP and IMAP protocols, making it compatible with most email providers.
+It connects directly over standard SMTP and IMAP protocols, making it compatible with most email providers. EBP also supports OAuth with Gmail and Outlook for a simpler experience.  
 
-### Gmail Native Email
+### Native Email Via OAuth
 
-Gmail users must enable 2-factor authentication and create an App Password for their Gmail account.
+To run using OAuth you will need to provide the following values in your `.env` file. 
+
+```ini
+MAIL_OAUTH_GMAIL_CLIENT_ID=""
+MAIL_OAUTH_GMAIL_CLIENT_SECRET=""
+
+MAIL_OAUTH_OUTLOOK_CLIENT_ID=""
+MAIL_OAUTH_OUTLOOK_CLIENT_SECRET=""
+```
 
 ### Proton Native Email
 
@@ -124,7 +132,7 @@ I have not yet published the extension to the webstore. I intend to do this soon
 
 If you intend to run your own key server you will need to create a `.env` file in the project root (the same folder as this `ReadMe.md`). Example:
 
-```
+```ini
 DB_TYPE=psql # options include sqlite | psql
 
 # postgres database connection details
