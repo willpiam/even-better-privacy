@@ -4,42 +4,42 @@ overview: Comprehensive redesign of the GUI mail page with a tabbed sub-navigati
 todos:
   - id: mail-tabs
     content: Add tabbed sub-navigation (Inbox, Compose, Account Setup, Help) with CSS + JS toggle logic
-    status: pending
+    status: completed
   - id: split-pane
     content: "Restructure Inbox tab into split-pane: message list left, reader right"
-    status: pending
+    status: completed
     dependencies:
       - mail-tabs
   - id: message-list
     content: "Enhance message list items: unread bold, relative dates, cleaner metadata, better selected state"
-    status: pending
+    status: completed
     dependencies:
       - split-pane
   - id: reader-header
     content: Add message reader header bar (Subject, From, To, Date) above body content
-    status: pending
+    status: completed
     dependencies:
       - split-pane
   - id: reply-button
     content: Add Reply button in reader that switches to Compose tab with pre-filled fields
-    status: pending
+    status: completed
     dependencies:
       - mail-tabs
       - reader-header
   - id: folder-dropdown
     content: Replace folder freetext with select dropdown plus Custom option
-    status: pending
+    status: completed
     dependencies:
       - split-pane
   - id: css-polish
     content: "CSS polish: tab bar styling, split-pane divider, transitions, responsive breakpoints, empty states"
-    status: pending
+    status: completed
     dependencies:
       - mail-tabs
       - split-pane
   - id: e2e-compat
     content: Verify all existing element IDs and button text preserved for e2e test compatibility
-    status: pending
+    status: completed
     dependencies:
       - mail-tabs
       - split-pane

@@ -1494,6 +1494,137 @@
       text-align: center;
     }
 
+    .mail-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mail-tab-trigger {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-secondary);
+      padding: 8px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .mail-tab-trigger:hover,
+    .mail-tab-trigger:focus-visible {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      border-color: var(--border);
+      outline: none;
+    }
+
+    .mail-tab-trigger.active {
+      color: var(--accent);
+      border-color: var(--accent);
+      background: var(--accent-bg);
+    }
+
+    .mail-tab-panel {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .mail-tab-panel.active {
+      display: block;
+    }
+
+    .mail-inbox-layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 340px) 1fr;
+      gap: 16px;
+      align-items: start;
+    }
+
+    .mail-list-panel,
+    .mail-reader-panel {
+      min-width: 0;
+    }
+
+    .mail-list-panel #mail-message-list {
+      max-height: 540px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .mail-message-item {
+      border-left: 3px solid transparent;
+    }
+
+    .mail-message-item.unread {
+      border-left-color: var(--accent);
+    }
+
+    .mail-message-subject {
+      font-weight: 500;
+    }
+
+    .mail-message-item.unread .mail-message-subject {
+      font-weight: 700;
+    }
+
+    .mail-message-date {
+      margin-left: auto;
+      white-space: nowrap;
+    }
+
+    .mail-message-from {
+      margin-top: 2px;
+    }
+
+    .mail-reader-header {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-base);
+      padding: 10px 12px;
+      margin-bottom: 12px;
+    }
+
+    .mail-reader-header-row {
+      display: grid;
+      grid-template-columns: 70px 1fr;
+      gap: 8px;
+      font-size: 0.85rem;
+      margin-bottom: 4px;
+    }
+
+    .mail-reader-header-row:last-child {
+      margin-bottom: 0;
+    }
+
+    .mail-reader-header-label {
+      color: var(--text-muted);
+    }
+
+    .mail-reader-empty {
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      margin-bottom: 10px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .mail-reader-actions {
+      justify-content: space-between;
+    }
+
+    .mail-folder-custom-wrap {
+      display: none;
+    }
+
+    .mail-folder-custom-wrap.visible {
+      display: flex;
+    }
+
     .mail-message-html-wrap {
       display: none;
       margin-top: 6px;
@@ -1566,6 +1697,10 @@
       }
 
       .two {
+        grid-template-columns: 1fr;
+      }
+
+      .mail-inbox-layout {
         grid-template-columns: 1fr;
       }
 
@@ -2141,178 +2276,218 @@
         <h2>Mail</h2>
         <p>Connect your existing mailbox locally (IMAP/SMTP) and send EBP-secured mail.</p>
       </div>
+      <div class="mail-tabs" id="mail-tabs" role="tablist" aria-label="Mail sections">
+        <button type="button" class="mail-tab-trigger active" data-mail-tab="inbox" aria-expanded="true">Inbox</button>
+        <button type="button" class="mail-tab-trigger" data-mail-tab="compose" aria-expanded="false">Compose</button>
+        <button type="button" class="mail-tab-trigger" data-mail-tab="account" aria-expanded="false">Account Setup (Local Device)</button>
+        <button type="button" class="mail-tab-trigger" data-mail-tab="help" aria-expanded="false">How to Connect Your Email</button>
+      </div>
 
-      <section>
-        <h3>Account Setup (Local Device)</h3>
-        <form id="mail-account-form" class="stack">
-          <div class="two">
-            <label>Saved Accounts
-              <select id="mail-account-select">
-                <option value="">(none)</option>
+      <div class="mail-tab-panel active" id="mail-tab-inbox" data-mail-tab-panel="inbox">
+        <div class="mail-inbox-layout">
+          <div class="mail-list-panel">
+            <section data-expanded-by-default="true">
+              <h3>Inbox</h3>
+              <form id="mail-inbox-form" class="row" style="margin-bottom: 12px;">
+                <label>Folder
+                  <select id="mail-folder">
+                    <option value="INBOX" selected>INBOX</option>
+                    <option value="Sent">Sent</option>
+                    <option value="Drafts">Drafts</option>
+                    <option value="Trash">Trash</option>
+                    <option value="Spam">Spam</option>
+                    <option value="__custom__">Custom...</option>
+                  </select>
+                </label>
+                <label id="mail-folder-custom-wrap" class="mail-folder-custom-wrap">Custom Folder
+                  <input id="mail-folder-custom" type="text" value="" placeholder="Archive/2026" />
+                </label>
+                <label>Limit
+                  <input id="mail-limit" type="number" min="1" max="100" value="20" />
+                </label>
+                <label>Search
+                  <input id="mail-search" type="text" placeholder="sender, subject, or content" />
+                </label>
+                <button type="submit">Refresh</button>
+              </form>
+              <ul id="mail-message-list" class="small"></ul>
+              <div id="mail-pagination" class="pagination-controls" style="display: none;">
+                <button type="button" class="secondary" id="mail-prev" disabled>← Previous</button>
+                <span class="pagination-info" id="mail-page-info">Page 1 of 1</span>
+                <button type="button" class="secondary" id="mail-next" disabled>Next →</button>
+              </div>
+            </section>
+          </div>
+
+          <div class="mail-reader-panel">
+            <section data-expanded-by-default="true">
+              <h3>Message Reader</h3>
+              <div class="mail-reader-header" id="mail-reader-header">
+                <div class="mail-reader-header-row"><span class="mail-reader-header-label">Subject</span><span id="mail-reader-subject" class="small muted">(none selected)</span></div>
+                <div class="mail-reader-header-row"><span class="mail-reader-header-label">From</span><span id="mail-reader-from" class="small muted">-</span></div>
+                <div class="mail-reader-header-row"><span class="mail-reader-header-label">To</span><span id="mail-reader-to" class="small muted">-</span></div>
+                <div class="mail-reader-header-row"><span class="mail-reader-header-label">Date</span><span id="mail-reader-date" class="small muted">-</span></div>
+              </div>
+              <div id="mail-reader-empty" class="mail-reader-empty">Select a message from Inbox to view it.</div>
+              <label id="mail-message-body-wrap">Selected message
+                <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
+              </label>
+              <div class="mail-message-html-wrap" id="mail-message-html-wrap">
+                <div class="small muted" style="margin-bottom: 8px;">Rendered HTML preview (scripts and remote resources are blocked).</div>
+                <iframe
+                  id="mail-message-html-frame"
+                  class="mail-message-html-frame"
+                  sandbox=""
+                  referrerpolicy="no-referrer"
+                  title="Rendered email body"
+                ></iframe>
+              </div>
+              <div id="mail-message-loading" class="small muted" style="display: none;">Loading selected message...</div>
+              <div class="row mail-reader-actions">
+                <button type="button" class="secondary" id="mail-reply-btn">Reply</button>
+                <div class="row">
+                  <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
+                  <button type="button" class="secondary" id="mail-decrypt-btn">Decrypt EBP Payload</button>
+                </div>
+              </div>
+              <div class="small">Verification: <span id="mail-verify-result" class="result-badge pending">-</span></div>
+              <div class="small muted" id="mail-verify-meta"></div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div class="mail-tab-panel" id="mail-tab-compose" data-mail-tab-panel="compose">
+        <section data-expanded-by-default="true">
+          <h3>Compose</h3>
+          <form id="mail-compose-form" class="stack">
+            <label>From
+              <input id="mail-compose-from" type="text" readonly placeholder="No sender account selected" />
+            </label>
+            <div class="two">
+              <label>To
+                <input id="mail-compose-to" type="text" placeholder="recipient@example.com" />
+              </label>
+              <label>Subject
+                <input id="mail-compose-subject" type="text" placeholder="Subject" />
+              </label>
+            </div>
+            <label>Mode
+              <select id="mail-compose-mode">
+                <option value="plain">Plaintext email</option>
+                <option value="ebp-encrypt" selected>EBP sign + encrypt payload in email body</option>
               </select>
             </label>
-            <label>Account Label
-              <input id="mail-account-name" type="text" placeholder="Personal Gmail" />
+            <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
+              <div class="contact-search-wrapper">
+                <input id="mail-compose-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
+                <button type="button" class="contact-search-clear" data-target="mail-compose-recipient" title="Clear">×</button>
+                <div class="contact-search-dropdown" id="mail-compose-recipient-dropdown"></div>
+              </div>
             </label>
-          </div>
-          <div class="row">
-            <button type="button" class="secondary" id="mail-account-new">New Account</button>
-          </div>
-          <label>Auth Method
-            <select id="mail-auth-type">
-              <option value="oauth" selected>OAuth (recommended)</option>
-              <option value="password">Manual IMAP/SMTP</option>
-            </select>
-          </label>
-          <div id="mail-oauth-fields" class="stack">
+            <label>Body
+              <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
+            </label>
+            <div>
+              <button id="mail-compose-send-btn" type="submit">Send Email</button>
+            </div>
+          </form>
+        </section>
+      </div>
+
+      <div class="mail-tab-panel" id="mail-tab-account" data-mail-tab-panel="account">
+        <section data-expanded-by-default="true">
+          <h3>Account Setup (Local Device)</h3>
+          <form id="mail-account-form" class="stack">
+            <div class="two">
+              <label>Saved Accounts
+                <select id="mail-account-select">
+                  <option value="">(none)</option>
+                </select>
+              </label>
+              <label>Account Label
+                <input id="mail-account-name" type="text" placeholder="Personal Gmail" />
+              </label>
+            </div>
             <div class="row">
-              <button type="button" id="mail-oauth-gmail-btn">Sign in with Gmail</button>
-              <button type="button" class="secondary" id="mail-oauth-reauth-btn" style="display: none;">Re-authenticate</button>
+              <button type="button" class="secondary" id="mail-account-new">New Account</button>
             </div>
-            <div class="two">
-              <label>OAuth Provider
-                <input id="mail-oauth-provider" type="text" readonly placeholder="Not connected" />
-              </label>
-              <label>OAuth Email
-                <input id="mail-oauth-email" type="text" readonly placeholder="Not connected" />
-              </label>
-            </div>
-            <div id="mail-oauth-status" class="small muted">Choose a provider to connect this account.</div>
-          </div>
-          <div id="mail-manual-fields" class="stack">
-            <div class="two">
-              <label id="mail-imap-host-wrap">IMAP Host
-                <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
-              </label>
-              <label id="mail-imap-port-wrap">IMAP Port
-                <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
-              </label>
-            </div>
-            <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
-            <div class="two">
-              <label id="mail-smtp-host-wrap">SMTP Host
-                <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
-              </label>
-              <label id="mail-smtp-port-wrap">SMTP Port
-                <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
-              </label>
-            </div>
-            <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
-            <label id="mail-username-wrap">Username
-              <input id="mail-username" type="text" placeholder="you@example.com" />
+            <label>Auth Method
+              <select id="mail-auth-type">
+                <option value="oauth" selected>OAuth (recommended)</option>
+                <option value="password">Manual IMAP/SMTP</option>
+              </select>
             </label>
-            <div class="two" id="mail-password-pair-wrap">
-              <label id="mail-imap-password-wrap">IMAP Password
-                <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
-              </label>
-              <label id="mail-smtp-password-wrap">SMTP Password
-                <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
-              </label>
+            <div id="mail-oauth-fields" class="stack">
+              <div class="row">
+                <button type="button" id="mail-oauth-gmail-btn">Sign in with Gmail</button>
+                <button type="button" class="secondary" id="mail-oauth-reauth-btn" style="display: none;">Re-authenticate</button>
+              </div>
+              <div class="two">
+                <label>OAuth Provider
+                  <input id="mail-oauth-provider" type="text" readonly placeholder="Not connected" />
+                </label>
+                <label>OAuth Email
+                  <input id="mail-oauth-email" type="text" readonly placeholder="Not connected" />
+                </label>
+              </div>
+              <div id="mail-oauth-status" class="small muted">Choose a provider to connect this account.</div>
             </div>
-          </div>
-          <label id="mail-from-email-wrap">From Email
-            <input id="mail-from-email" type="text" placeholder="you@example.com" />
-          </label>
-          <label>From Name (optional)
-            <input id="mail-from-name" type="text" placeholder="Your Name" />
-          </label>
-          <label class="inline"><input id="mail-persist-secrets" type="checkbox" /> Persist mail passwords on this device</label>
-          <div class="row">
-            <button type="submit">Save Mail Account</button>
-            <button type="button" class="secondary" id="mail-test-btn">Test IMAP + SMTP</button>
-          </div>
-          <p class="small muted">Mail credentials are used by the local backend on this PC. They are not sent to your remote EBP key server.</p>
-        </form>
-      </section>
-
-      <section>
-        <h3>Inbox</h3>
-        <form id="mail-inbox-form" class="row" style="margin-bottom: 12px;">
-          <label>Folder
-            <input id="mail-folder" type="text" value="INBOX" />
-          </label>
-          <label>Limit
-            <input id="mail-limit" type="number" min="1" max="100" value="20" />
-          </label>
-          <label>Search
-            <input id="mail-search" type="text" placeholder="sender, subject, or content" />
-          </label>
-          <button type="submit">Refresh</button>
-        </form>
-        <ul id="mail-message-list" class="small"></ul>
-        <div id="mail-pagination" class="pagination-controls" style="display: none;">
-          <button type="button" class="secondary" id="mail-prev" disabled>← Previous</button>
-          <span class="pagination-info" id="mail-page-info">Page 1 of 1</span>
-          <button type="button" class="secondary" id="mail-next" disabled>Next →</button>
-        </div>
-      </section>
-
-      <section>
-        <h3>Message Reader</h3>
-        <label id="mail-message-body-wrap">Selected message
-          <textarea id="mail-message-body" readonly placeholder="Select a message from Inbox to view it..."></textarea>
-        </label>
-        <div class="mail-message-html-wrap" id="mail-message-html-wrap">
-          <div class="small muted" style="margin-bottom: 8px;">Rendered HTML preview (scripts and remote resources are blocked).</div>
-          <iframe
-            id="mail-message-html-frame"
-            class="mail-message-html-frame"
-            sandbox=""
-            referrerpolicy="no-referrer"
-            title="Rendered email body"
-          ></iframe>
-        </div>
-        <div id="mail-message-loading" class="small muted" style="display: none;">Loading selected message...</div>
-        <div class="row">
-          <input id="mail-sender-contact" type="text" placeholder="Sender contact name or fingerprint (for signed EBP payloads)" />
-          <button type="button" class="secondary" id="mail-decrypt-btn">Decrypt EBP Payload</button>
-        </div>
-        <div class="small">Verification: <span id="mail-verify-result" class="result-badge pending">-</span></div>
-        <div class="small muted" id="mail-verify-meta"></div>
-      </section>
-
-      <section>
-        <h3>Compose</h3>
-        <form id="mail-compose-form" class="stack">
-          <label>From
-            <input id="mail-compose-from" type="text" readonly placeholder="No sender account selected" />
-          </label>
-          <div class="two">
-            <label>To
-              <input id="mail-compose-to" type="text" placeholder="recipient@example.com" />
-            </label>
-            <label>Subject
-              <input id="mail-compose-subject" type="text" placeholder="Subject" />
-            </label>
-          </div>
-          <label>Mode
-            <select id="mail-compose-mode">
-              <option value="plain">Plaintext email</option>
-              <option value="ebp-encrypt" selected>EBP sign + encrypt payload in email body</option>
-            </select>
-          </label>
-          <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
-            <div class="contact-search-wrapper">
-              <input id="mail-compose-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
-              <button type="button" class="contact-search-clear" data-target="mail-compose-recipient" title="Clear">×</button>
-              <div class="contact-search-dropdown" id="mail-compose-recipient-dropdown"></div>
+            <div id="mail-manual-fields" class="stack">
+              <div class="two">
+                <label id="mail-imap-host-wrap">IMAP Host
+                  <input id="mail-imap-host" type="text" placeholder="imap.example.com" />
+                </label>
+                <label id="mail-imap-port-wrap">IMAP Port
+                  <input id="mail-imap-port" type="number" min="1" max="65535" value="993" />
+                </label>
+              </div>
+              <label class="inline"><input id="mail-imap-secure" type="checkbox" checked /> IMAP uses TLS/SSL</label>
+              <div class="two">
+                <label id="mail-smtp-host-wrap">SMTP Host
+                  <input id="mail-smtp-host" type="text" placeholder="smtp.example.com" />
+                </label>
+                <label id="mail-smtp-port-wrap">SMTP Port
+                  <input id="mail-smtp-port" type="number" min="1" max="65535" value="465" />
+                </label>
+              </div>
+              <label class="inline"><input id="mail-smtp-secure" type="checkbox" checked /> SMTP uses TLS/SSL</label>
+              <label id="mail-username-wrap">Username
+                <input id="mail-username" type="text" placeholder="you@example.com" />
+              </label>
+              <div class="two" id="mail-password-pair-wrap">
+                <label id="mail-imap-password-wrap">IMAP Password
+                  <input id="mail-imap-password" type="password" placeholder="App password or mailbox password" />
+                </label>
+                <label id="mail-smtp-password-wrap">SMTP Password
+                  <input id="mail-smtp-password" type="password" placeholder="App password or mailbox password" />
+                </label>
+              </div>
             </div>
-          </label>
-          <label>Body
-            <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
-          </label>
-          <div>
-            <button id="mail-compose-send-btn" type="submit">Send Email</button>
-          </div>
-        </form>
-      </section>
+            <label id="mail-from-email-wrap">From Email
+              <input id="mail-from-email" type="text" placeholder="you@example.com" />
+            </label>
+            <label>From Name (optional)
+              <input id="mail-from-name" type="text" placeholder="Your Name" />
+            </label>
+            <label class="inline"><input id="mail-persist-secrets" type="checkbox" /> Persist mail passwords on this device</label>
+            <div class="row">
+              <button type="submit">Save Mail Account</button>
+              <button type="button" class="secondary" id="mail-test-btn">Test IMAP + SMTP</button>
+            </div>
+            <p class="small muted">Mail credentials are used by the local backend on this PC. They are not sent to your remote EBP key server.</p>
+          </form>
+        </section>
+      </div>
 
-      <section>
-        <h3>How to Connect Your Email</h3>
-        <p class="small muted"><strong>Gmail:</strong> turn on 2FA in your Google account, then create an App Password and use that in EBP as your IMAP/SMTP password. Typical settings: <code>imap.gmail.com:993</code> (TLS on) and <code>smtp.gmail.com:465</code> (TLS on).</p>
-        <p class="small muted"><strong>Proton Mail:</strong> use Proton Mail Bridge for desktop IMAP/SMTP access. Enter the Bridge host/ports and the Bridge-generated username/password in EBP.</p>
-        <p class="small muted"><strong>All Others:</strong> this works with most providers the same way. Use your provider's IMAP + SMTP settings, enable secure ports/TLS, and use an app-specific password if your provider requires it.</p>
-      </section>
+      <div class="mail-tab-panel" id="mail-tab-help" data-mail-tab-panel="help">
+        <section data-expanded-by-default="true">
+          <h3>How to Connect Your Email</h3>
+          <p class="small muted"><strong>Gmail:</strong> turn on 2FA in your Google account, then create an App Password and use that in EBP as your IMAP/SMTP password. Typical settings: <code>imap.gmail.com:993</code> (TLS on) and <code>smtp.gmail.com:465</code> (TLS on).</p>
+          <p class="small muted"><strong>Proton Mail:</strong> use Proton Mail Bridge for desktop IMAP/SMTP access. Enter the Bridge host/ports and the Bridge-generated username/password in EBP.</p>
+          <p class="small muted"><strong>All Others:</strong> this works with most providers the same way. Use your provider's IMAP + SMTP settings, enable secure ports/TLS, and use an app-specific password if your provider requires it.</p>
+        </section>
+      </div>
     </div>
 
     <!-- Page: Settings -->

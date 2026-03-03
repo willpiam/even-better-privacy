@@ -48,6 +48,7 @@ const state = {
   mailOAuthPendingState: "",
   mailOAuthProvider: "",
   mailOAuthEmail: "",
+  mailActiveTab: "inbox",
 };
 let decryptedFileResult = null;
 
@@ -681,21 +682,6 @@ function bytesToHex(bytes) {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function formatByteSize(value) {
-  const bytes = Number(value);
-  if (!Number.isFinite(bytes) || bytes < 0) return "";
-  if (bytes < 1024) return `${Math.round(bytes)} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let size = bytes / 1024;
-  let unitIdx = 0;
-  while (size >= 1024 && unitIdx < units.length - 1) {
-    size /= 1024;
-    unitIdx += 1;
-  }
-  const rounded = size >= 100 ? size.toFixed(0) : size >= 10 ? size.toFixed(1) : size.toFixed(2);
-  return `${rounded.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")} ${units[unitIdx]}`;
-}
-
 async function hashFileSha256Hex(file) {
   const arrayBuffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", arrayBuffer);
@@ -1117,6 +1103,45 @@ function updateMailComposeSendState() {
   const requiresRecipient = modeEl.value === "ebp-encrypt";
   const hasRecipient = recipientEl.value.trim().length > 0;
   sendBtn.disabled = requiresRecipient && !hasRecipient;
+}
+
+function setMailTab(tabName) {
+  const safeTab = tabName || "inbox";
+  state.mailActiveTab = safeTab;
+  document.querySelectorAll("[data-mail-tab]").forEach((btn) => {
+    const active = btn.dataset.mailTab === safeTab;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-expanded", String(active));
+  });
+  document.querySelectorAll("[data-mail-tab-panel]").forEach((panel) => {
+    panel.classList.toggle("active", panel.dataset.mailTabPanel === safeTab);
+  });
+}
+
+function initMailTabs() {
+  document.querySelectorAll("[data-mail-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setMailTab(btn.dataset.mailTab || "inbox");
+    });
+  });
+  setMailTab(state.mailActiveTab || "inbox");
+}
+
+function syncMailFolderCustomUi() {
+  const folderEl = document.getElementById("mail-folder");
+  const customWrap = document.getElementById("mail-folder-custom-wrap");
+  if (!folderEl || !customWrap) return;
+  customWrap.classList.toggle("visible", folderEl.value === "__custom__");
+}
+
+function getSelectedMailFolder() {
+  const folderEl = document.getElementById("mail-folder");
+  const customEl = document.getElementById("mail-folder-custom");
+  const folderValue = folderEl ? String(folderEl.value || "").trim() : "";
+  if (folderValue === "__custom__") {
+    return (customEl?.value || "").trim() || "INBOX";
+  }
+  return folderValue || "INBOX";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1982,8 +2007,64 @@ function setMailReaderHtml(html) {
   if (frame) frame.setAttribute("srcdoc", buildSandboxedEmailSrcDoc(html));
 }
 
+function formatMailRelativeDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const deltaMs = Date.now() - date.getTime();
+  const absMinutes = Math.floor(Math.abs(deltaMs) / 60000);
+  const absHours = Math.floor(absMinutes / 60);
+  const absDays = Math.floor(absHours / 24);
+  if (absMinutes < 1) return "just now";
+  if (absMinutes < 60) return `${absMinutes}m ago`;
+  if (absHours < 24) return `${absHours}h ago`;
+  if (absDays === 1) return "Yesterday";
+  if (absDays < 7) return `${absDays}d ago`;
+  return date.toLocaleDateString();
+}
+
+function formatMailSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes < 0) return "";
+  if (bytes < 1024) return `${Math.round(bytes)} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let size = bytes / 1024;
+  let unitIdx = 0;
+  while (size >= 1024 && unitIdx < units.length - 1) {
+    size /= 1024;
+    unitIdx += 1;
+  }
+  const rounded = size >= 100 ? size.toFixed(0) : size >= 10 ? size.toFixed(1) : size.toFixed(2);
+  return `${rounded.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")} ${units[unitIdx]}`;
+}
+
+function renderMailReaderHeader() {
+  const detail = state.selectedMailMessage;
+  const subjectEl = document.getElementById("mail-reader-subject");
+  const fromEl = document.getElementById("mail-reader-from");
+  const toEl = document.getElementById("mail-reader-to");
+  const dateEl = document.getElementById("mail-reader-date");
+  const emptyEl = document.getElementById("mail-reader-empty");
+  const hasDetail = Boolean(detail);
+  if (emptyEl) emptyEl.style.display = hasDetail ? "none" : "block";
+  if (!subjectEl || !fromEl || !toEl || !dateEl) return;
+  if (!detail) {
+    subjectEl.textContent = "(none selected)";
+    fromEl.textContent = "-";
+    toEl.textContent = "-";
+    dateEl.textContent = "-";
+    return;
+  }
+  const dateValue = detail.date ? new Date(detail.date).toLocaleString() : "-";
+  subjectEl.textContent = detail.subject || "(no subject)";
+  fromEl.textContent = detail.from || "(unknown sender)";
+  toEl.textContent = detail.to || "(unknown recipient)";
+  dateEl.textContent = dateValue;
+}
+
 function renderSelectedMailMessageBody() {
   const detail = state.selectedMailMessage;
+  renderMailReaderHeader();
   if (!detail) {
     setMailReaderPlaintext("");
     return;
@@ -2017,21 +2098,17 @@ function renderMailMessages() {
   for (const msg of state.mailMessages) {
     const li = document.createElement("li");
     const isSelected = selectedUid !== null && String(msg.uid) === selectedUid;
-    const dateText = msg.date ? new Date(msg.date).toLocaleString() : "";
-    const sizeText = formatByteSize(msg.size);
-    const readState = msg.seen ? "Read" : "Unread";
-    const metaParts = [
-      `To: ${escapeHtml(msg.to || "(unknown recipient)")}`,
-      `UID: ${escapeHtml(String(msg.uid ?? "-"))}`,
-      readState,
-      sizeText ? `Size: ${sizeText}` : "",
-    ].filter(Boolean);
-    li.className = isSelected ? "clickable current" : "clickable";
+    const dateText = formatMailRelativeDate(msg.date);
+    const sizeText = formatMailSize(msg.size);
+    const fromMeta = [msg.from || "(unknown sender)", sizeText ? `Size: ${sizeText}` : ""].filter(Boolean).join(" • ");
+    li.className = isSelected ? "clickable current mail-message-item" : "clickable mail-message-item";
+    if (!msg.seen) li.classList.add("unread");
     li.innerHTML = `
-      <div><strong>${escapeHtml(msg.subject || "(no subject)")}</strong></div>
-      <div class="small muted">${escapeHtml(msg.from || "(unknown sender)")}</div>
-      <div class="small muted">${metaParts.join(" • ")}</div>
-      <div class="small muted">${escapeHtml(dateText)}</div>
+      <div class="row" style="justify-content: space-between; align-items: center; gap: 8px;">
+        <span class="mail-message-subject">${escapeHtml(msg.subject || "(no subject)")}</span>
+        <span class="small muted mail-message-date">${escapeHtml(dateText)}</span>
+      </div>
+      <div class="small muted mail-message-from">${escapeHtml(fromMeta)}</div>
     `;
     li.addEventListener("click", async () => {
       const requestId = state.mailMessageLoadRequestId + 1;
@@ -2044,7 +2121,7 @@ function renderMailMessages() {
       setMailMessageLoading(true);
       renderMailMessages();
       try {
-        const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
+        const folder = getSelectedMailFolder();
         const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
         const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
         if (requestId !== state.mailMessageLoadRequestId) return;
@@ -2066,7 +2143,7 @@ function renderMailMessages() {
 }
 
 async function loadMailMessages(page = 1) {
-  const folder = document.getElementById("mail-folder").value.trim() || "INBOX";
+  const folder = getSelectedMailFolder();
   const limit = Number(document.getElementById("mail-limit").value || 20);
   const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
   const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
@@ -2114,6 +2191,17 @@ function renderMailPagination() {
 }
 
 function initMailPage() {
+  initMailTabs();
+  renderMailReaderHeader();
+  syncMailFolderCustomUi();
+
+  const folderEl = document.getElementById("mail-folder");
+  if (folderEl) {
+    folderEl.addEventListener("change", () => {
+      syncMailFolderCustomUi();
+    });
+  }
+
   const renderHtmlToggle = document.getElementById("settings-mail-render-html");
   if (renderHtmlToggle) {
     renderHtmlToggle.checked = Boolean(state.mailRenderHtml);
@@ -2189,6 +2277,7 @@ function initMailPage() {
   const newAccountBtn = document.getElementById("mail-account-new");
   if (newAccountBtn) {
     newAccountBtn.addEventListener("click", () => {
+      setMailTab("account");
       state.selectedMailAccountId = null;
       state.mailCreatingNewAccount = true;
       if (accountSelect) accountSelect.value = "";
@@ -2379,6 +2468,26 @@ function initMailPage() {
         renderMailVerifyMeta(null);
         setStatus(err.message, "error");
       }
+    });
+  }
+
+  const replyBtn = document.getElementById("mail-reply-btn");
+  if (replyBtn) {
+    replyBtn.addEventListener("click", () => {
+      if (!state.selectedMailMessage) {
+        setStatus("Select a message first", "error");
+        return;
+      }
+      const fromAddress = extractEmailAddress(state.selectedMailMessage.from || "");
+      const subject = (state.selectedMailMessage.subject || "").trim();
+      const composeTo = document.getElementById("mail-compose-to");
+      const composeSubject = document.getElementById("mail-compose-subject");
+      const composeBody = document.getElementById("mail-compose-body");
+      if (composeTo) composeTo.value = fromAddress;
+      if (composeSubject) composeSubject.value = subject.toLowerCase().startsWith("re:") ? subject : `Re: ${subject || "(no subject)"}`;
+      setMailTab("compose");
+      composeBody?.focus();
+      setStatus("Reply drafted from selected message", "success");
     });
   }
 
