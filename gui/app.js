@@ -2138,14 +2138,6 @@ function initMailPage() {
       });
     });
   }
-  const oauthOutlookBtn = document.getElementById("mail-oauth-outlook-btn");
-  if (oauthOutlookBtn) {
-    oauthOutlookBtn.addEventListener("click", async () => {
-      await withLoading(oauthOutlookBtn, async () => {
-        await beginMailOAuth("outlook");
-      });
-    });
-  }
   const oauthReauthBtn = document.getElementById("mail-oauth-reauth-btn");
   if (oauthReauthBtn) {
     oauthReauthBtn.addEventListener("click", async () => {
