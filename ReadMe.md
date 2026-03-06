@@ -71,10 +71,10 @@ To run using OAuth you will need to provide the following values in your `.env` 
 
 ```ini
 MAIL_OAUTH_GMAIL_CLIENT_ID=""
-MAIL_OAUTH_GMAIL_CLIENT_SECRET=""
+MAIL_OAUTH_GMAIL_CLIENT_SECRET="" # only provided to key server (playing double duty by also handeling oauth)
 
 # MAIL_OAUTH_OUTLOOK_CLIENT_ID="" # no longer concerned with outlook because the headache wasn't worth the time
-# MAIL_OAUTH_OUTLOOK_CLIENT_SECRET=""
+# MAIL_OAUTH_OUTLOOK_CLIENT_SECRET="" # only provided to key server, not the users machine
 ```
 
 If you are using a testing gmail client oauth cred you may find this following link helpful for adding people as test users. [console.cloud.google.com/auth/audience](https://console.cloud.google.com/auth/audience). Make sure you are in the correct project. Scroll down to "Test users" and click "add users". 
