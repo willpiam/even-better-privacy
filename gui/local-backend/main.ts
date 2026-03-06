@@ -78,9 +78,7 @@ type EncryptedMailSecretsEnvelope = {
 };
 type OAuthProviderConfig = {
 	clientId: string;
-	clientSecret: string;
 	authUrl: string;
-	tokenUrl: string;
 	scopes: string[];
 	imapHost: string;
 	imapPort: number;
@@ -92,6 +90,7 @@ type OAuthProviderConfig = {
 type PendingMailOAuthStart = {
 	provider: Exclude<MailOauthProvider, "">;
 	createdAt: number;
+	serverUrl: string;
 };
 type CompletedMailOAuth = {
 	provider: Exclude<MailOauthProvider, "">;
@@ -147,9 +146,7 @@ const MAIL_OAUTH_REDIRECT_URI = `http://127.0.0.1:${PORT}/api/v1/mail/oauth/call
 const OAUTH_PROVIDER_CONFIGS: Record<Exclude<MailOauthProvider, "">, OAuthProviderConfig> = {
 	gmail: {
 		clientId: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_ID") ?? "",
-		clientSecret: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_SECRET") ?? "",
 		authUrl: "https://accounts.google.com/o/oauth2/v2/auth",
-		tokenUrl: "https://oauth2.googleapis.com/token",
 		scopes: ["https://mail.google.com/", "openid", "email"],
 		imapHost: "imap.gmail.com",
 		imapPort: 993,
@@ -160,9 +157,7 @@ const OAUTH_PROVIDER_CONFIGS: Record<Exclude<MailOauthProvider, "">, OAuthProvid
 	},
 	outlook: {
 		clientId: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_ID") ?? "",
-		clientSecret: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_SECRET") ?? "",
 		authUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-		tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
 		scopes: [
 			"https://outlook.office.com/IMAP.AccessAsUser.All",
 			"https://outlook.office.com/SMTP.Send",
@@ -428,8 +423,8 @@ function getOAuthProviderConfig(provider: unknown): OAuthProviderConfig {
 		throw new HttpError(STATUS.BadRequest, "unsupported oauth provider");
 	}
 	const conf = OAUTH_PROVIDER_CONFIGS[provider];
-	if (!conf.clientId || !conf.clientSecret) {
-		throw new HttpError(STATUS.BadRequest, `oauth credentials for ${provider} are not configured`);
+	if (!conf.clientId) {
+		throw new HttpError(STATUS.BadRequest, `oauth client id for ${provider} is not configured`);
 	}
 	return conf;
 }
@@ -437,22 +432,6 @@ function getOAuthProviderConfig(provider: unknown): OAuthProviderConfig {
 function toOAuthProvider(value: unknown): MailOauthProvider {
 	if (value === "gmail" || value === "outlook") return value;
 	return "";
-}
-
-function base64UrlDecode(input: string): string {
-	const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
-	const padding = normalized.length % 4 ? "=".repeat(4 - (normalized.length % 4)) : "";
-	return atob(normalized + padding);
-}
-
-function parseJwtPayload(token: string): Record<string, unknown> | null {
-	try {
-		const parts = token.split(".");
-		if (parts.length < 2) return null;
-		return JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>;
-	} catch {
-		return null;
-	}
 }
 
 function pruneExpiredOAuthState(): void {
@@ -740,71 +719,26 @@ function buildSmtpAuth(config: MailAccountConfig, secrets: MailAuthSecrets): Rec
 	return { user: config.username, pass: secrets.smtpPassword };
 }
 
-async function fetchOAuthUserEmail(provider: Exclude<MailOauthProvider, "">, accessToken: string): Promise<string | null> {
-	try {
-		const userInfoUrl = provider === "gmail"
-			? "https://openidconnect.googleapis.com/v1/userinfo"
-			: "https://graph.microsoft.com/oidc/userinfo";
-		const res = await fetch(userInfoUrl, { headers: { authorization: `Bearer ${accessToken}` } });
-		if (!res.ok) return null;
-		const body = await res.json();
-		const email = typeof body?.email === "string"
-			? body.email
-			: typeof body?.preferred_username === "string"
-			? body.preferred_username
-			: typeof body?.upn === "string"
-			? body.upn
-			: "";
-		return email ? email.toLowerCase() : null;
-	} catch {
-		return null;
-	}
-}
-
 async function exchangeOAuthCode(
+	serverUrl: string,
 	provider: Exclude<MailOauthProvider, "">,
 	code: string,
 ): Promise<{ accessToken: string; refreshToken: string; tokenExpiry: number; email: string }> {
-	const conf = getOAuthProviderConfig(provider);
-	const payload = new URLSearchParams({
-		client_id: conf.clientId,
-		client_secret: conf.clientSecret,
-		code,
-		redirect_uri: MAIL_OAUTH_REDIRECT_URI,
-		grant_type: "authorization_code",
-	});
-	const tokenRes = await fetch(conf.tokenUrl, {
+	const exchangeUrl = apiUrl(serverUrl, "/api/v1/mail/oauth/exchange");
+	const res = await fetch(exchangeUrl, {
 		method: "POST",
-		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body: payload.toString(),
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ provider, code, redirectUri: MAIL_OAUTH_REDIRECT_URI }),
 	});
-	const tokenBody = await tokenRes.json().catch(() => ({}));
-	if (!tokenRes.ok) {
-		const reason = (tokenBody as { error_description?: string; error?: string }).error_description ??
-			(tokenBody as { error?: string }).error ??
-			`HTTP ${tokenRes.status}`;
+	const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+	if (!res.ok) {
+		const reason = typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
 		throw new HttpError(STATUS.BadGateway, `oauth token exchange failed: ${reason}`);
 	}
-	const accessToken = typeof (tokenBody as { access_token?: unknown }).access_token === "string"
-		? (tokenBody as { access_token: string }).access_token
-		: "";
-	const refreshToken = typeof (tokenBody as { refresh_token?: unknown }).refresh_token === "string"
-		? (tokenBody as { refresh_token: string }).refresh_token
-		: "";
-	const expiresIn = Number((tokenBody as { expires_in?: unknown }).expires_in ?? 3600) || 3600;
-	const tokenExpiry = Date.now() + expiresIn * 1000;
-	const idToken = typeof (tokenBody as { id_token?: unknown }).id_token === "string"
-		? (tokenBody as { id_token: string }).id_token
-		: "";
-	const jwtPayload = idToken ? parseJwtPayload(idToken) : null;
-	const emailFromIdToken = jwtPayload && (
-			typeof jwtPayload.email === "string" ? jwtPayload.email :
-			typeof jwtPayload.preferred_username === "string" ? jwtPayload.preferred_username :
-			typeof jwtPayload.upn === "string" ? jwtPayload.upn :
-			""
-		);
-	const fallbackEmail = await fetchOAuthUserEmail(provider, accessToken);
-	const email = (emailFromIdToken || fallbackEmail || "").trim().toLowerCase();
+	const accessToken = typeof body.accessToken === "string" ? body.accessToken : "";
+	const refreshToken = typeof body.refreshToken === "string" ? body.refreshToken : "";
+	const tokenExpiry = typeof body.tokenExpiry === "number" ? body.tokenExpiry : Date.now() + 3600_000;
+	const email = typeof body.email === "string" ? body.email : "";
 	if (!accessToken || !refreshToken || !email) {
 		throw new HttpError(STATUS.BadGateway, "oauth token response missing required fields");
 	}
@@ -824,37 +758,28 @@ async function refreshOAuthToken(
 		typeof secrets.accessToken === "string" &&
 		secrets.accessToken.length > 0;
 	if (stillValid) return secrets;
-	const provider = getOAuthProviderConfig(config.oauthProvider);
-	const payload = new URLSearchParams({
-		client_id: provider.clientId,
-		client_secret: provider.clientSecret,
-		grant_type: "refresh_token",
-		refresh_token: secrets.refreshToken,
-	});
-	const tokenRes = await fetch(provider.tokenUrl, {
+	const state = await readState(identityDir);
+	const serverUrl = state?.server;
+	if (!serverUrl) throw new HttpError(STATUS.BadRequest, "server is not configured; needed for oauth token refresh");
+	const provider = config.oauthProvider as Exclude<MailOauthProvider, "">;
+	const refreshUrl = apiUrl(serverUrl, "/api/v1/mail/oauth/refresh");
+	const res = await fetch(refreshUrl, {
 		method: "POST",
-		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body: payload.toString(),
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ provider, refreshToken: secrets.refreshToken }),
 	});
-	const tokenBody = await tokenRes.json().catch(() => ({}));
-	if (!tokenRes.ok) {
-		const reason = (tokenBody as { error_description?: string; error?: string }).error_description ??
-			(tokenBody as { error?: string }).error ??
-			`HTTP ${tokenRes.status}`;
+	const body = await res.json().catch(() => ({})) as Record<string, unknown>;
+	if (!res.ok) {
+		const reason = typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
 		throw new HttpError(STATUS.BadGateway, `oauth token refresh failed: ${reason}`);
 	}
-	const accessToken = typeof (tokenBody as { access_token?: unknown }).access_token === "string"
-		? (tokenBody as { access_token: string }).access_token
-		: "";
+	const accessToken = typeof body.accessToken === "string" ? body.accessToken : "";
 	if (!accessToken) throw new HttpError(STATUS.BadGateway, "oauth token refresh did not return an access token");
-	const expiresIn = Number((tokenBody as { expires_in?: unknown }).expires_in ?? 3600) || 3600;
 	const updated: MailAuthSecrets = {
 		...secrets,
 		accessToken,
-		tokenExpiry: Date.now() + expiresIn * 1000,
-		refreshToken: typeof (tokenBody as { refresh_token?: unknown }).refresh_token === "string"
-			? (tokenBody as { refresh_token: string }).refresh_token
-			: secrets.refreshToken,
+		tokenExpiry: typeof body.tokenExpiry === "number" ? body.tokenExpiry : Date.now() + 3600_000,
+		refreshToken: typeof body.refreshToken === "string" ? body.refreshToken : secrets.refreshToken,
 	};
 	const secretStore = await getMailSecretsStore(identityDir);
 	secretStore[accountId] = updated;
@@ -1147,16 +1072,19 @@ async function handleRequest(req: Request): Promise<Response> {
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/start") {
-			const body = await readJson<{ provider?: unknown }>(req);
+			const body = await readJson<{ provider?: unknown; home?: unknown }>(req);
 			const providerRaw = toSafeString(body.provider, 64).toLowerCase();
 			if (!isMailOauthProvider(providerRaw)) {
 				throw new HttpError(STATUS.BadRequest, "provider must be gmail or outlook");
 			}
 			const provider = providerRaw as Exclude<MailOauthProvider, "">;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const ctx = await getContext(home ?? undefined);
+			const serverUrl = resolveServer(ctx);
 			const conf = getOAuthProviderConfig(provider);
 			pruneExpiredOAuthState();
 			const oauthState = randomHex(24);
-			mailOauthStarts.set(oauthState, { provider, createdAt: Date.now() });
+			mailOauthStarts.set(oauthState, { provider, createdAt: Date.now(), serverUrl });
 			const authUrl = new URL(conf.authUrl);
 			authUrl.searchParams.set("client_id", conf.clientId);
 			authUrl.searchParams.set("response_type", "code");
@@ -1188,7 +1116,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				});
 			}
 			try {
-				const exchanged = await exchangeOAuthCode(pending.provider, code);
+				const exchanged = await exchangeOAuthCode(pending.serverUrl, pending.provider, code);
 				mailOauthCompleted.set(oauthState, {
 					provider: pending.provider,
 					createdAt: Date.now(),

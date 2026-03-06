@@ -21,7 +21,8 @@
     "npm:mailparser@^3.7.4": "3.9.3",
     "npm:mailparser@^3.9.3": "3.9.3",
     "npm:nodemailer@*": "8.0.1",
-    "npm:nodemailer@^6.9.14": "6.10.1"
+    "npm:nodemailer@^6.9.14": "6.10.1",
+    "npm:playwright@1.57.0": "1.57.0"
   },
   "jsr": {
     "@noble/ciphers@1.3.0": {

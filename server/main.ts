@@ -118,6 +118,194 @@ const LIMITS = {
 };
 
 // =============================================================================
+// Mail OAuth Proxy Configuration (secrets stay on this server)
+// =============================================================================
+
+type MailOauthProvider = "gmail" | "outlook";
+
+interface OAuthProviderServerConfig {
+  clientId: string;
+  clientSecret: string;
+  tokenUrl: string;
+}
+
+const OAUTH_PROVIDER_SERVER_CONFIGS: Record<MailOauthProvider, OAuthProviderServerConfig> = {
+  gmail: {
+    clientId: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_ID") ?? "",
+    clientSecret: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_SECRET") ?? "",
+    tokenUrl: "https://oauth2.googleapis.com/token",
+  },
+  outlook: {
+    clientId: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_ID") ?? "",
+    clientSecret: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_SECRET") ?? "",
+    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+  },
+};
+
+function isMailOauthProvider(value: unknown): value is MailOauthProvider {
+  return value === "gmail" || value === "outlook";
+}
+
+function getOAuthServerConfig(provider: MailOauthProvider): OAuthProviderServerConfig {
+  const conf = OAUTH_PROVIDER_SERVER_CONFIGS[provider];
+  if (!conf.clientId || !conf.clientSecret) {
+    throw new Error(`oauth credentials for ${provider} are not configured on server`);
+  }
+  return conf;
+}
+
+function base64UrlDecode(input: string): string {
+  const normalized = input.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = normalized.length % 4 ? "=".repeat(4 - (normalized.length % 4)) : "";
+  return atob(normalized + padding);
+}
+
+function parseJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    return JSON.parse(base64UrlDecode(parts[1])) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchOAuthUserEmail(provider: MailOauthProvider, accessToken: string): Promise<string | null> {
+  try {
+    const userInfoUrl = provider === "gmail"
+      ? "https://openidconnect.googleapis.com/v1/userinfo"
+      : "https://graph.microsoft.com/oidc/userinfo";
+    const res = await fetch(userInfoUrl, { headers: { authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) return null;
+    const body = await res.json();
+    const email = typeof body?.email === "string"
+      ? body.email
+      : typeof body?.preferred_username === "string"
+      ? body.preferred_username
+      : typeof body?.upn === "string"
+      ? body.upn
+      : null;
+    return email ? email.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleOAuthExchange(req: Request): Promise<Response> {
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, bodyResult.status);
+
+  const { provider: rawProvider, code: rawCode, redirectUri: rawRedirectUri } = bodyResult.data;
+
+  if (!isMailOauthProvider(rawProvider)) {
+    return json({ error: "provider must be gmail or outlook" }, 400);
+  }
+  if (typeof rawCode !== "string" || !rawCode) {
+    return json({ error: "code is required" }, 400);
+  }
+  if (typeof rawRedirectUri !== "string" || !rawRedirectUri) {
+    return json({ error: "redirectUri is required" }, 400);
+  }
+
+  const conf = getOAuthServerConfig(rawProvider);
+  const payload = new URLSearchParams({
+    client_id: conf.clientId,
+    client_secret: conf.clientSecret,
+    code: rawCode,
+    redirect_uri: rawRedirectUri,
+    grant_type: "authorization_code",
+  });
+
+  const tokenRes = await fetch(conf.tokenUrl, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: payload.toString(),
+  });
+  const tokenBody = await tokenRes.json().catch(() => ({}));
+  if (!tokenRes.ok) {
+    const reason = (tokenBody as { error_description?: string; error?: string }).error_description ??
+      (tokenBody as { error?: string }).error ??
+      `HTTP ${tokenRes.status}`;
+    return json({ error: `oauth token exchange failed: ${reason}` }, 502);
+  }
+
+  const accessToken = typeof (tokenBody as { access_token?: unknown }).access_token === "string"
+    ? (tokenBody as { access_token: string }).access_token : "";
+  const refreshToken = typeof (tokenBody as { refresh_token?: unknown }).refresh_token === "string"
+    ? (tokenBody as { refresh_token: string }).refresh_token : "";
+  const expiresIn = Number((tokenBody as { expires_in?: unknown }).expires_in ?? 3600) || 3600;
+  const tokenExpiry = Date.now() + expiresIn * 1000;
+
+  const idToken = typeof (tokenBody as { id_token?: unknown }).id_token === "string"
+    ? (tokenBody as { id_token: string }).id_token : "";
+  const jwtPayload = idToken ? parseJwtPayload(idToken) : null;
+  const emailFromIdToken = jwtPayload && (
+    typeof jwtPayload.email === "string" ? jwtPayload.email :
+    typeof jwtPayload.preferred_username === "string" ? jwtPayload.preferred_username :
+    typeof jwtPayload.upn === "string" ? jwtPayload.upn :
+    ""
+  );
+  const fallbackEmail = await fetchOAuthUserEmail(rawProvider, accessToken);
+  const email = (emailFromIdToken || fallbackEmail || "").trim().toLowerCase();
+
+  if (!accessToken || !refreshToken || !email) {
+    return json({ error: "oauth token response missing required fields" }, 502);
+  }
+
+  return json({ accessToken, refreshToken, tokenExpiry, email });
+}
+
+async function handleOAuthRefresh(req: Request): Promise<Response> {
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, bodyResult.status);
+
+  const { provider: rawProvider, refreshToken: rawRefreshToken } = bodyResult.data;
+
+  if (!isMailOauthProvider(rawProvider)) {
+    return json({ error: "provider must be gmail or outlook" }, 400);
+  }
+  if (typeof rawRefreshToken !== "string" || !rawRefreshToken) {
+    return json({ error: "refreshToken is required" }, 400);
+  }
+
+  const conf = getOAuthServerConfig(rawProvider);
+  const payload = new URLSearchParams({
+    client_id: conf.clientId,
+    client_secret: conf.clientSecret,
+    grant_type: "refresh_token",
+    refresh_token: rawRefreshToken,
+  });
+
+  const tokenRes = await fetch(conf.tokenUrl, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: payload.toString(),
+  });
+  const tokenBody = await tokenRes.json().catch(() => ({}));
+  if (!tokenRes.ok) {
+    const reason = (tokenBody as { error_description?: string; error?: string }).error_description ??
+      (tokenBody as { error?: string }).error ??
+      `HTTP ${tokenRes.status}`;
+    return json({ error: `oauth token refresh failed: ${reason}` }, 502);
+  }
+
+  const accessToken = typeof (tokenBody as { access_token?: unknown }).access_token === "string"
+    ? (tokenBody as { access_token: string }).access_token : "";
+  if (!accessToken) {
+    return json({ error: "oauth token refresh did not return an access token" }, 502);
+  }
+  const expiresIn = Number((tokenBody as { expires_in?: unknown }).expires_in ?? 3600) || 3600;
+  const newRefreshToken = typeof (tokenBody as { refresh_token?: unknown }).refresh_token === "string"
+    ? (tokenBody as { refresh_token: string }).refresh_token : rawRefreshToken;
+
+  return json({
+    accessToken,
+    refreshToken: newRefreshToken,
+    tokenExpiry: Date.now() + expiresIn * 1000,
+  });
+}
+
+// =============================================================================
 // Email Verification Configuration
 // =============================================================================
 
@@ -192,6 +380,8 @@ const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number }> = {
   "POST /api/v1/revoke": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/verify-email/request": { windowMs: 60_000, maxRequests: 15 },
   "GET /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
+  "POST /api/v1/mail/oauth/exchange": { windowMs: 60_000, maxRequests: 10 },
+  "POST /api/v1/mail/oauth/refresh": { windowMs: 60_000, maxRequests: 20 },
   "GET *": { windowMs: 60_000, maxRequests: 200 },
 };
 
@@ -714,6 +904,14 @@ async function handleRequest(req: Request): Promise<Response> {
       return respond(attachCors(await handleGetRevocations(fingerprint, db), corsHeaders));
     }
 
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/exchange") {
+      return respond(attachCors(await handleOAuthExchange(req), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/refresh") {
+      return respond(attachCors(await handleOAuthRefresh(req), corsHeaders));
+    }
+
     return jsonResponse({ error: "not found" }, 404);
   } catch (err) {
     const traceId = generateTraceId();
@@ -1008,11 +1206,9 @@ async function handlePostDetail(req: Request, db: DatabaseAdapter): Promise<Resp
       }
 
       const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
-      try {
-        await sendVerificationEmail(detail, link, fingerprint);
-      } catch (err) {
+      sendVerificationEmail(detail, link, fingerprint).catch((err) => {
         console.error("failed to send verification email:", err);
-      }
+      });
     }
   } catch (e) {
     if (String(e).includes("UNIQUE")) {

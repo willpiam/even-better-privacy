@@ -44,6 +44,7 @@ const pgConfig = {
 export default defineConfig({
   testDir: "./gui/e2e",
   testIgnore: ["**/global.setup.ts"],
+  workers: 1,
   timeout: 30_000,
   expect: {
     timeout: 5_000,
