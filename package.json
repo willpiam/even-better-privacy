@@ -2,13 +2,14 @@
   "name": "ebp",
   "private": true,
   "dependencies": {
-    "imapflow": "^1.2.10",
+    "imapflow": "^1.2.12",
     "mailparser": "^3.9.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.43.1"
+    "@playwright/test": "^1.58.2",
+    "playwright": "1.58.2"
   },
   "scripts": {
-    "test:e2e": "playwright test --headed --reporter=line"
+    "test:e2e": "playwright test gui/e2e --headed --reporter=line"
   }
 }

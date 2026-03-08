@@ -1,28 +1,27 @@
 {
   "version": "5",
   "specifiers": {
-    "jsr:@noble/ciphers@^1.2.1": "1.3.0",
+    "jsr:@noble/ciphers@^1.3.0": "1.3.0",
     "jsr:@noble/curves@2.0": "2.0.1",
     "jsr:@noble/hashes@2": "2.0.1",
     "jsr:@noble/hashes@2.0": "2.0.1",
     "jsr:@noble/hashes@^1.8.0": "1.8.0",
-    "jsr:@noble/post-quantum@*": "0.5.2",
-    "jsr:@noble/post-quantum@~0.5.2": "0.5.2",
+    "jsr:@noble/post-quantum@*": "0.5.4",
+    "jsr:@noble/post-quantum@~0.5.4": "0.5.4",
     "jsr:@std/assert@*": "1.0.16",
     "jsr:@std/assert@^1.0.6": "1.0.16",
-    "jsr:@std/cli@*": "1.0.24",
-    "jsr:@std/cli@^1.0.6": "1.0.24",
+    "jsr:@std/cli@^1.0.28": "1.0.28",
     "jsr:@std/internal@^1.0.12": "1.0.12",
-    "npm:@playwright/test@^1.43.1": "1.57.0",
+    "npm:@playwright/test@1.58.2": "1.58.2",
+    "npm:@playwright/test@^1.58.2": "1.58.2",
     "npm:@types/node@*": "24.2.0",
     "npm:bech32@2": "2.0.0",
-    "npm:imapflow@^1.1.1": "1.2.10",
-    "npm:imapflow@^1.2.10": "1.2.10",
-    "npm:mailparser@^3.7.4": "3.9.3",
+    "npm:imapflow@^1.2.12": "1.2.12",
     "npm:mailparser@^3.9.3": "3.9.3",
     "npm:nodemailer@*": "8.0.1",
-    "npm:nodemailer@^6.9.14": "6.10.1",
-    "npm:playwright@1.57.0": "1.57.0"
+    "npm:nodemailer@^6.10.1": "6.10.1",
+    "npm:playwright@1.57.0": "1.57.0",
+    "npm:playwright@1.58.2": "1.58.2"
   },
   "jsr": {
     "@noble/ciphers@1.3.0": {
@@ -40,8 +39,8 @@
     "@noble/hashes@2.0.1": {
       "integrity": "e0e908292a0bf91099cf8ba0720a1647cef82ab38b588815b5e9535b4ff4d7bb"
     },
-    "@noble/post-quantum@0.5.2": {
-      "integrity": "e15f0a636f8d3b39ad584fe9b8a7dd203a6330e9ec48728be7edd6af8e2c7136",
+    "@noble/post-quantum@0.5.4": {
+      "integrity": "b50d47f863976f3b178a73762f0087c8309dfac0bc30aff4d167253830f145ba",
       "dependencies": [
         "jsr:@noble/curves",
         "jsr:@noble/hashes@2.0"
@@ -56,8 +55,8 @@
         "jsr:@std/internal"
       ]
     },
-    "@std/cli@1.0.24": {
-      "integrity": "b655a5beb26aa94f98add6bc8889f5fb9bc3ee2cc3fc954e151201f4c4200a5e"
+    "@std/cli@1.0.28": {
+      "integrity": "74ef9b976db59ca6b23a5283469c9072be6276853807a83ec6c7ce412135c70a"
     },
     "@std/internal@1.0.12": {
       "integrity": "972a634fd5bc34b242024402972cd5143eac68d8dffaca5eaa4dba30ce17b027"
@@ -67,10 +66,10 @@
     "@pinojs/redact@0.4.0": {
       "integrity": "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="
     },
-    "@playwright/test@1.57.0": {
-      "integrity": "sha512-6TyEnHgd6SArQO8UO2OMTxshln3QMWBtPGrOCgs3wVEmQmwyuNtB10IZMfmYDE0riwNR1cu4q+pPcxMVtaG3TA==",
+    "@playwright/test@1.58.2": {
+      "integrity": "sha512-akea+6bHYBBfA9uQqSYmlJXn61cTa+jbO87xVLCWbTqbWadRVmhxlXATaOjOgcBaWU4ePo0wB41KMFv3o35IXA==",
       "dependencies": [
-        "playwright"
+        "playwright@1.58.2"
       ],
       "bin": true
     },
@@ -175,8 +174,8 @@
         "safer-buffer"
       ]
     },
-    "imapflow@1.2.10": {
-      "integrity": "sha512-tqmk0Gj4YBEnGCjjrUYWIf3Z4tzn4iihUcMkBRbafvHF3LqEiYNCSJAAYYbwERFxlikOJ3zzqtEcoxCUTjMv2Q==",
+    "imapflow@1.2.12": {
+      "integrity": "sha512-UX8qCKXZk2xExe/x8KPTSbhROdtUGP13bSLSjT9Sb3YwGuryD4aFNlGhbWBW5B1GtgHMRxVv9yvl61RqXgIQtQ==",
       "dependencies": [
         "@zone-eu/mailsplit",
         "encoding-japanese",
@@ -283,10 +282,24 @@
       "integrity": "sha512-agTcKlMw/mjBWOnD6kFZttAAGHgi/Nw0CZ2o6JqWSbMlI219lAFLZZCyqByTsvVAJq5XA5H8cA6PrvBRpBWEuQ==",
       "bin": true
     },
+    "playwright-core@1.58.2": {
+      "integrity": "sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==",
+      "bin": true
+    },
     "playwright@1.57.0": {
       "integrity": "sha512-ilYQj1s8sr2ppEJ2YVadYBN0Mb3mdo9J0wQ+UuDhzYqURwSoW4n1Xs5vs7ORwgDGmyEh33tRMeS8KhdkMoLXQw==",
       "dependencies": [
-        "playwright-core"
+        "playwright-core@1.57.0"
+      ],
+      "optionalDependencies": [
+        "fsevents"
+      ],
+      "bin": true
+    },
+    "playwright@1.58.2": {
+      "integrity": "sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==",
+      "dependencies": [
+        "playwright-core@1.58.2"
       ],
       "optionalDependencies": [
         "fsevents"
@@ -437,20 +450,21 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@noble/ciphers@^1.2.1",
+      "jsr:@noble/ciphers@^1.3.0",
       "jsr:@noble/hashes@^1.8.0",
-      "jsr:@noble/post-quantum@~0.5.2",
-      "jsr:@std/cli@^1.0.6",
+      "jsr:@noble/post-quantum@~0.5.4",
+      "jsr:@std/cli@^1.0.28",
       "npm:bech32@2",
-      "npm:imapflow@^1.1.1",
-      "npm:mailparser@^3.7.4",
-      "npm:nodemailer@^6.9.14"
+      "npm:imapflow@^1.2.12",
+      "npm:mailparser@^3.9.3",
+      "npm:nodemailer@^6.10.1"
     ],
     "packageJson": {
       "dependencies": [
-        "npm:@playwright/test@^1.43.1",
-        "npm:imapflow@^1.2.10",
-        "npm:mailparser@^3.9.3"
+        "npm:@playwright/test@^1.58.2",
+        "npm:imapflow@^1.2.12",
+        "npm:mailparser@^3.9.3",
+        "npm:playwright@1.58.2"
       ]
     }
   }
