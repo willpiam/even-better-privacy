@@ -5,6 +5,9 @@ use std::path::{PathBuf, Path};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 
+const BUILD_MAIL_OAUTH_GMAIL_CLIENT_ID: Option<&str> = option_env!("MAIL_OAUTH_GMAIL_CLIENT_ID");
+const BUILD_MAIL_OAUTH_OUTLOOK_CLIENT_ID: Option<&str> = option_env!("MAIL_OAUTH_OUTLOOK_CLIENT_ID");
+
 #[derive(Clone)]
 struct SidecarState(Arc<Mutex<Option<Child>>>);
 
@@ -23,6 +26,16 @@ fn main() {
         cmd
           .env("GUI_BACKEND_HOST", "127.0.0.1")
           .env("GUI_BACKEND_PORT", "8787");
+        set_env_if_non_empty(
+          &mut cmd,
+          "MAIL_OAUTH_GMAIL_CLIENT_ID",
+          BUILD_MAIL_OAUTH_GMAIL_CLIENT_ID,
+        );
+        set_env_if_non_empty(
+          &mut cmd,
+          "MAIL_OAUTH_OUTLOOK_CLIENT_ID",
+          BUILD_MAIL_OAUTH_OUTLOOK_CLIENT_ID,
+        );
 
         if let Some(log) = &log_file {
           if let Ok(stdout_log) = log.try_clone() {
@@ -60,6 +73,14 @@ fn main() {
     })
     .run(tauri::generate_context!())
     .expect("error while running tauri application");
+}
+
+fn set_env_if_non_empty(cmd: &mut Command, key: &str, value: Option<&str>) {
+  if let Some(value) = value {
+    if !value.trim().is_empty() {
+      cmd.env(key, value);
+    }
+  }
 }
 
 fn init_sidecar_log(app: &tauri::App) -> std::io::Result<std::fs::File> {

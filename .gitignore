@@ -26,6 +26,7 @@ npm-debug.log*
 
 # Environment files
 .env
+.env.desktop.build
 .env.local
 .env.*.local
 

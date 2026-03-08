@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 DESKTOP_DIR="${ROOT}/desktop"
 BUNDLE_DIR="${DESKTOP_DIR}/src-tauri/target/release/bundle/msi"
 MSI_OUTPUT="${ROOT}/EBP.msi"
+ENV_FILE="${ROOT}/.env.desktop.build"
 
 echo "Building EBP desktop app for Windows (MSI)..."
 echo "Note: this script should run on Windows unless you have a configured cross-compilation toolchain."
@@ -18,6 +19,16 @@ case "$(uname -s)" in
     exit 1
     ;;
 esac
+
+if [ -f "${ENV_FILE}" ]; then
+  echo "Loading build-only env from ${ENV_FILE}"
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+else
+  echo "No build-only env file found at ${ENV_FILE} (continuing with current environment)."
+fi
 
 cd "${DESKTOP_DIR}"
 npm install

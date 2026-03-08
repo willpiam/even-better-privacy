@@ -5,8 +5,19 @@ echo "Prereqs (once): sudo apt install libwebkit2gtk-4.0-dev libssl-dev build-es
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APPIMAGE_DIR="${ROOT}/desktop/src-tauri/target/release/bundle/appimage"
+ENV_FILE="${ROOT}/.env.desktop.build"
 
 rm -rf "${APPIMAGE_DIR}/ebp.AppDir"
+
+if [ -f "${ENV_FILE}" ]; then
+  echo "Loading build-only env from ${ENV_FILE}"
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE}"
+  set +a
+else
+  echo "No build-only env file found at ${ENV_FILE} (continuing with current environment)."
+fi
 
 cd "${ROOT}/desktop"
 npm install
