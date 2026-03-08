@@ -317,36 +317,54 @@ async function waitForMessageDetailBySubject(
   accountId: string,
   subject: string,
 ): Promise<{ text: string; ebpPayload: Record<string, unknown> | null }> {
-  for (let attempt = 0; attempt < 120; attempt += 1) {
+  const attempts = 72;
+  const delayMs = 2500;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     const listRes = await request.get(
-      `/api/v1/mail/messages?folder=INBOX&limit=30&accountId=${encodeURIComponent(accountId)}`,
+      `/api/v1/mail/messages?folder=INBOX&limit=30&search=${
+        encodeURIComponent(subject)
+      }&accountId=${encodeURIComponent(accountId)}`,
     );
-    if (listRes.ok()) {
-      const listJson = await listRes.json() as {
-        messages?: Array<{ uid?: number; subject?: string }>;
-      };
-      const match = (listJson.messages ?? []).find((msg) => msg.subject === subject && msg.uid);
-      if (match?.uid) {
-        const detailRes = await request.get(
-          `/api/v1/mail/message?folder=INBOX&uid=${encodeURIComponent(String(match.uid))}&accountId=${encodeURIComponent(accountId)}`,
-        );
-        if (detailRes.ok()) {
-          const detailJson = await detailRes.json() as {
-            text?: string;
-            html?: string;
-            ebpPayload?: Record<string, unknown> | null;
-          };
-          const text = detailJson.text ?? detailJson.html ?? "";
-          return { text, ebpPayload: detailJson.ebpPayload ?? null };
-        }
-      }
+    if (!listRes.ok()) {
+      const bodyText = await listRes.text().catch(() => "");
+      throw new Error(
+        `Failed to list inbox messages while waiting for subject "${subject}" (status ${
+          listRes.status()
+        }): ${bodyText.slice(0, 500)}`,
+      );
     }
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    const listJson = await listRes.json() as {
+      messages?: Array<{ uid?: number; subject?: string }>;
+    };
+    const match = (listJson.messages ?? []).find((msg) =>
+      typeof msg.uid === "number" && typeof msg.subject === "string" && msg.subject.includes(subject)
+    );
+    if (match?.uid) {
+      const detailRes = await request.get(
+        `/api/v1/mail/message?folder=INBOX&uid=${encodeURIComponent(String(match.uid))}&accountId=${encodeURIComponent(accountId)}`,
+      );
+      if (!detailRes.ok()) {
+        const bodyText = await detailRes.text().catch(() => "");
+        throw new Error(
+          `Found matching message uid ${match.uid} but failed to load detail (status ${
+            detailRes.status()
+          }): ${bodyText.slice(0, 500)}`,
+        );
+      }
+      const detailJson = await detailRes.json() as {
+        text?: string;
+        html?: string;
+        ebpPayload?: Record<string, unknown> | null;
+      };
+      const text = detailJson.text ?? detailJson.html ?? "";
+      return { text, ebpPayload: detailJson.ebpPayload ?? null };
+    }
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
-  throw new Error(`Timed out waiting for message detail with subject: ${subject}`);
+  throw new Error(`Timed out waiting for inbox message with subject containing: ${subject}`);
 }
 
-test.only("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
+test("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
   const now = Date.now();
   const messageUid = 101;
   const htmlBody = `<h1>Rendered ${now}</h1><p>This is an html email body.</p><script>window.__mailScriptExecuted = true;</script>`;
@@ -480,7 +498,7 @@ test.only("mail reader defaults to plaintext and can render HTML from settings",
   await expect(page.locator("#settings-mail-render-html")).toBeChecked();
 });
 
-test.only("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
+test("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
   page,
   request,
 }) => {
@@ -575,7 +593,7 @@ test.only("adds two mail accounts, sends encrypted mail between identities, decr
   }
 });
 
-test.only("inbox search passes search param and filters displayed messages", async ({ page }) => {
+test("inbox search passes search param and filters displayed messages", async ({ page }) => {
   const now = Date.now();
   const allMessages = [
     { uid: 1, subject: "Meeting notes", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 3000, seen: true, size: 200 },
@@ -705,7 +723,7 @@ test.only("inbox search passes search param and filters displayed messages", asy
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
 });
 
-test.only("inbox pagination navigates between pages", async ({ page }) => {
+test("inbox pagination navigates between pages", async ({ page }) => {
   const now = Date.now();
   const page1Messages = [
     { uid: 3, subject: "Newest msg", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 1000, seen: false, size: 100 },
