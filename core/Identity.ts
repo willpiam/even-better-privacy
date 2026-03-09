@@ -6,6 +6,7 @@ import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
 import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
+import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import { AES } from "./AES.ts";
 import { Buffer } from "node:buffer";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
@@ -20,6 +21,7 @@ import {
     type SignedRevocationCertificate,
     type RevocationType,
 } from "./Revocation.ts";
+export type { ExternalIdentity } from "./ExternalIdentity.ts";
 
 type SigningKeyOptions = 'dilithium' | 'sphincs';
 type EncryptionKeyOptions = 'kyber';
@@ -51,21 +53,6 @@ export type IdentityStorageFormat = {
     public: IdentityPublicData;
     encrypted: string; // AES-encrypted private keys
 };
-
-export type ExternalIdentity = {
-    version?: number;
-    fingerprint: string;
-    signingKeyType: SigningKeyOptions;
-    encryptionKeyType: EncryptionKeyOptions;
-    details: {[key: string]: [string, string]}; // object with string keys and string values
-    detailsMeta?: Record<string, { verified: boolean; verifiedAt: number | null }>;
-    revoked?: boolean;
-    revokedDetails?: string[];
-    signingKey: string;
-    encryptionKey: string;
-    signingKeyDetails: any;
-    encryptionKeyDetails: any;
-}
 
 export class Identity extends Key {
     signingKey: SigningKey;

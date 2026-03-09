@@ -4,11 +4,15 @@
  */
 
 import { Identity, ExternalIdentity, IdentityPublicData } from "../../../core/Identity.ts";
-import { DilithiumSigningKey } from "../../../core/Dilithium.ts";
-import { SphincsSigningKey } from "../../../core/Sphincs.ts";
-import { KyberEncryptionKey } from "../../../core/Kyber.ts";
+import { computeIdentityFingerprint } from "../../../core/Fingerprint.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../../core/version.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
+import {
+	buildDetachedSignaturePayload,
+	buildEncryptedMessagePayload,
+	buildEncryptedSignedMessagePayload,
+	buildSignedMessagePayload,
+} from "../../../core/Payloads.ts";
 import {
 	createFileCleartextEnvelope,
 	parseFileCleartextEnvelope,
@@ -237,39 +241,12 @@ async function deleteContact(ctx: CLIContext, name?: string, fingerprint?: strin
 
 function computeExternalFingerprint(identity: ExternalIdentity): string | null {
 	try {
-		const shell = Object.create(Identity.prototype) as Identity;
-		shell.signingKeyType = identity.signingKeyType;
-		shell.encryptionKeyType = identity.encryptionKeyType;
-
-		switch (identity.signingKeyType) {
-			case "dilithium":
-				shell.signingKey = DilithiumSigningKey.fromPublicKey(
-					identity.signingKey,
-					identity.signingKeyDetails?.variant ?? "ml_dsa87",
-				);
-				break;
-			case "sphincs":
-				shell.signingKey = SphincsSigningKey.fromPublicKey(
-					identity.signingKey,
-					identity.signingKeyDetails?.variant ?? "slh_dsa_sha2_256s",
-				);
-				break;
-			default:
-				return null;
-		}
-
-		switch (identity.encryptionKeyType) {
-			case "kyber":
-				shell.encryptionKey = KyberEncryptionKey.fromPublicKey(
-					identity.encryptionKey,
-					identity.encryptionKeyDetails?.variant ?? "ml_kem1024",
-				);
-				break;
-			default:
-				return null;
-		}
-
-		return shell.toFingerprint();
+		return computeIdentityFingerprint({
+			signingKeyType: identity.signingKeyType,
+			encryptionKeyType: identity.encryptionKeyType,
+			signingKey: identity.signingKey,
+			encryptionKey: identity.encryptionKey,
+		});
 	} catch {
 		return null;
 	}
@@ -542,26 +519,22 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				}
 				: undefined;
 			if (detached) {
-				return json({
-					type: "ebp-signature",
-					version: FILE_FORMAT_VERSIONS.signature,
+				return json(buildDetachedSignaturePayload({
 					fingerprint: identity.toFingerprint(),
 					messageHash,
 					salt,
 					signature,
 					identity: identityPayload,
-				});
+				}));
 			}
-			return json({
-				type: "ebp-signed-message",
-				version: FILE_FORMAT_VERSIONS.signedMessage,
+			return json(buildSignedMessagePayload({
 				fingerprint: identity.toFingerprint(),
 				message,
 				messageHash,
 				salt,
 				signature,
 				identity: identityPayload,
-			});
+			}));
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/verify") {
@@ -655,10 +628,10 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 					fingerprint: typeof candidate.fingerprint === "string" ? candidate.fingerprint : fingerprint,
 					signingKey,
 					signingKeyType: signingKeyType as ExternalIdentity["signingKeyType"],
-					signingKeyDetails: candidate.signingKeyDetails,
+					signingKeyDetails: (candidate.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: "ml_dsa87" },
 					encryptionKey,
 					encryptionKeyType: "kyber",
-					encryptionKeyDetails: candidate.encryptionKeyDetails,
+					encryptionKeyDetails: (candidate.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
 					details: (candidate.details as ExternalIdentity["details"]) ?? {},
 				};
 			} else {
@@ -693,22 +666,18 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 				if (!password) throw new HttpError(STATUS.BadRequest, "password is required when signing");
 				const identity = await loadIdentity(ctx, password);
 				const ciphertext = identity.signAndEncryptFor(message, contact);
-				return json({
-					type: "ebp-encrypted-signed-message",
-					version: FILE_FORMAT_VERSIONS.encryptedSignedMessage,
+				return json(buildEncryptedSignedMessagePayload({
 					recipientFingerprint: contact.fingerprint,
 					senderFingerprint: identity.toFingerprint(),
 					ciphertext,
-				});
+				}));
 			}
 
 			const ciphertext = Identity.EncryptFor(contact, message);
-			return json({
-				type: "ebp-encrypted-message",
-				version: FILE_FORMAT_VERSIONS.encryptedMessage,
+			return json(buildEncryptedMessagePayload({
 				recipientFingerprint: contact.fingerprint,
 				ciphertext,
-			});
+			}));
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/decrypt") {

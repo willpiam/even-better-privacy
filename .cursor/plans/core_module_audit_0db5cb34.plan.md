@@ -4,31 +4,31 @@ overview: Audit the codebase to identify standard/protocol logic that should liv
 todos:
   - id: payloads
     content: Create core/Payloads.ts with payload types, builders, parsers, and armor format
-    status: pending
+    status: completed
   - id: state-hash
     content: Create core/StateHash.ts with canonicalize, stableStringify, computeStateHash, IdentityState type
-    status: pending
+    status: completed
   - id: encoding
     content: Add toHex and hexToBytes exports to core (new file or extend Base64.ts)
-    status: pending
+    status: completed
   - id: detail-verify
     content: Move standalone verifyDetailProof logic into core
-    status: pending
+    status: completed
   - id: revocation-helper
     content: Add hex-encoded decode+verify convenience function to core/Revocation.ts
-    status: pending
+    status: completed
   - id: app-version-out
     content: Move APP_VERSION and COMPONENT_VERSIONS out of core/version.ts
-    status: pending
+    status: completed
   - id: external-identity
     content: Consolidate ExternalIdentity to single definition in core/ExternalIdentity.ts
-    status: pending
+    status: completed
   - id: message-cleanup
     content: Remove or repurpose the empty core/Message.ts stub
-    status: pending
+    status: completed
   - id: update-consumers
     content: Update CLI, server, GUI local-backend to import from new core modules
-    status: pending
+    status: completed
     dependencies:
       - payloads
       - state-hash

@@ -1,5 +1,11 @@
-import { sha256 } from "@noble/hashes/sha2";
 import { ExternalIdentity } from "../core/Identity.ts";
+import {
+	buildIdentityStateFromExternal,
+	canonicalize,
+	computeStateHash,
+	type IdentityState,
+	stableStringify,
+} from "../core/StateHash.ts";
 
 export interface CLIContext {
 	identityDir: string;
@@ -14,18 +20,7 @@ export interface CLIState {
 	server?: string;
 }
 
-export type IdentityState = {
-	fingerprint: string;
-	signingKeyType: string;
-	encryptionKeyType: string;
-	signingKey: string;
-	encryptionKey: string;
-	signingKeyDetails?: Record<string, unknown> | null;
-	encryptionKeyDetails?: Record<string, unknown> | null;
-	details: Record<string, [string, string]>;
-};
-
-const textEncoder = new TextEncoder();
+export type { IdentityState };
 
 export async function readState(identityDir: string): Promise<CLIState | undefined> {
 	try {
@@ -152,44 +147,10 @@ export async function readStdin(): Promise<string> {
 	return new TextDecoder().decode(result).trim();
 }
 
-export function canonicalize(value: unknown): unknown {
-	if (Array.isArray(value)) return value.map((v) => canonicalize(v));
-	if (value && typeof value === "object") {
-		const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-		const out: Record<string, unknown> = {};
-		for (const [k, v] of entries) {
-			out[k] = canonicalize(v);
-		}
-		return out;
-	}
-	return value;
-}
-
-export function stableStringify(value: unknown): string {
-	return JSON.stringify(canonicalize(value));
-}
-
-function toHex(bytes: Uint8Array): string {
-	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-export function computeStateHash(state: IdentityState): string {
-	const canonical = canonicalize(state);
-	const data = textEncoder.encode(JSON.stringify(canonical));
-	return toHex(sha256(data));
-}
+export { canonicalize, computeStateHash, stableStringify };
 
 export function buildStateFromExternal(ext: ExternalIdentity, details: Record<string, [string, string]>): IdentityState {
-	return {
-		fingerprint: ext.fingerprint,
-		signingKeyType: ext.signingKeyType,
-		encryptionKeyType: ext.encryptionKeyType,
-		signingKey: ext.signingKey,
-		encryptionKey: ext.encryptionKey,
-		signingKeyDetails: ext.signingKeyDetails ?? null,
-		encryptionKeyDetails: ext.encryptionKeyDetails ?? null,
-		details,
-	};
+	return buildIdentityStateFromExternal(ext, details);
 }
 
 export type ParsedArgs = Record<string, unknown> & { [key: string]: unknown };

@@ -3,7 +3,8 @@
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
-import { PROTOCOL_VERSION, COMPONENT_VERSIONS } from "../core/version.ts";
+import { PROTOCOL_VERSION } from "../core/version.ts";
+import { COMPONENT_VERSIONS } from "../app-version.ts";
 import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
 import { buildMessageHashEnvelopeFromHash, sha256Hex } from "../core/MessageHash.ts";
 import {

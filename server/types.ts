@@ -1,3 +1,5 @@
+import type { IdentityState as CoreIdentityState } from "../core/StateHash.ts";
+
 export type IdentityRow = {
   fingerprint: string;
   signing_key_type: "dilithium" | "sphincs";
@@ -35,15 +37,7 @@ export type RevocationRow = {
   created_at: number;
 };
 
-export type IdentityState = {
-  fingerprint: string;
-  signingKeyType: "dilithium" | "sphincs";
-  encryptionKeyType: "kyber";
-  signingKey: string;
-  encryptionKey: string;
-  signingKeyDetails: Record<string, unknown> | null;
-  encryptionKeyDetails: Record<string, unknown> | null;
-  details: DetailsMap;
+export type IdentityState = CoreIdentityState & {
   revoked?: boolean;
   revokedDetails?: string[];
 };

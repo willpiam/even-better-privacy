@@ -177,6 +177,41 @@ export function verifyRevocationCertificate(
 }
 
 /**
+ * Decode a hex-encoded revocation certificate and verify it against a signer.
+ */
+export function decodeAndVerifyRevocationCertificate(
+	encodedCertificate: string,
+	input: {
+		signingKeyType: "dilithium" | "sphincs";
+		signingKey: string;
+		variant: string;
+		expectedType?: RevocationType;
+		expectedTarget?: string;
+		expectedFingerprint?: string;
+	},
+): RevocationVerifyResult {
+	const cert = decodeRevocationCertificate(encodedCertificate);
+	if (!cert) {
+		return { ok: false, error: "invalid certificate encoding" };
+	}
+	if (input.expectedType && cert.type !== input.expectedType) {
+		return { ok: false, error: `expected ${input.expectedType} revocation, got ${cert.type}` };
+	}
+	if (input.expectedFingerprint && cert.fingerprint !== input.expectedFingerprint) {
+		return { ok: false, error: "certificate fingerprint mismatch" };
+	}
+	if (input.expectedType === "detail" && input.expectedTarget && cert.target !== input.expectedTarget) {
+		return { ok: false, error: "certificate target path mismatch" };
+	}
+	return verifyRevocationCertificate(
+		cert,
+		input.signingKeyType,
+		input.signingKey,
+		input.variant,
+	);
+}
+
+/**
  * Check if a nonce is valid (greater than the highest seen nonce)
  */
 export function isValidRevocationNonce(nonce: number, maxSeenNonce: number): boolean {

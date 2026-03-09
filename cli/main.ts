@@ -2,13 +2,20 @@
 
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../core/Identity.ts";
-import { PROTOCOL_VERSION, COMPONENT_VERSIONS, FILE_FORMAT_VERSIONS } from "../core/version.ts";
+import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../core/version.ts";
+import { COMPONENT_VERSIONS } from "../app-version.ts";
 import { sha256Hex } from "../core/MessageHash.ts";
 import {
 	createFileCleartextEnvelope,
 	parseFileCleartextEnvelope,
 	MAX_ENCRYPTED_FILE_BYTES,
 } from "../core/FilePayload.ts";
+import {
+	buildDetachedSignaturePayload,
+	buildEncryptedMessagePayload,
+	buildEncryptedSignedMessagePayload,
+	buildSignedMessagePayload,
+} from "../core/Payloads.ts";
 import {
 	CLIContext,
 	updateState,
@@ -378,14 +385,16 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 	
 	if (detached) {
 		// Output just the signature
-		const output = JSON.stringify({
-			type: "ebp-signature",
-			version: FILE_FORMAT_VERSIONS.signature,
-			fingerprint: identity.toFingerprint(),
-			messageHash,
-			salt,
-			signature,
-		}, null, 2);
+		const output = JSON.stringify(
+			buildDetachedSignaturePayload({
+				fingerprint: identity.toFingerprint(),
+				messageHash,
+				salt,
+				signature,
+			}),
+			null,
+			2,
+		);
 		
 		if (outputFile) {
 			await Deno.writeTextFile(outputFile, output);
@@ -395,15 +404,17 @@ async function cmdSign(args: ReturnType<typeof parseArgs>, ctx: CLIContext): Pro
 		}
 	} else {
 		// Output message + signature together
-		const output = JSON.stringify({
-			type: "ebp-signed-message",
-			version: FILE_FORMAT_VERSIONS.signedMessage,
-			fingerprint: identity.toFingerprint(),
-			message,
-			messageHash,
-			salt,
-			signature,
-		}, null, 2);
+		const output = JSON.stringify(
+			buildSignedMessagePayload({
+				fingerprint: identity.toFingerprint(),
+				message,
+				messageHash,
+				salt,
+				signature,
+			}),
+			null,
+			2,
+		);
 		
 		if (outputFile) {
 			await Deno.writeTextFile(outputFile, output);
@@ -523,22 +534,26 @@ async function cmdEncrypt(args: ReturnType<typeof parseArgs>, ctx: CLIContext): 
 		const ciphertext = identity.signAndEncryptFor(message, recipient);
 		senderFingerprint = identity.toFingerprint();
 		
-		output = JSON.stringify({
-			type: "ebp-encrypted-signed-message",
-			version: FILE_FORMAT_VERSIONS.encryptedSignedMessage,
-			recipientFingerprint: recipient.fingerprint,
-			senderFingerprint,
-			ciphertext,
-		}, null, 2);
+		output = JSON.stringify(
+			buildEncryptedSignedMessagePayload({
+				recipientFingerprint: recipient.fingerprint,
+				senderFingerprint,
+				ciphertext,
+			}),
+			null,
+			2,
+		);
 	} else {
 		const ciphertext = Identity.EncryptFor(recipient, message);
 		
-		output = JSON.stringify({
-			type: "ebp-encrypted-message",
-			version: FILE_FORMAT_VERSIONS.encryptedMessage,
-			recipientFingerprint: recipient.fingerprint,
-			ciphertext,
-		}, null, 2);
+		output = JSON.stringify(
+			buildEncryptedMessagePayload({
+				recipientFingerprint: recipient.fingerprint,
+				ciphertext,
+			}),
+			null,
+			2,
+		);
 	}
 	
 	if (outputFile) {
@@ -918,8 +933,8 @@ async function cmdPublishIdentity(args: ReturnType<typeof parseArgs>, ctx: CLICo
 				encryptionKeyType: body.encryptionKeyType,
 				signingKey: body.signingKey,
 				encryptionKey: body.encryptionKey,
-				signingKeyDetails: body.signingKeyDetails,
-				encryptionKeyDetails: body.encryptionKeyDetails,
+				signingKeyDetails: (body.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: "ml_dsa87" },
+				encryptionKeyDetails: (body.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
 				details: body.details ?? {},
 			};
 		} else if (res.status !== 404) {
@@ -1052,8 +1067,8 @@ async function cmdFetchIdentity(args: ReturnType<typeof parseArgs>, ctx: CLICont
 		encryptionKeyType: b?.encryptionKeyType ?? "kyber",
 		signingKey: b?.signingKey ?? "",
 		encryptionKey: b?.encryptionKey ?? "",
-		signingKeyDetails: b?.signingKeyDetails,
-		encryptionKeyDetails: b?.encryptionKeyDetails,
+		signingKeyDetails: (b?.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: "ml_dsa87" },
+		encryptionKeyDetails: (b?.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
 		details: b?.details ?? {},
 	};
 

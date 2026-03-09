@@ -6,7 +6,11 @@
  */
 
 import { Identity } from "../core/Identity.ts";
-import { sha256 } from "@noble/hashes/sha2";
+import {
+  buildIdentityStateFromExternal,
+  computeStateHash,
+  stableStringify,
+} from "../core/StateHash.ts";
 
 const SERVER_URL = Deno.env.get("SERVER_URL") ?? "http://localhost:8080";
 const PASSWORD = "password";
@@ -23,56 +27,8 @@ const IDENTITY_NAMES = [
   "grace",
 ];
 
-function canonicalize(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((v) => canonicalize(v));
-  if (value && typeof value === "object") {
-    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b));
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of entries) {
-      out[k] = canonicalize(v);
-    }
-    return out;
-  }
-  return value;
-}
-
-function stableStringify(value: unknown): string {
-  return JSON.stringify(canonicalize(value));
-}
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function computeStateHash(state: Record<string, unknown>): string {
-  const canonical = canonicalize(state);
-  const data = new TextEncoder().encode(JSON.stringify(canonical));
-  return toHex(sha256(data));
-}
-
-type IdentityState = {
-  fingerprint: string;
-  signingKeyType: string;
-  encryptionKeyType: string;
-  signingKey: string;
-  encryptionKey: string;
-  signingKeyDetails?: Record<string, unknown> | null;
-  encryptionKeyDetails?: Record<string, unknown> | null;
-  details: Record<string, [string, string]>;
-};
-
-function buildStateFromIdentity(identity: Identity): IdentityState {
-  const summary = identity.summary;
-  return {
-    fingerprint: summary.fingerprint,
-    signingKeyType: summary.signingKeyType,
-    encryptionKeyType: summary.encryptionKeyType,
-    signingKey: summary.signingKey,
-    encryptionKey: summary.encryptionKey,
-    signingKeyDetails: summary.signingKeyDetails ?? null,
-    encryptionKeyDetails: summary.encryptionKeyDetails ?? null,
-    details: {},
-  };
+function buildStateFromIdentity(identity: Identity) {
+  return buildIdentityStateFromExternal(identity.summary, {});
 }
 
 async function uploadIdentity(identity: Identity, name: string): Promise<void> {
