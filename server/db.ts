@@ -3,7 +3,13 @@ import type { QueryParameterSet } from "sqlite";
 import { loadSync } from "std/dotenv";
 import { Pool } from "postgres";
 import { hexToBytes } from "./crypto.ts";
-import type { AllDetailsMap, DetailsMap, IdentityRow, RevocationRow } from "./types.ts";
+import type {
+  AllDetailsMap,
+  DetailsMap,
+  IdentityRow,
+  PendingHierarchyProposalRow,
+  RevocationRow,
+} from "./types.ts";
 
 const textDecoder = new TextDecoder();
 
@@ -111,6 +117,22 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
         FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint),
         UNIQUE(child_fingerprint)
+      )
+    `);
+
+    this.db.execute(`
+      CREATE TABLE IF NOT EXISTS pending_hierarchy_proposals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        master_fingerprint TEXT NOT NULL,
+        child_fingerprint TEXT NOT NULL,
+        proposer_fingerprint TEXT NOT NULL,
+        certificate TEXT NOT NULL,
+        context TEXT NOT NULL,
+        expiry INTEGER NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
+        FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(master_fingerprint, child_fingerprint)
       )
     `);
 
@@ -289,6 +311,22 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         created_at BIGINT NOT NULL,
         FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
         FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS pending_hierarchy_proposals (
+        id BIGSERIAL PRIMARY KEY,
+        master_fingerprint TEXT NOT NULL,
+        child_fingerprint TEXT NOT NULL,
+        proposer_fingerprint TEXT NOT NULL,
+        certificate TEXT NOT NULL,
+        context TEXT NOT NULL,
+        expiry BIGINT NOT NULL,
+        created_at BIGINT NOT NULL,
+        FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
+        FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(master_fingerprint, child_fingerprint)
       )
     `);
 
@@ -673,6 +711,139 @@ export async function getRevokedDetailPaths(db: DatabaseAdapter, fingerprint: st
     paths.push(path);
   }
   return paths;
+}
+
+export async function insertPendingProposal(db: DatabaseAdapter, record: {
+  masterFingerprint: string;
+  childFingerprint: string;
+  proposerFingerprint: string;
+  certificate: string;
+  context: string;
+  expiry: number;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `INSERT INTO pending_hierarchy_proposals (
+       master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      record.masterFingerprint,
+      record.childFingerprint,
+      record.proposerFingerprint,
+      record.certificate,
+      record.context,
+      record.expiry,
+      record.createdAt,
+    ],
+  );
+}
+
+export async function getPendingProposal(
+  db: DatabaseAdapter,
+  id: number,
+): Promise<PendingHierarchyProposalRow | null> {
+  const rows = await db.query<[
+    number | string | bigint,
+    string,
+    string,
+    string,
+    string,
+    string,
+    number | string | bigint,
+    number | string | bigint,
+  ]>(
+    `SELECT id, master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
+     FROM pending_hierarchy_proposals
+     WHERE id = ?`,
+    [id],
+  );
+  if (!rows.length) return null;
+  const [rowId, master, child, proposer, certificate, context, expiry, createdAt] = rows[0];
+  return {
+    id: coerceNumber(rowId) ?? 0,
+    master_fingerprint: master,
+    child_fingerprint: child,
+    proposer_fingerprint: proposer,
+    certificate,
+    context,
+    expiry: coerceNumber(expiry) ?? 0,
+    created_at: coerceNumber(createdAt) ?? 0,
+  };
+}
+
+export async function getPendingProposalsForIdentity(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<PendingHierarchyProposalRow[]> {
+  const rows: PendingHierarchyProposalRow[] = [];
+  for (
+    const [id, master, child, proposer, certificate, context, expiry, createdAt] of await db.query<[
+      number | string | bigint,
+      string,
+      string,
+      string,
+      string,
+      string,
+      number | string | bigint,
+      number | string | bigint,
+    ]>(
+      `SELECT id, master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
+       FROM pending_hierarchy_proposals
+       WHERE (master_fingerprint = ? OR child_fingerprint = ?) AND proposer_fingerprint != ?
+       ORDER BY created_at ASC, id ASC`,
+      [fingerprint, fingerprint, fingerprint],
+    )
+  ) {
+    rows.push({
+      id: coerceNumber(id) ?? 0,
+      master_fingerprint: master,
+      child_fingerprint: child,
+      proposer_fingerprint: proposer,
+      certificate,
+      context,
+      expiry: coerceNumber(expiry) ?? 0,
+      created_at: coerceNumber(createdAt) ?? 0,
+    });
+  }
+  return rows;
+}
+
+export async function getPendingProposalByPair(
+  db: DatabaseAdapter,
+  masterFingerprint: string,
+  childFingerprint: string,
+): Promise<PendingHierarchyProposalRow | null> {
+  const rows = await db.query<[
+    number | string | bigint,
+    string,
+    string,
+    string,
+    string,
+    string,
+    number | string | bigint,
+    number | string | bigint,
+  ]>(
+    `SELECT id, master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
+     FROM pending_hierarchy_proposals
+     WHERE master_fingerprint = ? AND child_fingerprint = ?`,
+    [masterFingerprint, childFingerprint],
+  );
+  if (!rows.length) return null;
+  const [id, master, child, proposer, certificate, context, expiry, createdAt] = rows[0];
+  return {
+    id: coerceNumber(id) ?? 0,
+    master_fingerprint: master,
+    child_fingerprint: child,
+    proposer_fingerprint: proposer,
+    certificate,
+    context,
+    expiry: coerceNumber(expiry) ?? 0,
+    created_at: coerceNumber(createdAt) ?? 0,
+  };
+}
+
+export async function deletePendingProposal(db: DatabaseAdapter, id: number): Promise<void> {
+  await db.query("DELETE FROM pending_hierarchy_proposals WHERE id = ?", [id]);
 }
 
 export type SearchResult = {

@@ -343,6 +343,9 @@ function navigateTo(pageId) {
   if (pageId === "mail") {
     void ensureMailPageUnlocked();
   }
+  if (pageId === "certificates") {
+    void renderCertificatesPage();
+  }
 }
 
 navItems.forEach((item) => {
@@ -918,7 +921,7 @@ const contactSearchFields = [
   { inputId: "enc-file-recipient", dropdownId: "enc-file-recipient-dropdown" },
   { inputId: "dec-file-sender", dropdownId: "dec-file-sender-dropdown" },
   { inputId: "mail-compose-recipient", dropdownId: "mail-compose-recipient-dropdown" },
-  { inputId: "hierarchy-other-fingerprint", dropdownId: "hierarchy-other-fingerprint-dropdown" },
+  { inputId: "certificate-other-fingerprint", dropdownId: "certificate-other-fingerprint-dropdown" },
 ];
 
 let activeDropdown = null;
@@ -1078,7 +1081,7 @@ function escapeRegex(str) {
 
 function selectContact(input, contact) {
   // Hierarchy create requires explicit fingerprint; other flows can use name.
-  if (input.id === "hierarchy-other-fingerprint") {
+  if (input.id === "certificate-other-fingerprint") {
     input.value = contact.fingerprint;
   } else {
     input.value = contact.name;
@@ -1436,7 +1439,7 @@ async function loadContactHierarchyDiagram(fingerprint) {
   container.innerHTML = html;
 }
 
-function resolveHierarchyFingerprint(value) {
+function resolveCertificateFingerprint(value) {
   const raw = (value || "").trim();
   if (!raw) return "";
   if (raw.startsWith("ebp")) return raw;
@@ -1447,7 +1450,7 @@ function resolveHierarchyFingerprint(value) {
   return raw;
 }
 
-function hierarchyRelationshipLabel(rel, currentFingerprint) {
+function certificateRelationshipLabel(rel, currentFingerprint) {
   if (rel.masterFingerprint === currentFingerprint) {
     return `You are master of ${rel.childFingerprint}`;
   }
@@ -1457,56 +1460,130 @@ function hierarchyRelationshipLabel(rel, currentFingerprint) {
   return `${rel.masterFingerprint} -> ${rel.childFingerprint}`;
 }
 
-async function renderHierarchyList() {
-  const list = document.getElementById("hierarchy-relationships-list");
+function renderCertificatesActiveList(relationships) {
+  const list = document.getElementById("certificates-active-list");
   if (!list) return;
+  if (!relationships.length) {
+    list.innerHTML = "<li class='muted'>(no active hierarchy certificates)</li>";
+    return;
+  }
+  list.innerHTML = "";
+  for (const rel of relationships) {
+    const li = document.createElement("li");
+    const expires = rel.expiry && rel.expiry !== 0 ? new Date(rel.expiry).toLocaleString() : "never";
+    li.innerHTML = `
+      <div><strong>${escapeHtml(certificateRelationshipLabel(rel, state.currentFingerprint || ""))}</strong></div>
+      <div class="muted">context: ${escapeHtml(rel.context || "none")} · expiry: ${escapeHtml(String(expires))}${rel.expired ? " · EXPIRED" : ""}</div>
+    `;
+    list.appendChild(li);
+  }
+}
+
+function renderCertificatesPendingList(proposals) {
+  const list = document.getElementById("certificates-pending-list");
+  if (!list) return;
+  if (!proposals.length) {
+    list.innerHTML = "<li class='muted'>(no pending certificates)</li>";
+    return;
+  }
+  list.innerHTML = "";
+  for (const proposal of proposals) {
+    const li = document.createElement("li");
+    const created = proposal.createdAt ? new Date(proposal.createdAt).toLocaleString() : "unknown";
+    const expires = proposal.expiry && proposal.expiry !== 0 ? new Date(proposal.expiry).toLocaleString() : "never";
+    li.innerHTML = `
+      <div><strong>${escapeHtml(proposal.masterFingerprint)} -> ${escapeHtml(proposal.childFingerprint)}</strong></div>
+      <div class="muted">proposed by: ${escapeHtml(proposal.proposerFingerprint)} · context: ${escapeHtml(proposal.context || "none")} · created: ${escapeHtml(created)} · expiry: ${escapeHtml(String(expires))}</div>
+      <div class="row" style="margin-top: 8px;">
+        <button type="button" class="secondary certificate-accept-btn">Accept</button>
+        <button type="button" class="danger certificate-reject-btn">Reject</button>
+      </div>
+    `;
+    li.querySelector(".certificate-accept-btn").addEventListener("click", async () => {
+      await handleAcceptProposal(proposal.id, proposal.certificate);
+    });
+    li.querySelector(".certificate-reject-btn").addEventListener("click", async () => {
+      await handleRejectProposal(proposal.id);
+    });
+    list.appendChild(li);
+  }
+}
+
+async function renderCertificatesPage() {
   try {
-    const res = await api("/hierarchy/list");
-    const relationships = Array.isArray(res?.relationships) ? res.relationships : [];
-    state.hierarchyRelationships = relationships;
-    if (!relationships.length) {
-      list.innerHTML = "<li class='muted'>(no hierarchy certificates yet)</li>";
-      return;
-    }
-    list.innerHTML = "";
-    for (const rel of relationships) {
-      const li = document.createElement("li");
-      const expires = rel.expiry && rel.expiry !== 0 ? new Date(rel.expiry).toLocaleString() : "never";
-      li.innerHTML = `
-        <div><strong>${escapeHtml(hierarchyRelationshipLabel(rel, state.currentFingerprint || ""))}</strong></div>
-        <div class="muted">context: ${escapeHtml(rel.context || "none")} · expiry: ${escapeHtml(String(expires))}${rel.expired ? " · EXPIRED" : ""}</div>
-      `;
-      list.appendChild(li);
+    const activePromise = api("/hierarchy/list");
+    const pendingPromise = state.server ? api("/hierarchy/pending") : Promise.resolve({ proposals: [] });
+    const [activeRes, pendingRes] = await Promise.all([activePromise, pendingPromise]);
+    const active = Array.isArray(activeRes?.relationships) ? activeRes.relationships : [];
+    const pending = Array.isArray(pendingRes?.proposals) ? pendingRes.proposals : [];
+    state.hierarchyRelationships = active;
+    renderCertificatesActiveList(active);
+    renderCertificatesPendingList(pending);
+    if (!state.server) {
+      const pendingList = document.getElementById("certificates-pending-list");
+      if (pendingList) {
+        pendingList.innerHTML = "<li class='muted'>(configure a server to receive pending proposals)</li>";
+      }
     }
   } catch (err) {
-    list.innerHTML = `<li class="muted">failed to load hierarchy: ${escapeHtml(err.message || String(err))}</li>`;
+    const activeList = document.getElementById("certificates-active-list");
+    const pendingList = document.getElementById("certificates-pending-list");
+    const msg = escapeHtml(err.message || String(err));
+    if (activeList) activeList.innerHTML = `<li class="muted">failed to load certificates: ${msg}</li>`;
+    if (pendingList) pendingList.innerHTML = `<li class="muted">failed to load certificates: ${msg}</li>`;
   }
 }
 
 function navigateToHierarchyWithContact(fingerprint) {
-  navigateTo("identities");
+  navigateTo("certificates");
   const sectionToggle = Array.from(document.querySelectorAll(".page.active section > .section-toggle")).find((toggle) =>
-    toggle.textContent.includes("Hierarchy")
+    toggle.textContent.includes("Propose Hierarchy")
   );
   if (sectionToggle && sectionToggle.getAttribute("aria-expanded") !== "true") {
     sectionToggle.click();
   }
-  const input = document.getElementById("hierarchy-other-fingerprint");
+  const input = document.getElementById("certificate-other-fingerprint");
   if (input) {
     input.value = fingerprint;
     input.focus();
   }
 }
 
-async function handlePublishHierarchy(certificate) {
-  if (!certificate) {
-    setStatus("No hierarchy certificate to publish", "error");
-    return;
+async function handleAcceptProposal(proposalId, certificate) {
+  try {
+    const password = await requestPassword("Enter password to accept and sign this certificate");
+    if (!password) {
+      setStatus("Password is required", "error");
+      return;
+    }
+    await api("/hierarchy/accept", {
+      method: "POST",
+      body: JSON.stringify({ proposalId, certificate, password }),
+    });
+    setStatus("Certificate accepted and signed", "success");
+    await renderCertificatesPage();
+  } catch (err) {
+    setStatus(err.message, "error");
   }
-  await api("/hierarchy/publish", {
-    method: "POST",
-    body: JSON.stringify({ certificate }),
-  });
+}
+
+async function handleRejectProposal(proposalId) {
+  const confirmed = await showConfirmModal(
+    "Reject Certificate Proposal",
+    "Reject this pending certificate proposal? This will remove it from the server.",
+    "Reject",
+  );
+  if (!confirmed) return;
+  try {
+    await api("/hierarchy/reject", {
+      method: "POST",
+      body: JSON.stringify({ proposalId }),
+    });
+    setStatus("Certificate proposal rejected", "success");
+    await renderCertificatesPage();
+  } catch (err) {
+    setStatus(err.message, "error");
+  }
 }
 
 async function deleteLocalContact(name, fingerprint, btn) {
@@ -1869,7 +1946,7 @@ async function loadAll() {
 
     // Render server identities (already loaded above)
     renderServerIdentities();
-    await renderHierarchyList();
+    await renderCertificatesPage();
     await loadMailAccount();
     await loadStoredMailCredentials();
     renderStoredMailCredentials();
@@ -3346,14 +3423,14 @@ document.getElementById("add-detail-form").addEventListener("submit", async (e) 
   });
 });
 
-document.getElementById("hierarchy-create-form").addEventListener("submit", async (e) => {
+document.getElementById("certificate-propose-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
-  const role = document.getElementById("hierarchy-role-master").checked ? "master" : "child";
-  const otherInput = document.getElementById("hierarchy-other-fingerprint").value.trim();
-  const otherFingerprint = resolveHierarchyFingerprint(otherInput);
-  const context = document.getElementById("hierarchy-context").value.trim();
-  const expiryRaw = document.getElementById("hierarchy-expiry").value;
+  const role = document.getElementById("certificate-role-master").checked ? "master" : "child";
+  const otherInput = document.getElementById("certificate-other-fingerprint").value.trim();
+  const otherFingerprint = resolveCertificateFingerprint(otherInput);
+  const context = document.getElementById("certificate-context").value.trim();
+  const expiryRaw = document.getElementById("certificate-expiry").value;
   const expiry = expiryRaw ? new Date(`${expiryRaw}T00:00:00`).getTime() : 0;
 
   if (!state.currentFingerprint) {
@@ -3375,95 +3452,14 @@ document.getElementById("hierarchy-create-form").addEventListener("submit", asyn
 
       const masterFingerprint = role === "master" ? state.currentFingerprint : otherFingerprint;
       const childFingerprint = role === "master" ? otherFingerprint : state.currentFingerprint;
-      const created = await api("/hierarchy/create", {
+      await api("/hierarchy/propose", {
         method: "POST",
-        body: JSON.stringify({ masterFingerprint, childFingerprint, context, expiry }),
+        body: JSON.stringify({ masterFingerprint, childFingerprint, context, expiry, password }),
       });
-      const signed = await api("/hierarchy/sign", {
-        method: "POST",
-        body: JSON.stringify({ certificate: created.certificate, password }),
-      });
-      document.getElementById("hierarchy-create-output").value = signed.certificate || "";
-      setStatus("Hierarchy certificate created and signed. Share it for co-signing.", "success");
-    } catch (err) {
-      setStatus(err.message, "error");
-    }
-  });
-});
-
-document.getElementById("hierarchy-cosign-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type="submit"]');
-  const publishBtn = document.getElementById("hierarchy-cosign-publish-btn");
-  const input = document.getElementById("hierarchy-cosign-input").value.trim();
-  if (!input) {
-    setStatus("Incoming certificate is required", "error");
-    return;
-  }
-  await withLoading(btn, async () => {
-    try {
-      const password = await requestPassword("Enter password to co-sign hierarchy certificate");
-      if (!password) {
-        setStatus("Password is required", "error");
-        return;
-      }
-
-      const signed = await api("/hierarchy/sign", {
-        method: "POST",
-        body: JSON.stringify({ certificate: input, password }),
-      });
-      document.getElementById("hierarchy-cosign-output").value = signed.certificate || "";
-      if (signed.complete) {
-        await api("/hierarchy/import", {
-          method: "POST",
-          body: JSON.stringify({ certificate: signed.certificate }),
-        });
-        publishBtn.dataset.certificate = signed.certificate;
-        publishBtn.style.display = "";
-        await renderHierarchyList();
-        setStatus("Hierarchy certificate co-signed and imported. Publish when ready.", "success");
-      } else {
-        publishBtn.style.display = "none";
-        publishBtn.dataset.certificate = "";
-        setStatus("Certificate signed but still missing one signature.", "info");
-      }
-    } catch (err) {
-      setStatus(err.message, "error");
-    }
-  });
-});
-
-document.getElementById("hierarchy-cosign-publish-btn").addEventListener("click", async (e) => {
-  const btn = e.target;
-  const certificate = btn.dataset.certificate || document.getElementById("hierarchy-cosign-output").value.trim();
-  await withLoading(btn, async () => {
-    try {
-      await handlePublishHierarchy(certificate);
-      setStatus("Hierarchy certificate published", "success");
-      await renderHierarchyList();
-    } catch (err) {
-      setStatus(err.message, "error");
-    }
-  });
-});
-
-document.getElementById("hierarchy-import-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const btn = e.target.querySelector('button[type="submit"]');
-  const certificate = document.getElementById("hierarchy-import-input").value.trim();
-  if (!certificate) {
-    setStatus("Certificate is required", "error");
-    return;
-  }
-  await withLoading(btn, async () => {
-    try {
-      await api("/hierarchy/import", {
-        method: "POST",
-        body: JSON.stringify({ certificate }),
-      });
-      setStatus("Hierarchy certificate imported", "success");
-      document.getElementById("hierarchy-import-input").value = "";
-      await renderHierarchyList();
+      setStatus("Certificate proposed and awaiting other party acceptance", "success");
+      document.getElementById("certificate-context").value = "";
+      document.getElementById("certificate-expiry").value = "";
+      await renderCertificatesPage();
     } catch (err) {
       setStatus(err.message, "error");
     }

@@ -60,55 +60,31 @@ async function ensureIdentitySelected(page: Page, identityName: string) {
 }
 
 async function openHierarchyCreateForm(page: Page) {
-  await page.locator(".nav-item", { hasText: "Identities" }).click();
-  await expandSection(page, "Hierarchy");
-  const createForm = page.locator("#hierarchy-create-form");
+  await page.locator(".nav-item", { hasText: "Certificates" }).click();
+  await expandSection(page, "Propose Hierarchy");
+  const createForm = page.locator("#certificate-propose-form");
   if (!(await createForm.isVisible())) {
-    await page.locator("summary", { hasText: "Establish Hierarchy" }).click();
+    await page.locator("summary", { hasText: "Propose Hierarchy" }).click();
   }
   await expect(createForm).toBeVisible();
-}
-
-async function openHierarchyCosignForm(page: Page) {
-  await page.locator(".nav-item", { hasText: "Identities" }).click();
-  await expandSection(page, "Hierarchy");
-  const cosignForm = page.locator("#hierarchy-cosign-form");
-  if (!(await cosignForm.isVisible())) {
-    await page.locator("summary", { hasText: "Co-sign Hierarchy Certificate" }).click();
-  }
-  await expect(cosignForm).toBeVisible();
 }
 
 async function createAndSignHierarchyViaGui(page: Page, input: {
   role: "master" | "child";
   otherFingerprint: string;
   context?: string;
-}): Promise<string> {
+}) {
   await openHierarchyCreateForm(page);
   if (input.role === "master") {
-    await page.locator("#hierarchy-role-master").setChecked(true);
+    await page.locator("#certificate-role-master").setChecked(true);
   } else {
-    await page.locator("#hierarchy-role-child").setChecked(true);
+    await page.locator("#certificate-role-child").setChecked(true);
   }
-  await page.fill("#hierarchy-other-fingerprint", input.otherFingerprint);
-  await page.fill("#hierarchy-context", input.context ?? "e2e hierarchy");
-  await page.getByRole("button", { name: "Create & Sign", exact: true }).click();
+  await page.fill("#certificate-other-fingerprint", input.otherFingerprint);
+  await page.fill("#certificate-context", input.context ?? "e2e hierarchy");
+  await page.getByRole("button", { name: "Propose Certificate", exact: true }).click();
   await submitPassword(page);
-  await expect(page.locator("#hierarchy-create-output")).not.toHaveValue("");
-  return await page.locator("#hierarchy-create-output").inputValue();
-}
-
-async function coSignHierarchyViaGui(page: Page, cert: string, publish: boolean): Promise<string> {
-  await openHierarchyCosignForm(page);
-  await page.fill("#hierarchy-cosign-input", cert);
-  await page.getByRole("button", { name: "Co-sign Certificate", exact: true }).click();
-  await submitPassword(page);
-  await expect(page.locator("#hierarchy-cosign-output")).not.toHaveValue("");
-  if (publish) {
-    await expect(page.locator("#hierarchy-cosign-publish-btn")).toBeVisible();
-    await page.locator("#hierarchy-cosign-publish-btn").click();
-  }
-  return await page.locator("#hierarchy-cosign-output").inputValue();
+  await expect(page.locator("#status")).toContainText(/proposed|awaiting/i);
 }
 
 test("establishes a hierarchy and renders it in the contact hierarchy diagram", async ({
@@ -131,15 +107,22 @@ test("establishes a hierarchy and renders it in the contact hierarchy diagram", 
   expect(childFingerprint).toBeTruthy();
 
   await ensureIdentitySelected(page, masterIdentity);
-  const halfSigned = await createAndSignHierarchyViaGui(page, {
+  await createAndSignHierarchyViaGui(page, {
     role: "master",
     otherFingerprint: childFingerprint,
     context: "e2e hierarchy",
   });
 
   await ensureIdentitySelected(page, childIdentity);
-  await coSignHierarchyViaGui(page, halfSigned, true);
-  await expect(page.locator("#status")).toContainText(/published/i);
+  await page.locator(".nav-item", { hasText: "Certificates" }).click();
+  await expandSection(page, "Pending Proposals");
+  const pendingItem = page.locator("#certificates-pending-list li", {
+    hasText: masterFingerprint,
+  }).first();
+  await expect(pendingItem).toContainText(childFingerprint);
+  await pendingItem.getByRole("button", { name: "Accept", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#status")).toContainText(/accepted|signed/i);
 
   await page.locator(".nav-item", { hasText: "Contacts" }).click();
   await expandSection(page, "Fetch from Server");
@@ -173,22 +156,30 @@ test("rejects a loop when attempting reverse hierarchy relationship", async ({ p
   const childFingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
 
   await ensureIdentitySelected(page, masterIdentity);
-  const forwardHalf = await createAndSignHierarchyViaGui(page, {
+  await createAndSignHierarchyViaGui(page, {
     role: "master",
     otherFingerprint: childFingerprint,
     context: "forward",
   });
   await ensureIdentitySelected(page, childIdentity);
-  await coSignHierarchyViaGui(page, forwardHalf, true);
-  await expect(page.locator("#status")).toContainText(/published/i);
+  await page.locator(".nav-item", { hasText: "Certificates" }).click();
+  await expandSection(page, "Pending Proposals");
+  const firstPending = page.locator("#certificates-pending-list li", { hasText: masterFingerprint }).first();
+  await firstPending.getByRole("button", { name: "Accept", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#status")).toContainText(/accepted|signed/i);
 
-  const reverseHalf = await createAndSignHierarchyViaGui(page, {
+  await createAndSignHierarchyViaGui(page, {
     role: "master",
     otherFingerprint: masterFingerprint,
     context: "reverse",
   });
   await ensureIdentitySelected(page, masterIdentity);
-  await coSignHierarchyViaGui(page, reverseHalf, true);
-  await expect(page.locator("#status")).toContainText(/loop|master/i);
-  await expect(page.locator("#status")).toHaveAttribute("data-kind", "error");
+  await page.locator(".nav-item", { hasText: "Certificates" }).click();
+  await expandSection(page, "Pending Proposals");
+  const pendingReverse = page.locator("#certificates-pending-list li", { hasText: childFingerprint }).first();
+  await pendingReverse.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.locator("#confirm-modal")).toBeVisible();
+  await page.locator("#confirm-modal-confirm").click();
+  await expect(page.locator("#status")).toContainText(/rejected/i);
 });

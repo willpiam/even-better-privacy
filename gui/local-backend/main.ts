@@ -1072,6 +1072,60 @@ async function storeHierarchyCertificateLocal(ctx: CLIContext, encodedCertificat
 	await Deno.writeTextFile(path, JSON.stringify({ certificate: encodedCertificate }, null, 2));
 }
 
+type LocalPendingHierarchyProposal = {
+	id: number;
+	masterFingerprint: string;
+	childFingerprint: string;
+	proposerFingerprint: string;
+	certificate: string;
+	context: string;
+	expiry: number;
+	createdAt: number;
+};
+
+function getPendingHierarchyPath(ctx: CLIContext): string {
+	return `${ctx.identityDir}/hierarchy-pending.json`;
+}
+
+async function readPendingHierarchyLocal(ctx: CLIContext): Promise<LocalPendingHierarchyProposal[]> {
+	try {
+		const raw = await Deno.readTextFile(getPendingHierarchyPath(ctx));
+		const parsed = JSON.parse(raw) as LocalPendingHierarchyProposal[];
+		if (!Array.isArray(parsed)) return [];
+		return parsed.filter((p) =>
+			p && typeof p.id === "number" && typeof p.masterFingerprint === "string" && typeof p.childFingerprint === "string"
+		);
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) return [];
+		throw e;
+	}
+}
+
+async function writePendingHierarchyLocal(ctx: CLIContext, proposals: LocalPendingHierarchyProposal[]): Promise<void> {
+	await ensureDir(ctx.identityDir);
+	await Deno.writeTextFile(getPendingHierarchyPath(ctx), JSON.stringify(proposals, null, 2));
+}
+
+async function addPendingHierarchyLocal(
+	ctx: CLIContext,
+	record: Omit<LocalPendingHierarchyProposal, "id" | "createdAt">,
+): Promise<LocalPendingHierarchyProposal> {
+	const all = await readPendingHierarchyLocal(ctx);
+	const duplicate = all.find((p) => p.masterFingerprint === record.masterFingerprint && p.childFingerprint === record.childFingerprint);
+	if (duplicate) {
+		throw new HttpError(STATUS.Conflict, "a pending proposal for this relationship already exists");
+	}
+	const nextId = all.reduce((max, item) => Math.max(max, item.id), 0) + 1;
+	const proposal: LocalPendingHierarchyProposal = {
+		id: nextId,
+		createdAt: Date.now(),
+		...record,
+	};
+	all.push(proposal);
+	await writePendingHierarchyLocal(ctx, all);
+	return proposal;
+}
+
 function buildHierarchyTreeFromCertificates(
 	fingerprint: string,
 	certs: SignedHierarchyCertificate[],
@@ -1977,64 +2031,76 @@ async function handleRequest(req: Request): Promise<Response> {
 			return json({ certificate: stringToHex(JSON.stringify(cert)), complete: false });
 		}
 
-		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/sign") {
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/propose") {
 			const body = await readJson<{
-				certificate?: unknown;
+				masterFingerprint?: unknown;
+				childFingerprint?: unknown;
+				expiry?: unknown;
+				context?: unknown;
 				password?: unknown;
 				home?: unknown;
 				identity?: unknown;
+				server?: unknown;
 			}>(req);
-			const certificate = typeof body.certificate === "string" ? body.certificate : "";
+			const masterFingerprint = typeof body.masterFingerprint === "string" ? body.masterFingerprint : "";
+			const childFingerprint = typeof body.childFingerprint === "string" ? body.childFingerprint : "";
+			const expiry = typeof body.expiry === "number" ? body.expiry : 0;
+			const context = typeof body.context === "string" ? body.context : "";
 			const password = typeof body.password === "string" ? body.password : undefined;
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
-			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
+			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			if (!masterFingerprint || !childFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "masterFingerprint and childFingerprint are required");
+			}
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+			if (!isValidFingerprintBech32(masterFingerprint) || !isValidFingerprintBech32(childFingerprint)) {
+				throw new HttpError(STATUS.BadRequest, "fingerprints must be valid bech32");
+			}
 
 			const ctx = await getContext(home, identityName);
 			const identity = await loadIdentity(ctx, password);
-			const cert = decodeHierarchyCertificateDraft(certificate);
+			const proposerFingerprint = identity.toFingerprint();
+			if (proposerFingerprint !== masterFingerprint && proposerFingerprint !== childFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "current identity must be either master or child");
+			}
+			const cert = createHierarchyCertificate(masterFingerprint, childFingerprint, { expiry, context });
 			const payload = getHierarchySignaturePayload(cert);
-			const myFingerprint = identity.toFingerprint();
-			if (myFingerprint !== cert.masterFingerprint && myFingerprint !== cert.childFingerprint) {
-				throw new HttpError(STATUS.BadRequest, "current identity is not the master or child in this certificate");
-			}
 			const signature = identity.signMessage(payload);
-			if (myFingerprint === cert.masterFingerprint) {
+			if (proposerFingerprint === masterFingerprint) {
 				cert.masterSignature = signature;
-			}
-			if (myFingerprint === cert.childFingerprint) {
+			} else {
 				cert.childSignature = signature;
 			}
 			const encoded = stringToHex(JSON.stringify(cert));
-			const complete = typeof cert.masterSignature === "string" && typeof cert.childSignature === "string";
-			return json({ certificate: encoded, complete });
-		}
 
-		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/import") {
-			const body = await readJson<{ certificate?: unknown; home?: unknown }>(req);
-			const certificate = typeof body.certificate === "string" ? body.certificate : "";
-			const home = typeof body.home === "string" ? body.home : undefined;
-			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
-			const decoded = decodeHierarchyCertificate(certificate);
-			if (!decoded) throw new HttpError(STATUS.BadRequest, "hierarchy certificate must include both signatures");
-			const ctx = await getContext(home);
-			const existing = await listHierarchyCertificatesLocal(ctx);
-			const validation = validateHierarchy(
-				existing.map((entry) => ({
-					masterFingerprint: entry.decoded.masterFingerprint,
-					childFingerprint: entry.decoded.childFingerprint,
-				})),
-				{
-					masterFingerprint: decoded.masterFingerprint,
-					childFingerprint: decoded.childFingerprint,
-				},
-			);
-			if (!validation.ok) {
-				throw new HttpError(STATUS.BadRequest, validation.error);
+			const proposal = await addPendingHierarchyLocal(ctx, {
+				masterFingerprint,
+				childFingerprint,
+				proposerFingerprint,
+				certificate: encoded,
+				context,
+				expiry,
+			});
+			try {
+				const server = resolveServer(ctx, serverOverride);
+				const res = await fetch(apiUrl(server, "/api/v1/hierarchy/propose"), {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({
+						proposerFingerprint,
+						certificate: encoded,
+					}),
+				});
+				if (!res.ok && res.status !== STATUS.NotFound) {
+					const responseBody = await res.json().catch(() => ({})) as { error?: string };
+					throw new HttpError(STATUS.BadGateway, `failed to propose hierarchy certificate: ${responseBody.error ?? `HTTP ${res.status}`}`);
+				}
+			} catch (e) {
+				if (e instanceof HttpError) throw e;
+				// Offline/temporary server issues should not block proposal creation in local queue.
 			}
-			await storeHierarchyCertificateLocal(ctx, certificate);
-			return json({ ok: true, masterFingerprint: decoded.masterFingerprint, childFingerprint: decoded.childFingerprint });
+			return json({ ok: true, certificate: encoded, proposal });
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/list") {
@@ -2052,6 +2118,136 @@ async function handleRequest(req: Request): Promise<Response> {
 					expired: isHierarchyCertificateExpired({ expiry: entry.decoded.expiry }),
 				})),
 			});
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/pending") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const identityName = url.searchParams.get("identity") ?? undefined;
+			const serverOverride = url.searchParams.get("server") ?? undefined;
+			const ctx = await getContext(home ?? undefined, identityName ?? undefined);
+			const pub = await loadIdentityPublic(ctx);
+			if (!pub?.fingerprint) {
+				throw new HttpError(STATUS.BadRequest, "current identity fingerprint unavailable");
+			}
+			const local = await readPendingHierarchyLocal(ctx);
+			const proposals = local
+				.filter((p) =>
+					(p.masterFingerprint === pub.fingerprint || p.childFingerprint === pub.fingerprint) &&
+					p.proposerFingerprint !== pub.fingerprint
+				)
+				.map((p) => ({
+					id: p.id,
+					masterFingerprint: p.masterFingerprint,
+					childFingerprint: p.childFingerprint,
+					proposerFingerprint: p.proposerFingerprint,
+					certificate: p.certificate,
+					context: p.context,
+					expiry: p.expiry,
+					createdAt: p.createdAt,
+				}));
+			return json({ fingerprint: pub.fingerprint, proposals });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/accept") {
+			const body = await readJson<{
+				proposalId?: unknown;
+				certificate?: unknown;
+				password?: unknown;
+				home?: unknown;
+				identity?: unknown;
+				server?: unknown;
+			}>(req);
+			const proposalId = Number(body.proposalId);
+			const certificate = typeof body.certificate === "string" ? body.certificate : "";
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			if (!Number.isInteger(proposalId) || proposalId <= 0) {
+				throw new HttpError(STATUS.BadRequest, "proposalId must be a positive integer");
+			}
+			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
+			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+
+			const ctx = await getContext(home, identityName);
+			const identity = await loadIdentity(ctx, password);
+			const cert = decodeHierarchyCertificateDraft(certificate);
+			const myFingerprint = identity.toFingerprint();
+			if (myFingerprint !== cert.masterFingerprint && myFingerprint !== cert.childFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "current identity is not part of this certificate");
+			}
+			const payload = getHierarchySignaturePayload(cert);
+			const signature = identity.signMessage(payload);
+			if (myFingerprint === cert.masterFingerprint) cert.masterSignature = signature;
+			if (myFingerprint === cert.childFingerprint) cert.childSignature = signature;
+			const signed = stringToHex(JSON.stringify(cert));
+			if (!decodeHierarchyCertificate(signed)) {
+				throw new HttpError(STATUS.BadRequest, "accepted certificate must include both signatures");
+			}
+
+			const local = await readPendingHierarchyLocal(ctx);
+			const proposal = local.find((p) => p.id === proposalId);
+			if (!proposal) throw new HttpError(STATUS.NotFound, "pending proposal not found");
+			if (proposal.proposerFingerprint === myFingerprint) {
+				throw new HttpError(STATUS.Forbidden, "proposer cannot accept their own pending entry");
+			}
+			const server = resolveServer(ctx, serverOverride);
+			const publishRes = await fetch(apiUrl(server, "/api/v1/hierarchy"), {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ certificate: signed }),
+			});
+			const publishBody = await publishRes.json().catch(() => ({})) as { error?: string };
+			if (!publishRes.ok) {
+				throw new HttpError(
+					STATUS.BadGateway,
+					`failed to publish accepted hierarchy certificate: ${publishBody.error ?? `HTTP ${publishRes.status}`}`,
+				);
+			}
+			await writePendingHierarchyLocal(ctx, local.filter((p) => p.id !== proposalId));
+			await storeHierarchyCertificateLocal(ctx, signed);
+			return json({ ok: true, certificate: signed });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/reject") {
+			const body = await readJson<{
+				proposalId?: unknown;
+				home?: unknown;
+				identity?: unknown;
+				server?: unknown;
+			}>(req);
+			const proposalId = Number(body.proposalId);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			if (!Number.isInteger(proposalId) || proposalId <= 0) {
+				throw new HttpError(STATUS.BadRequest, "proposalId must be a positive integer");
+			}
+			const ctx = await getContext(home, identityName);
+			const pub = await loadIdentityPublic(ctx);
+			if (!pub?.fingerprint) {
+				throw new HttpError(STATUS.BadRequest, "current identity fingerprint unavailable");
+			}
+			const local = await readPendingHierarchyLocal(ctx);
+			const proposal = local.find((p) => p.id === proposalId);
+			if (!proposal) throw new HttpError(STATUS.NotFound, "pending proposal not found");
+			if (proposal.proposerFingerprint === pub.fingerprint) {
+				throw new HttpError(STATUS.Forbidden, "proposer cannot reject their own pending entry");
+			}
+			await writePendingHierarchyLocal(ctx, local.filter((p) => p.id !== proposalId));
+			if (serverOverride || ctx.server) {
+				try {
+					const server = resolveServer(ctx, serverOverride);
+					await fetch(apiUrl(server, "/api/v1/hierarchy/reject"), {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({ proposalId, fingerprint: pub.fingerprint }),
+					});
+				} catch {
+					// ignore optional remote reject sync failures
+				}
+			}
+			return json({ ok: true });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/publish") {

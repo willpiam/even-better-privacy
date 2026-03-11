@@ -1760,6 +1760,10 @@
           <span class="nav-item-icon">👥</span>
           Contacts
         </div>
+        <div class="nav-item" data-page="certificates">
+          <span class="nav-item-icon">📜</span>
+          Certificates
+        </div>
         <div class="nav-item" data-page="sign-verify">
           <span class="nav-item-icon">✍️</span>
           Sign / Verify
@@ -1976,93 +1980,57 @@
         </div>
       </section>
 
+    </div>
+
+    <!-- Page: Certificates -->
+    <div class="page" id="page-certificates">
+      <div class="page-header">
+        <h2>Certificates</h2>
+        <p>Manage hierarchy certificate proposals and active relationships</p>
+      </div>
+
       <section>
-        <h3>Hierarchy</h3>
-        <p class="small muted" style="margin-bottom: 12px;">
-          Create and manage master/child hierarchy certificates for identities.
-        </p>
+        <h3>Active Hierarchy Certificates</h3>
+        <ul id="certificates-active-list" class="small"></ul>
+      </section>
 
-        <div class="stack" style="margin-bottom: 16px;">
-          <strong class="small">Your Hierarchy Relationships</strong>
-          <ul id="hierarchy-relationships-list" class="small" style="margin-top: 8px;"></ul>
-        </div>
+      <section>
+        <h3>Pending Proposals</h3>
+        <ul id="certificates-pending-list" class="small"></ul>
+      </section>
 
-        <details>
-          <summary style="cursor: pointer; color: var(--text-secondary); margin-bottom: 12px;">
-            <strong>Establish Hierarchy (Create + Sign)</strong>
-          </summary>
-          <form id="hierarchy-create-form" class="stack" style="margin-top: 12px;">
-            <div class="row">
-              <label class="inline">
-                <input id="hierarchy-role-master" name="hierarchy-role" type="radio" value="master" checked />
-                I am the Master
-              </label>
-              <label class="inline">
-                <input id="hierarchy-role-child" name="hierarchy-role" type="radio" value="child" />
-                I am the Child
-              </label>
-            </div>
-            <label>Other party (contact name or fingerprint)
-              <div class="contact-search-wrapper">
-                <input id="hierarchy-other-fingerprint" type="text" placeholder="Search contacts or paste fingerprint..." autocomplete="off" />
-                <button type="button" class="contact-search-clear" data-target="hierarchy-other-fingerprint" title="Clear">×</button>
-                <div class="contact-search-dropdown" id="hierarchy-other-fingerprint-dropdown"></div>
-              </div>
+      <section>
+        <h3>Propose Hierarchy</h3>
+        <form id="certificate-propose-form" class="stack">
+          <div class="row">
+            <label class="inline">
+              <input id="certificate-role-master" name="certificate-role" type="radio" value="master" checked />
+              I am the Master
             </label>
-            <div class="two">
-              <label>Context (optional)
-                <input id="hierarchy-context" type="text" maxlength="256" placeholder="e.g., Team lead relationship" />
-              </label>
-              <label>Expiry (optional)
-                <input id="hierarchy-expiry" type="date" />
-              </label>
-            </div>
-            <div>
-              <button type="submit">Create & Sign</button>
-            </div>
-            <label>Half-signed certificate
-              <div class="output-wrapper">
-                <textarea id="hierarchy-create-output" readonly placeholder="Half-signed certificate will appear here..."></textarea>
-                <button type="button" class="copy-btn" data-target="hierarchy-create-output">Copy</button>
-              </div>
+            <label class="inline">
+              <input id="certificate-role-child" name="certificate-role" type="radio" value="child" />
+              I am the Child
             </label>
-          </form>
-        </details>
-
-        <details>
-          <summary style="cursor: pointer; color: var(--text-secondary); margin-bottom: 12px;">
-            <strong>Co-sign Hierarchy Certificate</strong>
-          </summary>
-          <form id="hierarchy-cosign-form" class="stack" style="margin-top: 12px;">
-            <label>Incoming certificate (hex)
-              <textarea id="hierarchy-cosign-input" placeholder="Paste half-signed certificate here..."></textarea>
-            </label>
-            <div>
-              <button type="submit">Co-sign Certificate</button>
-              <button type="button" class="secondary" id="hierarchy-cosign-publish-btn" style="display: none;">Publish to Server</button>
+          </div>
+          <label>Other party (contact name or fingerprint)
+            <div class="contact-search-wrapper">
+              <input id="certificate-other-fingerprint" type="text" placeholder="Search contacts or paste fingerprint..." autocomplete="off" />
+              <button type="button" class="contact-search-clear" data-target="certificate-other-fingerprint" title="Clear">×</button>
+              <div class="contact-search-dropdown" id="certificate-other-fingerprint-dropdown"></div>
             </div>
-            <label>Updated certificate
-              <div class="output-wrapper">
-                <textarea id="hierarchy-cosign-output" readonly placeholder="Updated certificate will appear here..."></textarea>
-                <button type="button" class="copy-btn" data-target="hierarchy-cosign-output">Copy</button>
-              </div>
+          </label>
+          <div class="two">
+            <label>Context (optional)
+              <input id="certificate-context" type="text" maxlength="256" placeholder="e.g., Team lead relationship" />
             </label>
-          </form>
-        </details>
-
-        <details>
-          <summary style="cursor: pointer; color: var(--text-secondary); margin-bottom: 12px;">
-            <strong>Import Fully Signed Certificate</strong>
-          </summary>
-          <form id="hierarchy-import-form" class="stack" style="margin-top: 12px;">
-            <label>Certificate (hex)
-              <textarea id="hierarchy-import-input" placeholder="Paste fully-signed certificate to import..."></textarea>
+            <label>Expiry (optional)
+              <input id="certificate-expiry" type="date" />
             </label>
-            <div>
-              <button type="submit">Import Certificate</button>
-            </div>
-          </form>
-        </details>
+          </div>
+          <div>
+            <button type="submit">Propose Certificate</button>
+          </div>
+        </form>
       </section>
     </div>
 

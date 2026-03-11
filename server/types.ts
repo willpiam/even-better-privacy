@@ -41,6 +41,21 @@ export type HierarchyCertificatePayload = {
   certificate: string;
 };
 
+export type HierarchyProposalPayload = {
+  proposerFingerprint: string;
+  certificate: string;
+};
+
+export type HierarchyAcceptPayload = {
+  proposalId: number;
+  certificate: string;
+};
+
+export type HierarchyRejectPayload = {
+  proposalId: number;
+  fingerprint: string;
+};
+
 export type HierarchyCertificateRow = {
   id: number;
   master_fingerprint: string;
@@ -49,6 +64,17 @@ export type HierarchyCertificateRow = {
   expiry: number;
   context: string;
   certificate: string;
+  created_at: number;
+};
+
+export type PendingHierarchyProposalRow = {
+  id: number;
+  master_fingerprint: string;
+  child_fingerprint: string;
+  proposer_fingerprint: string;
+  certificate: string;
+  context: string;
+  expiry: number;
   created_at: number;
 };
 
