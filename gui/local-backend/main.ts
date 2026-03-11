@@ -8,7 +8,7 @@ import { simpleParser } from "mailparser";
 import { Identity, ExternalIdentity, IdentityPublicData } from "../../core/Identity.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
-import { computeIdentityFingerprint, isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
+import { computeIdentityFingerprint, isValidFingerprintBech32, decodeFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
 	createHierarchyCertificate,
@@ -19,7 +19,7 @@ import {
 	type HierarchyCertificateData,
 	type SignedHierarchyCertificate,
 } from "../../core/HierarchyCertificate.ts";
-import { hexToString, stringToHex } from "../../core/Hex.ts";
+import { hexToString, stringToHex, toHex } from "../../core/Hex.ts";
 import {
 	buildDetachedSignaturePayload,
 	buildEncryptedMessagePayload,
@@ -1206,6 +1206,18 @@ function buildHierarchyTreeFromCertificates(
 	};
 }
 
+// Helper: derive a hex color from the last 3 bytes of the bech32-decoded fingerprint
+function fingerprintColor(fp: string): string {
+	try {
+		const decoded = decodeFingerprintBech32(fp);
+		const bytes = decoded.bytes;
+		const last3 = bytes.slice(bytes.length - 3);
+		return "#" + toHex(last3);
+	} catch {
+		return "#58a6ff";
+	}
+}
+
 async function handleRequest(req: Request): Promise<Response> {
 	if (req.method === "OPTIONS") {
 		return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -2120,6 +2132,107 @@ async function handleRequest(req: Request): Promise<Response> {
 			});
 		}
 
+		if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/tree") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const ctx = await getContext(home ?? undefined);
+			const pub = await loadIdentityPublic(ctx);
+			const selfFingerprint = pub?.fingerprint ?? null;
+			const entries = await listHierarchyCertificatesLocal(ctx);
+			const certs = entries.map((e) => e.decoded);
+
+			// Collect all fingerprints that appear in the hierarchy
+			const allFingerprints = new Set<string>();
+			if (selfFingerprint) allFingerprints.add(selfFingerprint);
+			for (const cert of certs) {
+				allFingerprints.add(cert.masterFingerprint);
+				allFingerprints.add(cert.childFingerprint);
+			}
+
+			// Build identity detail lookup: load contacts once, index by fingerprint
+			const contacts = await listContacts(ctx);
+			const contactByFingerprint = new Map<string, { name: string; details: Record<string, [string, string]> }>();
+			for (const c of contacts) {
+				if (c.contact.fingerprint) {
+					contactByFingerprint.set(c.contact.fingerprint, {
+						name: c.name,
+						details: c.contact.details ?? {},
+					});
+				}
+			}
+
+			// Build self details
+			const selfDetails: Record<string, string> = {};
+			if (pub) {
+				for (const [path, val] of Object.entries(pub.details ?? {})) {
+					selfDetails[path] = Array.isArray(val) ? val[0] : String(val);
+				}
+			}
+
+			// Build nodes array
+			const nodes: Array<{
+				fingerprint: string;
+				label: string;
+				details: Record<string, string>;
+				color: string;
+				isSelf: boolean;
+			}> = [];
+			for (const fp of allFingerprints) {
+				const isSelf = fp === selfFingerprint;
+				let label = fp.substring(0, 16) + "…";
+				const details: Record<string, string> = {};
+				if (isSelf && pub) {
+					for (const [k, v] of Object.entries(selfDetails)) {
+						details[k] = v;
+					}
+					if (selfDetails["name"]) label = selfDetails["name"];
+				} else {
+					const contact = contactByFingerprint.get(fp);
+					if (contact) {
+						label = contact.name;
+						for (const [k, val] of Object.entries(contact.details)) {
+							details[k] = Array.isArray(val) ? val[0] : String(val);
+						}
+					}
+				}
+				nodes.push({
+					fingerprint: fp,
+					label,
+					details,
+					color: fingerprintColor(fp),
+					isSelf,
+				});
+			}
+
+			// Build relationships array
+			const relationships = certs.map((cert) => ({
+				masterFingerprint: cert.masterFingerprint,
+				childFingerprint: cert.childFingerprint,
+				context: cert.context,
+				timestamp: cert.timestamp,
+				expiry: cert.expiry,
+				expired: isHierarchyCertificateExpired({ expiry: cert.expiry }),
+			}));
+
+			// Build tree structure: find root(s)
+			const childToParent = new Map<string, string>();
+			for (const cert of certs) {
+				childToParent.set(cert.childFingerprint, cert.masterFingerprint);
+			}
+			const roots: string[] = [];
+			for (const fp of allFingerprints) {
+				if (!childToParent.has(fp)) {
+					roots.push(fp);
+				}
+			}
+
+			return json({
+				focusFingerprint: selfFingerprint,
+				nodes,
+				relationships,
+				roots,
+			});
+		}
+
 		if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/pending") {
 			const home = url.searchParams.get("home") ?? undefined;
 			const identityName = url.searchParams.get("identity") ?? undefined;
@@ -2284,22 +2397,107 @@ async function handleRequest(req: Request): Promise<Response> {
 			const serverOverride = url.searchParams.get("server") ?? undefined;
 			const source = url.searchParams.get("source") ?? "local";
 			const ctx = await getContext(home ?? undefined);
+
+			// Get basic tree data from either server or local
+			let treeData: {
+				fingerprint: string;
+				root: string;
+				ancestors: string[];
+				descendants: string[];
+				allFingerprints: string[];
+				relationships: Array<{
+					masterFingerprint: string;
+					childFingerprint: string;
+					timestamp: number;
+					expiry: number;
+					context: string;
+					certificate: string;
+					expired: boolean;
+				}>;
+			};
+
 			if (source === "server") {
 				const server = resolveServer(ctx, serverOverride ?? undefined);
 				const res = await fetch(apiUrl(server, `/api/v1/hierarchy/${fingerprint}`));
-				const bodyJson = await res.json().catch(() => ({})) as { error?: string };
+				const bodyJson = await res.json().catch(() => ({})) as Record<string, unknown>;
 				if (!res.ok) {
-					throw new HttpError(STATUS.BadGateway, `failed to fetch hierarchy: ${bodyJson.error ?? `HTTP ${res.status}`}`);
+					throw new HttpError(STATUS.BadGateway, `failed to fetch hierarchy: ${(bodyJson as { error?: string }).error ?? `HTTP ${res.status}`}`);
 				}
-				return json(bodyJson);
+				treeData = bodyJson as typeof treeData;
+			} else {
+				const certs = await listHierarchyCertificatesLocal(ctx);
+				treeData = buildHierarchyTreeFromCertificates(
+					fingerprint,
+					certs.map((entry) => entry.decoded),
+				);
 			}
 
-			const certs = await listHierarchyCertificatesLocal(ctx);
-			const tree = buildHierarchyTreeFromCertificates(
-				fingerprint,
-				certs.map((entry) => entry.decoded),
-			);
-			return json(tree);
+			// Enrich with nodes and roots for tree visualization
+			const pub = await loadIdentityPublic(ctx);
+			const selfFingerprint = pub?.fingerprint ?? null;
+
+			const contacts = await listContacts(ctx);
+			const contactByFp = new Map<string, { name: string; details: Record<string, [string, string]> }>();
+			for (const c of contacts) {
+				if (c.contact.fingerprint) {
+					contactByFp.set(c.contact.fingerprint, {
+						name: c.name,
+						details: (c.contact.details ?? {}) as Record<string, [string, string]>,
+					});
+				}
+			}
+
+			const selfDetails: Record<string, string> = {};
+			if (pub) {
+				for (const [p, val] of Object.entries(pub.details ?? {})) {
+					selfDetails[p] = Array.isArray(val) ? val[0] : String(val);
+				}
+			}
+
+			const nodes: Array<{
+				fingerprint: string;
+				label: string;
+				details: Record<string, string>;
+				color: string;
+				isSelf: boolean;
+				isFocus: boolean;
+			}> = [];
+
+			for (const fp of treeData.allFingerprints) {
+				const isSelf = fp === selfFingerprint;
+				const isFocus = fp === fingerprint;
+				let label = fp.substring(0, 16) + "…";
+				const details: Record<string, string> = {};
+				if (isSelf && pub) {
+					for (const [k, v] of Object.entries(selfDetails)) {
+						details[k] = v;
+					}
+					if (selfDetails["name"]) label = selfDetails["name"];
+				} else {
+					const contact = contactByFp.get(fp);
+					if (contact) {
+						label = contact.name;
+						for (const [k, val] of Object.entries(contact.details)) {
+							details[k] = Array.isArray(val) ? val[0] : String(val);
+						}
+					}
+				}
+				nodes.push({ fingerprint: fp, label, details, color: fingerprintColor(fp), isSelf, isFocus });
+			}
+
+			// Compute roots (fingerprints that aren't children in any relationship)
+			const childSet = new Set(treeData.relationships.map((r) => r.childFingerprint));
+			const roots: string[] = [];
+			for (const fp of treeData.allFingerprints) {
+				if (!childSet.has(fp)) roots.push(fp);
+			}
+
+			return json({
+				...treeData,
+				focusFingerprint: fingerprint,
+				nodes,
+				roots,
+			});
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/sign") {

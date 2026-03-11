@@ -844,6 +844,168 @@
       color: var(--warning);
     }
 
+    /* ─── Hierarchy Tree SVG Visualization ─── */
+    .hierarchy-tree-wrap {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-input);
+      padding: 0;
+      overflow: hidden;
+      min-height: 160px;
+      height: 420px;
+      position: relative;
+      resize: vertical;
+    }
+
+    .hierarchy-tree-wrap svg {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
+    .hierarchy-tree-wrap svg .ht-edge {
+      stroke-width: 2;
+      fill: none;
+      cursor: pointer;
+      transition: stroke 0.15s ease, stroke-width 0.15s ease;
+    }
+
+    .hierarchy-tree-wrap svg .ht-edge:hover {
+      stroke: var(--accent) !important;
+      stroke-width: 3;
+    }
+
+    .hierarchy-tree-wrap svg .ht-edge.expired {
+      stroke-dasharray: 6 4;
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-group {
+      cursor: grab;
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-group.dragging {
+      cursor: grabbing;
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-circle {
+      stroke: var(--border);
+      stroke-width: 2;
+      transition: stroke 0.15s ease, stroke-width 0.15s ease, filter 0.15s ease;
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-circle:hover {
+      stroke: var(--text-primary);
+      stroke-width: 3;
+      filter: brightness(1.2) drop-shadow(0 0 6px rgba(255,255,255,0.25));
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-circle.ht-self {
+      stroke: var(--accent);
+      stroke-width: 3;
+    }
+
+    .hierarchy-tree-wrap svg .ht-node-circle.ht-focus {
+      stroke: var(--success, #3fb950);
+      stroke-width: 3;
+    }
+
+    .hierarchy-tree-wrap svg .ht-label {
+      fill: var(--text-primary);
+      font-family: var(--font-main);
+      font-size: 11px;
+      font-weight: 600;
+      text-anchor: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .hierarchy-tree-wrap svg .ht-fp-label {
+      fill: var(--text-muted);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      text-anchor: middle;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    .ht-tooltip {
+      position: fixed;
+      z-index: 300;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 14px;
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      max-width: 340px;
+      animation: fadeIn 0.15s ease;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
+
+    .ht-tooltip-title {
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .ht-tooltip-title .ht-color-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .ht-tooltip-fp {
+      font-family: var(--font-mono);
+      font-size: 0.72rem;
+      color: var(--accent);
+      word-break: break-all;
+      margin-bottom: 6px;
+    }
+
+    .ht-tooltip-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .ht-tooltip-row .ht-tl {
+      color: var(--text-muted);
+      min-width: 60px;
+    }
+
+    .ht-tooltip-row .ht-tv {
+      color: var(--text-secondary);
+      word-break: break-word;
+    }
+
+    .ht-tooltip-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 3px;
+      margin-left: 6px;
+    }
+
+    .ht-tooltip-badge.self {
+      background: var(--accent-bg);
+      color: var(--accent);
+    }
+
+    .ht-tooltip-badge.focus {
+      background: rgba(63, 185, 80, 0.15);
+      color: var(--success, #3fb950);
+    }
+
+    .ht-tooltip-badge.expired-badge {
+      background: rgba(210, 153, 34, 0.15);
+      color: var(--warning);
+    }
+
     /* ─────────────────────────────────────────────────────────────────────────
        Project Info Page
     ───────────────────────────────────────────────────────────────────────── */
@@ -1258,11 +1420,22 @@
     }
 
     /* Certificate detail modal */
+    .modal-certificate-detail {
+      width: min(92vw, 980px);
+      max-width: 980px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
+    }
+
     .certificate-detail-content {
       display: flex;
       flex-direction: column;
       gap: 8px;
       margin-bottom: 16px;
+      overflow: auto;
+      flex: 1 1 auto;
+      min-height: 0;
     }
 
     .certificate-detail-field {
@@ -1290,7 +1463,8 @@
       border-radius: var(--radius-sm);
       padding: 10px;
       font-size: 0.75rem;
-      max-height: 200px;
+      min-height: 260px;
+      max-height: 52vh;
       overflow: auto;
       word-break: break-all;
       white-space: pre-wrap;
@@ -2056,6 +2230,17 @@
       </section>
 
       <section>
+        <h3>Hierarchy Tree</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Visual overview of the full certificate hierarchy for your identity.</p>
+        <div style="margin-bottom: 12px;">
+          <button type="button" class="secondary" id="hierarchy-tree-load-btn">Load Hierarchy Tree</button>
+        </div>
+        <div id="hierarchy-tree-container" class="hierarchy-tree-wrap">
+          <div class="muted small">Press the button above to load the hierarchy tree.</div>
+        </div>
+      </section>
+
+      <section>
         <h3>Propose Hierarchy</h3>
         <form id="certificate-propose-form" class="stack">
           <div class="row">
@@ -2812,7 +2997,7 @@
 
   <!-- Certificate Detail Modal -->
   <div class="modal-overlay" id="certificate-detail-modal">
-    <div class="modal modal-wide">
+    <div class="modal modal-certificate-detail">
       <h3>Certificate Details</h3>
       <div class="certificate-detail-content">
         <div class="certificate-detail-field">
@@ -2876,8 +3061,8 @@
             <strong>Hierarchy</strong>
             <button type="button" class="secondary" id="contact-detail-hierarchy-btn">View Hierarchy</button>
           </div>
-          <div id="contact-detail-hierarchy" class="hierarchy-diagram">
-            <div class="muted">(hierarchy not loaded)</div>
+          <div id="contact-detail-hierarchy" class="hierarchy-tree-wrap" style="height: 300px;">
+            <div class="muted small" style="padding:16px">(hierarchy not loaded)</div>
           </div>
         </div>
       </div>
