@@ -754,6 +754,10 @@
     }
 
     /* Keep global confirm/password modals above contextual modals (e.g. contact details). */
+    #certificate-detail-modal {
+      z-index: 210;
+    }
+
     #contact-detail-modal {
       z-index: 220;
     }
@@ -1251,6 +1255,58 @@
     /* Contact detail modal */
     .modal-wide {
       max-width: 600px;
+    }
+
+    /* Certificate detail modal */
+    .certificate-detail-content {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .certificate-detail-field {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+    }
+
+    .certificate-detail-field code {
+      word-break: break-all;
+    }
+
+    .certificate-detail-section {
+      margin-top: 12px;
+    }
+
+    .certificate-detail-section strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .certificate-raw-text {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px;
+      font-size: 0.75rem;
+      max-height: 200px;
+      overflow: auto;
+      word-break: break-all;
+      white-space: pre-wrap;
+      margin: 0;
+      user-select: all;
+    }
+
+    #certificates-active-list li.certificate-clickable {
+      cursor: pointer;
+      padding: 8px;
+      border-radius: var(--radius-sm);
+      transition: background 0.15s ease;
+    }
+
+    #certificates-active-list li.certificate-clickable:hover {
+      background: var(--bg-hover);
     }
 
     .contact-detail-content {
@@ -2750,6 +2806,45 @@
       <div class="modal-actions" style="margin-top: 12px;">
         <button class="secondary" id="password-modal-cancel">Cancel</button>
         <button id="password-modal-confirm">Submit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Certificate Detail Modal -->
+  <div class="modal-overlay" id="certificate-detail-modal">
+    <div class="modal modal-wide">
+      <h3>Certificate Details</h3>
+      <div class="certificate-detail-content">
+        <div class="certificate-detail-field">
+          <span class="muted">Master Fingerprint:</span>
+          <code id="cert-detail-master"></code>
+        </div>
+        <div class="certificate-detail-field">
+          <span class="muted">Child Fingerprint:</span>
+          <code id="cert-detail-child"></code>
+        </div>
+        <div class="certificate-detail-field">
+          <span class="muted">Context:</span>
+          <span id="cert-detail-context"></span>
+        </div>
+        <div class="certificate-detail-field">
+          <span class="muted">Created:</span>
+          <span id="cert-detail-timestamp"></span>
+        </div>
+        <div class="certificate-detail-field">
+          <span class="muted">Expiry:</span>
+          <span id="cert-detail-expiry"></span>
+        </div>
+        <div class="certificate-detail-field" id="cert-detail-expired-field" style="display: none;">
+          <span class="result-badge warning">EXPIRED</span>
+        </div>
+        <div class="certificate-detail-section">
+          <strong>Raw Certificate</strong>
+          <pre class="certificate-raw-text" id="cert-detail-raw"></pre>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="secondary" id="certificate-detail-close">Close</button>
       </div>
     </div>
   </div>

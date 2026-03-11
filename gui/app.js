@@ -547,6 +547,17 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// Certificate detail modal handlers
+document.getElementById("certificate-detail-close").addEventListener("click", () => {
+  document.getElementById("certificate-detail-modal").classList.remove("active");
+});
+
+document.getElementById("certificate-detail-modal").addEventListener("click", (e) => {
+  if (e.target.id === "certificate-detail-modal") {
+    document.getElementById("certificate-detail-modal").classList.remove("active");
+  }
+});
+
 // Contact detail modal handlers
 document.getElementById("contact-detail-close").addEventListener("click", () => {
   document.getElementById("contact-detail-modal").classList.remove("active");
@@ -1470,13 +1481,47 @@ function renderCertificatesActiveList(relationships) {
   list.innerHTML = "";
   for (const rel of relationships) {
     const li = document.createElement("li");
+    li.classList.add("certificate-clickable");
     const expires = rel.expiry && rel.expiry !== 0 ? new Date(rel.expiry).toLocaleString() : "never";
     li.innerHTML = `
       <div><strong>${escapeHtml(certificateRelationshipLabel(rel, state.currentFingerprint || ""))}</strong></div>
       <div class="muted">context: ${escapeHtml(rel.context || "none")} · expiry: ${escapeHtml(String(expires))}${rel.expired ? " · EXPIRED" : ""}</div>
     `;
+    li.addEventListener("click", () => showCertificateDetails(rel));
     list.appendChild(li);
   }
+}
+
+function showCertificateDetails(rel) {
+  document.getElementById("cert-detail-master").textContent = rel.masterFingerprint;
+  document.getElementById("cert-detail-child").textContent = rel.childFingerprint;
+  document.getElementById("cert-detail-context").textContent = rel.context || "none";
+  document.getElementById("cert-detail-timestamp").textContent = rel.timestamp
+    ? new Date(rel.timestamp).toLocaleString()
+    : "unknown";
+  const expiryText = rel.expiry && rel.expiry !== 0 ? new Date(rel.expiry).toLocaleString() : "never";
+  document.getElementById("cert-detail-expiry").textContent = expiryText;
+
+  const expiredField = document.getElementById("cert-detail-expired-field");
+  expiredField.style.display = rel.expired ? "flex" : "none";
+
+  // Show raw certificate text
+  const rawEl = document.getElementById("cert-detail-raw");
+  if (rel.certificate) {
+    // Try to decode hex -> JSON for a readable view, fall back to raw hex
+    try {
+      const decoded = JSON.parse(
+        rel.certificate.match(/.{1,2}/g).map(b => String.fromCharCode(parseInt(b, 16))).join("")
+      );
+      rawEl.textContent = JSON.stringify(decoded, null, 2);
+    } catch {
+      rawEl.textContent = rel.certificate;
+    }
+  } else {
+    rawEl.textContent = "(certificate data not available)";
+  }
+
+  document.getElementById("certificate-detail-modal").classList.add("active");
 }
 
 function renderCertificatesPendingList(proposals) {
