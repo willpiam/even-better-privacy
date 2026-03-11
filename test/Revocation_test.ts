@@ -1,6 +1,6 @@
 import { assert, assertEquals, assertFalse, assertThrows } from "jsr:@std/assert";
-import { Buffer } from "node:buffer";
 import { Identity } from "../core/Identity.ts";
+import { stringToHex } from "../core/Hex.ts";
 import {
 	createRevocationCertificate,
 	decodeRevocationCertificate,
@@ -53,7 +53,7 @@ Deno.test("Revocation: decodeRevocationCertificate returns null for invalid inpu
 	assertEquals(decodeRevocationCertificate(""), null);
 	
 	// Valid hex but invalid JSON
-	const invalidHex = Buffer.from("not json").toString("hex");
+	const invalidHex = stringToHex("not json");
 	assertEquals(decodeRevocationCertificate(invalidHex), null);
 });
 

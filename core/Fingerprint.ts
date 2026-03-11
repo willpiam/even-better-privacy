@@ -1,8 +1,8 @@
 import { sha256 } from "@noble/hashes/sha2";
-import { Buffer } from "node:buffer";
 import { base64ToBytes } from "./Base64.ts";
 import type { EncryptionKeyOptions, SigningKeyOptions } from "./Keys.ts";
 import { bech32 } from "bech32";
+import { toHex, concatBytes } from "./Hex.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -49,11 +49,11 @@ export function computeEncryptionLeafRaw(
 export function computeIdentityMerkleRootRaw(input: IdentityFingerprintInput): Uint8Array {
   const leftLeaf = computeSigningLeafRaw(input.signingKeyType, input.signingKey);
   const rightLeaf = computeEncryptionLeafRaw(input.encryptionKeyType, input.encryptionKey);
-  return sha256(Buffer.concat([leftLeaf, rightLeaf]));
+  return sha256(concatBytes(leftLeaf, rightLeaf));
 }
 
 export function computeIdentityFingerprintHex(input: IdentityFingerprintInput): string {
-  return Buffer.from(computeIdentityMerkleRootRaw(input)).toString("hex");
+  return toHex(computeIdentityMerkleRootRaw(input));
 }
 
 export function encodeFingerprintBech32(rawFingerprint: Uint8Array, hrp: string): string {

@@ -8,7 +8,7 @@ import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import { AES } from "./AES.ts";
-import { Buffer } from "node:buffer";
+import { stringToHex, hexToString } from "./Hex.ts";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
 import { buildMessageHashEnvelope } from "./MessageHash.ts";
@@ -156,7 +156,7 @@ export class Identity extends Key {
         }
         const detailRecordSignature = this.signMessage(JSON.stringify(detailRecord));
         detailRecord.signature = detailRecordSignature;
-        const proof = Buffer.from(JSON.stringify(detailRecord)).toString("hex");
+        const proof = stringToHex(JSON.stringify(detailRecord));
         this.details.set(path, [detail, proof]);
         this.detailsNonce++;
     }
@@ -171,7 +171,7 @@ export class Identity extends Key {
 
         try {
             // Decode the stored proof back into the signed record
-            const recordJson = Buffer.from(proof, "hex").toString();
+            const recordJson = hexToString(proof);
             const record = JSON.parse(recordJson) as {
                 nonce: number;
                 path: string;
@@ -223,7 +223,7 @@ export class Identity extends Key {
 
         for (const [path, [detail, proof]] of details.entries()) {
             try {
-                const recordJson = Buffer.from(proof, "hex").toString();
+                const recordJson = hexToString(proof);
                 const record = JSON.parse(recordJson) as {
                     nonce: number;
                     path: string;
@@ -539,7 +539,7 @@ export class Identity extends Key {
             let maxNonce = -1;
             for (const [, [, proof]] of detailsEntries) {
                 try {
-                    const record = JSON.parse(Buffer.from(proof, "hex").toString());
+                    const record = JSON.parse(hexToString(proof));
                     if (typeof record.nonce === "number" && Number.isInteger(record.nonce)) {
                         maxNonce = Math.max(maxNonce, record.nonce);
                     }
@@ -589,12 +589,12 @@ export class Identity extends Key {
     }
 
     /** Convert to new storage format with encrypted private keys */
-    async toStorageFormat(password: string): Promise<string> {
+    toStorageFormat(password: string): string {
         const privateData = {
             signingKey: this.signingKey.toJSON(),
             encryptionKey: this.encryptionKey.toJSON(),
         };
-        const encrypted = await AES.encrypt(password, JSON.stringify(privateData));
+        const encrypted = AES.encrypt(password, JSON.stringify(privateData));
         
         const storage: IdentityStorageFormat = {
             version: FILE_FORMAT_VERSIONS.identityStorage,
@@ -624,7 +624,7 @@ export class Identity extends Key {
      * If password is provided, decrypts private keys for full access.
      * If password is omitted, returns an identity that can only verify/encrypt (public ops).
      */
-    static async fromStorageFormat(storageData: string, password?: string): Promise<Identity> {
+    static fromStorageFormat(storageData: string, password?: string): Identity {
         const parsed = JSON.parse(storageData);
         
         // Handle new v2 format
@@ -654,7 +654,7 @@ export class Identity extends Key {
             
             if (password) {
                 // Decrypt private keys for full access
-                const privateJson = await AES.decrypt(password, parsed.encrypted);
+                const privateJson = AES.decrypt(password, parsed.encrypted);
                 const privateData = JSON.parse(privateJson);
                 
                 switch (pub.signingKeyType) {

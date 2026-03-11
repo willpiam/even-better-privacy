@@ -111,7 +111,7 @@ async function loadIdentity(ctx: CLIContext, password: string): Promise<Identity
 
 	let identity: Identity;
 	try {
-		identity = await Identity.fromStorageFormat(storageData, password);
+		identity = Identity.fromStorageFormat(storageData, password);
 	} catch {
 		throw new HttpError(STATUS.Unauthorized, "failed to decrypt identity (wrong password?)");
 	}
@@ -138,7 +138,7 @@ async function saveIdentity(ctx: CLIContext, password: string, identity: Identit
 	const dir = ctx.identityDir;
 	const newPath = `${dir}/${baseName}.identity.json`;
 
-	const storageData = await identity.toStorageFormat(password);
+	const storageData = identity.toStorageFormat(password);
 	await Deno.writeTextFile(newPath, storageData);
 
 	ctx.identityPath = newPath;

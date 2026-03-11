@@ -1,8 +1,8 @@
 import { sha256 } from "@noble/hashes/sha2";
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { SigningKey } from "./Keys.ts";
-import * as dilithium from "jsr:@noble/post-quantum/ml-dsa.js";
-import { Buffer } from "node:buffer";
+import * as dilithium from "@noble/post-quantum/ml-dsa";
+import { toHex } from "./Hex.ts";
 
 type DilithiumVariant = {
     keygen: () => { publicKey: Uint8Array; secretKey: Uint8Array };
@@ -39,7 +39,7 @@ export class DilithiumSigningKey  extends SigningKey {
     }
 
     toFingerprint(): string {
-        return Buffer.from(this.toRawFingerprint()).toString("hex");
+        return toHex(this.toRawFingerprint());
     }
 
     toJSON(): string {

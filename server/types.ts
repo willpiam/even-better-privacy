@@ -37,6 +37,21 @@ export type RevocationRow = {
   created_at: number;
 };
 
+export type HierarchyCertificatePayload = {
+  certificate: string;
+};
+
+export type HierarchyCertificateRow = {
+  id: number;
+  master_fingerprint: string;
+  child_fingerprint: string;
+  timestamp: number;
+  expiry: number;
+  context: string;
+  certificate: string;
+  created_at: number;
+};
+
 export type IdentityState = CoreIdentityState & {
   revoked?: boolean;
   revokedDetails?: string[];

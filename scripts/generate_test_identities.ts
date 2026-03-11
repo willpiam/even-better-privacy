@@ -107,7 +107,7 @@ async function main() {
   try {
     await Deno.mkdir(outputDir, { recursive: true });
     for (const { name, identity } of identities) {
-      const storageData = await identity.toStorageFormat(PASSWORD);
+      const storageData = identity.toStorageFormat(PASSWORD);
       await Deno.writeTextFile(`${outputDir}/${name}.identity.json`, storageData);
     }
     console.log(`\nIdentities saved to ${outputDir}/ (password: "${PASSWORD}")`);

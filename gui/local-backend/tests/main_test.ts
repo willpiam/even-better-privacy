@@ -76,7 +76,7 @@ async function createTestIdentity(home: string, name: string, password: string):
 	const identity = new Identity("dilithium", "kyber");
 	const ebpDir = `${home}/.ebp`;
 	await ensureDir(ebpDir);
-	const storageData = await identity.toStorageFormat(password);
+	const storageData = identity.toStorageFormat(password);
 	await Deno.writeTextFile(`${ebpDir}/${name}.identity.json`, storageData);
 	return identity;
 }

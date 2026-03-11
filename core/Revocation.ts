@@ -1,7 +1,7 @@
-import { Buffer } from "node:buffer";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
 import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import { stringToHex, hexToString } from "./Hex.ts";
 
 /**
  * Types of revocations supported by the system
@@ -95,7 +95,7 @@ export function getRevocationSignaturePayload(cert: RevocationCertificateData): 
  * Encode a signed revocation certificate to hex-encoded JSON
  */
 export function encodeRevocationCertificate(cert: SignedRevocationCertificate): string {
-	return Buffer.from(JSON.stringify(cert)).toString("hex");
+	return stringToHex(JSON.stringify(cert));
 }
 
 /**
@@ -103,7 +103,7 @@ export function encodeRevocationCertificate(cert: SignedRevocationCertificate): 
  */
 export function decodeRevocationCertificate(encoded: string): SignedRevocationCertificate | null {
 	try {
-		const json = Buffer.from(encoded, "hex").toString();
+		const json = hexToString(encoded);
 		const cert = JSON.parse(json) as SignedRevocationCertificate;
 		
 		// Validate structure

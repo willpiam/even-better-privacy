@@ -1,8 +1,8 @@
-import * as slh_dsa from "jsr:@noble/post-quantum/slh-dsa.js";
+import * as slh_dsa from "@noble/post-quantum/slh-dsa";
 import { sha256 } from "@noble/hashes/sha2";
 import { SigningKey } from "./Keys.ts";
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
-import { Buffer } from "node:buffer";
+import { toHex } from "./Hex.ts";
 
 type SphincsVariant = {
 	keygen: () => { publicKey: Uint8Array; secretKey: Uint8Array };
@@ -62,7 +62,7 @@ export class SphincsSigningKey extends SigningKey {
     }
 
     toFingerprint(): string {
-        return Buffer.from(this.toRawFingerprint()).toString("hex");
+        return toHex(this.toRawFingerprint());
     }
 
     static listVariants(): string[] {

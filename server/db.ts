@@ -98,6 +98,22 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       )
     `);
 
+    this.db.execute(`
+      CREATE TABLE IF NOT EXISTS hierarchy_certificates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        master_fingerprint TEXT NOT NULL,
+        child_fingerprint TEXT NOT NULL,
+        timestamp INTEGER NOT NULL,
+        expiry INTEGER NOT NULL,
+        context TEXT NOT NULL,
+        certificate TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
+        FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(child_fingerprint)
+      )
+    `);
+
     // Add revocation columns to existing tables if they don't exist (migration)
     try {
       this.db.execute(`ALTER TABLE identities ADD COLUMN revoked_at INTEGER`);
@@ -258,6 +274,21 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         created_at BIGINT NOT NULL,
         FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
         UNIQUE(identity_fingerprint, nonce)
+      )
+    `);
+
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS hierarchy_certificates (
+        id BIGSERIAL PRIMARY KEY,
+        master_fingerprint TEXT NOT NULL,
+        child_fingerprint TEXT NOT NULL UNIQUE,
+        timestamp BIGINT NOT NULL,
+        expiry BIGINT NOT NULL,
+        context TEXT NOT NULL,
+        certificate TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        FOREIGN KEY(master_fingerprint) REFERENCES identities(fingerprint),
+        FOREIGN KEY(child_fingerprint) REFERENCES identities(fingerprint)
       )
     `);
 

@@ -1,5 +1,9 @@
 import { bytesToBase64, base64ToBytes } from "./Base64.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
+import { gcm } from "@noble/ciphers/aes";
+import { randomBytes } from "@noble/hashes/utils";
+import { pbkdf2 } from "@noble/hashes/pbkdf2";
+import { sha256 } from "@noble/hashes/sha2";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -7,21 +11,17 @@ const decoder = new TextDecoder();
 const SALT_LENGTH = 16; // 128-bit salt
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
 const PBKDF2_ITERATIONS = 310_000; // strong default as of 2024
+const KEY_LENGTH = 32; // 256 bits
 
 export class AES {
-	static async encrypt(password: string, plaintext: string): Promise<string> {
-		const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
-		const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
-		const key = await deriveKey(password, salt);
+	static encrypt(password: string, plaintext: string): string {
+		const salt = randomBytes(SALT_LENGTH);
+		const iv = randomBytes(IV_LENGTH);
+		const key = deriveKey(password, salt);
 
 		const data = encoder.encode(plaintext);
-		const ciphertext = new Uint8Array(
-			await crypto.subtle.encrypt(
-				{ name: "AES-GCM", iv },
-				key,
-				data,
-			),
-		);
+		const cipher = gcm(key, iv);
+		const ciphertext = cipher.encrypt(data);
 
 		// [version(1)] [salt] [iv] [ciphertext]
 		const result = new Uint8Array(1 + salt.length + iv.length + ciphertext.length);
@@ -33,7 +33,7 @@ export class AES {
 		return bytesToBase64(result);
 	}
 
-	static async decrypt(password: string, encoded: string): Promise<string> {
+	static decrypt(password: string, encoded: string): string {
 		const data = base64ToBytes(encoded);
 		if (data.length < 1 + SALT_LENGTH + IV_LENGTH) {
 			throw new Error("Invalid ciphertext");
@@ -52,15 +52,12 @@ export class AES {
 		const iv = data.slice(saltEnd, ivEnd);
 		const ciphertext = data.slice(ivEnd);
 
-		const key = await deriveKey(password, salt);
+		const key = deriveKey(password, salt);
 
-		let plaintextBytes: ArrayBuffer;
+		const decipher = gcm(key, iv);
+		let plaintextBytes: Uint8Array;
 		try {
-			plaintextBytes = await crypto.subtle.decrypt(
-				{ name: "AES-GCM", iv },
-				key,
-				ciphertext,
-			);
+			plaintextBytes = decipher.decrypt(ciphertext);
 		} catch {
 			throw new Error("Decryption failed");
 		}
@@ -69,32 +66,11 @@ export class AES {
 	}
 }
 
-async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
+function deriveKey(password: string, salt: Uint8Array): Uint8Array {
 	const passwordBytes = encoder.encode(password);
 
-	const keyMaterial = await crypto.subtle.importKey(
-		"raw",
-		passwordBytes.buffer as ArrayBuffer,
-		"PBKDF2",
-		false,
-		["deriveKey"],
-	);
-
-	return await crypto.subtle.deriveKey(
-		{
-			name: "PBKDF2",
-			salt: salt.buffer as ArrayBuffer,
-			iterations: PBKDF2_ITERATIONS,
-			hash: "SHA-256",
-		},
-		keyMaterial,
-		{
-			name: "AES-GCM",
-			length: 256,
-		},
-		false,
-		["encrypt", "decrypt"],
-	);
+	return pbkdf2(sha256, passwordBytes, salt, {
+		c: PBKDF2_ITERATIONS,
+		dkLen: KEY_LENGTH,
+	});
 }
-
-

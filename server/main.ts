@@ -40,9 +40,14 @@ import {
 } from "./crypto.ts";
 import nodemailer from "npm:nodemailer";
 import { verifyDetailProof } from "./detail.ts";
+import {
+  getHierarchyCertificateByChild,
+  getHierarchyForIdentity,
+  verifyAndInsertHierarchyCertificate,
+} from "./hierarchy.ts";
 import { verifyRevocationCertificate } from "./revocation.ts";
 import { buildState } from "./state.ts";
-import type { DetailPayload, RevocationPayload } from "./types.ts";
+import type { DetailPayload, HierarchyCertificatePayload, RevocationPayload } from "./types.ts";
 
 // =============================================================================
 // CORS Configuration
@@ -108,7 +113,7 @@ const LIMITS = {
   message: 100_000,         // Message payload for signature verification
   signature: 100_000,       // Post-quantum signatures are large
   proof: 100_000,           // Proof/certificate can be large due to signatures
-  certificate: 100_000,     // Revocation certificate
+  certificate: 300_000,     // Certificates can include two large PQ signatures
   reason: 1024,             // Revocation reason
   signingKey: 50_000,       // Post-quantum keys are large
   encryptionKey: 50_000,
@@ -903,6 +908,20 @@ async function handleRequest(req: Request): Promise<Response> {
     if (req.method === "GET" && url.pathname.startsWith("/api/v1/revocations/")) {
       const fingerprint = url.pathname.split("/").pop()!;
       return respond(attachCors(await handleGetRevocations(fingerprint, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/hierarchy") {
+      return respond(attachCors(await handlePostHierarchy(req, db), corsHeaders));
+    }
+
+    if (req.method === "GET" && url.pathname.startsWith("/api/v1/hierarchy/")) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      const fingerprint = parts[3] ?? "";
+      const suffix = parts[4] ?? "";
+      if (suffix === "certificate") {
+        return respond(attachCors(await handleGetHierarchyCertificate(fingerprint, db), corsHeaders));
+      }
+      return respond(attachCors(await handleGetHierarchy(fingerprint, db), corsHeaders));
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/exchange") {
@@ -1700,6 +1719,94 @@ async function handleGetRevocations(fingerprint: string, db: DatabaseAdapter): P
       certificate: r.certificate,
       createdAt: r.created_at,
     })),
+  });
+}
+
+async function handlePostHierarchy(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const bodyResult = await readJsonBody<HierarchyCertificatePayload>(req);
+  if (!bodyResult.ok) {
+    return json({ error: bodyResult.error }, bodyResult.status);
+  }
+
+  const certificateCheck = validateStringLength(
+    bodyResult.data.certificate,
+    "certificate",
+    LIMITS.certificate,
+  );
+  if (!certificateCheck.ok) {
+    return json({ error: certificateCheck.error }, 400);
+  }
+
+  const insertResult = await verifyAndInsertHierarchyCertificate(db, certificateCheck.value);
+  if (!insertResult.ok) {
+    return json({ error: insertResult.error }, 400);
+  }
+
+  return json({
+    ok: true,
+    hierarchy: {
+      masterFingerprint: insertResult.row.master_fingerprint,
+      childFingerprint: insertResult.row.child_fingerprint,
+      timestamp: insertResult.row.timestamp,
+      expiry: insertResult.row.expiry,
+      context: insertResult.row.context,
+      certificate: insertResult.row.certificate,
+    },
+  });
+}
+
+async function handleGetHierarchy(fingerprint: string, db: DatabaseAdapter): Promise<Response> {
+  if (fingerprint.length > LIMITS.fingerprint) {
+    return json({ error: "fingerprint too long" }, 400);
+  }
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
+
+  const identity = await getIdentity(db, fingerprint);
+  if (!identity) {
+    return json({ error: "identity not found" }, 404);
+  }
+
+  const hierarchy = await getHierarchyForIdentity(db, fingerprint);
+  return json({
+    fingerprint,
+    root: hierarchy.root,
+    ancestors: hierarchy.ancestors,
+    descendants: hierarchy.descendants,
+    allFingerprints: hierarchy.allFingerprints,
+    relationships: hierarchy.relationships.map((row) => ({
+      masterFingerprint: row.master_fingerprint,
+      childFingerprint: row.child_fingerprint,
+      timestamp: row.timestamp,
+      expiry: row.expiry,
+      context: row.context,
+      certificate: row.certificate,
+      expired: row.expired,
+    })),
+  });
+}
+
+async function handleGetHierarchyCertificate(fingerprint: string, db: DatabaseAdapter): Promise<Response> {
+  if (fingerprint.length > LIMITS.fingerprint) {
+    return json({ error: "fingerprint too long" }, 400);
+  }
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "fingerprint must be valid bech32" }, 400);
+  }
+
+  const row = await getHierarchyCertificateByChild(db, fingerprint);
+  if (!row) {
+    return json({ error: "hierarchy certificate not found" }, 404);
+  }
+
+  return json({
+    masterFingerprint: row.master_fingerprint,
+    childFingerprint: row.child_fingerprint,
+    timestamp: row.timestamp,
+    expiry: row.expiry,
+    context: row.context,
+    certificate: row.certificate,
   });
 }
 

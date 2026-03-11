@@ -26,6 +26,7 @@ const state = {
   identities: [],
   contacts: [],
   serverIdentities: [],
+  hierarchyRelationships: [],
   serverIdentitiesPagination: { page: 1, totalPages: 1, total: 0 },
   serverIdentitiesSearch: "",
   identityDir: "",
@@ -568,6 +569,34 @@ document.getElementById("contact-detail-delete-btn").addEventListener("click", a
   await deleteLocalContact(name, fingerprint, btn);
 });
 
+document.getElementById("contact-detail-establish-hierarchy-btn").addEventListener("click", (e) => {
+  const btn = e.target;
+  const fingerprint = btn.dataset.fingerprint;
+  if (!fingerprint) {
+    setStatus("Contact fingerprint missing", "error");
+    return;
+  }
+  navigateToHierarchyWithContact(fingerprint);
+  document.getElementById("contact-detail-modal").classList.remove("active");
+});
+
+document.getElementById("contact-detail-hierarchy-btn").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const fingerprint = btn.dataset.fingerprint;
+  if (!fingerprint) {
+    setStatus("Contact fingerprint missing", "error");
+    return;
+  }
+  setButtonLoading(btn, true);
+  try {
+    await loadContactHierarchyDiagram(fingerprint);
+  } catch (err) {
+    setStatus(err.message, "error");
+  } finally {
+    setButtonLoading(btn, false);
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // UI Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -889,6 +918,7 @@ const contactSearchFields = [
   { inputId: "enc-file-recipient", dropdownId: "enc-file-recipient-dropdown" },
   { inputId: "dec-file-sender", dropdownId: "dec-file-sender-dropdown" },
   { inputId: "mail-compose-recipient", dropdownId: "mail-compose-recipient-dropdown" },
+  { inputId: "hierarchy-other-fingerprint", dropdownId: "hierarchy-other-fingerprint-dropdown" },
 ];
 
 let activeDropdown = null;
@@ -1047,8 +1077,12 @@ function escapeRegex(str) {
 }
 
 function selectContact(input, contact) {
-  // Use the contact name as the value (the backend resolves by name or fingerprint)
-  input.value = contact.name;
+  // Hierarchy create requires explicit fingerprint; other flows can use name.
+  if (input.id === "hierarchy-other-fingerprint") {
+    input.value = contact.fingerprint;
+  } else {
+    input.value = contact.name;
+  }
   closeAllDropdowns();
   updateMailComposeSendState();
 }
@@ -1335,6 +1369,9 @@ async function showContactDetails(contact) {
   document.getElementById("contact-detail-sync-btn").dataset.name = contact.name;
   document.getElementById("contact-detail-delete-btn").dataset.fingerprint = contact.fingerprint;
   document.getElementById("contact-detail-delete-btn").dataset.name = contact.name;
+  document.getElementById("contact-detail-establish-hierarchy-btn").dataset.fingerprint = contact.fingerprint;
+  document.getElementById("contact-detail-hierarchy-btn").dataset.fingerprint = contact.fingerprint;
+  document.getElementById("contact-detail-hierarchy").innerHTML = '<div class="muted">(hierarchy not loaded)</div>';
   
   // Show server API link if server is configured
   const serverLinkContainer = document.getElementById("contact-detail-server-link-container");
@@ -1349,6 +1386,127 @@ async function showContactDetails(contact) {
   }
   
   modal.classList.add("active");
+}
+
+async function loadContactHierarchyDiagram(fingerprint) {
+  const hierarchy = await api(`/hierarchy/${encodeURIComponent(fingerprint)}`);
+  const container = document.getElementById("contact-detail-hierarchy");
+  const focus = hierarchy.fingerprint || fingerprint;
+  const relationships = Array.isArray(hierarchy.relationships) ? hierarchy.relationships : [];
+
+  if (!relationships.length) {
+    container.innerHTML = '<div class="muted">(no known hierarchy relationships)</div>';
+    return;
+  }
+
+  const nodes = new Set([focus]);
+  for (const edge of relationships) {
+    if (edge && edge.masterFingerprint) nodes.add(edge.masterFingerprint);
+    if (edge && edge.childFingerprint) nodes.add(edge.childFingerprint);
+  }
+
+  const ordered = Array.from(nodes.values());
+  let html = "";
+  for (const node of ordered) {
+    const outgoing = relationships.filter((r) => r.masterFingerprint === node);
+    const incoming = relationships.filter((r) => r.childFingerprint === node);
+    const edgeLines = [];
+    for (const edge of outgoing) {
+      const exp = edge.expiry && edge.expiry !== 0 ? new Date(edge.expiry).toLocaleString() : "never";
+      edgeLines.push(
+        `<div class="hierarchy-edge ${edge.expired ? "expired" : ""}">` +
+        `→ ${escapeHtml(edge.childFingerprint)} ` +
+        `[${escapeHtml(edge.context || "no context")}; expiry: ${escapeHtml(String(exp))}${edge.expired ? "; EXPIRED" : ""}]` +
+        `</div>`
+      );
+    }
+    for (const edge of incoming) {
+      edgeLines.push(
+        `<div class="hierarchy-edge">← from ${escapeHtml(edge.masterFingerprint)}</div>`
+      );
+    }
+    html += `
+      <div class="hierarchy-node ${node === focus ? "focus" : ""}">
+        <div><code>${escapeHtml(node)}</code></div>
+        ${edgeLines.join("")}
+      </div>
+    `;
+  }
+
+  container.innerHTML = html;
+}
+
+function resolveHierarchyFingerprint(value) {
+  const raw = (value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("ebp")) return raw;
+  const byName = state.contacts.find((c) => (c.name || "").toLowerCase() === raw.toLowerCase());
+  if (byName?.fingerprint) return byName.fingerprint;
+  const prefixMatches = state.contacts.filter((c) => (c.fingerprint || "").startsWith(raw));
+  if (prefixMatches.length === 1) return prefixMatches[0].fingerprint;
+  return raw;
+}
+
+function hierarchyRelationshipLabel(rel, currentFingerprint) {
+  if (rel.masterFingerprint === currentFingerprint) {
+    return `You are master of ${rel.childFingerprint}`;
+  }
+  if (rel.childFingerprint === currentFingerprint) {
+    return `You are child of ${rel.masterFingerprint}`;
+  }
+  return `${rel.masterFingerprint} -> ${rel.childFingerprint}`;
+}
+
+async function renderHierarchyList() {
+  const list = document.getElementById("hierarchy-relationships-list");
+  if (!list) return;
+  try {
+    const res = await api("/hierarchy/list");
+    const relationships = Array.isArray(res?.relationships) ? res.relationships : [];
+    state.hierarchyRelationships = relationships;
+    if (!relationships.length) {
+      list.innerHTML = "<li class='muted'>(no hierarchy certificates yet)</li>";
+      return;
+    }
+    list.innerHTML = "";
+    for (const rel of relationships) {
+      const li = document.createElement("li");
+      const expires = rel.expiry && rel.expiry !== 0 ? new Date(rel.expiry).toLocaleString() : "never";
+      li.innerHTML = `
+        <div><strong>${escapeHtml(hierarchyRelationshipLabel(rel, state.currentFingerprint || ""))}</strong></div>
+        <div class="muted">context: ${escapeHtml(rel.context || "none")} · expiry: ${escapeHtml(String(expires))}${rel.expired ? " · EXPIRED" : ""}</div>
+      `;
+      list.appendChild(li);
+    }
+  } catch (err) {
+    list.innerHTML = `<li class="muted">failed to load hierarchy: ${escapeHtml(err.message || String(err))}</li>`;
+  }
+}
+
+function navigateToHierarchyWithContact(fingerprint) {
+  navigateTo("identities");
+  const sectionToggle = Array.from(document.querySelectorAll(".page.active section > .section-toggle")).find((toggle) =>
+    toggle.textContent.includes("Hierarchy")
+  );
+  if (sectionToggle && sectionToggle.getAttribute("aria-expanded") !== "true") {
+    sectionToggle.click();
+  }
+  const input = document.getElementById("hierarchy-other-fingerprint");
+  if (input) {
+    input.value = fingerprint;
+    input.focus();
+  }
+}
+
+async function handlePublishHierarchy(certificate) {
+  if (!certificate) {
+    setStatus("No hierarchy certificate to publish", "error");
+    return;
+  }
+  await api("/hierarchy/publish", {
+    method: "POST",
+    body: JSON.stringify({ certificate }),
+  });
 }
 
 async function deleteLocalContact(name, fingerprint, btn) {
@@ -1711,6 +1869,7 @@ async function loadAll() {
 
     // Render server identities (already loaded above)
     renderServerIdentities();
+    await renderHierarchyList();
     await loadMailAccount();
     await loadStoredMailCredentials();
     renderStoredMailCredentials();
@@ -3181,6 +3340,130 @@ document.getElementById("add-detail-form").addEventListener("submit", async (e) 
       document.getElementById("detail-value").value = "";
       // Reload to show updated details
       await loadPublicIdentityInfo();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("hierarchy-create-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const role = document.getElementById("hierarchy-role-master").checked ? "master" : "child";
+  const otherInput = document.getElementById("hierarchy-other-fingerprint").value.trim();
+  const otherFingerprint = resolveHierarchyFingerprint(otherInput);
+  const context = document.getElementById("hierarchy-context").value.trim();
+  const expiryRaw = document.getElementById("hierarchy-expiry").value;
+  const expiry = expiryRaw ? new Date(`${expiryRaw}T00:00:00`).getTime() : 0;
+
+  if (!state.currentFingerprint) {
+    setStatus("Current identity fingerprint is unavailable", "error");
+    return;
+  }
+  if (!otherFingerprint) {
+    setStatus("Other party fingerprint is required", "error");
+    return;
+  }
+
+  await withLoading(btn, async () => {
+    try {
+      const password = await requestPassword("Enter password to create and sign hierarchy certificate");
+      if (!password) {
+        setStatus("Password is required", "error");
+        return;
+      }
+
+      const masterFingerprint = role === "master" ? state.currentFingerprint : otherFingerprint;
+      const childFingerprint = role === "master" ? otherFingerprint : state.currentFingerprint;
+      const created = await api("/hierarchy/create", {
+        method: "POST",
+        body: JSON.stringify({ masterFingerprint, childFingerprint, context, expiry }),
+      });
+      const signed = await api("/hierarchy/sign", {
+        method: "POST",
+        body: JSON.stringify({ certificate: created.certificate, password }),
+      });
+      document.getElementById("hierarchy-create-output").value = signed.certificate || "";
+      setStatus("Hierarchy certificate created and signed. Share it for co-signing.", "success");
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("hierarchy-cosign-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const publishBtn = document.getElementById("hierarchy-cosign-publish-btn");
+  const input = document.getElementById("hierarchy-cosign-input").value.trim();
+  if (!input) {
+    setStatus("Incoming certificate is required", "error");
+    return;
+  }
+  await withLoading(btn, async () => {
+    try {
+      const password = await requestPassword("Enter password to co-sign hierarchy certificate");
+      if (!password) {
+        setStatus("Password is required", "error");
+        return;
+      }
+
+      const signed = await api("/hierarchy/sign", {
+        method: "POST",
+        body: JSON.stringify({ certificate: input, password }),
+      });
+      document.getElementById("hierarchy-cosign-output").value = signed.certificate || "";
+      if (signed.complete) {
+        await api("/hierarchy/import", {
+          method: "POST",
+          body: JSON.stringify({ certificate: signed.certificate }),
+        });
+        publishBtn.dataset.certificate = signed.certificate;
+        publishBtn.style.display = "";
+        await renderHierarchyList();
+        setStatus("Hierarchy certificate co-signed and imported. Publish when ready.", "success");
+      } else {
+        publishBtn.style.display = "none";
+        publishBtn.dataset.certificate = "";
+        setStatus("Certificate signed but still missing one signature.", "info");
+      }
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("hierarchy-cosign-publish-btn").addEventListener("click", async (e) => {
+  const btn = e.target;
+  const certificate = btn.dataset.certificate || document.getElementById("hierarchy-cosign-output").value.trim();
+  await withLoading(btn, async () => {
+    try {
+      await handlePublishHierarchy(certificate);
+      setStatus("Hierarchy certificate published", "success");
+      await renderHierarchyList();
+    } catch (err) {
+      setStatus(err.message, "error");
+    }
+  });
+});
+
+document.getElementById("hierarchy-import-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  const certificate = document.getElementById("hierarchy-import-input").value.trim();
+  if (!certificate) {
+    setStatus("Certificate is required", "error");
+    return;
+  }
+  await withLoading(btn, async () => {
+    try {
+      await api("/hierarchy/import", {
+        method: "POST",
+        body: JSON.stringify({ certificate }),
+      });
+      setStatus("Hierarchy certificate imported", "success");
+      document.getElementById("hierarchy-import-input").value = "";
+      await renderHierarchyList();
     } catch (err) {
       setStatus(err.message, "error");
     }

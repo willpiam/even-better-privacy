@@ -11,6 +11,16 @@ import { COMPONENT_VERSIONS } from "../../app-version.ts";
 import { computeIdentityFingerprint, isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
+	createHierarchyCertificate,
+	decodeHierarchyCertificate,
+	getHierarchySignaturePayload,
+	isHierarchyCertificateExpired,
+	validateHierarchy,
+	type HierarchyCertificateData,
+	type SignedHierarchyCertificate,
+} from "../../core/HierarchyCertificate.ts";
+import { hexToString, stringToHex } from "../../core/Hex.ts";
+import {
 	buildDetachedSignaturePayload,
 	buildEncryptedMessagePayload,
 	buildEncryptedSignedMessagePayload,
@@ -328,7 +338,7 @@ async function loadIdentity(ctx: CLIContext, password: string): Promise<Identity
 
 	let identity: Identity;
 	try {
-		identity = await Identity.fromStorageFormat(storageData, password);
+		identity = Identity.fromStorageFormat(storageData, password);
 	} catch {
 		throw new HttpError(STATUS.Unauthorized, "failed to decrypt identity (wrong password?)");
 	}
@@ -358,7 +368,7 @@ async function saveIdentity(ctx: CLIContext, password: string, identity: Identit
 	const newPath = `${dir}/${baseName}.identity.json`;
 	
 	// Save in new format
-	const storageData = await identity.toStorageFormat(password);
+	const storageData = identity.toStorageFormat(password);
 	await Deno.writeTextFile(newPath, storageData);
 	console.log(`Saved identity to ${newPath}`);
 	
@@ -1003,6 +1013,143 @@ function computeExternalFingerprint(identity: ExternalIdentity): string | null {
 	} catch {
 		return null;
 	}
+}
+
+function getHierarchyDir(ctx: CLIContext): string {
+	return `${ctx.identityDir}/hierarchy`;
+}
+
+function decodeHierarchyCertificateDraft(encoded: string): HierarchyCertificateData {
+	try {
+		const parsed = JSON.parse(hexToString(encoded)) as HierarchyCertificateData;
+		if (!parsed || typeof parsed !== "object") {
+			throw new Error("invalid hierarchy certificate");
+		}
+		if (typeof parsed.masterFingerprint !== "string" || typeof parsed.childFingerprint !== "string") {
+			throw new Error("invalid hierarchy certificate fingerprints");
+		}
+		if (typeof parsed.timestamp !== "number" || typeof parsed.expiry !== "number") {
+			throw new Error("invalid hierarchy certificate timestamps");
+		}
+		if (typeof parsed.context !== "string" || typeof parsed.salt !== "string") {
+			throw new Error("invalid hierarchy certificate payload");
+		}
+		return parsed;
+	} catch {
+		throw new HttpError(STATUS.BadRequest, "invalid hierarchy certificate encoding");
+	}
+}
+
+async function listHierarchyCertificatesLocal(
+	ctx: CLIContext,
+): Promise<Array<{ certificate: string; decoded: SignedHierarchyCertificate }>> {
+	const out: Array<{ certificate: string; decoded: SignedHierarchyCertificate }> = [];
+	const dir = getHierarchyDir(ctx);
+	try {
+		for await (const entry of Deno.readDir(dir)) {
+			if (!entry.isFile || !entry.name.endsWith(".json")) continue;
+			const json = await Deno.readTextFile(`${dir}/${entry.name}`);
+			const payload = JSON.parse(json) as { certificate?: string };
+			if (!payload?.certificate || typeof payload.certificate !== "string") continue;
+			const decoded = decodeHierarchyCertificate(payload.certificate);
+			if (!decoded) continue;
+			out.push({ certificate: payload.certificate, decoded });
+		}
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) return out;
+		throw e;
+	}
+	return out;
+}
+
+async function storeHierarchyCertificateLocal(ctx: CLIContext, encodedCertificate: string): Promise<void> {
+	const decoded = decodeHierarchyCertificate(encodedCertificate);
+	if (!decoded) {
+		throw new HttpError(STATUS.BadRequest, "hierarchy certificate must include both signatures");
+	}
+	await ensureDir(getHierarchyDir(ctx));
+	const path = `${getHierarchyDir(ctx)}/${decoded.childFingerprint}.json`;
+	await Deno.writeTextFile(path, JSON.stringify({ certificate: encodedCertificate }, null, 2));
+}
+
+function buildHierarchyTreeFromCertificates(
+	fingerprint: string,
+	certs: SignedHierarchyCertificate[],
+): {
+	fingerprint: string;
+	root: string;
+	ancestors: string[];
+	descendants: string[];
+	allFingerprints: string[];
+	relationships: Array<{
+		masterFingerprint: string;
+		childFingerprint: string;
+		timestamp: number;
+		expiry: number;
+		context: string;
+		certificate: string;
+		expired: boolean;
+	}>;
+} {
+	const childToParent = new Map<string, SignedHierarchyCertificate>();
+	const masterToChildren = new Map<string, SignedHierarchyCertificate[]>();
+	for (const cert of certs) {
+		childToParent.set(cert.childFingerprint, cert);
+		const arr = masterToChildren.get(cert.masterFingerprint) ?? [];
+		arr.push(cert);
+		masterToChildren.set(cert.masterFingerprint, arr);
+	}
+
+	const ancestors: string[] = [];
+	let root = fingerprint;
+	while (true) {
+		const parent = childToParent.get(root);
+		if (!parent) break;
+		ancestors.push(parent.masterFingerprint);
+		root = parent.masterFingerprint;
+	}
+
+	const descendants: string[] = [];
+	const relationships: Array<{
+		masterFingerprint: string;
+		childFingerprint: string;
+		timestamp: number;
+		expiry: number;
+		context: string;
+		certificate: string;
+		expired: boolean;
+	}> = [];
+	const queue = [root];
+	const seen = new Set<string>([root]);
+	while (queue.length > 0) {
+		const current = queue.shift()!;
+		for (const edge of masterToChildren.get(current) ?? []) {
+			const encoded = stringToHex(JSON.stringify(edge));
+			relationships.push({
+				masterFingerprint: edge.masterFingerprint,
+				childFingerprint: edge.childFingerprint,
+				timestamp: edge.timestamp,
+				expiry: edge.expiry,
+				context: edge.context,
+				certificate: encoded,
+				expired: isHierarchyCertificateExpired({ expiry: edge.expiry }),
+			});
+			descendants.push(edge.childFingerprint);
+			if (!seen.has(edge.childFingerprint)) {
+				seen.add(edge.childFingerprint);
+				queue.push(edge.childFingerprint);
+			}
+		}
+	}
+
+	return {
+		fingerprint,
+		root,
+		ancestors,
+		descendants,
+		allFingerprints: Array.from(new Set([fingerprint, root, ...ancestors, ...descendants])),
+		relationships,
+	};
 }
 
 async function handleRequest(req: Request): Promise<Response> {
@@ -1807,6 +1954,156 @@ async function handleRequest(req: Request): Promise<Response> {
 			const ctx = await getContext(home);
 			const deletedName = await deleteContact(ctx, name, fingerprint);
 			return json({ ok: true, name: deletedName });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/create") {
+			const body = await readJson<{
+				masterFingerprint?: unknown;
+				childFingerprint?: unknown;
+				expiry?: unknown;
+				context?: unknown;
+			}>(req);
+			const masterFingerprint = typeof body.masterFingerprint === "string" ? body.masterFingerprint : "";
+			const childFingerprint = typeof body.childFingerprint === "string" ? body.childFingerprint : "";
+			const expiry = typeof body.expiry === "number" ? body.expiry : 0;
+			const context = typeof body.context === "string" ? body.context : "";
+			if (!masterFingerprint || !childFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "masterFingerprint and childFingerprint are required");
+			}
+			if (!isValidFingerprintBech32(masterFingerprint) || !isValidFingerprintBech32(childFingerprint)) {
+				throw new HttpError(STATUS.BadRequest, "fingerprints must be valid bech32");
+			}
+			const cert = createHierarchyCertificate(masterFingerprint, childFingerprint, { expiry, context });
+			return json({ certificate: stringToHex(JSON.stringify(cert)), complete: false });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/sign") {
+			const body = await readJson<{
+				certificate?: unknown;
+				password?: unknown;
+				home?: unknown;
+				identity?: unknown;
+			}>(req);
+			const certificate = typeof body.certificate === "string" ? body.certificate : "";
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
+			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+
+			const ctx = await getContext(home, identityName);
+			const identity = await loadIdentity(ctx, password);
+			const cert = decodeHierarchyCertificateDraft(certificate);
+			const payload = getHierarchySignaturePayload(cert);
+			const myFingerprint = identity.toFingerprint();
+			if (myFingerprint !== cert.masterFingerprint && myFingerprint !== cert.childFingerprint) {
+				throw new HttpError(STATUS.BadRequest, "current identity is not the master or child in this certificate");
+			}
+			const signature = identity.signMessage(payload);
+			if (myFingerprint === cert.masterFingerprint) {
+				cert.masterSignature = signature;
+			}
+			if (myFingerprint === cert.childFingerprint) {
+				cert.childSignature = signature;
+			}
+			const encoded = stringToHex(JSON.stringify(cert));
+			const complete = typeof cert.masterSignature === "string" && typeof cert.childSignature === "string";
+			return json({ certificate: encoded, complete });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/import") {
+			const body = await readJson<{ certificate?: unknown; home?: unknown }>(req);
+			const certificate = typeof body.certificate === "string" ? body.certificate : "";
+			const home = typeof body.home === "string" ? body.home : undefined;
+			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
+			const decoded = decodeHierarchyCertificate(certificate);
+			if (!decoded) throw new HttpError(STATUS.BadRequest, "hierarchy certificate must include both signatures");
+			const ctx = await getContext(home);
+			const existing = await listHierarchyCertificatesLocal(ctx);
+			const validation = validateHierarchy(
+				existing.map((entry) => ({
+					masterFingerprint: entry.decoded.masterFingerprint,
+					childFingerprint: entry.decoded.childFingerprint,
+				})),
+				{
+					masterFingerprint: decoded.masterFingerprint,
+					childFingerprint: decoded.childFingerprint,
+				},
+			);
+			if (!validation.ok) {
+				throw new HttpError(STATUS.BadRequest, validation.error);
+			}
+			await storeHierarchyCertificateLocal(ctx, certificate);
+			return json({ ok: true, masterFingerprint: decoded.masterFingerprint, childFingerprint: decoded.childFingerprint });
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/list") {
+			const home = url.searchParams.get("home") ?? undefined;
+			const ctx = await getContext(home ?? undefined);
+			const entries = await listHierarchyCertificatesLocal(ctx);
+			return json({
+				relationships: entries.map((entry) => ({
+					masterFingerprint: entry.decoded.masterFingerprint,
+					childFingerprint: entry.decoded.childFingerprint,
+					timestamp: entry.decoded.timestamp,
+					expiry: entry.decoded.expiry,
+					context: entry.decoded.context,
+					certificate: entry.certificate,
+					expired: isHierarchyCertificateExpired({ expiry: entry.decoded.expiry }),
+				})),
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/publish") {
+			const body = await readJson<{ certificate?: unknown; home?: unknown; server?: unknown }>(req);
+			const certificate = typeof body.certificate === "string" ? body.certificate : "";
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			if (!certificate) throw new HttpError(STATUS.BadRequest, "certificate is required");
+			if (!decodeHierarchyCertificate(certificate)) {
+				throw new HttpError(STATUS.BadRequest, "certificate must include both signatures");
+			}
+			const ctx = await getContext(home);
+			const server = resolveServer(ctx, serverOverride);
+			const res = await fetch(apiUrl(server, "/api/v1/hierarchy"), {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ certificate }),
+			});
+			const responseBody = await res.json().catch(() => ({})) as { error?: string };
+			if (!res.ok) {
+				throw new HttpError(STATUS.BadGateway, `failed to publish hierarchy certificate: ${responseBody.error ?? `HTTP ${res.status}`}`);
+			}
+			return json({ ok: true });
+		}
+
+		if (req.method === "GET" && url.pathname.startsWith("/api/v1/hierarchy/")) {
+			const fingerprint = decodeURIComponent(url.pathname.replace("/api/v1/hierarchy/", ""));
+			if (!fingerprint) throw new HttpError(STATUS.BadRequest, "fingerprint is required");
+			if (!isValidFingerprintBech32(fingerprint)) {
+				throw new HttpError(STATUS.BadRequest, "fingerprint must be valid bech32");
+			}
+
+			const home = url.searchParams.get("home") ?? undefined;
+			const serverOverride = url.searchParams.get("server") ?? undefined;
+			const source = url.searchParams.get("source") ?? "local";
+			const ctx = await getContext(home ?? undefined);
+			if (source === "server") {
+				const server = resolveServer(ctx, serverOverride ?? undefined);
+				const res = await fetch(apiUrl(server, `/api/v1/hierarchy/${fingerprint}`));
+				const bodyJson = await res.json().catch(() => ({})) as { error?: string };
+				if (!res.ok) {
+					throw new HttpError(STATUS.BadGateway, `failed to fetch hierarchy: ${bodyJson.error ?? `HTTP ${res.status}`}`);
+				}
+				return json(bodyJson);
+			}
+
+			const certs = await listHierarchyCertificatesLocal(ctx);
+			const tree = buildHierarchyTreeFromCertificates(
+				fingerprint,
+				certs.map((entry) => entry.decoded),
+			);
+			return json(tree);
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/sign") {

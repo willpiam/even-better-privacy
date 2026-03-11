@@ -1,12 +1,12 @@
 import { 
      AsymmetricEncryptionKey
  } from "./Keys.ts";
-import * as kyber from "jsr:@noble/post-quantum/ml-kem.js";
+import * as kyber from "@noble/post-quantum/ml-kem";
 import { randomBytes } from "@noble/hashes/utils";
-import { Buffer } from "node:buffer";
 import { sha256 } from "@noble/hashes/sha2";
 import { gcm } from "@noble/ciphers/aes";
 import { ExternalIdentity } from "./ExternalIdentity.ts";
+import { toHex, hexToBytes, concatBytes } from "./Hex.ts";
 
 type KyberVariant = {
     keygen: (seed: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array };
@@ -32,7 +32,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
     private key: { publicKey: Uint8Array; secretKey: Uint8Array };
 
     get publicKey(): string {
-        return Buffer.from(this.key.publicKey).toString("hex");
+        return toHex(this.key.publicKey);
     }
 
     constructor(variant: string = "ml_kem1024") {
@@ -51,7 +51,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
     }
 
     toFingerprint(): string {
-        return Buffer.from(this.toRawFingerprint()).toString("hex");
+        return toHex(this.toRawFingerprint());
     }
 
     static listVariants(): string[] {
@@ -66,7 +66,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         }
 
         const variant = ((kyber as unknown) as Record<string, KyberVariant>)[variantName];
-        const recipientPublicKey = Buffer.from(recipient.encryptionKey, "hex");
+        const recipientPublicKey = hexToBytes(recipient.encryptionKey);
 
         // Encapsulate to derive shared secret with recipient's public key
         const { cipherText: encapsulatedKey, sharedSecret } = variant.encapsulate(recipientPublicKey);
@@ -78,8 +78,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         const encryptedMessage = cipher.encrypt(messageBytes);
 
         // Return hex-encoded payload: encapsulated key || nonce || ciphertext
-        const result = Buffer.concat([encapsulatedKey, nonce, encryptedMessage]);
-        return Buffer.from(result).toString("hex");
+        return toHex(concatBytes(encapsulatedKey, nonce, encryptedMessage));
     }
 
     // Encrypts a message using Kyber KEM + AES-256-GCM
@@ -99,8 +98,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         const encryptedMessage = cipher.encrypt(messageBytes);
         
         // Concatenate: encapsulatedKey || nonce || encryptedMessage
-        const result = Buffer.concat([encapsulatedKey, nonce, encryptedMessage]);
-        return Buffer.from(result).toString("hex");
+        return toHex(concatBytes(encapsulatedKey, nonce, encryptedMessage));
     }
 
     // Decrypts the result of the encrypt function
@@ -109,7 +107,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         const ciphertextSize = CIPHERTEXT_SIZES[this.variant]!;
         
         // Parse the hex-encoded ciphertext
-        const data = Buffer.from(ciphertext, "hex");
+        const data = hexToBytes(ciphertext);
         
         // Extract components: encapsulatedKey || nonce || encryptedMessage
         const encapsulatedKey = data.subarray(0, ciphertextSize);
@@ -131,7 +129,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
             variant: this.variant,
             fingerprint: this.toFingerprint(),
             publicKey: this.publicKey,
-            secretKey: Buffer.from(this.key.secretKey).toString("hex"),
+            secretKey: toHex(this.key.secretKey),
         }, null, 2);
     }
     
@@ -139,8 +137,8 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         const data = JSON.parse(json);
         const instance = new KyberEncryptionKey(data.variant);
         instance.key = {
-            publicKey: Buffer.from(data.publicKey, "hex"),
-            secretKey: Buffer.from(data.secretKey, "hex"),
+            publicKey: hexToBytes(data.publicKey),
+            secretKey: hexToBytes(data.secretKey),
         };
         return instance;
     }
@@ -151,7 +149,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
         instance.variant = variant;
         instance.seed = new Uint8Array(0); // Empty
         instance.key = {
-            publicKey: Buffer.from(publicKey, "hex"),
+            publicKey: hexToBytes(publicKey),
             secretKey: new Uint8Array(0), // Empty - decryption will fail
         };
         return instance;

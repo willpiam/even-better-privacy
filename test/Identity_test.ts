@@ -1,8 +1,8 @@
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert";
 import { Identity } from "../core/Identity.ts";
-import { Buffer } from "node:buffer";
 import { sha256 } from "@noble/hashes/sha2";
 import { computeIdentityFingerprint } from "../core/Fingerprint.ts";
+import { toHex, hexToString, stringToHex, concatBytes } from "../core/Hex.ts";
 
 Deno.test("Identity: creation with dilithium signing key", () => {
 	const identity = new Identity("dilithium", "kyber");
@@ -77,12 +77,12 @@ Deno.test("Identity: merkle root order is role-sensitive", () => {
 	const signingLeaf = identity.signingKey.toRawFingerprint();
 	const encryptionLeaf = identity.encryptionKey.toRawFingerprint();
 
-	const forwardHex = Buffer.from(sha256(Buffer.concat([signingLeaf, encryptionLeaf]))).toString("hex");
-	const reverseHex = Buffer.from(sha256(Buffer.concat([encryptionLeaf, signingLeaf]))).toString("hex");
+	const forwardHex = toHex(sha256(concatBytes(signingLeaf, encryptionLeaf)));
+	const reverseHex = toHex(sha256(concatBytes(encryptionLeaf, signingLeaf)));
 
 	assert(forwardHex !== reverseHex);
 	// toRawFingerprint is the binary merkle root before bech32 encoding.
-	assertEquals(Buffer.from(identity.toRawFingerprint()).toString("hex"), forwardHex);
+	assertEquals(toHex(identity.toRawFingerprint()), forwardHex);
 });
 
 Deno.test("Identity: signing and verification through signingKey", () => {
@@ -208,14 +208,14 @@ Deno.test("Identity: VerifyDetails detects invalid nonce reuse", () => {
 	// Corrupt the second record to reuse the first record's nonce
 	const [nameDetail, nameProof] = nameEntry;
 	const [, emailProof] = emailEntry;
-	const emailRecordJson = Buffer.from(emailProof, "hex").toString();
+	const emailRecordJson = hexToString(emailProof);
 	const emailRecord = JSON.parse(emailRecordJson);
 
-	const nameRecordJson = Buffer.from(nameProof, "hex").toString();
+	const nameRecordJson = hexToString(nameProof);
 	const nameRecord = JSON.parse(nameRecordJson);
 	nameRecord.nonce = emailRecord.nonce;
 
-	const corruptedNameProof = Buffer.from(JSON.stringify(nameRecord)).toString("hex");
+	const corruptedNameProof = stringToHex(JSON.stringify(nameRecord));
 	detailsMap.set("name", [nameDetail, corruptedNameProof]);
 
 	assertEquals(Identity.VerifyDetails(detailsMap), false);
@@ -240,12 +240,12 @@ Deno.test("Identity: VerifyDetails detects non-increasing timestamps", () => {
 	const [nameDetail, nameProof] = nameEntry;
 	const [, emailProof] = emailEntry;
 
-	const emailRecord = JSON.parse(Buffer.from(emailProof, "hex").toString());
-	const nameRecord = JSON.parse(Buffer.from(nameProof, "hex").toString());
+	const emailRecord = JSON.parse(hexToString(emailProof));
+	const nameRecord = JSON.parse(hexToString(nameProof));
 
 	nameRecord.timestamp = emailRecord.timestamp;
 
-	const corruptedNameProof = Buffer.from(JSON.stringify(nameRecord)).toString("hex");
+	const corruptedNameProof = stringToHex(JSON.stringify(nameRecord));
 	detailsMap.set("name", [nameDetail, corruptedNameProof]);
 
 	assertEquals(Identity.VerifyDetails(detailsMap), false);

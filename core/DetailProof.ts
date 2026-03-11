@@ -1,7 +1,7 @@
-import { Buffer } from "node:buffer";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
 import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import { hexToString } from "./Hex.ts";
 
 export type DetailProofRecord = {
   nonce: number;
@@ -21,7 +21,7 @@ export function verifyDetailProof(input: {
 }): { ok: true; record: { nonce: number; timestamp: number } } | { ok: false; error?: string } {
   let record: DetailProofRecord;
   try {
-    record = JSON.parse(Buffer.from(input.proof, "hex").toString());
+    record = JSON.parse(hexToString(input.proof));
   } catch {
     return { ok: false, error: "invalid proof encoding" };
   }

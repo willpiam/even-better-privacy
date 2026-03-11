@@ -82,10 +82,10 @@ Deno.test("CLI revocation: revocation persists through storage format", async ()
   
   // Use storage format (as CLI would do)
   const password = "testpassword123";
-  const storageData = await original.toStorageFormat(password);
+  const storageData = original.toStorageFormat(password);
   
   // Restore from storage
-  const restored = await Identity.fromStorageFormat(storageData, password);
+  const restored = Identity.fromStorageFormat(storageData, password);
   
   assert(restored.isRevoked());
   assertEquals(restored.revocationNonce, original.revocationNonce);

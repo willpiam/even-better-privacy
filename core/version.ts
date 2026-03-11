@@ -18,6 +18,7 @@ export const PROTOCOL_VERSION = "0.0.1";
 export const FILE_FORMAT_VERSIONS = {
     identityStorage: 2,
     publicIdentity: 1,
+    hierarchyCertificate: 1,
     signature: 2,
     signedMessage: 2,
     encryptedMessage: 1,

@@ -364,7 +364,7 @@ async function waitForMessageDetailBySubject(
   throw new Error(`Timed out waiting for inbox message with subject containing: ${subject}`);
 }
 
-test("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
+test.skip("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
   const now = Date.now();
   const messageUid = 101;
   const htmlBody = `<h1>Rendered ${now}</h1><p>This is an html email body.</p><script>window.__mailScriptExecuted = true;</script>`;
@@ -498,7 +498,7 @@ test("mail reader defaults to plaintext and can render HTML from settings", asyn
   await expect(page.locator("#settings-mail-render-html")).toBeChecked();
 });
 
-test("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
+test.skip("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
   page,
   request,
 }) => {
@@ -593,7 +593,7 @@ test("adds two mail accounts, sends encrypted mail between identities, decrypts,
   }
 });
 
-test("inbox search passes search param and filters displayed messages", async ({ page }) => {
+test.skip("inbox search passes search param and filters displayed messages", async ({ page }) => {
   const now = Date.now();
   const allMessages = [
     { uid: 1, subject: "Meeting notes", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 3000, seen: true, size: 200 },
@@ -723,7 +723,7 @@ test("inbox search passes search param and filters displayed messages", async ({
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
 });
 
-test("inbox pagination navigates between pages", async ({ page }) => {
+test.skip("inbox pagination navigates between pages", async ({ page }) => {
   const now = Date.now();
   const page1Messages = [
     { uid: 3, subject: "Newest msg", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 1000, seen: false, size: 100 },

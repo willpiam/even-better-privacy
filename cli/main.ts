@@ -109,7 +109,7 @@ async function cmdGenerate(args: ReturnType<typeof parseArgs>, ctx: CLIContext):
 	await ensureDir(ctx.identityDir);
 	await ensureDir(ctx.contactsDir);
 	
-	const storageData = await identity.toStorageFormat(password);
+	const storageData = identity.toStorageFormat(password);
 	await Deno.writeTextFile(newFormatPath, storageData);
 	await updateState(ctx.identityDir, { currentIdentity: identityName });
 
@@ -157,7 +157,7 @@ async function loadIdentity(ctx: CLIContext, password?: string): Promise<{ ident
 	const pwd = password ?? await readPassword("Enter password: ");
 	
 	try {
-		const identity = await Identity.fromStorageFormat(storageData, pwd);
+		const identity = Identity.fromStorageFormat(storageData, pwd);
 		return { identity, password: pwd };
 	} catch {
 		console.error("Failed to decrypt identity. Wrong password?");
@@ -171,7 +171,7 @@ async function saveIdentity(ctx: CLIContext, password: string, identity: Identit
 	const newPath = `${dir}/${baseName}.identity.json`;
 	
 	// Save in new format
-	const storageData = await identity.toStorageFormat(password);
+	const storageData = identity.toStorageFormat(password);
 	await Deno.writeTextFile(newPath, storageData);
 	
 	// Update context path to new format
