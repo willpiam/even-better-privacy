@@ -87,7 +87,7 @@ async function createAndSignHierarchyViaGui(page: Page, input: {
   await expect(page.locator("#status")).toContainText(/proposed|awaiting/i);
 }
 
-test("establishes a hierarchy and renders it in the contact hierarchy diagram", async ({
+test("establishes a hierarchy and renders it in the contact hierarchy tree", async ({
   page,
 }) => {
   const runId = Date.now();
@@ -135,9 +135,9 @@ test("establishes a hierarchy and renders it in the contact hierarchy diagram", 
   await page.locator("#contacts-list .contact-item", { hasText: "master-contact" }).first().click();
 
   await page.getByRole("button", { name: "View Hierarchy", exact: true }).click();
-  await expect(page.locator("#contact-detail-hierarchy")).toContainText(masterFingerprint);
-  await expect(page.locator("#contact-detail-hierarchy")).toContainText(childFingerprint);
-  await expect(page.locator("#contact-detail-hierarchy")).toContainText("e2e hierarchy");
+  await expect(page.locator("#contact-detail-hierarchy svg")).toBeVisible();
+  await expect(page.locator("#contact-detail-hierarchy .ht-node-group")).toHaveCount(2);
+  await expect(page.locator("#contact-detail-hierarchy button", { hasText: "fit all" })).toBeVisible();
 });
 
 test("rejects a loop when attempting reverse hierarchy relationship", async ({ page }) => {
