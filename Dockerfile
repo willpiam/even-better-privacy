@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Cache dependencies first for faster rebuilds
 COPY deno.json deno.lock ./
+COPY app-version.ts ./
 COPY core ./core
 COPY server ./server
 RUN deno cache --lock=deno.lock ./server/main.ts
