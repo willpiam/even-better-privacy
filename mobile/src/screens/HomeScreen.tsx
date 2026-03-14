@@ -84,7 +84,7 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
       <FlatList
         data={identities}
         keyExtractor={item => item.name}
-        ListEmptyComponent={<Text>No identities yet.</Text>}
+        ListEmptyComponent={<Text style={{color: '#111'}}>No identities yet.</Text>}
         renderItem={({item}) => (
           <TouchableOpacity
             style={styles.item}
@@ -102,15 +102,15 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16},
+  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 12,
   },
-  label: {marginBottom: 12},
-  status: {marginBottom: 12},
-  header: {fontWeight: '700', fontSize: 18, marginBottom: 8},
+  label: {marginBottom: 12, color: '#111'},
+  status: {marginBottom: 12, color: '#111'},
+  header: {fontWeight: '700', fontSize: 18, marginBottom: 8, color: '#111'},
   item: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -118,6 +118,6 @@ const styles = StyleSheet.create({
     padding: 10,
     marginBottom: 8,
   },
-  name: {fontWeight: '700'},
-  fingerprint: {marginTop: 4, fontSize: 12},
+  name: {fontWeight: '700', color: '#111'},
+  fingerprint: {marginTop: 4, fontSize: 12, color: '#333'},
 });

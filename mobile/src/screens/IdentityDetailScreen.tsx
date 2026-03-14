@@ -57,7 +57,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
   if (!identity) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text>Identity not found.</Text>
+        <Text style={{color: '#111'}}>Identity not found.</Text>
       </SafeAreaView>
     );
   }
@@ -87,10 +87,10 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16},
-  name: {fontWeight: '700', fontSize: 20, marginBottom: 8},
-  line: {marginBottom: 8},
-  label: {marginTop: 12, marginBottom: 4},
+  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
+  name: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
+  line: {marginBottom: 8, color: '#111'},
+  label: {marginTop: 12, marginBottom: 4, color: '#111'},
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -98,6 +98,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 12,
+    color: '#111',
   },
-  status: {marginTop: 12},
+  status: {marginTop: 12, color: '#111'},
 });

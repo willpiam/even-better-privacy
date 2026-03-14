@@ -49,8 +49,8 @@ export default function SettingsScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16},
-  label: {marginBottom: 6},
+  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
+  label: {marginBottom: 6, color: '#111'},
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -58,6 +58,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 12,
+    color: '#111',
   },
-  status: {marginTop: 12},
+  status: {marginTop: 12, color: '#111'},
 });

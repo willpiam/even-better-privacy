@@ -1,5 +1,5 @@
 import React from 'react';
-import {NavigationContainer} from '@react-navigation/native';
+import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import CreateIdentityScreen from '../screens/CreateIdentityScreen';
@@ -15,10 +15,26 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+const LightTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: '#fff',
+    text: '#111',
+    card: '#fff',
+    border: '#ddd',
+  },
+};
+
 export default function AppNavigator(): JSX.Element {
   return (
-    <NavigationContainer>
-      <Stack.Navigator>
+    <NavigationContainer theme={LightTheme}>
+      <Stack.Navigator
+        screenOptions={{
+          headerStyle: {backgroundColor: '#fff'},
+          headerTintColor: '#111',
+          headerTitleStyle: {color: '#111'},
+        }}>
         <Stack.Screen
           name="Home"
           component={HomeScreen}

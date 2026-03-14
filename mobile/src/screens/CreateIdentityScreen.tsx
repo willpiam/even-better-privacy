@@ -75,13 +75,13 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16},
+  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 16,
   },
-  label: {marginTop: 8, marginBottom: 4},
+  label: {marginTop: 8, marginBottom: 4, color: '#111'},
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
@@ -89,6 +89,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 10,
+    color: '#111',
   },
-  status: {marginTop: 12},
+  status: {marginTop: 12, color: '#111'},
 });
