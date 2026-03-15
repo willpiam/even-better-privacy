@@ -1,16 +1,16 @@
-/**
- * Metro configuration for React Native
- * https://github.com/facebook/react-native
- *
- * @format
- */
-
 const path = require('path');
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
+/**
+ * Metro configuration
+ * https://reactnative.dev/docs/metro
+ *
+ * @type {import('@react-native/metro-config').MetroConfig}
+ */
 const projectRoot = __dirname;
 const workspaceRoot = path.resolve(projectRoot, '..');
 
-module.exports = {
+const config = {
   watchFolders: [workspaceRoot],
   resolver: {
     disableHierarchicalLookup: true,
@@ -19,12 +19,6 @@ module.exports = {
       path.resolve(workspaceRoot, 'node_modules'),
     ],
   },
-  transformer: {
-    getTransformOptions: async () => ({
-      transform: {
-        experimentalImportSupport: false,
-        inlineRequires: true,
-      },
-    }),
-  },
 };
+
+module.exports = mergeConfig(getDefaultConfig(__dirname), config);
