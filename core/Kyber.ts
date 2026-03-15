@@ -47,7 +47,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
     }
 
     toRawFingerprint(): Uint8Array {
-        return sha256(this.publicKey);
+        return sha256(new TextEncoder().encode(this.publicKey));
     }
 
     toFingerprint(): string {

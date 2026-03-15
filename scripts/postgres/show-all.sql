@@ -9,3 +9,7 @@ left join details as name_detail
 left join details as email_detail
   on email_detail.identity_fingerprint = identities.fingerprint
   and email_detail.path = 'email';
+
+select * from identities;
+
+-- list all tables
