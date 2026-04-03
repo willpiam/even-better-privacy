@@ -1,6 +1,7 @@
 import React, {useEffect, useState} from 'react';
 import {Button, SafeAreaView, StyleSheet, Text, TextInput} from 'react-native';
 import {getServerUrl, setServerUrl} from '../services/settings';
+import {BASE_DIR} from '../services/storage';
 
 export default function SettingsScreen(): JSX.Element {
   const [serverUrl, setServerUrlValue] = useState('');
@@ -43,6 +44,8 @@ export default function SettingsScreen(): JSX.Element {
         disabled={loading}
         onPress={onSave}
       />
+      <Text style={styles.systemLabel}>Identity Directory</Text>
+      <Text style={styles.systemPath}>{BASE_DIR}</Text>
       {status ? <Text style={styles.status}>{status}</Text> : null}
     </SafeAreaView>
   );
@@ -60,5 +63,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#111',
   },
+  systemLabel: {marginTop: 14, marginBottom: 4, color: '#333', fontWeight: '600'},
+  systemPath: {fontSize: 12, color: '#333'},
   status: {marginTop: 12, color: '#111'},
 });

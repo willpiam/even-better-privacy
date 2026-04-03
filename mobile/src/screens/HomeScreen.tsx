@@ -19,6 +19,7 @@ import {
 } from '../services/storage';
 import type {StoredIdentityMeta} from '../types';
 import {getServerUrl} from '../services/settings';
+import {PROTOCOL_VERSION} from '../../../core/version';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -29,6 +30,9 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
   );
   const [serverUrl, setServerUrl] = useState<string>('');
   const [status, setStatus] = useState<string>('');
+
+  const currentFingerprint =
+    identities.find(item => item.name === currentIdentity)?.fingerprint ?? '-';
 
   const refresh = useCallback(async () => {
     const [list, current, server] = await Promise.all([
@@ -66,6 +70,9 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.label}>Server: {serverUrl}</Text>
+      <Text style={styles.label}>Identity: {currentIdentity ?? '-'}</Text>
+      <Text style={styles.label}>Fingerprint: {currentFingerprint}</Text>
+      <Text style={styles.label}>Protocol: {PROTOCOL_VERSION}</Text>
       <View style={styles.row}>
         <Button
           title="Create Identity"
@@ -78,6 +85,26 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
       </View>
       <View style={styles.row}>
         <Button title="Run Core Self-Test" onPress={runSelfTest} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Contacts" onPress={() => navigation.navigate('Contacts')} />
+        <Button title="Sign / Verify" onPress={() => navigation.navigate('SignVerify')} />
+      </View>
+      <View style={styles.row}>
+        <Button
+          title="Encrypt / Decrypt"
+          onPress={() => navigation.navigate('EncryptDecrypt')}
+        />
+        <Button
+          title="Certificates"
+          onPress={() => navigation.navigate('Certificates')}
+        />
+      </View>
+      <View style={styles.row}>
+        <Button
+          title="Project Info"
+          onPress={() => navigation.navigate('ProjectInfo')}
+        />
       </View>
       {status ? <Text style={styles.status}>{status}</Text> : null}
       <Text style={styles.header}>Local Identities</Text>

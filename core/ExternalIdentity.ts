@@ -6,6 +6,7 @@ export type ExternalIdentity = {
   signingKeyType: SigningKeyOptions;
   encryptionKeyType: EncryptionKeyOptions;
   details: Record<string, [string, string]>;
+  resolvedOpaqueDetails?: Record<string, string>;
   detailsMeta?: Record<string, { verified: boolean; verifiedAt: number | null }>;
   revoked?: boolean;
   revokedDetails?: string[];

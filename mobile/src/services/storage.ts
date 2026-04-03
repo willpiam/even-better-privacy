@@ -3,8 +3,11 @@ import {Identity} from '../ebpCore';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
 
-const BASE_DIR = `${RNFS.DocumentDirectoryPath}/ebp`;
+export const BASE_DIR = `${RNFS.DocumentDirectoryPath}/ebp`;
 const STATE_FILE = `${BASE_DIR}/state.json`;
+const CONTACTS_DIR = `${BASE_DIR}/contacts`;
+const CERTIFICATES_DIR = `${BASE_DIR}/certificates`;
+const PENDING_CERTIFICATES_FILE = `${BASE_DIR}/pending-certificates.json`;
 
 function identityPath(name: string): string {
   return `${BASE_DIR}/${name}.identity.json`;
@@ -14,6 +17,16 @@ async function ensureBaseDir(): Promise<void> {
   const exists = await RNFS.exists(BASE_DIR);
   if (!exists) {
     await RNFS.mkdir(BASE_DIR);
+  }
+}
+
+export async function ensureAppDirs(): Promise<void> {
+  await ensureBaseDir();
+  if (!(await RNFS.exists(CONTACTS_DIR))) {
+    await RNFS.mkdir(CONTACTS_DIR);
+  }
+  if (!(await RNFS.exists(CERTIFICATES_DIR))) {
+    await RNFS.mkdir(CERTIFICATES_DIR);
   }
 }
 
@@ -99,14 +112,58 @@ export async function loadIdentity(
   name: string,
   password: string,
 ): Promise<Identity> {
-  await ensureBaseDir();
+  const normalizedPassword = password.trim();
+  if (!normalizedPassword) {
+    throw new Error('Password is required');
+  }
+  await ensureAppDirs();
   const path = identityPath(normalizeName(name));
   const exists = await RNFS.exists(path);
   if (!exists) {
     throw new Error('Identity not found');
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  return Identity.fromStorageFormat(raw, password);
+  return Identity.fromStorageFormat(raw, normalizedPassword);
+}
+
+export async function readIdentityRaw(name: string): Promise<string> {
+  await ensureAppDirs();
+  const path = identityPath(normalizeName(name));
+  const exists = await RNFS.exists(path);
+  if (!exists) {
+    throw new Error('Identity not found');
+  }
+  return RNFS.readFile(path, 'utf8');
+}
+
+export async function saveIdentity(
+  name: string,
+  password: string,
+  identity: Identity,
+): Promise<void> {
+  await ensureAppDirs();
+  const path = identityPath(normalizeName(name));
+  await RNFS.writeFile(path, identity.toStorageFormat(password), 'utf8');
+}
+
+export async function getCurrentIdentityRequired(): Promise<string> {
+  const current = await getCurrentIdentity();
+  if (!current) {
+    throw new Error('No current identity selected');
+  }
+  return current;
+}
+
+export function getContactsDir(): string {
+  return CONTACTS_DIR;
+}
+
+export function getCertificatesDir(): string {
+  return CERTIFICATES_DIR;
+}
+
+export function getPendingCertificatesFile(): string {
+  return PENDING_CERTIFICATES_FILE;
 }
 
 export async function setCurrentIdentity(name: string | null): Promise<void> {

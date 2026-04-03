@@ -725,6 +725,7 @@ async function cmdAttachDetail(args: ReturnType<typeof parseArgs>, ctx: CLIConte
 	const path = args._[0] as string;
 	const detail = args._[1] as string;
 	const push = args["push"] ?? false;
+	const opaque = args["opaque"] ?? false;
 	
 	if (!path || !detail) {
 		console.error("Usage: ebp detail <path> <value>");
@@ -732,15 +733,17 @@ async function cmdAttachDetail(args: ReturnType<typeof parseArgs>, ctx: CLIConte
 		Deno.exit(1);
 	}
 	
-	identity.attachDetail(path, detail);
+	const effectivePath = opaque && !path.startsWith("opaque::") ? `opaque::${path}` : path;
+	const detailToAttach = effectivePath.startsWith("opaque::") ? sha256Hex(detail) : detail;
+	identity.attachDetail(effectivePath, detailToAttach);
 	
 	// Save in new format
 	await saveIdentity(ctx, password, identity);
-	console.log(`✓ Detail attached: ${path} = ${detail}`);
+	console.log(`✓ Detail attached: ${effectivePath} = ${detailToAttach}`);
 
 	if (push) {
 		const server = ensureServer(ctx, args);
-		const entry = identity.details.get(path);
+		const entry = identity.details.get(effectivePath);
 		if (!entry) {
 			console.error("Failed to locate attached detail for push.");
 			Deno.exit(1);
@@ -752,7 +755,7 @@ async function cmdAttachDetail(args: ReturnType<typeof parseArgs>, ctx: CLIConte
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({
 				fingerprint: identity.toFingerprint(),
-				path,
+				path: effectivePath,
 				detail: detailValue,
 				proof,
 			}),
@@ -1272,6 +1275,7 @@ COMMANDS:
 
   detail <path> <value> Attach a detail to your identity (e.g., name, email)
     --push              Also push the detail to the configured server
+    --opaque            Prefixes path with opaque:: and stores SHA-256(value)
 
   revoke-detail <path>  Revoke a detail from your identity
     --reason <reason>   Optional reason for revocation
@@ -1372,7 +1376,7 @@ EXAMPLES:
 async function main(): Promise<void> {
 	const args = parseArgs(Deno.args, {
 		string: ["signing", "encryption", "output", "name", "recipient", "sender", "signature", "password", "home", "identity", "server", "page", "reason", "revocation-output", "search"],
-		boolean: ["help", "version", "force", "detached", "sign", "push", "clear", "revocation-cert", "no-salt"],
+		boolean: ["help", "version", "force", "detached", "sign", "push", "clear", "revocation-cert", "no-salt", "opaque"],
 		alias: { h: "help", v: "version", o: "output", r: "recipient", s: "sender" },
 	});
 

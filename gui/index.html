@@ -1417,6 +1417,9 @@
     /* Contact detail modal */
     .modal-wide {
       max-width: 600px;
+      max-height: 88vh;
+      display: flex;
+      flex-direction: column;
     }
 
     /* Certificate detail modal */
@@ -1484,7 +1487,10 @@
     }
 
     .contact-detail-content {
-      margin-bottom: 20px;
+      margin-bottom: 16px;
+      overflow: auto;
+      flex: 1 1 auto;
+      min-height: 0;
     }
 
     .contact-detail-header {
@@ -2114,6 +2120,7 @@
           </div>
           <div class="row">
             <label class="inline"><input id="detail-push" type="checkbox" /> Push to server</label>
+            <label class="inline"><input id="detail-opaque" type="checkbox" /> Opaque</label>
           </div>
           <div>
             <button type="submit">Add Detail</button>

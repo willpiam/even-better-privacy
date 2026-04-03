@@ -94,6 +94,16 @@ function getDetailMeta(detailsMeta, path) {
   return detailsMeta[path] ?? null;
 }
 
+function isOpaqueDetailPath(path) {
+  return typeof path === "string" && path.startsWith("opaque::");
+}
+
+function formatOpaqueHash(value) {
+  if (typeof value !== "string") return "";
+  if (value.length <= 24) return value;
+  return `${value.slice(0, 12)}...${value.slice(-8)}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Fingerprint Management
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,6 +227,7 @@ function renderIdentityDetails() {
   for (const item of details) {
     const li = document.createElement("li");
     li.className = "detail-item";
+    const isOpaque = isOpaqueDetailPath(item.path);
     
     // Check if this detail exists on server
     const serverDetail = state.serverDetails.find(d => d.path === item.path);
@@ -237,7 +248,8 @@ function renderIdentityDetails() {
       <div class="detail-item-content">
         <div class="detail-text">
           <strong>${escapeHtml(item.path)}</strong>:
-          <span class="detail-value" title="${escapeHtml(item.detail)}">${escapeHtml(item.detail)}</span>
+          <span class="detail-value" title="${escapeHtml(item.detail)}">${escapeHtml(isOpaque ? formatOpaqueHash(item.detail) : item.detail)}</span>
+          ${isOpaque ? '<span class="muted small" title="Opaque detail: only hash is public">Opaque</span>' : ""}
           ${emailMarker}
         </div>
         ${isLocalOnly && state.server ? '<span class="local-only-badge">Local only</span>' : ''}
@@ -1362,9 +1374,21 @@ async function showContactDetails(contact) {
     
     for (const d of details) {
       const isEmail = d.path === "email";
-      const valueHtml = isEmail
-        ? `<span class="detail-value email-detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}${emailDot}</span>`
-        : `<span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>`;
+      const isOpaque = isOpaqueDetailPath(d.path);
+      const resolvedOpaqueValue = isOpaque
+        ? contact.resolvedOpaqueDetails?.[d.path] ?? null
+        : null;
+      const valueHtml = isOpaque
+        ? `
+          <span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(formatOpaqueHash(d.detail))}</span>
+          <span class="muted small">hash</span>
+          ${resolvedOpaqueValue
+            ? `<span class="detail-tag" title="Resolved opaque value">${escapeHtml(resolvedOpaqueValue)} ✓</span>`
+            : `<button class="secondary btn-opaque-check" data-fingerprint="${escapeHtml(contact.fingerprint)}" data-path="${escapeHtml(d.path)}">Check</button>`}
+        `
+        : isEmail
+          ? `<span class="detail-value email-detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}${emailDot}</span>`
+          : `<span class="detail-value" title="${escapeHtml(d.detail)}">${escapeHtml(d.detail)}</span>`;
       detailsHtml += `
         <div class="detail-row">
           <strong>${escapeHtml(d.path)}:</strong>
@@ -1398,6 +1422,36 @@ async function showContactDetails(contact) {
   document.getElementById("contact-detail-establish-hierarchy-btn").dataset.fingerprint = contact.fingerprint;
   document.getElementById("contact-detail-hierarchy-btn").dataset.fingerprint = contact.fingerprint;
   document.getElementById("contact-detail-hierarchy").innerHTML = '<div class="muted small" style="padding:16px">(hierarchy not loaded)</div>';
+
+  const detailContainer = document.getElementById("contact-detail-details");
+  detailContainer.querySelectorAll(".btn-opaque-check").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      const targetBtn = e.currentTarget;
+      const path = targetBtn.dataset.path;
+      const fingerprint = targetBtn.dataset.fingerprint;
+      if (!path || !fingerprint) return;
+      const candidate = window.prompt(`Enter a value to verify for ${path}`);
+      if (!candidate) return;
+      setButtonLoading(targetBtn, true);
+      try {
+        await api("/contacts/resolve-opaque", {
+          method: "POST",
+          body: JSON.stringify({ fingerprint, path, value: candidate }),
+        });
+        setStatus(`Opaque detail "${path}" matched and saved locally`, "success");
+        await loadAll();
+        const refreshed = state.contacts.find((c) => c.fingerprint === contact.fingerprint || c.fingerprint.startsWith(contact.fingerprint));
+        if (refreshed) {
+          await showContactDetails(refreshed);
+        }
+      } catch (err) {
+        setStatus(err.message, "error");
+      } finally {
+        setButtonLoading(targetBtn, false);
+      }
+    });
+  });
   
   // Show server API link if server is configured
   const serverLinkContainer = document.getElementById("contact-detail-server-link-container");
@@ -3927,6 +3981,8 @@ document.getElementById("add-detail-form").addEventListener("submit", async (e) 
   const path = document.getElementById("detail-path").value.trim();
   const detail = document.getElementById("detail-value").value.trim();
   const push = document.getElementById("detail-push").checked;
+  const opaque = document.getElementById("detail-opaque").checked;
+  const effectivePath = opaque && !path.startsWith("opaque::") ? `opaque::${path}` : path;
   
   if (!path || !detail) {
     setStatus("Path and value are required", "error");
@@ -3942,11 +3998,12 @@ document.getElementById("add-detail-form").addEventListener("submit", async (e) 
       }
       await api("/detail", {
         method: "POST",
-        body: JSON.stringify({ path, detail, password, push }),
+        body: JSON.stringify({ path: effectivePath, detail, password, push }),
       });
-      setStatus(`Detail "${path}" added${push ? " and pushed to server" : ""}`, "success");
+      setStatus(`Detail "${effectivePath}" added${push ? " and pushed to server" : ""}`, "success");
       document.getElementById("detail-path").value = "";
       document.getElementById("detail-value").value = "";
+      document.getElementById("detail-opaque").checked = false;
       // Reload to show updated details
       await loadPublicIdentityInfo();
     } catch (err) {

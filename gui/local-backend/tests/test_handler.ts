@@ -195,6 +195,33 @@ async function listContacts(ctx: CLIContext): Promise<Array<{ name: string; cont
 	return contacts;
 }
 
+async function findContactRecord(
+	ctx: CLIContext,
+	fingerprint: string,
+): Promise<{ name: string; path: string; contact: ExternalIdentity } | null> {
+	const query = fingerprint.trim();
+	if (!query) return null;
+	try {
+		for await (const entry of Deno.readDir(ctx.contactsDir)) {
+			if (!entry.isFile || !entry.name.endsWith(".json")) continue;
+			const name = entry.name.replace(".json", "");
+			const contactPath = `${ctx.contactsDir}/${entry.name}`;
+			const json = await Deno.readTextFile(contactPath);
+			const contact = JSON.parse(json) as ExternalIdentity;
+			if (
+				typeof contact.fingerprint === "string" &&
+				(contact.fingerprint === query || contact.fingerprint.startsWith(query))
+			) {
+				return { name, path: contactPath, contact };
+			}
+		}
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) return null;
+		throw e;
+	}
+	return null;
+}
+
 async function deleteContact(ctx: CLIContext, name?: string, fingerprint?: string): Promise<string> {
 	const byName = typeof name === "string" ? name.trim() : "";
 	const byFingerprint = typeof fingerprint === "string" ? fingerprint.trim() : "";
@@ -446,6 +473,7 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 					signingKeyType: contact.signingKeyType,
 					encryptionKeyType: contact.encryptionKeyType,
 					details: contact.details ?? {},
+					resolvedOpaqueDetails: contact.resolvedOpaqueDetails ?? {},
 				})),
 			});
 		}
@@ -477,6 +505,46 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 			const ctx = await getContext(home);
 			const deletedName = await deleteContact(ctx, name, fingerprint);
 			return json({ ok: true, name: deletedName });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/contacts/resolve-opaque") {
+			const body = await readJson<{
+				fingerprint?: unknown;
+				path?: unknown;
+				value?: unknown;
+				home?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const fingerprint = typeof body.fingerprint === "string" ? body.fingerprint : undefined;
+			const path = typeof body.path === "string" ? body.path : undefined;
+			const value = typeof body.value === "string" ? body.value : undefined;
+			if (!fingerprint) throw new HttpError(STATUS.BadRequest, "fingerprint is required");
+			if (!path || !path.startsWith("opaque::")) {
+				throw new HttpError(STATUS.BadRequest, "path must start with opaque::");
+			}
+			if (!value) throw new HttpError(STATUS.BadRequest, "value is required");
+
+			const ctx = await getContext(home);
+			const found = await findContactRecord(ctx, fingerprint);
+			if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
+
+			const detailEntry = found.contact.details?.[path];
+			const expectedHash = Array.isArray(detailEntry) ? detailEntry[0] : detailEntry;
+			if (typeof expectedHash !== "string" || expectedHash.length === 0) {
+				throw new HttpError(STATUS.NotFound, "opaque detail not found");
+			}
+
+			const candidateHash = sha256Hex(value);
+			if (candidateHash !== expectedHash) {
+				throw new HttpError(STATUS.BadRequest, "value does not match opaque detail hash");
+			}
+
+			found.contact.resolvedOpaqueDetails = {
+				...(found.contact.resolvedOpaqueDetails ?? {}),
+				[path]: value,
+			};
+			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
+			return json({ ok: true, matched: true, path });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/sign") {
@@ -987,10 +1055,11 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
 
 			const ctx = await getContext(home, identityName);
 			const identity = await loadIdentity(ctx, password);
-			identity.attachDetail(path, detail);
+			const detailToAttach = path.startsWith("opaque::") ? sha256Hex(detail) : detail;
+			identity.attachDetail(path, detailToAttach);
 			await saveIdentity(ctx, password, identity);
 
-			return json({ ok: true, path, detail });
+			return json({ ok: true, path, detail: detailToAttach });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/verify-email/request") {
