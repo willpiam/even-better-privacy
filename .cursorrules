@@ -1,0 +1,90 @@
+# EBP LLM Wiki Maintainer Rules
+
+You are maintaining a persistent markdown wiki for the EBP project.
+
+## Scope
+
+- Wiki root: `wiki/`
+- Raw source root: `wiki/raw/` (read-only for source docs; do not edit source contents)
+- The wiki is LLM-owned. Humans may review and request corrections.
+
+## Core Principles
+
+- Preserve factual accuracy and trace claims to sources.
+- Prefer incremental updates over rewriting large pages.
+- Keep pages interlinked with `[[wikilinks]]`.
+- Flag uncertainty explicitly.
+- When new evidence conflicts with old claims, update both affected pages and note the contradiction.
+
+## File Naming and Structure
+
+- Use kebab-case filenames.
+- Keep one primary concept/entity per page.
+- Add YAML frontmatter to every non-log page:
+  - `title`
+  - `type` (`overview`, `entity`, `concept`, `component`, `source-summary`, `analysis`)
+  - `status` (`seed`, `active`, `needs-review`)
+  - `last_updated` (ISO date)
+  - `source_count` (integer)
+  - `tags` (array)
+
+## Required Files
+
+- `wiki/index.md`: master catalog grouped by category with one-line summaries.
+- `wiki/log.md`: append-only chronological operations log.
+- `wiki/overview.md`: high-level synthesis of the EBP system.
+
+## Link and Citation Conventions
+
+- Use `[[page-name]]` for internal links.
+- For claims based on project docs, include a short Sources section listing file paths.
+- For claims based on external sources in `wiki/raw/`, cite the source summary page and raw filename.
+
+## Workflows
+
+### Ingest Workflow (new source added)
+
+1. Read source from `wiki/raw/`.
+2. Produce or update a `source-summary` page in `wiki/`.
+3. Update affected entity/concept/component pages.
+4. Update `wiki/index.md` entries and summaries.
+5. Append an ingest entry to `wiki/log.md` using:
+   `## [YYYY-MM-DD] ingest | <source-title>`
+6. If contradictions are found, update relevant pages and include a contradiction note.
+
+### Query Workflow (user asks a question)
+
+1. Read `wiki/index.md` first to identify relevant pages.
+2. Read the minimum set of linked pages needed to answer.
+3. Synthesize response with clear citations.
+4. If response creates durable value, file it as a new `analysis` page and add it to `index.md`.
+5. Append a query entry to `wiki/log.md` if a new page was created.
+
+### Lint Workflow (wiki health check)
+
+Check for and fix:
+- Orphan pages (no inbound links).
+- Stale pages (`last_updated` very old relative to recent ingests).
+- Missing high-value concept pages referenced repeatedly.
+- Broken wikilinks.
+- Contradictions not reflected across linked pages.
+
+Append lint runs to `wiki/log.md` with:
+`## [YYYY-MM-DD] lint | wiki-health-check`
+
+## EBP-Specific Content Taxonomy
+
+Organize the wiki around:
+- Cryptographic schemes (`ml-kem`, `slh-dsa`, `ml-dsa`, planned `fn-dsa`)
+- Identity model and fingerprinting
+- Revocation system
+- Components (`cli`, `gui`, `server`, `email-extension`, `mobile`)
+- Security and design tradeoffs
+- Testing and release workflows
+
+## Editing Guardrails
+
+- Do not delete substantive content without replacing it with updated synthesis.
+- Keep log entries append-only.
+- Avoid duplicate pages; merge into canonical pages when overlap is high.
+- Keep summaries concise; keep deep detail in focused pages and link outward.

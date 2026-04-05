@@ -466,6 +466,7 @@ const passwordModalToggle = document.getElementById("password-modal-toggle");
 
 let modalResolve = null;
 let passwordModalResolve = null;
+let passwordModalRequiredMessage = "Password is required.";
 
 function showConfirmModal(title, message, confirmText = "Confirm") {
   confirmModalTitle.textContent = title;
@@ -495,8 +496,27 @@ confirmModal.addEventListener("click", (e) => {
 async function requestPassword(promptText = "Enter password") {
   passwordModalTitle.textContent = promptText;
   passwordModalInput.value = "";
+  passwordModalInput.placeholder = "Enter password";
   passwordModalInput.type = "password";
   passwordModalToggle.textContent = "👁";
+  passwordModalToggle.style.display = "";
+  passwordModalRequiredMessage = "Password is required.";
+  passwordModalError.textContent = "";
+  passwordModal.classList.add("active");
+  passwordModalInput.focus();
+
+  return new Promise((resolve) => {
+    passwordModalResolve = resolve;
+  });
+}
+
+async function requestTextInput(promptText = "Enter value", placeholder = "Enter value") {
+  passwordModalTitle.textContent = promptText;
+  passwordModalInput.value = "";
+  passwordModalInput.placeholder = placeholder;
+  passwordModalInput.type = "text";
+  passwordModalToggle.style.display = "none";
+  passwordModalRequiredMessage = "Value is required.";
   passwordModalError.textContent = "";
   passwordModal.classList.add("active");
   passwordModalInput.focus();
@@ -518,7 +538,7 @@ passwordModalCancel.addEventListener("click", () => closePasswordModal(null));
 passwordModalConfirm.addEventListener("click", () => {
   const value = passwordModalInput.value;
   if (!value) {
-    passwordModalError.textContent = "Password is required.";
+    passwordModalError.textContent = passwordModalRequiredMessage;
     return;
   }
   closePasswordModal(value);
@@ -1431,7 +1451,7 @@ async function showContactDetails(contact) {
       const path = targetBtn.dataset.path;
       const fingerprint = targetBtn.dataset.fingerprint;
       if (!path || !fingerprint) return;
-      const candidate = window.prompt(`Enter a value to verify for ${path}`);
+      const candidate = await requestTextInput(`Enter a value to verify for ${path}`, "Value to compare");
       if (!candidate) return;
       setButtonLoading(targetBtn, true);
       try {

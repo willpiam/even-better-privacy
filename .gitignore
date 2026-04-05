@@ -65,6 +65,9 @@ final_builds/
 # Scripts
 /scripts/postgres/backups/
 
+# Wiki assets
+/wiki/raw/assets/
+
 # Misc
 temp_env
 undefined/
