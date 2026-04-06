@@ -4131,7 +4131,10 @@ function updateRevokeDetailPathOptions() {
   for (const item of details) {
     const option = document.createElement("option");
     option.value = item.path;
-    option.textContent = `${item.path}: ${item.detail}`;
+    const detailText = String(item.detail);
+    const maxLen = 60;
+    const truncated = detailText.length > maxLen ? detailText.slice(0, maxLen) + "…" : detailText;
+    option.textContent = `${item.path}: ${truncated}`;
     select.appendChild(option);
   }
 }
