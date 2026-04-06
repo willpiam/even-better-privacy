@@ -3465,10 +3465,21 @@ async function handleRequest(req: Request): Promise<Response> {
 				encryptionKeyDetails?: unknown;
 				details?: Record<string, [string, string]>;
 				detailsMeta?: Record<string, { verified: boolean; verifiedAt: number | null }>;
+				revokedDetails?: string[];
+				revoked?: boolean;
 			};
 
 			const signingKeyType = b?.signingKeyType === "sphincs" ? "sphincs" as const : "dilithium" as const;
 			const encryptionKeyType = "kyber" as const;
+
+			// Strip revoked details from the details and detailsMeta maps
+			const details = { ...(b?.details ?? {}) };
+			const detailsMeta = { ...(b?.detailsMeta ?? {}) };
+			const revokedDetails = b?.revokedDetails ?? [];
+			for (const path of revokedDetails) {
+				delete details[path];
+				delete detailsMeta[path];
+			}
 
 			const external: ExternalIdentity = {
 				fingerprint: b?.fingerprint ?? fingerprint,
@@ -3478,8 +3489,8 @@ async function handleRequest(req: Request): Promise<Response> {
 				encryptionKey: b?.encryptionKey ?? "",
 				signingKeyDetails: (b?.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: "ml_dsa87" },
 				encryptionKeyDetails: (b?.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
-				details: b?.details ?? {},
-				detailsMeta: b?.detailsMeta ?? {},
+				details,
+				detailsMeta,
 			};
 
 			if (!external.signingKey || !external.encryptionKey) {

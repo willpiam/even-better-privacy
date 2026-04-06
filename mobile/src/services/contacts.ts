@@ -55,6 +55,18 @@ function normalizeExternalIdentity(
   if (!fingerprint || !signingKey || !encryptionKey) {
     throw new Error('Invalid public identity payload');
   }
+  const revokedDetails = Array.isArray(source.revokedDetails)
+    ? (source.revokedDetails as string[])
+    : [];
+
+  // Strip revoked details from the details and detailsMeta maps
+  const details = { ...((source.details as ExternalIdentity['details']) ?? {}) };
+  const detailsMeta = { ...((source.detailsMeta as ExternalIdentity['detailsMeta']) ?? {}) };
+  for (const path of revokedDetails) {
+    delete details[path];
+    delete detailsMeta[path];
+  }
+
   return {
     fingerprint,
     signingKeyType,
@@ -70,12 +82,10 @@ function normalizeExternalIdentity(
       {
         variant: 'ml_kem1024',
       },
-    details: (source.details as ExternalIdentity['details']) ?? {},
-    detailsMeta: (source.detailsMeta as ExternalIdentity['detailsMeta']) ?? {},
+    details,
+    detailsMeta,
     revoked: Boolean(source.revoked),
-    revokedDetails: Array.isArray(source.revokedDetails)
-      ? (source.revokedDetails as string[])
-      : [],
+    revokedDetails,
   };
 }
 

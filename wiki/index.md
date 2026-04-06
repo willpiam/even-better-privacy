@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-05
+Last updated: 2026-04-06
 
 ## Overview
 
@@ -26,7 +26,7 @@ Last updated: 2026-04-05
 
 ## Analyses
 
-- (to be populated)
+- [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
 
 ## Source Summaries
 
