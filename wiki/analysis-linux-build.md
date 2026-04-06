@@ -3,7 +3,7 @@ title: "Analysis: Linux Build Process"
 type: analysis
 status: active
 last_updated: 2026-04-06
-source_count: 2
+source_count: 4
 tags:
   - build
   - linux
@@ -49,6 +49,26 @@ If the build completes successfully, the expected output is:
 
 - `EBP.AppImage` at the repository root
 
+## Desktop Architecture: Sidecar Redirect
+
+The desktop app has two binaries inside the AppImage:
+
+1. **Tauri shell** (`ebp`) — a Rust binary that creates a WebKit webview and spawns the sidecar. It embeds static assets from `distDir` at Cargo compile time via `tauri::generate_context!()`.
+2. **Sidecar** (`ebp-gui-backend`) — a Deno-compiled binary of `gui/local-backend/main.ts`. It serves both the full frontend (HTML/JS) and all API endpoints on `http://127.0.0.1:8787`.
+
+### Previous Problem: Stale Frontend in Tauri Binary
+
+Tauri v1's `distDir` was originally set to `../../gui`, causing the full `gui/index.html` and `gui/app.js` to be embedded in the Rust binary. Cargo's incremental compilation often failed to detect changes to these files, so rebuilt AppImages would ship old frontend code even though the sidecar was freshly compiled.
+
+### Fix: Loader Redirect
+
+`distDir` was changed to `../dist`, which contains only a lightweight loader page (`desktop/dist/index.html`). This loader polls the sidecar's health endpoint and, once the sidecar is ready, redirects the webview to `http://127.0.0.1:8787/`. The sidecar (always freshly compiled by `deno compile`) then serves the real `index.html` and `app.js`.
+
+This means:
+- The Tauri binary only embeds the tiny loader — its contents never need to change.
+- All frontend and backend code lives in the sidecar, which is always recompiled.
+- Cargo caching of the Tauri binary is harmless.
+
 ## Notes
 
 - The script optionally loads extra build-time environment variables from `.env.desktop.build` if that file exists.
@@ -64,3 +84,5 @@ If the build completes successfully, the expected output is:
 
 - `ReadMe.md`
 - `build_desktop_linux.sh`
+- `desktop/src-tauri/tauri.conf.json`
+- `desktop/dist/index.html`

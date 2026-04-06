@@ -143,7 +143,6 @@ const MAIL_OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 const MAIL_OAUTH_REFRESH_SKEW_MS = 5 * 60 * 1000;
 
 const STATIC_ROOT = new URL("..", import.meta.url);
-const PROJECT_ROOT = new URL("../..", import.meta.url);
 let envLoaded = false;
 function loadEnvOnce(): void {
 	if (envLoaded) return;
@@ -282,12 +281,7 @@ async function tryServeStatic(req: Request, url: URL): Promise<Response | null> 
 	let target = decoded.replace(/^\/+/, "");
 	if (target === "") target = "index.html";
 
-	let fileUrl: URL;
-	if (target.startsWith("assets/")) {
-		fileUrl = new URL(target, PROJECT_ROOT);
-	} else {
-		fileUrl = new URL(target, STATIC_ROOT);
-	}
+	const fileUrl = new URL(target, STATIC_ROOT);
 	let data: Uint8Array;
 	try {
 		data = await Deno.readFile(fileUrl);
