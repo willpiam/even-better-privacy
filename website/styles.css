@@ -44,6 +44,26 @@ img {
   padding: 1.2rem 0;
 }
 
+.top-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.top-nav-link {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-weight: 600;
+  border-bottom: 1px solid transparent;
+  padding-bottom: 1px;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+
+.top-nav-link:hover {
+  color: var(--ink);
+  border-color: var(--line);
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -276,6 +296,16 @@ textarea {
 }
 
 @media (max-width: 900px) {
+  .top-nav {
+    flex-wrap: wrap;
+    gap: 0.8rem;
+  }
+
+  .top-nav-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
   .hero-content,
   .split,
   .grid.three {
