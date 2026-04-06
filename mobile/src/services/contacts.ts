@@ -118,7 +118,23 @@ export async function importContact(
       : (payload as unknown as Record<string, unknown>);
   const contact = normalizeExternalIdentity(parsed);
   const contactName = normalizeContactName(name ?? contact.fingerprint.slice(0, 16));
-  await RNFS.writeFile(contactPath(contactName), JSON.stringify(contact, null, 2), 'utf8');
+  const path = contactPath(contactName);
+  if (await RNFS.exists(path)) {
+    try {
+      const existingRaw = await RNFS.readFile(path, 'utf8');
+      const existing = JSON.parse(existingRaw) as ExternalIdentity;
+      const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {}).filter(
+        ([detailPath, value]) =>
+          typeof value === 'string' && contact.details[detailPath] !== undefined,
+      );
+      if (preservedEntries.length > 0) {
+        contact.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
+      }
+    } catch {
+      // Ignore parse/read errors and continue with normalized contact payload.
+    }
+  }
+  await RNFS.writeFile(path, JSON.stringify(contact, null, 2), 'utf8');
   return {name: contactName, fingerprint: contact.fingerprint};
 }
 

@@ -3500,6 +3500,20 @@ async function handleRequest(req: Request): Promise<Response> {
 			await ensureDir(ctx.contactsDir);
 			const contactName = name ?? external.fingerprint.substring(0, 16);
 			const contactPath = `${ctx.contactsDir}/${contactName}.json`;
+			try {
+				const existingRaw = await Deno.readTextFile(contactPath);
+				const existing = JSON.parse(existingRaw) as ExternalIdentity;
+				const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {}).filter(
+					([path, value]) => typeof value === "string" && details[path] !== undefined,
+				);
+				if (preservedEntries.length > 0) {
+					external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
+				}
+			} catch (e) {
+				if (!(e instanceof Deno.errors.NotFound)) {
+					console.warn("failed to preserve resolved opaque details during fetch sync", e);
+				}
+			}
 			await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2));
 
 			return json({ ok: true, name: contactName, fingerprint: external.fingerprint });
