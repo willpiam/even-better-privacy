@@ -27,6 +27,7 @@ Last updated: 2026-04-06
 ## Analyses
 
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
+- [[analysis-linux-build]] - Linux install and local AppImage build flow, including required toolchain and system packages.
 
 ## Source Summaries
 

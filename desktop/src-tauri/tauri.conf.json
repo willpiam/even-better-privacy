@@ -3,7 +3,7 @@
     "beforeDevCommand": "deno task -c ../deno.json desktop:backend:dev",
     "beforeBuildCommand": "deno task -c ../deno.json desktop:backend:build",
     "devPath": "http://127.0.0.1:8787/",
-    "distDir": "../../gui"
+    "distDir": "../dist"
   },
   "package": {
     "productName": "EBP",
