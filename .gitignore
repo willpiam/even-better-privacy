@@ -37,6 +37,7 @@ test-results/
 
 # Build outputs
 dist/
+!desktop/dist/
 build/
 
 # Node
