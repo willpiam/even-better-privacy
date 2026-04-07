@@ -38,7 +38,7 @@ All released application files will come with an EBP signature from [ebpdk1m6l96
 
 ### From Source (Linux, Windows, & Mac)
 
-If you are comfortable with the CLI and or would like to contribute to this codebase you will likely want to run ebp from source. 
+If you are comfortable with the CLI and or would like to contribute to this codebase you will likely want to run ebp from source. Even without experience using the CLI this should be pretty simple. This is likely the most reliable way to get EBP up and running on your system. 
 
 1. Install [Deno](https://deno.land/)
 2. Clone this repository
