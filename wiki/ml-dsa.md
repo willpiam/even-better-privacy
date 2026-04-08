@@ -1,35 +1,76 @@
 ---
 title: "ML-DSA (Dilithium) in EBP"
 type: entity
-status: seed
-last_updated: 2026-04-05
-source_count: 1
+status: active
+last_updated: 2026-04-08
+source_count: 3
 tags:
   - crypto
   - signatures
   - dilithium
+  - lattice
 ---
 
 # ML-DSA (Dilithium)
 
-EBP supports ML-DSA as a signing/authentication scheme (documented `ml_dsa87` variant).
+ML-DSA (Module-Lattice-Based Digital Signature Algorithm) is one of two signing schemes supported by EBP. It is standardized as NIST FIPS 204, derived from the CRYSTALS-Dilithium submission. See [[source-fips-204]] for the full standard summary.
+
+## Variant Used
+
+EBP uses **ML-DSA-87** (`ml_dsa87`), the highest security parameter set (NIST Security Category 5):
+
+| Property | Value |
+|---|---|
+| Public key size | 2,592 bytes |
+| Secret key size | 4,896 bytes |
+| Signature size | 4,627 bytes |
+
+The default variant is set in `core/Dilithium.ts` via `DilithiumSigningKey(variant = "ml_dsa87")`. The implementation uses the `@noble/post-quantum/ml-dsa` library.
 
 ## Role in EBP
 
-- Used for digital signatures in identity and messaging workflows.
-- Paired with ML-KEM in EBP identity design.
+ML-DSA provides authentication and integrity in EBP's dual-key [[identity-model]]:
 
-## Notes
+- **Message signing:** signs a hash envelope of the message (with optional salt) to produce a signature.
+- **Detail proofs:** each attached detail (name, email, etc.) is signed with ML-DSA to create a verifiable proof.
+- **Revocation certificates:** revocation certificates are signed with the identity's signing key. See [[revocation-system]].
+- **State transitions:** publishing to the server requires signing a state-transition message.
 
-The README also references planned FN-DSA (Falcon) support, but this page covers currently supported ML-DSA behavior.
+## Compared to SLH-DSA
+
+ML-DSA and [[slh-dsa]] serve the same role in EBP (signing). The user chooses at identity generation time:
+
+| Property | ML-DSA-87 | SLH-DSA-SHA2-256s |
+|---|---|---|
+| Public key | 2,592 bytes | 64 bytes |
+| Signature | 4,627 bytes | 29,792 bytes |
+| Security basis | Lattice (MLWE/MSIS) | Hash functions only |
+| Speed | Faster signing/verifying | Slower |
+
+ML-DSA offers compact signatures but relies on lattice assumptions. SLH-DSA offers minimal assumptions (hash-only) but produces much larger signatures.
+
+## Fingerprint Role
+
+The signing public key forms the **left leaf** of the identity merkle tree. It is hashed as `SHA-256(base64-decoded public key bytes)`. Identities using ML-DSA receive the bech32 human-readable prefix **`ebpdk`** (Dilithium + Kyber). See [[identity-model]].
+
+## Implementation Details
+
+- Supported variants: `ml_dsa44`, `ml_dsa65`, `ml_dsa87` (only 87 used by default).
+- Public keys are stored as base64-encoded strings.
+- Public-key-only instances can be created via `DilithiumSigningKey.fromPublicKey()` — these can verify but not sign.
 
 ## Related Pages
 
 - [[identity-model]]
+- [[source-fips-204]]
+- [[slh-dsa]]
 - [[ml-kem]]
+- [[revocation-system]]
+- [[component-cli]]
 - [[overview]]
 
 ## Sources
 
 - `ReadMe.md`
-
+- `core/Dilithium.ts`
+- `wiki/raw/nist.fips.204.pdf` → [[source-fips-204]]

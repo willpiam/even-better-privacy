@@ -1388,7 +1388,8 @@ async function handleRequest(req: Request): Promise<Response> {
 		}
 
 		// Open a URL in the user's default system browser.
-		// Fallback for environments (Tauri WebKitGTK on Linux) where window.open() is blocked.
+		// Used for OAuth flows where the URL must open in a real browser rather
+		// than the Tauri/WebKitGTK webview (which causes "Popup blocked" errors).
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/open-browser") {
 			const body = await readJson<{ url?: unknown }>(req);
 			const targetUrl = typeof body.url === "string" ? body.url.trim() : "";
@@ -1398,23 +1399,39 @@ async function handleRequest(req: Request): Promise<Response> {
 				throw new HttpError(STATUS.BadRequest, "url must be https or http://127.0.0.1");
 			}
 			const os = Deno.build.os;
-			let cmd: string[];
+			// Try multiple openers on Linux — xdg-open may not be available inside
+			// some AppImage or container environments.
+			const openers: string[][] = [];
 			if (os === "linux") {
-				cmd = ["xdg-open", targetUrl];
+				openers.push(["xdg-open", targetUrl]);
+				openers.push(["gio", "open", targetUrl]);
+				openers.push(["sensible-browser", targetUrl]);
 			} else if (os === "darwin") {
-				cmd = ["open", targetUrl];
+				openers.push(["open", targetUrl]);
 			} else if (os === "windows") {
-				cmd = ["cmd", "/c", "start", "", targetUrl];
+				openers.push(["cmd", "/c", "start", "", targetUrl]);
 			} else {
 				throw new HttpError(STATUS.InternalServerError, `unsupported OS for open-browser: ${os}`);
 			}
-			try {
-				const proc = new Deno.Command(cmd[0], { args: cmd.slice(1), stdout: "null", stderr: "null" });
-				const child = proc.spawn();
-				// Don't await — fire and forget. Just unref so the process doesn't block shutdown.
-				child.unref();
-			} catch (e) {
-				throw new HttpError(STATUS.InternalServerError, `failed to open browser: ${e}`);
+			let opened = false;
+			for (const cmd of openers) {
+				try {
+					const proc = new Deno.Command(cmd[0], {
+						args: cmd.slice(1),
+						stdout: "null",
+						stderr: "null",
+					});
+					const output = await proc.output();
+					if (output.success) {
+						opened = true;
+						break;
+					}
+				} catch {
+					// This opener isn't available — try next.
+				}
+			}
+			if (!opened) {
+				throw new HttpError(STATUS.InternalServerError, "could not open system browser — xdg-open, gio, and sensible-browser all failed");
 			}
 			return json({ ok: true });
 		}

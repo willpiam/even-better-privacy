@@ -1,32 +1,70 @@
 ---
 title: "EBP GUI Component"
 type: component
-status: seed
-last_updated: 2026-04-05
-source_count: 1
+status: active
+last_updated: 2026-04-08
+source_count: 3
 tags:
   - component
   - gui
   - frontend
+  - deno
+  - tauri
 ---
 
 # GUI Component
 
-The GUI provides a graphical interface over the same identity and crypto workflows exposed by the CLI.
+The GUI provides a graphical interface over the same identity and crypto workflows exposed by the [[component-cli|CLI]]. It consists of a local backend server and an HTML/JS frontend.
 
-## Characteristics
+## Architecture
 
-- Runs with a local backend process.
-- Shares filesystem-backed data model with CLI usage.
-- Includes interfaces for native email workflows.
+- **Local backend** (`gui/local-backend/main.ts`): a Deno HTTP server on `http://127.0.0.1:8787` that serves the frontend and exposes REST API endpoints for all EBP operations.
+- **Frontend** (`gui/index.html` + `gui/app.js`): a single-page application that communicates with the local backend.
+- **Shared data model**: the GUI reads and writes the same `~/.ebp/` identity and contact files as the CLI. Both interfaces operate on the same data.
+
+## Running
+
+- **From source:** `deno task gui` (or `deno task gui:local-backend` then navigate to `http://localhost:8787`)
+- **Desktop app:** distributed as an AppImage (Linux), DMG (Mac), or MSI (Windows). See [[analysis-linux-build]] for the build process.
+
+## Desktop App Architecture
+
+The desktop app bundles two binaries inside a Tauri shell:
+
+1. **Tauri shell** (`ebp`): a Rust binary creating a WebKit webview. Embeds a lightweight loader page from `desktop/dist/`.
+2. **Sidecar** (`ebp-gui-backend`): the Deno-compiled local backend. Serves the full frontend and all API endpoints.
+
+The loader page polls the sidecar health endpoint and redirects to `http://127.0.0.1:8787/` once ready. This avoids stale-frontend issues with Cargo caching. See [[analysis-linux-build]] for details.
+
+## Native Email
+
+The GUI includes a built-in email interface:
+
+- Connects directly over SMTP and IMAP protocols.
+- Supports OAuth with Gmail (and partially Outlook).
+- Proton Mail users need Proton Mail Bridge running.
+- Email operations integrate with EBP sign/encrypt/decrypt/verify flows.
+
+## Key Features
+
+- All CLI features in a graphical format.
+- Contact management with server fetch/publish.
+- Sign, encrypt, decrypt, verify messages.
+- File encryption and decryption.
+- Identity generation and switching.
+- Detail management (attach, revoke, push).
 
 ## Related Pages
 
 - [[component-cli]]
 - [[component-email-extension]]
+- [[component-server]]
+- [[analysis-linux-build]]
+- [[identity-model]]
 - [[overview]]
 
 ## Sources
 
 - `ReadMe.md`
-
+- `gui/local-backend/main.ts`
+- `gui/index.html`

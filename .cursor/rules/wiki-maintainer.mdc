@@ -1,3 +1,6 @@
+---
+alwaysApply: true
+---
 # EBP LLM Wiki Maintainer Rules
 
 You are maintaining a persistent markdown wiki for the EBP project.
@@ -44,6 +47,8 @@ You are maintaining a persistent markdown wiki for the EBP project.
 
 ### Ingest Workflow (new source added)
 
+Trigger: user says "ingest wiki/raw", "process raw sources", or drops files in `wiki/raw/` and asks you to process them.
+
 1. Read source from `wiki/raw/`.
 2. Produce or update a `source-summary` page in `wiki/`.
 3. Update affected entity/concept/component pages.
@@ -61,6 +66,8 @@ You are maintaining a persistent markdown wiki for the EBP project.
 5. Append a query entry to `wiki/log.md` if a new page was created.
 
 ### Lint Workflow (wiki health check)
+
+Trigger: user says "lint the wiki", "wiki health check", or "audit the wiki".
 
 Check for and fix:
 - Orphan pages (no inbound links).

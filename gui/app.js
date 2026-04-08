@@ -2663,35 +2663,84 @@ async function beginMailOAuth(provider) {
       body: JSON.stringify({ provider }),
     });
     state.mailOAuthPendingState = start.oauthState || "";
-    if (oauthStatus) oauthStatus.textContent = `Opening ${provider} OAuth sign-in...`;
 
-    // Try opening as a popup first (works in normal browsers).
-    let popup = null;
-    try { popup = window.open(start.authUrl, "ebpMailOAuth", "width=560,height=740"); } catch { /* ignore */ }
+    // Google blocks OAuth inside embedded webviews (WebKitGTK on Linux).
+    // We MUST open the auth URL in the real system browser.  Never use
+    // window.open() — it creates a WebKitGTK popup that Google rejects.
+    //
+    // Strategy: always show the URL so the user can copy-paste it as a
+    // guaranteed fallback, AND try to auto-open the system browser via
+    // multiple methods (Tauri shell API, then backend xdg-open).
 
-    if (!popup) {
-      // Popup blocked (common in Tauri/WebKitGTK on Linux).
-      // Fall back to opening in the system's default browser and polling for completion.
-      if (oauthStatus) oauthStatus.textContent = `Opening ${provider} sign-in in your browser...`;
+    // Try Tauri's shell.open API first (most reliable on desktop).
+    let browserOpened = false;
+    try {
+      if (window.__TAURI__ && window.__TAURI__.shell && window.__TAURI__.shell.open) {
+        await window.__TAURI__.shell.open(start.authUrl);
+        browserOpened = true;
+      }
+    } catch { /* Tauri shell API not available */ }
+
+    // Fallback: ask the backend to run xdg-open / open / start.
+    if (!browserOpened) {
       try {
         await api("/mail/oauth/open-browser", {
           method: "POST",
           body: JSON.stringify({ url: start.authUrl }),
         });
-      } catch {
-        // If the open-browser endpoint isn't available, show the URL as a fallback.
-        if (oauthStatus) oauthStatus.textContent = `Please open this URL in your browser to sign in:`;
-        const link = document.createElement("a");
-        link.href = start.authUrl;
-        link.target = "_blank";
-        link.rel = "noopener";
-        link.textContent = start.authUrl;
-        link.style.wordBreak = "break-all";
-        if (oauthStatus) { oauthStatus.textContent = ""; oauthStatus.appendChild(link); }
-      }
-      // Poll the backend until the OAuth flow completes (or times out).
-      pollMailOAuthCompletion(start.oauthState, provider);
+        browserOpened = true;
+      } catch { /* backend opener failed */ }
     }
+
+    // Always show the URL so the user can open/copy it manually.
+    // This is the guaranteed fallback that works regardless of platform.
+    if (oauthStatus) {
+      oauthStatus.innerHTML = "";
+      const statusMsg = document.createElement("div");
+      statusMsg.style.marginBottom = "8px";
+      if (browserOpened) {
+        statusMsg.textContent = `Sign-in page should have opened in your browser. If not, copy the URL below and open it manually:`;
+      } else {
+        statusMsg.textContent = `Open this URL in your browser to sign in with ${provider}:`;
+      }
+      const urlBox = document.createElement("input");
+      urlBox.type = "text";
+      urlBox.readOnly = true;
+      urlBox.value = start.authUrl;
+      urlBox.style.width = "100%";
+      urlBox.style.fontFamily = "monospace";
+      urlBox.style.fontSize = "0.8em";
+      urlBox.style.padding = "6px";
+      urlBox.style.boxSizing = "border-box";
+      urlBox.addEventListener("click", () => { urlBox.select(); });
+      const copyBtn = document.createElement("button");
+      copyBtn.type = "button";
+      copyBtn.textContent = "Copy URL";
+      copyBtn.className = "secondary";
+      copyBtn.style.marginTop = "6px";
+      copyBtn.addEventListener("click", () => {
+        navigator.clipboard.writeText(start.authUrl).then(() => {
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy URL"; }, 2000);
+        }).catch(() => {
+          urlBox.select();
+          document.execCommand("copy");
+          copyBtn.textContent = "Copied!";
+          setTimeout(() => { copyBtn.textContent = "Copy URL"; }, 2000);
+        });
+      });
+      const waitMsg = document.createElement("div");
+      waitMsg.className = "small muted";
+      waitMsg.style.marginTop = "8px";
+      waitMsg.textContent = "Waiting for sign-in to complete... (this page will update automatically)";
+      oauthStatus.appendChild(statusMsg);
+      oauthStatus.appendChild(urlBox);
+      oauthStatus.appendChild(copyBtn);
+      oauthStatus.appendChild(waitMsg);
+    }
+
+    // Poll the backend until the OAuth flow completes (or times out).
+    pollMailOAuthCompletion(start.oauthState, provider);
   } catch (err) {
     if (oauthStatus) oauthStatus.textContent = err.message || "OAuth start failed";
     throw err;

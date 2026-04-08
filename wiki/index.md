@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-06
+Last updated: 2026-04-08
 
 ## Overview
 
@@ -8,27 +8,31 @@ Last updated: 2026-04-06
 
 ## Cryptographic Schemes
 
-- [[ml-kem]] - ML-KEM (Kyber) usage in EBP confidentiality workflows.
-- [[slh-dsa]] - SLH-DSA (SPHINCS+) signing role and integration notes.
-- [[ml-dsa]] - ML-DSA (Dilithium) signing role and implementation notes.
+- [[ml-kem]] - ML-KEM-1024 (Kyber) usage: KEM + AES-256-GCM confidentiality workflow.
+- [[slh-dsa]] - SLH-DSA-SHA2-256s (SPHINCS+) hash-based signing; compact keys, large signatures.
+- [[ml-dsa]] - ML-DSA-87 (Dilithium) lattice-based signing; compact signatures, larger keys.
+- [[fn-dsa]] - FN-DSA (Falcon) planned future signing scheme; not yet implemented.
 
 ## Core Concepts
 
-- [[identity-model]] - Dual-key identity structure and fingerprint model.
-- [[revocation-system]] - Signed revocation certificates, nonce behavior, and status checks.
+- [[identity-model]] - Dual-key identity structure, merkle-tree fingerprints, bech32 encoding, details system.
+- [[revocation-system]] - Signed revocation certificates, nonce protection, emergency certs, server integration.
 
 ## Components
 
-- [[component-cli]] - CLI workflows for identity lifecycle and crypto operations.
-- [[component-gui]] - Graphical interface and local-backend interaction model.
-- [[component-server]] - Publish/discovery API and revocation state integration.
-- [[component-email-extension]] - Browser extension integration for webmail clients.
+- [[component-cli]] - CLI for identity lifecycle, crypto operations, and server interaction.
+- [[component-gui]] - Graphical interface with local backend, native email, and Tauri desktop packaging.
+- [[component-server]] - Publish/discovery API with identity, detail, revocation, hierarchy, and OAuth endpoints.
+- [[component-email-extension]] - Chrome extension for sign/encrypt in Gmail, Outlook, Proton Mail webmail.
+- [[component-mobile]] - React Native mobile app (under development).
 
 ## Analyses
 
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
-- [[analysis-linux-build]] - Linux install and local AppImage build flow, including required toolchain and system packages.
+- [[analysis-linux-build]] - Linux install and local AppImage build flow, including sidecar redirect architecture.
 
 ## Source Summaries
 
-- (to be populated)
+- [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).
+- [[source-fips-204]] - NIST FIPS 204: ML-DSA standard (parameter sets, security levels, EBP usage).
+- [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).

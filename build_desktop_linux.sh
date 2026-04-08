@@ -19,13 +19,29 @@ else
   echo "No build-only env file found at ${ENV_FILE} (continuing with current environment)."
 fi
 
+cd "${ROOT}"
+
+# Always rebuild the Deno sidecar BEFORE tauri build.  The tauri CLI's
+# beforeBuildCommand may not execute if the Node.js version is too old
+# for @tauri-apps/cli (optional chaining syntax requires Node 14+).
+echo "Building desktop sidecar (Deno compile)…"
+deno run --allow-run --allow-read --allow-write --allow-env ./scripts/build_desktop_backend_sidecar.ts
+
 cd "${ROOT}/desktop"
 npm install
 
-# tauri build compiles the binary and generates bundle scripts, but the
-# AppImage bundling step often fails due to a symlink bug in the gtk plugin.
-# Allow it to fail – we'll run the AppImage build ourselves afterwards.
-npm run build || echo "tauri build exited non-zero (expected – AppImage bundling issue); continuing manually…"
+# Build the Rust binary directly with cargo since the tauri CLI may crash on
+# older Node.js.  option_env!() reads MAIL_OAUTH_*_CLIENT_ID at compile time,
+# so these env vars (loaded from .env.desktop.build above) must be present.
+echo "Building Tauri Rust binary (cargo build --release)…"
+cd "${ROOT}/desktop/src-tauri"
+cargo build --release --features custom-protocol
+
+cd "${ROOT}/desktop"
+# tauri build generates the AppImage bundle scripts/scaffolding.
+# Allow it to fail – cargo already built the binary above, and the AppImage
+# bundling step often fails due to a symlink bug in the gtk plugin anyway.
+npm run build || echo "tauri build exited non-zero (expected); continuing manually…"
 
 if [ ! -f "${APPIMAGE_DIR}/build_appimage.sh" ]; then
   echo "ERROR: build_appimage.sh not found – tauri build may have failed before generating bundle scripts."
