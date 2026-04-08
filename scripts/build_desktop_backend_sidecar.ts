@@ -41,6 +41,7 @@ const compile = new Deno.Command("deno", {
     "--allow-write",
     "--allow-env",
     "--allow-net",
+    "--allow-run",
     "--allow-sys",
     "--include",
     "./gui/index.html",

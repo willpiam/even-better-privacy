@@ -2664,14 +2664,59 @@ async function beginMailOAuth(provider) {
     });
     state.mailOAuthPendingState = start.oauthState || "";
     if (oauthStatus) oauthStatus.textContent = `Opening ${provider} OAuth sign-in...`;
-    const popup = window.open(start.authUrl, "ebpMailOAuth", "width=560,height=740");
+
+    // Try opening as a popup first (works in normal browsers).
+    let popup = null;
+    try { popup = window.open(start.authUrl, "ebpMailOAuth", "width=560,height=740"); } catch { /* ignore */ }
+
     if (!popup) {
-      throw new Error("Popup blocked by browser. Please allow popups and try again.");
+      // Popup blocked (common in Tauri/WebKitGTK on Linux).
+      // Fall back to opening in the system's default browser and polling for completion.
+      if (oauthStatus) oauthStatus.textContent = `Opening ${provider} sign-in in your browser...`;
+      try {
+        await api("/mail/oauth/open-browser", {
+          method: "POST",
+          body: JSON.stringify({ url: start.authUrl }),
+        });
+      } catch {
+        // If the open-browser endpoint isn't available, show the URL as a fallback.
+        if (oauthStatus) oauthStatus.textContent = `Please open this URL in your browser to sign in:`;
+        const link = document.createElement("a");
+        link.href = start.authUrl;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.textContent = start.authUrl;
+        link.style.wordBreak = "break-all";
+        if (oauthStatus) { oauthStatus.textContent = ""; oauthStatus.appendChild(link); }
+      }
+      // Poll the backend until the OAuth flow completes (or times out).
+      pollMailOAuthCompletion(start.oauthState, provider);
     }
   } catch (err) {
     if (oauthStatus) oauthStatus.textContent = err.message || "OAuth start failed";
     throw err;
   }
+}
+
+function pollMailOAuthCompletion(oauthState, provider, intervalMs = 2000, timeoutMs = 300000) {
+  const oauthStatus = document.getElementById("mail-oauth-status");
+  const startedAt = Date.now();
+  const timer = setInterval(async () => {
+    if (Date.now() - startedAt > timeoutMs) {
+      clearInterval(timer);
+      if (oauthStatus) oauthStatus.textContent = "OAuth sign-in timed out. Please try again.";
+      return;
+    }
+    try {
+      const res = await api(`/mail/oauth/poll?state=${encodeURIComponent(oauthState)}`);
+      if (res && res.status === "complete") {
+        clearInterval(timer);
+        await completeMailOAuth(res);
+      }
+    } catch {
+      // Ignore transient poll errors; will retry on next interval.
+    }
+  }, intervalMs);
 }
 
 async function completeMailOAuth(eventData) {

@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run
 
 import { serve } from "std/http/server";
 import { loadSync } from "std/dotenv";
@@ -146,10 +146,26 @@ const STATIC_ROOT = new URL("..", import.meta.url);
 let envLoaded = false;
 function loadEnvOnce(): void {
 	if (envLoaded) return;
+	// Try loading .env from several locations so OAuth client IDs can be
+	// picked up even when the app is installed (not running from the source tree).
+	const candidates: string[] = [];
+	try { candidates.push(new URL(".env", import.meta.url).pathname); } catch { /* ignore */ }
+	const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
+	if (home) {
+		candidates.push(`${home}/.ebp/.env`);
+	}
+	// Default: CWD (Deno dotenv's default behaviour)
 	try {
 		loadSync({ export: true });
 	} catch {
-		// ignore missing .env
+		// ignore missing .env in CWD
+	}
+	for (const envPath of candidates) {
+		try {
+			loadSync({ envPath, export: true });
+		} catch {
+			// ignore missing file
+		}
 	}
 	envLoaded = true;
 }
@@ -1346,6 +1362,61 @@ async function handleRequest(req: Request): Promise<Response> {
 					headers: { "content-type": "text/html; charset=utf-8", ...CORS_HEADERS },
 				});
 			}
+		}
+
+		// Poll for OAuth completion (used when the popup couldn't be opened
+		// and the auth URL was opened in the system browser instead).
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/oauth/poll") {
+			const oauthState = toSafeString(url.searchParams.get("state"), 256);
+			if (!oauthState) throw new HttpError(STATUS.BadRequest, "state is required");
+			const completed = mailOauthCompleted.get(oauthState);
+			if (completed) {
+				return json({
+					status: "complete",
+					type: "ebp-mail-oauth-complete",
+					ok: true,
+					oauthState,
+					provider: completed.provider,
+					email: completed.email,
+				});
+			}
+			const pending = mailOauthStarts.get(oauthState);
+			if (pending) {
+				return json({ status: "pending" });
+			}
+			return json({ status: "unknown" });
+		}
+
+		// Open a URL in the user's default system browser.
+		// Fallback for environments (Tauri WebKitGTK on Linux) where window.open() is blocked.
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/open-browser") {
+			const body = await readJson<{ url?: unknown }>(req);
+			const targetUrl = typeof body.url === "string" ? body.url.trim() : "";
+			if (!targetUrl) throw new HttpError(STATUS.BadRequest, "url is required");
+			// Only allow opening https:// and http://127.0.0.1 URLs for safety.
+			if (!targetUrl.startsWith("https://") && !targetUrl.startsWith("http://127.0.0.1")) {
+				throw new HttpError(STATUS.BadRequest, "url must be https or http://127.0.0.1");
+			}
+			const os = Deno.build.os;
+			let cmd: string[];
+			if (os === "linux") {
+				cmd = ["xdg-open", targetUrl];
+			} else if (os === "darwin") {
+				cmd = ["open", targetUrl];
+			} else if (os === "windows") {
+				cmd = ["cmd", "/c", "start", "", targetUrl];
+			} else {
+				throw new HttpError(STATUS.InternalServerError, `unsupported OS for open-browser: ${os}`);
+			}
+			try {
+				const proc = new Deno.Command(cmd[0], { args: cmd.slice(1), stdout: "null", stderr: "null" });
+				const child = proc.spawn();
+				// Don't await — fire and forget. Just unref so the process doesn't block shutdown.
+				child.unref();
+			} catch (e) {
+				throw new HttpError(STATUS.InternalServerError, `failed to open browser: ${e}`);
+			}
+			return json({ ok: true });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/complete") {
