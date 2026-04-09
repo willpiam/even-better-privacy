@@ -3823,6 +3823,34 @@ async function handleRequest(req: Request): Promise<Response> {
 			return json({ identities: entries, pagination });
 		}
 
+		if (req.method === "POST" && url.pathname === "/api/v1/save-file") {
+			const body = await readJson<{
+				content?: unknown;
+				base64Content?: unknown;
+				filename?: unknown;
+				mimeType?: unknown;
+			}>(req);
+			const filename = typeof body.filename === "string" ? body.filename.trim() : "";
+			if (!filename) throw new HttpError(STATUS.BadRequest, "filename is required");
+			if (/[/\\]/.test(filename) || filename === ".." || filename === ".") {
+				throw new HttpError(STATUS.BadRequest, "filename must not contain path separators");
+			}
+			const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";
+			if (!home) throw new HttpError(STATUS.InternalServerError, "could not determine home directory");
+			const downloadsDir = `${home}/Downloads`;
+			await ensureDir(downloadsDir);
+			const filePath = `${downloadsDir}/${filename}`;
+			if (typeof body.base64Content === "string") {
+				const binary = Uint8Array.from(atob(body.base64Content), (c) => c.charCodeAt(0));
+				await Deno.writeFile(filePath, binary);
+			} else if (typeof body.content === "string") {
+				await Deno.writeTextFile(filePath, body.content);
+			} else {
+				throw new HttpError(STATUS.BadRequest, "content or base64Content is required");
+			}
+			return json({ path: filePath });
+		}
+
 		return json({ error: "not found" }, STATUS.NotFound);
 	} catch (err) {
 		if (err instanceof HttpError) {

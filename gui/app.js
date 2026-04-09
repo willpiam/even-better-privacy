@@ -693,7 +693,7 @@ async function hashTextSha256Hex(text) {
   return bytesToHex(new Uint8Array(digest));
 }
 
-async function getPayloadDownloadName(payload, fallback) {
+function getPayloadDownloadName(payload, fallback) {
   if (!payload || typeof payload !== "object") return fallback;
   switch (payload.type) {
     case "ebp-signature":
@@ -702,15 +702,10 @@ async function getPayloadDownloadName(payload, fallback) {
       if (typeof payload.messageHash === "string" && payload.messageHash.length >= 8) {
         return `ebp-signed-message-${payload.messageHash.slice(0, 8)}.json`;
       }
-      if (typeof payload.message === "string" && payload.message.length > 0) {
-        const messageHash = await hashTextSha256Hex(payload.message);
-        return `ebp-signed-message-${messageHash.slice(0, 8)}.json`;
-      }
       return "ebp-signed-message.json";
     case "ebp-signed-file":
       if (typeof payload.fileHash === "string" && payload.fileHash.length >= 8) {
-        const prefix = payload.fileHash.slice(0, 8);
-        return `ebp-signed-file-${prefix}.json`;
+        return `ebp-signed-file-${payload.fileHash.slice(0, 8)}.json`;
       }
       return "ebp-signed-file.json";
     case "ebp-encrypted-message":
@@ -732,19 +727,15 @@ async function downloadJsonFromTextarea(textareaId, fallbackName) {
 
   try {
     const payload = JSON.parse(textarea.value);
-    const filename = await getPayloadDownloadName(payload, fallbackName);
+    const filename = getPayloadDownloadName(payload, fallbackName);
     const pretty = JSON.stringify(payload, null, 2) + "\n";
-    const blob = new Blob([pretty], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    const res = await api("/save-file", {
+      method: "POST",
+      body: JSON.stringify({ content: pretty, filename }),
+    });
+    setStatus(`Saved to ${res.path}`, "success");
   } catch (err) {
-    setStatus("Output is not valid JSON", "error");
+    setStatus(err.message || "Failed to save file", "error");
   }
 }
 
@@ -4053,22 +4044,22 @@ document.getElementById("decrypt-file-form").addEventListener("submit", async (e
 
 const decFileDownloadBtn = document.getElementById("dec-file-download-btn");
 if (decFileDownloadBtn) {
-  decFileDownloadBtn.addEventListener("click", (e) => {
+  decFileDownloadBtn.addEventListener("click", async (e) => {
     e.preventDefault();
     if (!decryptedFileResult?.fileDataBase64) {
       setStatus("No decrypted file available to download", "error");
       return;
     }
-    const bytes = base64ToUint8Array(decryptedFileResult.fileDataBase64);
-    const blob = new Blob([bytes], { type: decryptedFileResult.mimeType || "application/octet-stream" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.download = safeDownloadFileName(decryptedFileResult.fileName);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    try {
+      const filename = safeDownloadFileName(decryptedFileResult.fileName);
+      const res = await api("/save-file", {
+        method: "POST",
+        body: JSON.stringify({ base64Content: decryptedFileResult.fileDataBase64, filename }),
+      });
+      setStatus(`Saved to ${res.path}`, "success");
+    } catch (err) {
+      setStatus(err.message || "Failed to save file", "error");
+    }
   });
 }
 
