@@ -1409,7 +1409,12 @@ async function handleRequest(req: Request): Promise<Response> {
 			} else if (os === "darwin") {
 				openers.push(["open", targetUrl]);
 			} else if (os === "windows") {
-				openers.push(["cmd", "/c", "start", "", targetUrl]);
+				// cmd /c start breaks URLs containing & because cmd.exe treats & as
+				// a command separator, truncating the OAuth URL before response_type.
+				// rundll32 invokes the URL protocol handler directly without shell
+				// interpretation; powershell Start-Process is a secondary fallback.
+				openers.push(["rundll32", "url.dll,FileProtocolHandler", targetUrl]);
+				openers.push(["powershell", "-NoProfile", "-Command", `Start-Process '${targetUrl.replace(/'/g, "''")}'`]);
 			} else {
 				throw new HttpError(STATUS.InternalServerError, `unsupported OS for open-browser: ${os}`);
 			}

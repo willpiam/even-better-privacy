@@ -2672,10 +2672,14 @@ async function beginMailOAuth(provider) {
     // guaranteed fallback, AND try to auto-open the system browser via
     // multiple methods (Tauri shell API, then backend xdg-open).
 
-    // Try Tauri's shell.open API first (most reliable on desktop).
+    // Try Tauri's shell.open API on non-Windows platforms.  On Windows,
+    // Tauri v1's shell::open uses cmd /c start which treats & in URLs as a
+    // command separator, truncating the OAuth query string.  Fall through to
+    // the backend opener (rundll32) instead.
+    const isWindows = /Win/.test(navigator.platform ?? "");
     let browserOpened = false;
     try {
-      if (window.__TAURI__ && window.__TAURI__.shell && window.__TAURI__.shell.open) {
+      if (!isWindows && window.__TAURI__ && window.__TAURI__.shell && window.__TAURI__.shell.open) {
         await window.__TAURI__.shell.open(start.authUrl);
         browserOpened = true;
       }
