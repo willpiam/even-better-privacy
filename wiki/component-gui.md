@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-04-08
+last_updated: 2026-04-09
 source_count: 3
 tags:
   - component
@@ -53,6 +53,22 @@ The GUI includes a built-in email interface:
 - File encryption and decryption.
 - Identity generation and switching.
 - Detail management (attach, revoke, push).
+
+## Toast Notification System
+
+The GUI uses a single `#status` element rendered as a fixed-position toast at the bottom-center of the viewport. All user-facing feedback (success, error, info) flows through the `setStatus(msg, kind)` function in `app.js`.
+
+- **Kinds:** `"success"` (green), `"error"` (red), `"info"` (accent blue, default).
+- **Auto-dismiss:** non-error toasts hide after 5 seconds; errors persist until replaced.
+- **Animation:** slides up from bottom on each new message.
+
+## File Save / Download
+
+Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save through the local backend rather than browser blob-URL downloads. This avoids silent failures in the Tauri/WebKitGTK desktop webview where programmatic `<a>` downloads do not work.
+
+- Frontend POSTs content and a suggested filename to `POST /api/v1/save-file`.
+- Backend writes to `~/Downloads/` and returns the full path.
+- The toast notification displays the saved file path.
 
 ## Related Pages
 

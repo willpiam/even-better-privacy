@@ -659,13 +659,18 @@ document.getElementById("hierarchy-tree-load-btn").addEventListener("click", asy
 // UI Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+let statusTimer = null;
 function setStatus(msg, kind = "info") {
+  if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
   statusEl.textContent = msg;
   statusEl.dataset.kind = kind;
-  // Re-trigger animation
+  statusEl.classList.remove("hidden");
   statusEl.style.animation = "none";
-  statusEl.offsetHeight; // force reflow
+  statusEl.offsetHeight;
   statusEl.style.animation = "";
+  if (kind !== "error") {
+    statusTimer = setTimeout(() => { statusEl.classList.add("hidden"); }, 5000);
+  }
 }
 
 function setButtonLoading(btn, loading) {

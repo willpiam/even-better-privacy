@@ -163,16 +163,28 @@
     }
 
     #status {
-      padding: 8px 12px;
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      padding: 10px 20px;
       border-radius: var(--radius-sm);
-      font-size: 0.8rem;
+      font-size: 0.82rem;
       font-weight: 500;
       background: var(--accent-bg);
       border: 1px solid var(--accent);
       color: var(--accent);
-      transition: all 0.3s ease;
-      animation: slideIn 0.3s ease;
-      text-align: center;
+      text-align: left;
+      max-width: min(600px, 90vw);
+      word-break: break-word;
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+      animation: toastIn 0.25s ease;
+      pointer-events: none;
+    }
+
+    #status:empty, #status.hidden {
+      display: none;
     }
 
     #status[data-kind="error"] {
@@ -219,6 +231,11 @@
     @keyframes slideIn {
       from { opacity: 0; transform: translateY(-4px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes toastIn {
+      from { opacity: 0; transform: translate(-50%, 12px); }
+      to { opacity: 1; transform: translate(-50%, 0); }
     }
 
     /* ─────────────────────────────────────────────────────────────────────────
@@ -2027,10 +2044,8 @@
         </div>
       </div>
     </nav>
-    <div class="sidebar-footer">
-      <div id="status">Loading…</div>
-    </div>
   </aside>
+  <div id="status">Loading…</div>
 
   <!-- Main Content -->
   <main class="main-content">

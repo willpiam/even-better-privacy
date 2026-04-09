@@ -41,6 +41,11 @@ Lint pass findings and fixes:
 - Fixed `gui/local-backend/main.ts` `/api/v1/fetch` handler and `mobile/src/services/contacts.ts` `normalizeExternalIdentity`.
 - Created [[analysis-sync-revoked-details-bug]] page.
 
+## [2026-04-09] update | component-gui toast and file-save docs
+
+- Documented toast notification system (setStatus, auto-dismiss, animation) in [[component-gui]].
+- Documented backend-routed file save mechanism (`POST /api/v1/save-file`) and why blob-URL downloads were replaced.
+
 ## [2026-04-05] ingest | initial-wiki-bootstrap
 
 - Initialized wiki framework structure (`wiki/`, `wiki/raw/`).
