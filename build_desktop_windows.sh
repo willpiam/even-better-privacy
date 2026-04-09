@@ -6,6 +6,7 @@ DESKTOP_DIR="${ROOT}/desktop"
 BUNDLE_DIR="${DESKTOP_DIR}/src-tauri/target/release/bundle/msi"
 MSI_OUTPUT="${ROOT}/EBP.msi"
 ENV_FILE="${ROOT}/.env.desktop.build"
+ENV_FILE_ALT="${ROOT}/env.desktop.build"
 
 echo "Building EBP desktop app for Windows (MSI)..."
 echo "Note: this script should run on Windows unless you have a configured cross-compilation toolchain."
@@ -25,6 +26,12 @@ if [ -f "${ENV_FILE}" ]; then
   set -a
   # shellcheck disable=SC1090
   . "${ENV_FILE}"
+  set +a
+elif [ -f "${ENV_FILE_ALT}" ]; then
+  echo "Loading build-only env from ${ENV_FILE_ALT} (dotfile variant not found)"
+  set -a
+  # shellcheck disable=SC1090
+  . "${ENV_FILE_ALT}"
   set +a
 else
   echo "No build-only env file found at ${ENV_FILE} (continuing with current environment)."
