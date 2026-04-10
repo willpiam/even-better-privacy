@@ -43,7 +43,7 @@ The GUI includes a built-in email interface:
 - Connects directly over SMTP and IMAP protocols.
 - Supports OAuth with Gmail (and partially Outlook).
 - Proton Mail users need Proton Mail Bridge running.
-- Email operations integrate with EBP sign/encrypt/decrypt/verify flows.
+- Email operations integrate with EBP sign/encrypt/decrypt/verify flows. See [[message-payload-formats]] for the wire format.
 
 ## Key Features
 
@@ -77,6 +77,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[component-server]]
 - [[analysis-linux-build]]
 - [[identity-model]]
+- [[message-payload-formats]]
 - [[overview]]
 
 ## Sources

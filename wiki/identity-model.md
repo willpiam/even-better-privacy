@@ -84,6 +84,7 @@ See [[revocation-system]] for how identities and individual details can be revok
 - [[ml-dsa]]
 - [[slh-dsa]]
 - [[ml-kem]]
+- [[message-payload-formats]]
 - [[revocation-system]]
 - [[component-cli]]
 - [[component-gui]]

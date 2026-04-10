@@ -56,6 +56,7 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 ## Related Pages
 
 - [[identity-model]]
+- [[message-payload-formats]]
 - [[source-fips-203]]
 - [[ml-dsa]]
 - [[slh-dsa]]

@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-08
+Last updated: 2026-04-10
 
 ## Overview
 
@@ -16,6 +16,7 @@ Last updated: 2026-04-08
 ## Core Concepts
 
 - [[identity-model]] - Dual-key identity structure, merkle-tree fingerprints, bech32 encoding, details system.
+- [[message-payload-formats]] - Wire formats for signed, encrypted, and encrypted+signed message payloads.
 - [[revocation-system]] - Signed revocation certificates, nonce protection, emergency certs, server integration.
 
 ## Components

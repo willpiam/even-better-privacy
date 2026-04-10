@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-04-10] create | message-payload-formats
+
+- Created [[message-payload-formats]] page documenting the wire format for all EBP message payload types.
+- Covers `ebp-encrypted-signed-message`, `ebp-encrypted-message`, `ebp-signed-message`, and `ebp-signature` with field-level tables.
+- Documents armor wrapping, ciphertext structure (ML-KEM encapsulated key + AES-256-GCM), inner payload layout, and the key-material-vs-fingerprint design decision.
+- Documents the GUI native email compose/decrypt flow end-to-end.
+- Added to [[index.md]] under Core Concepts.
+
 ## [2026-04-08] lint | wiki-health-check
 
 Lint pass findings and fixes:
