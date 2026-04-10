@@ -8,6 +8,13 @@
     name="description"
     content="Privacy policy for Even Better Privacy (EBP)."
   />
+  <meta property="og:title" content="EBP Privacy Policy" />
+  <meta property="og:description" content="Privacy policy for Even Better Privacy (EBP). Minimal data collection by design." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/tiny-logo.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="EBP Privacy Policy" />
+  <meta name="twitter:description" content="Privacy policy for Even Better Privacy. Minimal data collection by design." />
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/tiny-logo.png" />
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -29,7 +36,7 @@
 
     <section class="card verifier-card">
       <h2>What We Store</h2>
-      <p>We only store information that is intended to be public:</p>
+      <p>We only store information that you explicitly choose to publish:</p>
       <ul class="steps">
         <li>Public keys that you publish</li>
         <li>Signatures that you publish</li>
@@ -39,21 +46,42 @@
 
     <section class="card verifier-card">
       <h2>What We Do Not Store</h2>
-      <p>We do not store private keys or private message content.</p>
+      <p>We do not store private keys, private message content, or plaintext of encrypted communications. All encryption and decryption happens client-side.</p>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Cookies, Analytics, and Tracking</h2>
+      <p>This website and the EBP tools do not use cookies, analytics scripts, or any third-party tracking. There is no telemetry.</p>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Signature Verifier</h2>
+      <p>When you use the browser-based signature verifier, the signature payload is sent to the EBP server for verification. The server does not log request payloads or IP addresses beyond what is required for standard HTTPS transport.</p>
     </section>
 
     <section class="card verifier-card">
       <h2>Your Control</h2>
       <p>
-        You choose what to publish. If you do not publish information, we do not store it.
+        You choose what to publish. If you do not publish information, we do not store it. Published data can be revoked using EBP's built-in revocation system.
       </p>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Data Retention</h2>
+      <p>Published public keys and signatures are retained on the server until revoked by the identity owner. There is no automatic expiry at this time.</p>
     </section>
 
     <section class="card verifier-card">
       <h2>Updates</h2>
       <p>
-        This Privacy Policy may be updated without notice. Users are encouraged to review this document periodically.
+        This Privacy Policy may be updated. Material changes will be reflected in the effective date below. Users are encouraged to review this document periodically.
       </p>
+      <p><strong>Effective date:</strong> April 9, 2026</p>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Contact</h2>
+      <p>For privacy inquiries, open an issue on the <a href="https://github.com/willpiam/even-better-privacy/issues" target="_blank" rel="noreferrer">GitHub repository</a>.</p>
     </section>
   </main>
 

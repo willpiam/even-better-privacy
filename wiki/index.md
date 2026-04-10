@@ -25,6 +25,7 @@ Last updated: 2026-04-08
 - [[component-server]] - Publish/discovery API with identity, detail, revocation, hierarchy, and OAuth endpoints.
 - [[component-email-extension]] - Chrome extension for sign/encrypt in Gmail, Outlook, Proton Mail webmail.
 - [[component-mobile]] - React Native mobile app (under development).
+- [[component-website]] - Static public site with marketing landing page and browser-based signature verifier.
 
 ## Analyses
 

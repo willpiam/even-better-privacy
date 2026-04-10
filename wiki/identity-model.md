@@ -2,7 +2,7 @@
 title: "EBP Identity Model"
 type: concept
 status: active
-last_updated: 2026-04-08
+last_updated: 2026-04-09
 source_count: 4
 tags:
   - identity
@@ -59,6 +59,17 @@ Identities can have attached **details** — key-value pairs like `name`, `email
 4. Timestamps must be strictly increasing when ordered by nonce.
 
 Details can be published to the [[component-server|server]] and verified by anyone with the identity's public signing key.
+
+### Updating a Detail
+
+Each detail path (e.g. `email`, `name`) can only hold one active value at a time. **To change a detail you must revoke the existing value first, then set the new one.** The server enforces this: pushing a detail to a path that already has an unrevoked value returns a 409 Conflict error. Once the old detail is revoked (see [[revocation-system]]), the server accepts a new value at the same path.
+
+Workflow to update a detail:
+
+1. Revoke the old value — e.g. `ebp revoke-detail email --push`
+2. Set the new value — e.g. `ebp detail email newemail@example.com --push`
+
+This two-step design creates an auditable trail via signed revocation certificates and prevents silent detail replacement.
 
 ## Opaque Details
 

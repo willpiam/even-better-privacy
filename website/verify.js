@@ -6,6 +6,7 @@ const payloadJsonInput = document.getElementById("payload-json");
 const publicJsonInput = document.getElementById("public-json");
 const messageInput = document.getElementById("message");
 const fileReconstructedMessageInput = document.getElementById("file-reconstructed-message");
+const reconstructedLabel = document.getElementById("reconstructed-label");
 const verifyButton = document.getElementById("verify-btn");
 const clearButton = document.getElementById("clear-btn");
 const resultSummary = document.getElementById("result-summary");
@@ -83,6 +84,7 @@ function resetVerifierForm() {
   if (publicJsonInput) publicJsonInput.value = "";
   if (messageInput) messageInput.value = "";
   if (fileReconstructedMessageInput) fileReconstructedMessageInput.value = "";
+  if (reconstructedLabel) reconstructedLabel.style.display = "none";
   if (resultSummary) resultSummary.textContent = "No verification run yet.";
   if (resultJson) resultJson.textContent = "{}";
   if (signerDetails) signerDetails.innerHTML = "";
@@ -157,6 +159,7 @@ verifyButton.addEventListener("click", async () => {
       requestBody.message = reconstructedMessage;
       if (fileReconstructedMessageInput) {
         fileReconstructedMessageInput.value = reconstructedMessage;
+        if (reconstructedLabel) reconstructedLabel.style.display = "";
       }
 
       if (computedFileHash !== expectedFileHash) {

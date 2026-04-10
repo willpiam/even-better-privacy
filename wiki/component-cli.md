@@ -2,7 +2,7 @@
 title: "EBP CLI Component"
 type: component
 status: active
-last_updated: 2026-04-08
+last_updated: 2026-04-09
 source_count: 2
 tags:
   - component
@@ -52,6 +52,8 @@ The CLI (`cli/main.ts`) is the primary scriptable interface for identity managem
 | Command | Description |
 |---|---|
 | `detail <path> <value>` | Attach a detail (name, email, etc.) with `--push` and `--opaque` options |
+
+**Updating a detail:** You cannot overwrite an existing detail directly — the server rejects duplicate paths with a 409 error. To change a detail, revoke the old value first, then set the new one. For example, to change an email: `ebp revoke-detail email --push` followed by `ebp detail email newemail@example.com --push`. See [[identity-model#Updating a Detail]].
 
 ### Revocation
 

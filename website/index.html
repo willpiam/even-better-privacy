@@ -8,6 +8,14 @@
     name="description"
     content="EBP is a post-quantum identity and secure messaging system designed as a practical successor to PGP."
   />
+  <meta property="og:title" content="EBP — Even Better Privacy" />
+  <meta property="og:description" content="A practical successor to PGP, built for the next era of cryptography. Post-quantum signing, encryption, and identity management." />
+  <meta property="og:image" content="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/marquee-promo.png" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="EBP — Even Better Privacy" />
+  <meta name="twitter:description" content="A practical successor to PGP, built for the next era of cryptography." />
+  <meta name="twitter:image" content="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/marquee-promo.png" />
   <link rel="icon" type="image/png" href="https://raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/tiny-logo.png" />
   <link rel="preconnect" href="https://raw.githubusercontent.com" />
   <link rel="stylesheet" href="./styles.css" />
@@ -25,6 +33,7 @@
         <span>Even Better Privacy</span>
       </div>
       <div class="top-nav-actions">
+        <a class="top-nav-link" href="./verify.html">Verify Signatures</a>
         <a class="top-nav-link" href="https://williamdoyle.ca/ebp/privacy.html">Privacy Policy</a>
         <a class="button subtle" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
           View on GitHub
@@ -37,7 +46,7 @@
         <p class="eyebrow">Post-Quantum Identity + Messaging</p>
         <h1>A practical successor to PGP, built for the next era of cryptography.</h1>
         <p class="lead">
-          EBP pairs modern post-quantum signing and encryption into one simple to use identity management tool.
+          EBP pairs modern post-quantum signing and encryption into one simple-to-use identity management tool.
         </p>
         <div class="actions">
           <a class="button primary" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
@@ -64,19 +73,19 @@
         <article class="card">
           <h3>Post-Quantum by Design</h3>
           <p>
-            Uses ML-DSA / SPHINCS+ style signatures and ML-KEM style encryption workflows instead of legacy PGP assumptions.
+            Built on NIST-approved quantum-resistant algorithms (ML-DSA, SLH-DSA, ML-KEM) at Security Category 5 — not retrofitted onto legacy PGP assumptions.
           </p>
         </article>
         <article class="card">
           <h3>Identity-Centered Security</h3>
           <p>
-            Your identity combines signing and encryption keys, with a clear fingerprint for sharing and verification.
+            Your identity pairs a signing key with an encryption key under one fingerprint — easy to share, easy to verify, impossible to confuse.
           </p>
         </article>
         <article class="card">
           <h3>Real-World Controls</h3>
           <p>
-            Includes revocation support when keys or details need to be retired.
+            Revoke individual details or entire identities with signed certificates. Pre-generate emergency revocation keys for compromise scenarios, with replay-attack protection built in.
           </p>
         </article>
       </div>
@@ -88,7 +97,7 @@
         <li>Generate an identity (signing key + encryption key).</li>
         <li>Share your public identity and fingerprint.</li>
         <li>Import contacts, then sign/verify and encrypt/decrypt messages.</li>
-        <li>Use the Chromium email plugin to sign/encrypt and decrypt/verify in supported webmail.</li>
+        <li>Use the Chromium email extension to sign, encrypt, decrypt, and verify messages in supported webmail.</li>
         <li>Revoke details or full identities if trust changes.</li>
       </ol>
     </section>
@@ -96,30 +105,34 @@
     <section class="container panel">
       <h2>How to Get It</h2>
       <p class="section-lead">Choose the interface that fits your workflow:</p>
-      <div class="grid three">
-         <article class="card">
-            <h3>Desktop Application</h3>
-            <p>Get the latest desktop builds from the GitHub releases page.</p>
-            <p><a href="https://github.com/willpiam/even-better-privacy/releases" target="_blank" rel="noreferrer">View Releases</a></p>
-          </article>
+      <div class="grid two-by-two">
         <article class="card">
-          <h3>GUI</h3>
-          <p>Run the graphical interface with local backend support for day-to-day use.</p>
+          <h3>Desktop Application</h3>
+          <p>Download a ready-to-run desktop build — no dependencies needed.</p>
+          <p><a href="https://github.com/willpiam/even-better-privacy/releases" target="_blank" rel="noreferrer">View Releases</a></p>
+        </article>
+        <article class="card">
+          <h3>GUI (from source)</h3>
+          <p>Run the graphical interface from source with Deno for development or day-to-day use.</p>
           <pre><code>deno task gui</code></pre>
         </article>
         <article class="card">
           <h3>CLI</h3>
-          <p>Use the command line tools for scripting, automation, and fast key operations.</p>
+          <p>Use the command-line tools for scripting, automation, and fast key operations.</p>
           <pre><code>deno task cli --help</code></pre>
         </article>
-       
+        <article class="card">
+          <h3>Email Extension</h3>
+          <p>Sign, encrypt, decrypt, and verify messages directly inside supported Chromium-based webmail.</p>
+          <p><a href="https://github.com/willpiam/even-better-privacy/tree/master/email/chrome-extension" target="_blank" rel="noreferrer">Installation Guide</a></p>
+        </article>
       </div>
     </section>
 
     <section class="container panel cta">
       <h2>Build trust that can adapt.</h2>
       <p>
-        We believe it is important to build a flexible, adaptive post-quantum standard early so adoption can converge instead of fragment. A world where people agree on crypto standards is safer for everyone, so we welcome contributions and collaboration because it should be easier to join us than compete with us.
+        We believe it is important to build a flexible, adaptive post-quantum standard early so adoption can converge instead of fragment. A world where people agree on crypto standards is safer for everyone. We welcome contributions and collaboration — it should be easier to join us than compete with us.
       </p>
       <div class="actions">
         <a class="button primary" href="https://github.com/willpiam/even-better-privacy/tree/master" target="_blank" rel="noreferrer">
@@ -129,7 +142,7 @@
     </section>
   </main>
   <footer class="container">
-    <p><small>my other work: <a href="https://projects.williamdoyle.ca" target="_blank" rel="noreferrer">projects.williamdoyle.ca</a> | <a href="https://williamdoyle.ca/ebp/privacy.html">Privacy Policy</a></small></p>
+    <p><small>MIT Licensed &middot; <a href="https://github.com/willpiam/even-better-privacy/issues" target="_blank" rel="noreferrer">Report an Issue</a> &middot; <a href="https://williamdoyle.ca/ebp/privacy.html">Privacy Policy</a> &middot; More from <a href="https://projects.williamdoyle.ca" target="_blank" rel="noreferrer">William Doyle</a></small></p>
   </footer>
 </body>
 </html>

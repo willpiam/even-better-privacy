@@ -2,7 +2,7 @@
 title: "EBP Revocation System"
 type: concept
 status: active
-last_updated: 2026-04-08
+last_updated: 2026-04-09
 source_count: 3
 tags:
   - revocation
@@ -23,6 +23,8 @@ Removes a specific detail path (e.g., an old email) from an identity. Use cases:
 - Information has changed (new email address)
 - Information was entered incorrectly
 - Detail should no longer be associated with the identity
+
+Detail revocation is also a **prerequisite for updating a detail** — the server enforces one active value per detail path. To change an email, for example, you must revoke the old value before setting the new one. See [[identity-model#Updating a Detail]] for the full workflow.
 
 CLI: `ebp revoke-detail <path> [--reason <reason>] [--push]`
 

@@ -41,6 +41,21 @@ Lint pass findings and fixes:
 - Fixed `gui/local-backend/main.ts` `/api/v1/fetch` handler and `mobile/src/services/contacts.ts` `normalizeExternalIdentity`.
 - Created [[analysis-sync-revoked-details-bug]] page.
 
+## [2026-04-09] update | detail update workflow docs
+
+- Documented the revoke-before-replace constraint for identity details across four wiki pages.
+- [[identity-model]]: Added "Updating a Detail" subsection explaining that each path allows one active value, the server enforces this with 409 Conflict, and the two-step revoke-then-set workflow.
+- [[revocation-system]]: Added note to Detail Revocation that revocation is a prerequisite for updating a detail.
+- [[component-server]]: Added detail uniqueness enforcement note under the Details API section.
+- [[component-cli]]: Added practical workflow guidance under the Details commands section.
+
+## [2026-04-09] create | component-website
+
+- Created [[component-website]] page documenting the static public site (`website/`).
+- Covers landing page content, browser-based signature verifier (supported types, inputs, server integration), privacy page, deployment/assets, and design notes.
+- Added to [[index.md]] under Components.
+- Cross-linked from [[component-server]] (verifier is a consumer of the verify-signature endpoint).
+
 ## [2026-04-09] update | component-gui toast and file-save docs
 
 - Documented toast notification system (setStatus, auto-dismiss, animation) in [[component-gui]].

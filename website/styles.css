@@ -130,6 +130,7 @@ h1 {
   padding: 0.65rem 1rem;
   font-weight: 600;
   background: #fff;
+  cursor: pointer;
   transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease;
 }
 
@@ -152,6 +153,14 @@ h1 {
 
 .button.subtle {
   background: transparent;
+}
+
+.button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 main {
@@ -179,6 +188,10 @@ h2 {
 
 .grid.three {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.grid.two-by-two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .card {
@@ -308,7 +321,8 @@ textarea {
 
   .hero-content,
   .split,
-  .grid.three {
+  .grid.three,
+  .grid.two-by-two {
     grid-template-columns: 1fr;
   }
 

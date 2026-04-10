@@ -1034,20 +1034,21 @@ function filterContacts(input, dropdown) {
     return;
   }
 
-  // Filter contacts by name, email, or fingerprint
   const filtered = state.contacts.filter((c) => {
     const name = (c.name || "").toLowerCase();
     const fingerprint = (c.fingerprint || "").toLowerCase();
     const email = (getDetailValue(c.details, "email") || "").toLowerCase();
     const detailName = (getDetailValue(c.details, "name") || "").toLowerCase();
+    const alias = (c.localAlias || "").toLowerCase();
     
-    if (!query) return true; // Show all if no query
+    if (!query) return true;
     
     return (
       name.includes(query) ||
       fingerprint.includes(query) ||
       email.includes(query) ||
-      detailName.includes(query)
+      detailName.includes(query) ||
+      alias.includes(query)
     );
   });
 
@@ -1081,11 +1082,13 @@ function renderContactDropdown(contacts, dropdown, query, input) {
 
     const email = getDetailValue(c.details, "email");
     const detailName = getDetailValue(c.details, "name");
+    const alias = c.localAlias || '';
     const shortFp = c.fingerprint.substring(0, 24) + "...";
 
     item.innerHTML = `
       <div class="contact-search-item-name">
         ${highlightMatch(escapeHtml(c.name), query)}
+        ${alias ? `<span class="contact-alias" style="margin-left:6px">${highlightMatch(escapeHtml(alias), query)}</span>` : ""}
       </div>
       ${detailName || email ? `
         <div class="contact-search-item-details">
@@ -1349,10 +1352,13 @@ function renderContacts() {
     const emailTagTitle = emailVerified ? "Email verified" : "Email not verified";
     const isRevoked = !!c.revoked;
     
+    const alias = c.localAlias || '';
+
     li.innerHTML = `
       <div class="contact-info">
         <div class="contact-header">
           <strong>${escapeHtml(c.name)}</strong>
+          ${alias ? `<span class="contact-alias">${escapeHtml(alias)}</span>` : ''}
           ${isRevoked ? '<span class="revoked-badge">Revoked</span>' : ''}
           <span class="muted">(${escapeHtml(c.signingKeyType)}/${escapeHtml(c.encryptionKeyType)})</span>
         </div>
@@ -1419,7 +1425,12 @@ async function showContactDetails(contact) {
   
   // Show modal with contact details
   const modal = document.getElementById("contact-detail-modal");
-  document.getElementById("contact-detail-name").textContent = contact.name;
+  const nameEl = document.getElementById("contact-detail-name");
+  if (contact.localAlias) {
+    nameEl.innerHTML = `${escapeHtml(contact.name)} <span class="contact-alias">${escapeHtml(contact.localAlias)}</span>`;
+  } else {
+    nameEl.textContent = contact.name;
+  }
   document.getElementById("contact-detail-fingerprint").textContent = contact.fingerprint;
   document.getElementById("contact-detail-keytypes").textContent = `${contact.signingKeyType} / ${contact.encryptionKeyType}`;
   const revokedBanner = document.getElementById("contact-detail-revoked");
@@ -1431,6 +1442,39 @@ async function showContactDetails(contact) {
     }
   }
   document.getElementById("contact-detail-details").innerHTML = detailsHtml;
+
+  // Populate local notes fields
+  const aliasInput = document.getElementById("contact-local-alias");
+  const descInput = document.getElementById("contact-local-description");
+  aliasInput.value = contact.localAlias || '';
+  descInput.value = contact.localDescription || '';
+  const savedIndicator = document.getElementById("contact-local-notes-saved");
+  savedIndicator.classList.remove("visible");
+
+  const saveBtn = document.getElementById("contact-local-notes-save-btn");
+  const newSaveBtn = saveBtn.cloneNode(true);
+  saveBtn.parentNode.replaceChild(newSaveBtn, saveBtn);
+  newSaveBtn.addEventListener("click", async () => {
+    setButtonLoading(newSaveBtn, true);
+    try {
+      await api("/contacts/update-local-notes", {
+        method: "POST",
+        body: JSON.stringify({
+          fingerprint: contact.fingerprint,
+          localAlias: aliasInput.value,
+          localDescription: descInput.value,
+        }),
+      });
+      await loadAll();
+      savedIndicator.classList.add("visible");
+      setTimeout(() => savedIndicator.classList.remove("visible"), 2000);
+    } catch (err) {
+      setStatus(err.message, "error");
+    } finally {
+      setButtonLoading(newSaveBtn, false);
+    }
+  });
+
   document.getElementById("contact-detail-sync-btn").dataset.fingerprint = contact.fingerprint;
   document.getElementById("contact-detail-sync-btn").dataset.name = contact.name;
   document.getElementById("contact-detail-delete-btn").dataset.fingerprint = contact.fingerprint;

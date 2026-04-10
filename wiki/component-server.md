@@ -2,7 +2,7 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-04-08
+last_updated: 2026-04-09
 source_count: 2
 tags:
   - component
@@ -33,6 +33,8 @@ The server (`server/main.ts`) is the publish/discovery layer for public identiti
 | `POST` | `/api/v1/detail` | Attach a detail with signed proof |
 | `POST` | `/api/v1/verify-email/request` | Request email verification for an email detail |
 | `GET/POST` | `/api/v1/verify-email` | Email verification confirmation (browser + API) |
+
+**Detail uniqueness:** The server enforces one active value per detail path. `POST /api/v1/detail` returns **409 Conflict** if an unrevoked detail already exists at the given path. To update a detail, the old value must be revoked first (via `POST /api/v1/revoke`), after which the server accepts a new value at that path. See [[identity-model#Updating a Detail]].
 
 ### Revocation
 
@@ -95,6 +97,7 @@ The server is useful for discovery and status, but **cryptographic verification 
 
 - [[component-cli]]
 - [[component-gui]]
+- [[component-website]] — hosts a browser-based verifier that calls `POST /api/v1/verify-signature`
 - [[revocation-system]]
 - [[identity-model]]
 - [[overview]]

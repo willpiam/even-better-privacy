@@ -2102,6 +2102,8 @@ async function handleRequest(req: Request): Promise<Response> {
 					details: contact.details ?? {},
 					detailsMeta: contact.detailsMeta ?? {},
 					resolvedOpaqueDetails: contact.resolvedOpaqueDetails ?? {},
+					localAlias: (contact as Record<string, unknown>).localAlias as string | undefined,
+					localDescription: (contact as Record<string, unknown>).localDescription as string | undefined,
 				})),
 			});
 		}
@@ -2176,6 +2178,36 @@ async function handleRequest(req: Request): Promise<Response> {
 			};
 			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
 			return json({ ok: true, matched: true, path });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/contacts/update-local-notes") {
+			const body = await readJson<{
+				fingerprint?: unknown;
+				localAlias?: unknown;
+				localDescription?: unknown;
+				home?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const fingerprint = typeof body.fingerprint === "string" ? body.fingerprint : undefined;
+			if (!fingerprint) throw new HttpError(STATUS.BadRequest, "fingerprint is required");
+
+			const ctx = await getContext(home);
+			const found = await findContactRecord(ctx, fingerprint);
+			if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
+
+			const raw = found.contact as Record<string, unknown>;
+			if (typeof body.localAlias === "string") {
+				raw.localAlias = body.localAlias || undefined;
+			} else if (body.localAlias === null) {
+				delete raw.localAlias;
+			}
+			if (typeof body.localDescription === "string") {
+				raw.localDescription = body.localDescription || undefined;
+			} else if (body.localDescription === null) {
+				delete raw.localDescription;
+			}
+			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
+			return json({ ok: true, fingerprint });
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/hierarchy/create") {

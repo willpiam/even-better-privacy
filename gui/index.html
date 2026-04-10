@@ -1596,6 +1596,94 @@
       border-bottom: none;
     }
 
+    /* Local alias in contact list */
+    .contact-alias {
+      font-size: 0.85rem;
+      color: #bc8cff;
+      font-style: italic;
+    }
+
+    /* Local notes section in contact detail modal */
+    .contact-local-notes {
+      margin-top: 16px;
+      border: 1px dashed rgba(188, 140, 255, 0.35);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      background: rgba(188, 140, 255, 0.06);
+    }
+
+    .contact-local-notes-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #bc8cff;
+    }
+
+    .contact-local-notes .local-note-field {
+      margin-bottom: 10px;
+    }
+
+    .contact-local-notes .local-note-field:last-child {
+      margin-bottom: 0;
+    }
+
+    .contact-local-notes .local-note-field label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .contact-local-notes .local-note-field input,
+    .contact-local-notes .local-note-field textarea {
+      width: 100%;
+      font-size: 0.85rem;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      padding: 6px 8px;
+      font-family: inherit;
+      resize: vertical;
+    }
+
+    .contact-local-notes .local-note-field textarea {
+      min-height: 50px;
+    }
+
+    .contact-local-notes .local-note-field input:focus,
+    .contact-local-notes .local-note-field textarea:focus {
+      outline: none;
+      border-color: #bc8cff;
+      box-shadow: 0 0 0 2px rgba(188, 140, 255, 0.2);
+    }
+
+    .local-notes-save-row {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .local-notes-save-row button {
+      font-size: 0.8rem;
+      padding: 4px 12px;
+    }
+
+    .local-notes-saved {
+      font-size: 0.78rem;
+      color: var(--success);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .local-notes-saved.visible {
+      opacity: 1;
+    }
+
     /* Help text */
     .help-text {
       font-size: 0.8rem;
@@ -3075,6 +3163,21 @@
         <div class="contact-detail-server-link" id="contact-detail-server-link-container" style="display: none;">
           <span class="muted">Server API:</span>
           <a href="#" id="contact-detail-server-link" target="_blank" rel="noopener noreferrer" class="server-api-link"></a>
+        </div>
+        <div class="contact-local-notes" id="contact-detail-local-notes">
+          <div class="contact-local-notes-header">📝 Local Notes</div>
+          <div class="local-note-field">
+            <label for="contact-local-alias">Alias</label>
+            <input type="text" id="contact-local-alias" placeholder="A short alias for this contact" maxlength="80" />
+          </div>
+          <div class="local-note-field">
+            <label for="contact-local-description">Description</label>
+            <textarea id="contact-local-description" placeholder="Private notes about this contact" rows="2" maxlength="500"></textarea>
+          </div>
+          <div class="local-notes-save-row">
+            <span class="local-notes-saved" id="contact-local-notes-saved">Saved</span>
+            <button type="button" class="secondary" id="contact-local-notes-save-btn">Save Notes</button>
+          </div>
         </div>
         <div class="contact-detail-section">
           <strong>Details</strong>
