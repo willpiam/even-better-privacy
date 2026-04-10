@@ -1040,6 +1040,7 @@ function filterContacts(input, dropdown) {
     const email = (getDetailValue(c.details, "email") || "").toLowerCase();
     const detailName = (getDetailValue(c.details, "name") || "").toLowerCase();
     const alias = (c.localAlias || "").toLowerCase();
+    const localEmail = (c.localEmail || "").toLowerCase();
     
     if (!query) return true;
     
@@ -1048,7 +1049,8 @@ function filterContacts(input, dropdown) {
       fingerprint.includes(query) ||
       email.includes(query) ||
       detailName.includes(query) ||
-      alias.includes(query)
+      alias.includes(query) ||
+      localEmail.includes(query)
     );
   });
 
@@ -1083,6 +1085,7 @@ function renderContactDropdown(contacts, dropdown, query, input) {
     const email = getDetailValue(c.details, "email");
     const detailName = getDetailValue(c.details, "name");
     const alias = c.localAlias || '';
+    const dropdownEmail = email || c.localEmail || '';
     const shortFp = c.fingerprint.substring(0, 24) + "...";
 
     item.innerHTML = `
@@ -1090,10 +1093,10 @@ function renderContactDropdown(contacts, dropdown, query, input) {
         ${highlightMatch(escapeHtml(c.name), query)}
         ${alias ? `<span class="contact-alias" style="margin-left:6px">${highlightMatch(escapeHtml(alias), query)}</span>` : ""}
       </div>
-      ${detailName || email ? `
+      ${detailName || dropdownEmail ? `
         <div class="contact-search-item-details">
           ${detailName ? `<span class="contact-search-item-detail">👤 ${highlightMatch(escapeHtml(detailName), query)}</span>` : ""}
-          ${email ? `<span class="contact-search-item-detail">✉️ ${highlightMatch(escapeHtml(email), query)}</span>` : ""}
+          ${dropdownEmail ? `<span class="contact-search-item-detail">✉️ ${highlightMatch(escapeHtml(dropdownEmail), query)}</span>` : ""}
         </div>
       ` : ""}
       <div class="contact-search-item-fingerprint">${highlightMatch(escapeHtml(shortFp), query)}</div>
@@ -1353,6 +1356,8 @@ function renderContacts() {
     const isRevoked = !!c.revoked;
     
     const alias = c.localAlias || '';
+    const displayEmail = detailEmail || c.localEmail || '';
+    const isLocalEmail = !detailEmail && !!c.localEmail;
 
     li.innerHTML = `
       <div class="contact-info">
@@ -1362,10 +1367,13 @@ function renderContacts() {
           ${isRevoked ? '<span class="revoked-badge">Revoked</span>' : ''}
           <span class="muted">(${escapeHtml(c.signingKeyType)}/${escapeHtml(c.encryptionKeyType)})</span>
         </div>
-        ${detailName || detailEmail ? `
+        ${detailName || displayEmail ? `
           <div class="contact-details-preview">
             ${detailName ? `<span class="detail-tag">👤 ${escapeHtml(detailName)}</span>` : ''}
-            ${detailEmail ? `<span class="detail-tag ${emailTagClass}" title="${emailTagTitle}">✉️ ${escapeHtml(detailEmail)}</span>` : ''}
+            ${displayEmail ? (isLocalEmail
+              ? `<span class="detail-tag" title="Local email">✉️ ${escapeHtml(displayEmail)}</span>`
+              : `<span class="detail-tag ${emailTagClass}" title="${emailTagTitle}">✉️ ${escapeHtml(displayEmail)}</span>`
+            ) : ''}
           </div>
         ` : ''}
         <div class="fingerprint">${escapeHtml(c.fingerprint)}</div>
@@ -1445,8 +1453,10 @@ async function showContactDetails(contact) {
 
   // Populate local notes fields
   const aliasInput = document.getElementById("contact-local-alias");
+  const localEmailInput = document.getElementById("contact-local-email");
   const descInput = document.getElementById("contact-local-description");
   aliasInput.value = contact.localAlias || '';
+  localEmailInput.value = contact.localEmail || '';
   descInput.value = contact.localDescription || '';
   const savedIndicator = document.getElementById("contact-local-notes-saved");
   savedIndicator.classList.remove("visible");
@@ -1462,6 +1472,7 @@ async function showContactDetails(contact) {
         body: JSON.stringify({
           fingerprint: contact.fingerprint,
           localAlias: aliasInput.value,
+          localEmail: localEmailInput.value,
           localDescription: descInput.value,
         }),
       });

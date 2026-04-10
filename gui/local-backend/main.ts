@@ -2104,6 +2104,7 @@ async function handleRequest(req: Request): Promise<Response> {
 					resolvedOpaqueDetails: contact.resolvedOpaqueDetails ?? {},
 					localAlias: (contact as Record<string, unknown>).localAlias as string | undefined,
 					localDescription: (contact as Record<string, unknown>).localDescription as string | undefined,
+					localEmail: (contact as Record<string, unknown>).localEmail as string | undefined,
 				})),
 			});
 		}
@@ -2125,6 +2126,18 @@ async function handleRequest(req: Request): Promise<Response> {
 			await ensureDir(ctx.contactsDir);
 			const contactName = name ?? contact.fingerprint.substring(0, 16);
 			const contactPath = `${ctx.contactsDir}/${contactName}.json`;
+			try {
+				const existingRaw = await Deno.readTextFile(contactPath);
+				const existing = JSON.parse(existingRaw) as Record<string, unknown>;
+				const localFields = ["localAlias", "localDescription", "localEmail"] as const;
+				for (const key of localFields) {
+					if (typeof existing[key] === "string" && existing[key]) {
+						(contact as Record<string, unknown>)[key] = existing[key];
+					}
+				}
+			} catch {
+				// no existing file to preserve from
+			}
 			await Deno.writeTextFile(contactPath, JSON.stringify(contact, null, 2));
 
 			return json({ ok: true, name: contactName, fingerprint: contact.fingerprint });
@@ -2185,6 +2198,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				fingerprint?: unknown;
 				localAlias?: unknown;
 				localDescription?: unknown;
+				localEmail?: unknown;
 				home?: unknown;
 			}>(req);
 			const home = typeof body.home === "string" ? body.home : undefined;
@@ -2205,6 +2219,11 @@ async function handleRequest(req: Request): Promise<Response> {
 				raw.localDescription = body.localDescription || undefined;
 			} else if (body.localDescription === null) {
 				delete raw.localDescription;
+			}
+			if (typeof body.localEmail === "string") {
+				raw.localEmail = body.localEmail || undefined;
+			} else if (body.localEmail === null) {
+				delete raw.localEmail;
 			}
 			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
 			return json({ ok: true, fingerprint });
@@ -3622,16 +3641,22 @@ async function handleRequest(req: Request): Promise<Response> {
 			const contactPath = `${ctx.contactsDir}/${contactName}.json`;
 			try {
 				const existingRaw = await Deno.readTextFile(contactPath);
-				const existing = JSON.parse(existingRaw) as ExternalIdentity;
+				const existing = JSON.parse(existingRaw) as ExternalIdentity & Record<string, unknown>;
 				const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {}).filter(
 					([path, value]) => typeof value === "string" && details[path] !== undefined,
 				);
 				if (preservedEntries.length > 0) {
 					external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
 				}
+				const localFields = ["localAlias", "localDescription", "localEmail"] as const;
+				for (const key of localFields) {
+					if (typeof existing[key] === "string" && existing[key]) {
+						(external as Record<string, unknown>)[key] = existing[key];
+					}
+				}
 			} catch (e) {
 				if (!(e instanceof Deno.errors.NotFound)) {
-					console.warn("failed to preserve resolved opaque details during fetch sync", e);
+					console.warn("failed to preserve local data during fetch sync", e);
 				}
 			}
 			await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2));
