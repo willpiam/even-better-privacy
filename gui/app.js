@@ -356,7 +356,13 @@ function navigateTo(pageId) {
   window.location.hash = pageId;
 
   if (pageId === "mail") {
-    void ensureMailPageUnlocked();
+    void ensureMailPageUnlocked().then((unlocked) => {
+      if (unlocked && state.mailMessages.length === 0) {
+        loadMailMessages(1).catch((err) => {
+          setStatus(err.message, "error");
+        });
+      }
+    });
   }
   if (pageId === "certificates") {
     void renderCertificatesPage();
@@ -3291,6 +3297,7 @@ function initMailPage() {
         renderMailMessages();
         renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", null, null);
+        await loadMailMessages(1);
         setStatus("Mail account selected", "success");
       } catch (err) {
         setStatus(err.message, "error");
