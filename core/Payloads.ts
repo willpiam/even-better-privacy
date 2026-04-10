@@ -37,6 +37,7 @@ export type EbpEncryptedSignedMessagePayload = {
   recipientFingerprint: string;
   senderFingerprint: string;
   ciphertext: string;
+  senderIdentity?: Record<string, unknown>;
 };
 
 export type AnyMessagePayload =
@@ -99,6 +100,7 @@ export function buildEncryptedSignedMessagePayload(input: {
   recipientFingerprint: string;
   senderFingerprint: string;
   ciphertext: string;
+  senderIdentity?: Record<string, unknown>;
 }): EbpEncryptedSignedMessagePayload {
   return {
     type: "ebp-encrypted-signed-message",
@@ -106,6 +108,7 @@ export function buildEncryptedSignedMessagePayload(input: {
     recipientFingerprint: input.recipientFingerprint,
     senderFingerprint: input.senderFingerprint,
     ciphertext: input.ciphertext,
+    senderIdentity: input.senderIdentity,
   };
 }
 

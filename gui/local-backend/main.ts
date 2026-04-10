@@ -2920,6 +2920,7 @@ async function handleRequest(req: Request): Promise<Response> {
 				password?: unknown;
 				home?: unknown;
 				identity?: unknown;
+				includePublicKeys?: unknown;
 			}>(req);
 			const message = typeof body.message === "string" ? body.message : undefined;
 			const recipient = typeof body.recipient === "string" ? body.recipient : undefined;
@@ -2927,6 +2928,7 @@ async function handleRequest(req: Request): Promise<Response> {
 			const password = typeof body.password === "string" ? body.password : undefined;
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const includePublicKeys = Boolean(body.includePublicKeys);
 			if (!message) throw new HttpError(STATUS.BadRequest, "message is required");
 			if (!recipient) throw new HttpError(STATUS.BadRequest, "recipient is required");
 
@@ -2937,10 +2939,23 @@ async function handleRequest(req: Request): Promise<Response> {
 				if (!password) throw new HttpError(STATUS.BadRequest, "password is required when signing");
 				const identity = await loadIdentity(ctx, password);
 				const ciphertext = identity.signAndEncryptFor(message, contact);
+				const summary = identity.summary;
+				const senderIdentity = includePublicKeys
+					? {
+						fingerprint: summary.fingerprint,
+						signingKeyType: summary.signingKeyType,
+						encryptionKeyType: summary.encryptionKeyType,
+						signingKey: summary.signingKey,
+						encryptionKey: summary.encryptionKey,
+						signingKeyDetails: summary.signingKeyDetails,
+						encryptionKeyDetails: summary.encryptionKeyDetails,
+					}
+					: undefined;
 				return json(buildEncryptedSignedMessagePayload({
 					recipientFingerprint: contact.fingerprint,
 					senderFingerprint: identity.toFingerprint(),
 					ciphertext,
+					senderIdentity,
 				}));
 			}
 

@@ -2965,8 +2965,13 @@
         </div>
       </section>
       <section>
-        <h3>Mail Reader</h3>
+        <h3>Email</h3>
         <label class="inline">
+          <input id="settings-mail-include-public-keys" type="checkbox" checked />
+          Include your public keys in encrypted emails
+        </label>
+        <p class="small muted" style="margin-top: 8px;">When enabled, your public signing and encryption keys are attached to outbound encrypted emails so the recipient can verify your signature without a server lookup.</p>
+        <label class="inline" style="margin-top: 16px;">
           <input id="settings-mail-render-html" type="checkbox" />
           Render HTML emails when opening messages
         </label>

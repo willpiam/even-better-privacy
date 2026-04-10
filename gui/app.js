@@ -2,6 +2,7 @@ const statusEl = document.getElementById("status");
 const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
 const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
 const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
+const MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY = "ebp.mail.includePublicKeys";
 const STARTUP_RETRY_ATTEMPTS = 12;
 const STARTUP_RETRY_DELAY_MS = 500;
 const ctxCurrent = document.getElementById("ctx-current");
@@ -46,6 +47,7 @@ const state = {
   mailMessageLoading: false,
   mailMessageLoadRequestId: 0,
   mailRenderHtml: false,
+  mailIncludePublicKeys: true,
   mailOAuthPendingState: "",
   mailOAuthProvider: "",
   mailOAuthEmail: "",
@@ -73,6 +75,7 @@ function saveBooleanPreference(key, value) {
 
 function loadUiPreferences() {
   state.mailRenderHtml = loadBooleanPreference(MAIL_RENDER_HTML_PREF_KEY, false);
+  state.mailIncludePublicKeys = loadBooleanPreference(MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, true);
 }
 
 // Helper to extract name/email from details
@@ -3193,6 +3196,15 @@ function initMailPage() {
     });
   }
 
+  const includePublicKeysToggle = document.getElementById("settings-mail-include-public-keys");
+  if (includePublicKeysToggle) {
+    includePublicKeysToggle.checked = Boolean(state.mailIncludePublicKeys);
+    includePublicKeysToggle.addEventListener("change", () => {
+      state.mailIncludePublicKeys = includePublicKeysToggle.checked;
+      saveBooleanPreference(MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, state.mailIncludePublicKeys);
+    });
+  }
+
   const renderHtmlToggle = document.getElementById("settings-mail-render-html");
   if (renderHtmlToggle) {
     renderHtmlToggle.checked = Boolean(state.mailRenderHtml);
@@ -3514,6 +3526,7 @@ function initMailPage() {
                 recipient,
                 sign: true,
                 password,
+                includePublicKeys: state.mailIncludePublicKeys,
               }),
             });
             outboundBody = [

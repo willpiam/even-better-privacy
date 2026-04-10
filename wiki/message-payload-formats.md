@@ -46,8 +46,9 @@ The primary payload used by GUI native email compose (EBP mode). Provides both c
 | `recipientFingerprint` | string | Bech32 [[identity-model|fingerprint]] of the intended recipient |
 | `senderFingerprint` | string | Bech32 fingerprint of the sender/signer |
 | `ciphertext` | string | Hex-encoded [[ml-kem|ML-KEM]] ciphertext (see below) |
+| `senderIdentity` | object? | Optional: sender's public identity (keys, types, fingerprint) |
 
-**What is NOT included:** the sender's public keys. Only the fingerprint is embedded. The recipient resolves the sender's full public identity from local contacts or by fetching from the [[component-server|EBP server]] using the fingerprint.
+When `senderIdentity` is present, the recipient can verify the signature without a server lookup. This is controlled by the **"Include your public keys in encrypted emails"** setting in the GUI (enabled by default). When omitted, the recipient resolves the sender's full public identity from local contacts or by fetching from the [[component-server|EBP server]] using the fingerprint.
 
 #### Ciphertext structure
 
@@ -121,7 +122,7 @@ Same as `ebp-signed-message` but without the `message` field. The verifier must 
 
 | Payload type | Sender public keys included? | Sender fingerprint included? |
 |---|---|---|
-| `ebp-encrypted-signed-message` | No | Yes |
+| `ebp-encrypted-signed-message` | Optional (`senderIdentity` field) | Yes |
 | `ebp-encrypted-message` | N/A (no sender) | No |
 | `ebp-signed-message` | Optional (`identity` field) | Yes |
 | `ebp-signature` | Optional (`identity` field) | Yes |
