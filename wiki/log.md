@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-04-10] update | message-payload-formats receive-side handling
+
+- Updated [[message-payload-formats]] to document receive-side identity resolution priority (local contacts → server → embedded keys).
+- Documented `serverIdentityMatch` cross-check for embedded identity verification.
+- Documented sender contact auto-fill behavior.
+
 ## [2026-04-10] create | message-payload-formats
 
 - Created [[message-payload-formats]] page documenting the wire format for all EBP message payload types.

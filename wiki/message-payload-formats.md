@@ -127,10 +127,13 @@ Same as `ebp-signed-message` but without the `message` field. The verifier must 
 | `ebp-signed-message` | Optional (`identity` field) | Yes |
 | `ebp-signature` | Optional (`identity` field) | Yes |
 
-For encrypted payloads, the recipient resolves the sender's identity through:
+For encrypted payloads, the recipient resolves the sender's identity through (in priority order):
 
 1. **Local contacts** — looked up by name or fingerprint prefix.
 2. **EBP server** — `GET /api/v1/identity/{fingerprint}` as a fallback.
+3. **Embedded `senderIdentity`** — if present in the payload, the keys are verified against the `senderFingerprint` via fingerprint recomputation. If the fingerprint doesn't match the embedded keys, the embedded identity is rejected.
+
+When verification succeeds using embedded keys (i.e. the sender is not a known contact), the decrypt handler also queries the [[component-server|EBP server]] to check whether the same identity is published there. The response includes a `serverIdentityMatch` field (`true` if the server holds the same keys, `false` if the server has no record or different keys, `null` if not applicable).
 
 ## GUI Native Email Flow
 
@@ -141,7 +144,7 @@ The [[component-gui|GUI]] compose form offers two modes:
 
 GUI compose always uses `sign: true`, so outbound EBP emails are always `ebp-encrypted-signed-message`.
 
-On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts any armored EBP payload from the text or HTML body. The user then triggers decryption via `POST /api/v1/decrypt`, which decapsulates the ML-KEM ciphertext, decrypts the AES payload, and verifies the signature against the resolved sender identity.
+On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts any armored EBP payload from the text or HTML body. If the payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled. The user then triggers decryption via `POST /api/v1/decrypt`, which decapsulates the ML-KEM ciphertext, decrypts the AES payload, and verifies the signature against the resolved sender identity.
 
 ## Version Constants
 

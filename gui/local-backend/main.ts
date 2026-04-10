@@ -3005,20 +3005,22 @@ async function handleRequest(req: Request): Promise<Response> {
 					signerEmail: null,
 					signerEmailVerified: null,
 					signerMatchesSenderEmail: null,
+					serverIdentityMatch: null,
 				});
 			}
 
 			if (type === "ebp-encrypted-signed-message") {
 				const ciphertext = String(payload.ciphertext ?? "");
 				const senderFp = typeof payload.senderFingerprint === "string" ? payload.senderFingerprint : undefined;
+				const embeddedIdentity = payload.senderIdentity as Record<string, unknown> | undefined;
 				let contact: ExternalIdentity | undefined;
 				let isKnownContact = false;
 				let signerFingerprint: string | null = senderFp ?? null;
 				let signerEmail: string | null = null;
 				let signerEmailVerified: boolean | null = null;
 				let signerMatchesSenderEmail: boolean | null = null;
+				let serverIdentityMatch: boolean | null = null;
 				
-				// Helper to safely decrypt
 				const safeDecrypt = (ct: string): string => {
 					try {
 						return identity.encryptionKey.decrypt(ct);
@@ -3027,7 +3029,6 @@ async function handleRequest(req: Request): Promise<Response> {
 					}
 				};
 				
-				// Helper to try fetching identity from server
 				const tryFetchFromServer = async (fingerprint: string): Promise<ExternalIdentity | null> => {
 					if (!ctx.server) return null;
 					try {
@@ -3050,6 +3051,29 @@ async function handleRequest(req: Request): Promise<Response> {
 						return null;
 					}
 				};
+
+				const buildEmbeddedContact = (): ExternalIdentity | null => {
+					if (!embeddedIdentity) return null;
+					const signingKey = typeof embeddedIdentity.signingKey === "string" ? embeddedIdentity.signingKey : undefined;
+					const encryptionKey = typeof embeddedIdentity.encryptionKey === "string" ? embeddedIdentity.encryptionKey : undefined;
+					if (!signingKey || !encryptionKey) return null;
+					const signingKeyType = embeddedIdentity.signingKeyType === "sphincs" ? "sphincs" as const : "dilithium" as const;
+					const ext: ExternalIdentity = {
+						fingerprint: typeof embeddedIdentity.fingerprint === "string" ? embeddedIdentity.fingerprint : "",
+						signingKeyType,
+						encryptionKeyType: "kyber",
+						signingKey,
+						encryptionKey,
+						signingKeyDetails: (embeddedIdentity.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: signingKeyType === "sphincs" ? "slh_dsa_sha2_256s" : "ml_dsa87" },
+						encryptionKeyDetails: (embeddedIdentity.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
+						details: {},
+					};
+					const computed = computeExternalFingerprint(ext);
+					if (!computed) return null;
+					if (senderFp && computed !== senderFp) return null;
+					ext.fingerprint = computed;
+					return ext;
+				};
 				
 				// Try to find the sender contact
 				if (sender) {
@@ -3057,33 +3081,39 @@ async function handleRequest(req: Request): Promise<Response> {
 						contact = await loadContact(ctx, sender);
 						isKnownContact = true;
 					} catch {
-						// Sender specified but not found in contacts - try server
 						if (senderFp) {
 							contact = await tryFetchFromServer(senderFp) ?? undefined;
 						}
 						if (!contact) {
-							const message = safeDecrypt(ciphertext);
-							try {
-								const inner = JSON.parse(message);
-								return json({
-									message: inner.message ?? message,
-									verified: null,
-									verifyStatus: "sender_not_found",
-									signerFingerprint,
-									signerEmail,
-									signerEmailVerified,
-									signerMatchesSenderEmail,
-								});
-							} catch {
-								return json({
-									message,
-									verified: null,
-									verifyStatus: "sender_not_found",
-									signerFingerprint,
-									signerEmail,
-									signerEmailVerified,
-									signerMatchesSenderEmail,
-								});
+							const embedded = buildEmbeddedContact();
+							if (embedded) {
+								contact = embedded;
+							} else {
+								const message = safeDecrypt(ciphertext);
+								try {
+									const inner = JSON.parse(message);
+									return json({
+										message: inner.message ?? message,
+										verified: null,
+										verifyStatus: "sender_not_found",
+										signerFingerprint,
+										signerEmail,
+										signerEmailVerified,
+										signerMatchesSenderEmail,
+										serverIdentityMatch,
+									});
+								} catch {
+									return json({
+										message,
+										verified: null,
+										verifyStatus: "sender_not_found",
+										signerFingerprint,
+										signerEmail,
+										signerEmailVerified,
+										signerMatchesSenderEmail,
+										serverIdentityMatch,
+									});
+								}
 							}
 						}
 					}
@@ -3092,58 +3122,71 @@ async function handleRequest(req: Request): Promise<Response> {
 						contact = await loadContact(ctx, senderFp.substring(0, 16));
 						isKnownContact = true;
 					} catch {
-						// Sender fingerprint in message but not in contacts - try server
 						contact = await tryFetchFromServer(senderFp) ?? undefined;
 						if (!contact) {
-							const message = safeDecrypt(ciphertext);
-							try {
-								const inner = JSON.parse(message);
-								return json({
-									message: inner.message ?? message,
-									verified: null,
-									verifyStatus: "sender_not_in_contacts",
-									signerFingerprint,
-									signerEmail,
-									signerEmailVerified,
-									signerMatchesSenderEmail,
-								});
-							} catch {
-								return json({
-									message,
-									verified: null,
-									verifyStatus: "sender_not_in_contacts",
-									signerFingerprint,
-									signerEmail,
-									signerEmailVerified,
-									signerMatchesSenderEmail,
-								});
+							const embedded = buildEmbeddedContact();
+							if (embedded) {
+								contact = embedded;
+							} else {
+								const message = safeDecrypt(ciphertext);
+								try {
+									const inner = JSON.parse(message);
+									return json({
+										message: inner.message ?? message,
+										verified: null,
+										verifyStatus: "sender_not_in_contacts",
+										signerFingerprint,
+										signerEmail,
+										signerEmailVerified,
+										signerMatchesSenderEmail,
+										serverIdentityMatch,
+									});
+								} catch {
+									return json({
+										message,
+										verified: null,
+										verifyStatus: "sender_not_in_contacts",
+										signerFingerprint,
+										signerEmail,
+										signerEmailVerified,
+										signerMatchesSenderEmail,
+										serverIdentityMatch,
+									});
+								}
 							}
 						}
 					}
 				} else {
-					// No sender specified at all
-					const message = safeDecrypt(ciphertext);
-					try {
-						const inner = JSON.parse(message);
-						return json({
-							message: inner.message ?? message,
-							verified: null,
-							verifyStatus: "sender_not_specified",
-							signerFingerprint,
-							signerEmail,
-							signerEmailVerified,
-							signerMatchesSenderEmail,
-						});
-					} catch {
-						return json({
-							message,
-							verified: null,
-							verifyStatus: "sender_not_specified",
-							signerFingerprint,
-							signerEmail,
-							signerEmailVerified,
-							signerMatchesSenderEmail,
-						});
+					const embedded = buildEmbeddedContact();
+					if (embedded) {
+						contact = embedded;
+						signerFingerprint = embedded.fingerprint;
+					} else {
+						const message = safeDecrypt(ciphertext);
+						try {
+							const inner = JSON.parse(message);
+							return json({
+								message: inner.message ?? message,
+								verified: null,
+								verifyStatus: "sender_not_specified",
+								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
+								serverIdentityMatch,
+							});
+						} catch {
+							return json({
+								message,
+								verified: null,
+								verifyStatus: "sender_not_specified",
+								signerFingerprint,
+								signerEmail,
+								signerEmailVerified,
+								signerMatchesSenderEmail,
+								serverIdentityMatch,
+							});
+						}
 					}
 				}
 				
@@ -3175,6 +3218,7 @@ async function handleRequest(req: Request): Promise<Response> {
 								signerEmail,
 								signerEmailVerified,
 								signerMatchesSenderEmail,
+								serverIdentityMatch,
 							});
 						} catch {
 							return json({
@@ -3185,6 +3229,7 @@ async function handleRequest(req: Request): Promise<Response> {
 								signerEmail,
 								signerEmailVerified,
 								signerMatchesSenderEmail,
+								serverIdentityMatch,
 							});
 						}
 					}
@@ -3200,6 +3245,7 @@ async function handleRequest(req: Request): Promise<Response> {
 								signerEmail,
 								signerEmailVerified,
 								signerMatchesSenderEmail,
+								serverIdentityMatch,
 							});
 						} catch {
 							return json({
@@ -3210,12 +3256,40 @@ async function handleRequest(req: Request): Promise<Response> {
 								signerEmail,
 								signerEmailVerified,
 								signerMatchesSenderEmail,
+								serverIdentityMatch,
 							});
 						}
 					}
 					const result = identity.decryptAndVerify(ciphertext, contact);
+
+					// When verification used embedded keys, check the server for a matching identity
+					if (result.verified && embeddedIdentity && !isKnownContact && computedFingerprint) {
+						const serverIdentity = await tryFetchFromServer(computedFingerprint);
+						if (serverIdentity) {
+							const serverFp = computeExternalFingerprint(serverIdentity);
+							serverIdentityMatch = serverFp === computedFingerprint
+								&& serverIdentity.signingKey === contact.signingKey
+								&& serverIdentity.encryptionKey === contact.encryptionKey;
+							if (serverIdentity.details) {
+								const serverEmail = getIdentityDetailValue(serverIdentity.details, "email");
+								if (serverEmail) {
+									signerEmail = serverEmail;
+									const meta = getIdentityDetailMeta(
+										(serverIdentity as ExternalIdentity & { detailsMeta?: unknown }).detailsMeta,
+										"email",
+									);
+									signerEmailVerified = meta && typeof meta.verified === "boolean" ? Boolean(meta.verified) : null;
+									const sEnorm = extractEmailAddress(senderEmail ?? "");
+									const sigEnorm = extractEmailAddress(signerEmail ?? "");
+									if (sEnorm && sigEnorm) signerMatchesSenderEmail = sEnorm === sigEnorm;
+								}
+							}
+						} else {
+							serverIdentityMatch = false;
+						}
+					}
+
 					if (result.verified) {
-						// Signature is valid - but is this a known contact?
 						const status = isKnownContact ? "valid" : "valid_unknown_signer";
 						return json({
 							message: result.message,
@@ -3225,6 +3299,7 @@ async function handleRequest(req: Request): Promise<Response> {
 							signerEmail,
 							signerEmailVerified,
 							signerMatchesSenderEmail,
+							serverIdentityMatch,
 						});
 					} else {
 						return json({
@@ -3235,6 +3310,7 @@ async function handleRequest(req: Request): Promise<Response> {
 							signerEmail,
 							signerEmailVerified,
 							signerMatchesSenderEmail,
+							serverIdentityMatch,
 						});
 					}
 				} catch {

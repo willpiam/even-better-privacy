@@ -2490,6 +2490,21 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
+function autoFillSenderContact(detail) {
+  const senderInput = document.getElementById("mail-sender-contact");
+  if (!senderInput) return;
+  senderInput.value = "";
+  const payload = detail?.ebpPayload;
+  if (!payload || !payload.senderFingerprint) return;
+  const fp = payload.senderFingerprint;
+  const match = state.contacts.find(
+    (c) => c.fingerprint === fp || c.fingerprint?.startsWith(fp.substring(0, 16)),
+  );
+  if (match) {
+    senderInput.value = match.name || match.fingerprint;
+  }
+}
+
 function extractEbpPayloadFromText(text) {
   const start = "-----BEGIN EBP MESSAGE-----";
   const end = "-----END EBP MESSAGE-----";
@@ -2528,6 +2543,9 @@ function renderMailVerifyMeta(result) {
   }
   if (typeof result.signerMatchesSenderEmail === "boolean") {
     lines.push(`Signer email matches sender address: ${result.signerMatchesSenderEmail ? "yes" : "no"}`);
+  }
+  if (typeof result.serverIdentityMatch === "boolean") {
+    lines.push(`Server identity match: ${result.serverIdentityMatch ? "yes" : "no"}`);
   }
   metaEl.textContent = lines.join(" • ");
 }
@@ -3112,6 +3130,8 @@ function renderMailMessages() {
       renderSelectedMailMessageBody();
       updateVerifyResult("mail-verify-result", null, null);
       renderMailVerifyMeta(null);
+      const senderInput = document.getElementById("mail-sender-contact");
+      if (senderInput) senderInput.value = "";
       setMailMessageLoading(true);
       renderMailMessages();
       try {
@@ -3126,6 +3146,7 @@ function renderMailMessages() {
         renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", null, null);
         renderMailVerifyMeta(null);
+        autoFillSenderContact(detail);
       } catch (err) {
         if (requestId !== state.mailMessageLoadRequestId) return;
         setMailMessageLoading(false);
