@@ -1,5 +1,14 @@
 # Wiki Log
 
+## [2026-04-12] ingest | RFC 8391 (XMSS) and NIST SP 800-208 (Stateful HBS)
+
+- Ingested two stateful hash-based signature sources from `wiki/raw/`:
+  - `rfc8391.txt` → Created [[source-rfc-8391]] (XMSS: WOTS+, single-tree, multi-tree parameter sets, security proofs).
+  - `NIST.SP.800-208.pdf` → Created [[source-sp-800-208]] (Federal recommendation for LMS/XMSS, approved parameter sets, conformance requirements, state management).
+- Updated [[slh-dsa]] with new "Stateless vs Stateful Hash-Based Signatures" section explaining the XMSS/LMS context and why EBP chose the stateless SLH-DSA.
+- Updated [[overview]] with references to stateful HBS predecessors.
+- Updated [[index.md]] source summaries section with two new entries.
+
 ## [2026-04-10] update | message-payload-formats receive-side handling
 
 - Updated [[message-payload-formats]] to document receive-side identity resolution priority (local contacts → server → embedded keys).

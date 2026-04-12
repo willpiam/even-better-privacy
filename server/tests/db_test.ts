@@ -1,5 +1,5 @@
 import { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
-import { insertDetail, insertIdentity, ensureNewNonce, initDb } from "../db.ts";
+import { insertDetail, insertIdentity, ensureNewNonce, initDb } from "../db/index.ts";
 import { encodeProof, createSphincsIdentity } from "./helpers.ts";
 
 async function withTempDb(fn: (dbPath: string) => Promise<void>) {

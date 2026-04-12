@@ -2,8 +2,8 @@
 title: "SLH-DSA (SPHINCS+) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-08
-source_count: 3
+last_updated: 2026-04-12
+source_count: 5
 tags:
   - crypto
   - signatures
@@ -42,6 +42,10 @@ SLH-DSA provides **cryptographic diversity**. Its security rests entirely on the
 
 The tradeoff is signature size: at ~30 KB per signature, SLH-DSA signatures are roughly 6× larger than ML-DSA-87 signatures (4.6 KB). Key sizes go in the opposite direction — SLH-DSA public keys are tiny (64 bytes) vs ML-DSA-87 (2,592 bytes).
 
+## Stateless vs Stateful Hash-Based Signatures
+
+SLH-DSA is a **stateless** hash-based scheme, meaning the private key does not change between signatures. This is a deliberate design choice over the earlier **stateful** schemes XMSS ([[source-rfc-8391]]) and LMS, which NIST first approved for federal use in [[source-sp-800-208]]. Stateful schemes produce much smaller signatures (~2.8 KB for XMSS-SHA2\_20\_256) but require that a one-time key index is persisted to non-volatile storage before every signature — reusing a key index completely breaks security. SP 800-208 mandates hardware cryptographic modules (FIPS 140-3 Level 3+) to enforce this. SLH-DSA eliminates this operational burden entirely, at the cost of larger signatures, making it suitable for general-purpose software deployments like EBP.
+
 ## Fingerprint Role
 
 The signing public key forms the **left leaf** of the identity merkle tree. It is hashed as `SHA-256(base64-decoded public key bytes)`. Identities using SLH-DSA receive the bech32 human-readable prefix **`ebpsk`** (SPHINCS+ + Kyber). See [[identity-model]].
@@ -56,6 +60,8 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 
 - [[identity-model]]
 - [[source-fips-205]]
+- [[source-rfc-8391]]
+- [[source-sp-800-208]]
 - [[ml-dsa]]
 - [[ml-kem]]
 - [[revocation-system]]
@@ -66,3 +72,5 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - `ReadMe.md`
 - `core/Sphincs.ts`
 - `wiki/raw/NIST.FIPS.205.pdf` → [[source-fips-205]]
+- `wiki/raw/rfc8391.txt` → [[source-rfc-8391]]
+- `wiki/raw/NIST.SP.800-208.pdf` → [[source-sp-800-208]]

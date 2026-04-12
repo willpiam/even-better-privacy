@@ -4,10 +4,10 @@ overview: Break the 6 largest source files (ranging from 709 to 4467 lines) into
 todos:
   - id: split-gui-app
     content: Split gui/app.js (4467 lines) into ~9 ES modules under gui/js/ with app.js as thin bootstrap
-    status: pending
+    status: completed
   - id: split-local-backend
     content: Split gui/local-backend/main.ts (4014 lines) into ~8 modules (http, identity, contacts, mail-account, mail-imap, mail-oauth, hierarchy, routes)
-    status: pending
+    status: in_progress
   - id: split-server-main
     content: Split server/main.ts (2216 lines) into ~8 modules (cors, rate-limit, body, mail-oauth, verify-email, handlers/*)
     status: pending

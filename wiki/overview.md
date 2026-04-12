@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-04-08
-source_count: 5
+last_updated: 2026-04-12
+source_count: 7
 tags:
   - ebp
   - overview
@@ -34,7 +34,7 @@ EBP uses NIST FIPS post-quantum standards:
 | SLH-DSA (SPHINCS+) | FIPS 205 | Signing / Auth | SLH-DSA-SHA2-256s |
 | FN-DSA (Falcon) | (planned) | Signing / Auth | TBD |
 
-All currently used parameter sets target NIST Security Category 5. See [[source-fips-203]], [[source-fips-204]], [[source-fips-205]] for standard summaries.
+All currently used parameter sets target NIST Security Category 5. See [[source-fips-203]], [[source-fips-204]], [[source-fips-205]] for standard summaries. For background on the stateful hash-based predecessors (XMSS, LMS) that motivated SLH-DSA's stateless design, see [[source-rfc-8391]] and [[source-sp-800-208]].
 
 ## Main System Components
 
@@ -84,3 +84,5 @@ The repository is organized as a multi-surface implementation:
 - `core/Fingerprint.ts`
 - `core/Revocation.ts`
 - `core/version.ts`
+- `wiki/raw/rfc8391.txt` → [[source-rfc-8391]]
+- `wiki/raw/NIST.SP.800-208.pdf` → [[source-sp-800-208]]

@@ -18,7 +18,7 @@ import {
   insertPendingProposal,
   deletePendingProposal,
   type DatabaseAdapter,
-} from "./db.ts";
+} from "./db/index.ts";
 import type { HierarchyCertificateRow, PendingHierarchyProposalRow } from "./types.ts";
 
 function coerceNumber(value: number | string | bigint | null): number | null {

@@ -1,4 +1,4 @@
-import { ExternalIdentity } from "../core/Identity.ts";
+import { Identity, ExternalIdentity } from "../core/Identity.ts";
 import {
 	buildIdentityStateFromExternal,
 	canonicalize,
@@ -169,5 +169,55 @@ export function apiUrl(server: string, path: string): string {
 	const base = server.replace(/\/+$/, "");
 	const suffix = path.startsWith("/") ? path : `/${path}`;
 	return `${base}${suffix}`;
+}
+
+export function randomHex(byteLength = 16): string {
+	const bytes = new Uint8Array(byteLength);
+	crypto.getRandomValues(bytes);
+	return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export function baseName(path: string): string {
+	const normalized = path.replace(/\\/g, "/");
+	const parts = normalized.split("/");
+	return parts[parts.length - 1] || "encrypted.bin";
+}
+
+export function safeFileName(fileName: string): string {
+	return baseName(fileName).replace(/[\u0000-\u001F\u007F]/g, "").replace(/\.\./g, "_");
+}
+
+export async function loadIdentity(ctx: CLIContext, password?: string): Promise<{ identity: Identity; password: string }> {
+	let storageData: string;
+	try {
+		storageData = await Deno.readTextFile(ctx.identityPath);
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) {
+			console.error("No identity found. Run 'generate' first.");
+			Deno.exit(1);
+		}
+		throw e;
+	}
+
+	const pwd = password ?? await readPassword("Enter password: ");
+	
+	try {
+		const identity = Identity.fromStorageFormat(storageData, pwd);
+		return { identity, password: pwd };
+	} catch {
+		console.error("Failed to decrypt identity. Wrong password?");
+		Deno.exit(1);
+	}
+}
+
+export async function saveIdentity(ctx: CLIContext, password: string, identity: Identity): Promise<void> {
+	const baseName = ctx.currentIdentity;
+	const dir = ctx.identityDir;
+	const newPath = `${dir}/${baseName}.identity.json`;
+	
+	const storageData = identity.toStorageFormat(password);
+	await Deno.writeTextFile(newPath, storageData);
+	
+	ctx.identityPath = newPath;
 }
 

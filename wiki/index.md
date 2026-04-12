@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-10
+Last updated: 2026-04-12
 
 ## Overview
 
@@ -38,3 +38,5 @@ Last updated: 2026-04-10
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).
 - [[source-fips-204]] - NIST FIPS 204: ML-DSA standard (parameter sets, security levels, EBP usage).
 - [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).
+- [[source-rfc-8391]] - RFC 8391: XMSS stateful hash-based signature scheme (WOTS+, Merkle trees, parameter sets).
+- [[source-sp-800-208]] - NIST SP 800-208: Federal recommendation for stateful HBS schemes (LMS, XMSS, conformance requirements).
