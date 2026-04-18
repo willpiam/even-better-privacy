@@ -7,19 +7,19 @@ todos:
     status: completed
   - id: split-local-backend
     content: Split gui/local-backend/main.ts (4014 lines) into ~8 modules (http, identity, contacts, mail-account, mail-imap, mail-oauth, hierarchy, routes)
-    status: in_progress
+    status: completed
   - id: split-server-main
     content: Split server/main.ts (2216 lines) into ~8 modules (cors, rate-limit, body, mail-oauth, verify-email, handlers/*)
-    status: pending
+    status: completed
   - id: split-cli-main
     content: Split cli/main.ts (1493 lines) into ~6 command modules under cli/commands/
-    status: pending
+    status: completed
   - id: split-server-db
     content: Split server/db.ts (891 lines) into db/adapter.ts, db/sqlite.ts, db/postgres.ts, db/index.ts
-    status: pending
+    status: completed
   - id: update-wiki
     content: Update wiki pages (component-gui, component-server, component-cli, index, log) to reflect new file structures
-    status: pending
+    status: completed
 isProject: false
 ---
 

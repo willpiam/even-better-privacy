@@ -2,7 +2,7 @@
 title: "EBP CLI Component"
 type: component
 status: active
-last_updated: 2026-04-09
+last_updated: 2026-04-10
 source_count: 2
 tags:
   - component
@@ -13,7 +13,7 @@ tags:
 
 # CLI Component
 
-The CLI (`cli/main.ts`) is the primary scriptable interface for identity management, cryptographic operations, and server interaction. It runs via `deno task cli` (or as the compiled `ebp` binary).
+The CLI (`cli/main.ts`) is the primary scriptable interface for identity management, cryptographic operations, and server interaction. It runs via `deno task cli` (or as the compiled `ebp` binary). Subcommand implementations are organized in `cli/commands/` (identity, contacts, crypto, files, details, server) with shared helpers in `cli/utils.ts`.
 
 ## Commands
 
@@ -93,4 +93,4 @@ Identities are stored under `~/.ebp/` as `<name>.identity.json` files using the 
 ## Sources
 
 - `ReadMe.md`
-- `cli/main.ts`
+- `cli/main.ts`, `cli/commands/`, `cli/utils.ts`

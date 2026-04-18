@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-04-10] update | module split documentation
+
+- Updated [[component-gui]] architecture section to reflect the split of `gui/app.js` into ES modules under `gui/js/` and `gui/local-backend/main.ts` into domain modules (`routes.ts`, `http.ts`, `identity.ts`, `contacts.ts`, `mail-account.ts`, `mail-imap.ts`, `mail-oauth.ts`, `hierarchy-local.ts`).
+- Updated [[component-server]] to reflect the split of `server/main.ts` into handler modules under `server/handlers/` and infrastructure modules (`cors.ts`, `rate-limit.ts`, `body.ts`, `response.ts`, `mail-oauth.ts`, `verify-email.ts`), plus the split of `server/db.ts` into `server/db/` directory.
+- Updated [[component-cli]] to reflect the split of `cli/main.ts` into command modules under `cli/commands/`.
+
 ## [2026-04-12] ingest | RFC 8391 (XMSS) and NIST SP 800-208 (Stateful HBS)
 
 - Ingested two stateful hash-based signature sources from `wiki/raw/`:

@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-04-09
+last_updated: 2026-04-10
 source_count: 3
 tags:
   - component
@@ -18,8 +18,8 @@ The GUI provides a graphical interface over the same identity and crypto workflo
 
 ## Architecture
 
-- **Local backend** (`gui/local-backend/main.ts`): a Deno HTTP server on `http://127.0.0.1:8787` that serves the frontend and exposes REST API endpoints for all EBP operations.
-- **Frontend** (`gui/index.html` + `gui/app.js`): a single-page application that communicates with the local backend.
+- **Local backend** (`gui/local-backend/`): a Deno HTTP server on `http://127.0.0.1:8787` that serves the frontend and exposes REST API endpoints for all EBP operations. The entrypoint is `main.ts`, with route dispatch in `routes.ts` and domain logic split across `http.ts`, `identity.ts`, `contacts.ts`, `mail-account.ts`, `mail-imap.ts`, `mail-oauth.ts`, and `hierarchy-local.ts`.
+- **Frontend** (`gui/index.html` + `gui/app.js` + `gui/js/`): a single-page application that communicates with the local backend. The JS is organized into ES modules under `gui/js/` (state, UI helpers, modals, crypto utilities, contact search, renderers, hierarchy SVG, mail, revocation) with `app.js` as a thin bootstrap.
 - **Shared data model**: the GUI reads and writes the same `~/.ebp/` identity and contact files as the CLI. Both interfaces operate on the same data.
 
 ## Running
@@ -56,7 +56,7 @@ The GUI includes a built-in email interface:
 
 ## Toast Notification System
 
-The GUI uses a single `#status` element rendered as a fixed-position toast at the bottom-center of the viewport. All user-facing feedback (success, error, info) flows through the `setStatus(msg, kind)` function in `app.js`.
+The GUI uses a single `#status` element rendered as a fixed-position toast at the bottom-center of the viewport. All user-facing feedback (success, error, info) flows through the `setStatus(msg, kind)` function in `gui/js/ui.js`.
 
 - **Kinds:** `"success"` (green), `"error"` (red), `"info"` (accent blue, default).
 - **Auto-dismiss:** non-error toasts hide after 5 seconds; errors persist until replaced.
@@ -83,5 +83,5 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 ## Sources
 
 - `ReadMe.md`
-- `gui/local-backend/main.ts`
-- `gui/index.html`
+- `gui/local-backend/main.ts`, `gui/local-backend/routes.ts`
+- `gui/index.html`, `gui/app.js`, `gui/js/`

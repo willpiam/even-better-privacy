@@ -2,7 +2,7 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-04-09
+last_updated: 2026-04-10
 source_count: 2
 tags:
   - component
@@ -13,7 +13,7 @@ tags:
 
 # Server Component
 
-The server (`server/main.ts`) is the publish/discovery layer for public identities, details, and revocation state. It is a Deno HTTP server that stores data in SQLite or PostgreSQL.
+The server (`server/main.ts`) is the publish/discovery layer for public identities, details, and revocation state. It is a Deno HTTP server that stores data in SQLite or PostgreSQL. Route handlers are organized into `server/handlers/` (identity, verify, revocation, hierarchy, discovery) with shared infrastructure in `server/cors.ts`, `server/rate-limit.ts`, `server/body.ts`, `server/response.ts`, `server/mail-oauth.ts`, and `server/verify-email.ts`.
 
 ## API Endpoints
 
@@ -91,7 +91,7 @@ The server is useful for discovery and status, but **cryptographic verification 
 ## Database
 
 - Supports SQLite (default, `DB_TYPE=sqlite`) and PostgreSQL (`DB_TYPE=psql`).
-- Schema managed by `server/db.ts`.
+- Schema and adapters organized in `server/db/`: `adapter.ts` (abstract base), `sqlite.ts`, `postgres.ts`, and `index.ts` (factory + query functions).
 
 ## Related Pages
 
@@ -105,4 +105,4 @@ The server is useful for discovery and status, but **cryptographic verification 
 ## Sources
 
 - `ReadMe.md`
-- `server/main.ts`
+- `server/main.ts`, `server/handlers/`, `server/db/`
