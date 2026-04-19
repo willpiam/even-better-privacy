@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-04-18] create | EBP Security Audit — April 2026 (kickoff)
+
+- Initiated phased security audit covering crypto core, server, GUI/local-backend, desktop/Tauri, CLI, website verifier, supply chain, and identity storage. Mobile and email Chrome extension are out of scope.
+- Created `wiki/security-audit-2026-04/` with [[security-audit-2026-04/README]], [[security-audit-2026-04/threat-model]], [[security-audit-2026-04/findings]], and [[security-audit-2026-04/phase-01-scaffolding]].
+- Linked from [[index.md]] under a new "Security Audits" section.
+- Phase 1 complete: scaffolding, threat model, adversary capability matrix, trust-boundary diagram, STRIDE per component, and 11 preliminary findings raised from cryptographic pre-read.
+
 ## [2026-04-10] update | module split documentation
 
 - Updated [[component-gui]] architecture section to reflect the split of `gui/app.js` into ES modules under `gui/js/` and `gui/local-backend/main.ts` into domain modules (`routes.ts`, `http.ts`, `identity.ts`, `contacts.ts`, `mail-account.ts`, `mail-imap.ts`, `mail-oauth.ts`, `hierarchy-local.ts`).

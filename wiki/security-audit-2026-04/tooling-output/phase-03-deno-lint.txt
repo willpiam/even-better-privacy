@@ -1,0 +1,152 @@
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/state_test.ts[0m[0m[33m:1:30[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                             [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/detail_test.ts[0m[0m[33m:1:43[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assertFalse } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                          [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/integration_test.ts[0m[0m[33m:1:30[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                             [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/db_test.ts[0m[0m[33m:1:51[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                                  [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/crypto_test.ts[0m[0m[33m:1:47[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assertNotEquals } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                              [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/security_test.ts[0m[0m[33m:1:38[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assert } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                     [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/main.ts[0m[0m[33m:3:23[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m3 | [0mimport { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+ [0m[38;5;12m | [0m                      [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/revocation_test.ts[0m[0m[33m:1:51[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                                  [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`encodeProof` is never used[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/revocation_test.ts[0m[0m[33m:3:33[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m3 | [0mimport { createSphincsIdentity, encodeProof } from "./helpers.ts";
+ [0m[38;5;12m | [0m                                [0m[1m[31m^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `encodeProof as _encodeProof`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/verify-email.ts[0m[0m[33m:1:24[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport nodemailer from "npm:nodemailer";
+ [0m[38;5;12m | [0m                       [0m[1m[31m^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-unversioned-import][0m: [0m[1mMissing version in specifier[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/verify-email.ts[0m[0m[33m:1:24[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport nodemailer from "npm:nodemailer";
+ [0m[38;5;12m | [0m                       [0m[1m[31m^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add a version requirement after the package name
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unversioned-import
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/hierarchy_test.ts[0m[0m[33m:1:30[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                             [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`assert` is never used[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/search_test.ts[0m[0m[33m:1:24[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assert } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                       [0m[1m[31m^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `assert as _assert`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/search_test.ts[0m[0m[33m:1:38[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assert } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                     [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/server/tests/main_handlers_test.ts[0m[0m[33m:1:38[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                     [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+Found 15 problems
+Checked 34 files

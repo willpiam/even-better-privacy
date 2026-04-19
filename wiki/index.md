@@ -33,6 +33,10 @@ Last updated: 2026-04-10
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
 - [[analysis-linux-build]] - Linux install and local AppImage build flow, including sidecar redirect architecture.
 
+## Security Audits
+
+- [[security-audit-2026-04/README|Security Audit — April 2026]] - Phased security audit covering crypto core, server, GUI, CLI, website, supply chain, storage, and dynamic testing.
+
 ## Source Summaries
 
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).

@@ -1,0 +1,10 @@
+$ deno lint core/
+
+error[no-unused-vars]: `textEncoder` is never used
+ --> core/HierarchyCertificate.ts:6:7
+
+error[no-unused-vars]: `RevocationType` is never used
+ --> core/Identity.ts:22:10
+
+Found 2 problems
+Checked 18 files

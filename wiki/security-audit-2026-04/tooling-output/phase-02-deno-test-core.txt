@@ -1,0 +1,7 @@
+$ deno test ./test --allow-read --allow-write --allow-env
+
+ok | 84 passed | 0 failed (1m56s)
+
+Notable: emergency-revocation tests cover certificate generation and verification but do NOT exercise the
+"emergency cert is invalidated by a regular revocation that runs first" scenario. See PoC for F-CRYPTO-01
+in wiki/security-audit-2026-04/pocs/F-CRYPTO-01-emergency-nonce-collision.ts.
