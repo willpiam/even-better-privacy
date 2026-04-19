@@ -27,7 +27,7 @@ Out of scope (per requestor): [`mobile/`](../../mobile), [`email/`](../../email)
 - [[phase-02-crypto-core]] — Phase 2 notes (`core/`).
 - [[phase-03-server]] — Phase 3 notes (`server/`).
 - [[phase-04-gui]] — Phase 4 notes (`gui/`, `gui/local-backend/`).
-- [[phase-05-cli-website-desktop]] — Phase 5 notes (CLI, website verifier, Tauri).
+- [[phase-05-cli-website-tauri]] — Phase 5 notes (CLI, website verifier, Tauri).
 - [[phase-06-supply-chain]] — Phase 6 notes (deps + build).
 - [[phase-07-storage]] — Phase 7 notes (`~/.ebp/`, key management).
 - [[phase-08-dynamic]] — Phase 8 notes (dynamic testing + PoCs).
@@ -50,12 +50,16 @@ Findings use the standard severity rubric **Critical / High / Medium / Low / Inf
 
 | Phase | Status |
 |---|---|
-| 1. Scaffolding + threat model | in progress |
-| 2. Crypto core | pending |
-| 3. Server | pending |
-| 4. GUI local backend + frontend | pending |
-| 5. CLI, website verifier, Tauri | pending |
-| 6. Supply chain + build | pending |
-| 7. Identity storage | pending |
-| 8. Dynamic testing | pending |
-| 9. Final report | pending |
+| 1. Scaffolding + threat model | completed |
+| 2. Crypto core | completed |
+| 3. Server | completed |
+| 4. GUI local backend + frontend | completed |
+| 5. CLI, website verifier, Tauri | completed |
+| 6. Supply chain + build | completed |
+| 7. Identity storage | completed |
+| 8. Dynamic testing | completed |
+| 9. Final report | completed |
+
+## Result
+
+**75 findings** across the codebase. Most severe: **F-GUI-01** (Critical) — universal cross-origin access to the GUI local backend. See [[report]] for the executive summary, prioritised remediation roadmap, and adversary-by-adversary risk analysis. See [[findings]] for the complete findings table.

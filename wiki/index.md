@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-10
+Last updated: 2026-04-18
 
 ## Overview
 
@@ -35,7 +35,7 @@ Last updated: 2026-04-10
 
 ## Security Audits
 
-- [[security-audit-2026-04/README|Security Audit — April 2026]] - Phased security audit covering crypto core, server, GUI, CLI, website, supply chain, storage, and dynamic testing.
+- [[security-audit-2026-04/README|Security Audit — April 2026]] - Phased security audit covering crypto core, server, GUI, CLI, website, supply chain, storage, and dynamic testing. **Completed 2026-04-18** with 75 findings; see [[security-audit-2026-04/report|final report]] and [[security-audit-2026-04/findings|findings register]].
 
 ## Source Summaries
 

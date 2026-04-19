@@ -1,0 +1,520 @@
+    Fetching advisory database from `https://github.com/RustSec/advisory-db.git`
+      Loaded 1049 security advisories (from /home/william/.cargo/advisory-db)
+    Updating crates.io index
+    Scanning Cargo.lock for vulnerabilities (397 crate dependencies)
+Crate:     tar
+Version:   0.4.44
+Title:     tar-rs incorrectly ignores PAX size headers if header size is nonzero
+Date:      2026-03-19
+ID:        RUSTSEC-2026-0068
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0068
+Severity:  5.1 (medium)
+Solution:  Upgrade to >=0.4.45
+Dependency tree:
+tar 0.4.44
+└── tauri 1.8.3
+    └── ebp_desktop 0.1.0
+
+Crate:     tar
+Version:   0.4.44
+Title:     `unpack_in` can chmod arbitrary directories by following symlinks
+Date:      2026-03-19
+ID:        RUSTSEC-2026-0067
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0067
+Severity:  5.1 (medium)
+Solution:  Upgrade to >=0.4.45
+
+Crate:     atk
+Version:   0.15.1
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0413
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0413
+Dependency tree:
+atk 0.15.1
+└── gtk 0.15.5
+    ├── wry 0.24.11
+    │   └── tauri-runtime-wry 0.14.11
+    │       └── tauri 1.8.3
+    │           └── ebp_desktop 0.1.0
+    ├── webkit2gtk 0.18.2
+    │   ├── wry 0.24.11
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri-runtime-wry 0.14.11
+    ├── tauri-runtime 0.14.6
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri 1.8.3
+    └── tao 0.16.10
+        └── wry 0.24.11
+
+Crate:     atk-sys
+Version:   0.15.1
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0416
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0416
+Dependency tree:
+atk-sys 0.15.1
+├── webkit2gtk-sys 0.18.0
+│   ├── wry 0.24.11
+│   │   └── tauri-runtime-wry 0.14.11
+│   │       └── tauri 1.8.3
+│   │           └── ebp_desktop 0.1.0
+│   └── webkit2gtk 0.18.2
+│       ├── wry 0.24.11
+│       ├── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+├── gtk-sys 0.15.3
+│   ├── webkit2gtk-sys 0.18.0
+│   ├── webkit2gtk 0.18.2
+│   └── gtk 0.15.5
+│       ├── wry 0.24.11
+│       ├── webkit2gtk 0.18.2
+│       ├── tauri-runtime-wry 0.14.11
+│       ├── tauri-runtime 0.14.6
+│       │   ├── tauri-runtime-wry 0.14.11
+│       │   └── tauri 1.8.3
+│       ├── tauri 1.8.3
+│       └── tao 0.16.10
+│           └── wry 0.24.11
+└── atk 0.15.1
+    └── gtk 0.15.5
+
+Crate:     fxhash
+Version:   0.2.1
+Warning:   unmaintained
+Title:     fxhash - no longer maintained
+Date:      2025-09-05
+ID:        RUSTSEC-2025-0057
+URL:       https://rustsec.org/advisories/RUSTSEC-2025-0057
+Dependency tree:
+fxhash 0.2.1
+└── selectors 0.22.0
+    └── kuchikiki 0.8.2
+        ├── wry 0.24.11
+        │   └── tauri-runtime-wry 0.14.11
+        │       └── tauri 1.8.3
+        │           └── ebp_desktop 0.1.0
+        └── tauri-utils 1.6.2
+            ├── tauri-runtime-wry 0.14.11
+            ├── tauri-runtime 0.14.6
+            │   ├── tauri-runtime-wry 0.14.11
+            │   └── tauri 1.8.3
+            ├── tauri-macros 1.4.7
+            │   └── tauri 1.8.3
+            ├── tauri-codegen 1.4.6
+            │   └── tauri-macros 1.4.7
+            ├── tauri-build 1.5.6
+            │   └── ebp_desktop 0.1.0
+            └── tauri 1.8.3
+
+Crate:     gdk
+Version:   0.15.4
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0412
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0412
+Dependency tree:
+gdk 0.15.4
+├── wry 0.24.11
+│   └── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+│           └── ebp_desktop 0.1.0
+├── webkit2gtk 0.18.2
+│   ├── wry 0.24.11
+│   ├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+├── tao 0.16.10
+│   └── wry 0.24.11
+└── gtk 0.15.5
+    ├── wry 0.24.11
+    ├── webkit2gtk 0.18.2
+    ├── tauri-runtime-wry 0.14.11
+    ├── tauri-runtime 0.14.6
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri 1.8.3
+    └── tao 0.16.10
+
+Crate:     gdk-sys
+Version:   0.15.1
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0418
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0418
+Dependency tree:
+gdk-sys 0.15.1
+├── webkit2gtk-sys 0.18.0
+│   ├── wry 0.24.11
+│   │   └── tauri-runtime-wry 0.14.11
+│   │       └── tauri 1.8.3
+│   │           └── ebp_desktop 0.1.0
+│   └── webkit2gtk 0.18.2
+│       ├── wry 0.24.11
+│       ├── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+├── webkit2gtk 0.18.2
+├── tao 0.16.10
+│   └── wry 0.24.11
+├── gtk-sys 0.15.3
+│   ├── webkit2gtk-sys 0.18.0
+│   ├── webkit2gtk 0.18.2
+│   └── gtk 0.15.5
+│       ├── wry 0.24.11
+│       ├── webkit2gtk 0.18.2
+│       ├── tauri-runtime-wry 0.14.11
+│       ├── tauri-runtime 0.14.6
+│       │   ├── tauri-runtime-wry 0.14.11
+│       │   └── tauri 1.8.3
+│       ├── tauri 1.8.3
+│       └── tao 0.16.10
+├── gdkx11-sys 0.15.1
+│   └── tao 0.16.10
+├── gdkwayland-sys 0.15.3
+│   └── tao 0.16.10
+└── gdk 0.15.4
+    ├── wry 0.24.11
+    ├── webkit2gtk 0.18.2
+    ├── tao 0.16.10
+    └── gtk 0.15.5
+
+Crate:     gdkwayland-sys
+Version:   0.15.3
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0411
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0411
+Dependency tree:
+gdkwayland-sys 0.15.3
+└── tao 0.16.10
+    └── wry 0.24.11
+        └── tauri-runtime-wry 0.14.11
+            └── tauri 1.8.3
+                └── ebp_desktop 0.1.0
+
+Crate:     gdkx11-sys
+Version:   0.15.1
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0414
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0414
+Dependency tree:
+gdkx11-sys 0.15.1
+└── tao 0.16.10
+    └── wry 0.24.11
+        └── tauri-runtime-wry 0.14.11
+            └── tauri 1.8.3
+                └── ebp_desktop 0.1.0
+
+Crate:     gtk
+Version:   0.15.5
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0415
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0415
+Dependency tree:
+gtk 0.15.5
+├── wry 0.24.11
+│   └── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+│           └── ebp_desktop 0.1.0
+├── webkit2gtk 0.18.2
+│   ├── wry 0.24.11
+│   ├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+├── tauri-runtime-wry 0.14.11
+├── tauri-runtime 0.14.6
+│   ├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+├── tauri 1.8.3
+└── tao 0.16.10
+    └── wry 0.24.11
+
+Crate:     gtk-sys
+Version:   0.15.3
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0420
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0420
+Dependency tree:
+gtk-sys 0.15.3
+├── webkit2gtk-sys 0.18.0
+│   ├── wry 0.24.11
+│   │   └── tauri-runtime-wry 0.14.11
+│   │       └── tauri 1.8.3
+│   │           └── ebp_desktop 0.1.0
+│   └── webkit2gtk 0.18.2
+│       ├── wry 0.24.11
+│       ├── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+├── webkit2gtk 0.18.2
+└── gtk 0.15.5
+    ├── wry 0.24.11
+    ├── webkit2gtk 0.18.2
+    ├── tauri-runtime-wry 0.14.11
+    ├── tauri-runtime 0.14.6
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri 1.8.3
+    └── tao 0.16.10
+        └── wry 0.24.11
+
+Crate:     gtk3-macros
+Version:   0.15.6
+Warning:   unmaintained
+Title:     gtk-rs GTK3 bindings - no longer maintained
+Date:      2024-03-04
+ID:        RUSTSEC-2024-0419
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0419
+Dependency tree:
+gtk3-macros 0.15.6
+└── gtk 0.15.5
+    ├── wry 0.24.11
+    │   └── tauri-runtime-wry 0.14.11
+    │       └── tauri 1.8.3
+    │           └── ebp_desktop 0.1.0
+    ├── webkit2gtk 0.18.2
+    │   ├── wry 0.24.11
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri-runtime-wry 0.14.11
+    ├── tauri-runtime 0.14.6
+    │   ├── tauri-runtime-wry 0.14.11
+    │   └── tauri 1.8.3
+    ├── tauri 1.8.3
+    └── tao 0.16.10
+        └── wry 0.24.11
+
+Crate:     instant
+Version:   0.1.13
+Warning:   unmaintained
+Title:     `instant` is unmaintained
+Date:      2024-09-01
+ID:        RUSTSEC-2024-0384
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0384
+Dependency tree:
+instant 0.1.13
+└── tao 0.16.10
+    └── wry 0.24.11
+        └── tauri-runtime-wry 0.14.11
+            └── tauri 1.8.3
+                └── ebp_desktop 0.1.0
+
+Crate:     proc-macro-error
+Version:   1.0.4
+Warning:   unmaintained
+Title:     proc-macro-error is unmaintained
+Date:      2024-09-01
+ID:        RUSTSEC-2024-0370
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0370
+Dependency tree:
+proc-macro-error 1.0.4
+├── gtk3-macros 0.15.6
+│   └── gtk 0.15.5
+│       ├── wry 0.24.11
+│       │   └── tauri-runtime-wry 0.14.11
+│       │       └── tauri 1.8.3
+│       │           └── ebp_desktop 0.1.0
+│       ├── webkit2gtk 0.18.2
+│       │   ├── wry 0.24.11
+│       │   ├── tauri-runtime-wry 0.14.11
+│       │   └── tauri 1.8.3
+│       ├── tauri-runtime-wry 0.14.11
+│       ├── tauri-runtime 0.14.6
+│       │   ├── tauri-runtime-wry 0.14.11
+│       │   └── tauri 1.8.3
+│       ├── tauri 1.8.3
+│       └── tao 0.16.10
+│           └── wry 0.24.11
+└── glib-macros 0.15.13
+    └── glib 0.15.12
+        ├── wry 0.24.11
+        ├── webkit2gtk 0.18.2
+        ├── tauri 1.8.3
+        ├── tao 0.16.10
+        ├── soup2 0.2.1
+        │   ├── wry 0.24.11
+        │   └── webkit2gtk 0.18.2
+        ├── pango 0.15.10
+        │   ├── gtk 0.15.5
+        │   └── gdk 0.15.4
+        │       ├── wry 0.24.11
+        │       ├── webkit2gtk 0.18.2
+        │       ├── tao 0.16.10
+        │       └── gtk 0.15.5
+        ├── javascriptcore-rs 0.16.0
+        │   └── webkit2gtk 0.18.2
+        ├── gtk 0.15.5
+        ├── gio 0.15.12
+        │   ├── wry 0.24.11
+        │   ├── webkit2gtk 0.18.2
+        │   ├── tao 0.16.10
+        │   ├── soup2 0.2.1
+        │   ├── gtk 0.15.5
+        │   ├── gdk-pixbuf 0.15.11
+        │   │   ├── tao 0.16.10
+        │   │   ├── gtk 0.15.5
+        │   │   └── gdk 0.15.4
+        │   └── gdk 0.15.4
+        ├── gdk-pixbuf 0.15.11
+        ├── gdk 0.15.4
+        ├── cairo-rs 0.15.12
+        │   ├── webkit2gtk 0.18.2
+        │   ├── tao 0.16.10
+        │   ├── gtk 0.15.5
+        │   └── gdk 0.15.4
+        └── atk 0.15.1
+            └── gtk 0.15.5
+
+Crate:     glib
+Version:   0.15.12
+Warning:   unsound
+Title:     Unsoundness in `Iterator` and `DoubleEndedIterator` impls for `glib::VariantStrIter`
+Date:      2024-03-30
+ID:        RUSTSEC-2024-0429
+URL:       https://rustsec.org/advisories/RUSTSEC-2024-0429
+Dependency tree:
+glib 0.15.12
+├── wry 0.24.11
+│   └── tauri-runtime-wry 0.14.11
+│       └── tauri 1.8.3
+│           └── ebp_desktop 0.1.0
+├── webkit2gtk 0.18.2
+│   ├── wry 0.24.11
+│   ├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+├── tauri 1.8.3
+├── tao 0.16.10
+│   └── wry 0.24.11
+├── soup2 0.2.1
+│   ├── wry 0.24.11
+│   └── webkit2gtk 0.18.2
+├── pango 0.15.10
+│   ├── gtk 0.15.5
+│   │   ├── wry 0.24.11
+│   │   ├── webkit2gtk 0.18.2
+│   │   ├── tauri-runtime-wry 0.14.11
+│   │   ├── tauri-runtime 0.14.6
+│   │   │   ├── tauri-runtime-wry 0.14.11
+│   │   │   └── tauri 1.8.3
+│   │   ├── tauri 1.8.3
+│   │   └── tao 0.16.10
+│   └── gdk 0.15.4
+│       ├── wry 0.24.11
+│       ├── webkit2gtk 0.18.2
+│       ├── tao 0.16.10
+│       └── gtk 0.15.5
+├── javascriptcore-rs 0.16.0
+│   └── webkit2gtk 0.18.2
+├── gtk 0.15.5
+├── gio 0.15.12
+│   ├── wry 0.24.11
+│   ├── webkit2gtk 0.18.2
+│   ├── tao 0.16.10
+│   ├── soup2 0.2.1
+│   ├── gtk 0.15.5
+│   ├── gdk-pixbuf 0.15.11
+│   │   ├── tao 0.16.10
+│   │   ├── gtk 0.15.5
+│   │   └── gdk 0.15.4
+│   └── gdk 0.15.4
+├── gdk-pixbuf 0.15.11
+├── gdk 0.15.4
+├── cairo-rs 0.15.12
+│   ├── webkit2gtk 0.18.2
+│   ├── tao 0.16.10
+│   ├── gtk 0.15.5
+│   └── gdk 0.15.4
+└── atk 0.15.1
+    └── gtk 0.15.5
+
+Crate:     rand
+Version:   0.7.3
+Warning:   unsound
+Title:     Rand is unsound with a custom logger using `rand::rng()`
+Date:      2026-04-09
+ID:        RUSTSEC-2026-0097
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0097
+Dependency tree:
+rand 0.7.3
+└── phf_generator 0.8.0
+    ├── phf_macros 0.8.0
+    │   └── phf 0.8.0
+    │       ├── selectors 0.22.0
+    │       │   └── kuchikiki 0.8.2
+    │       │       ├── wry 0.24.11
+    │       │       │   └── tauri-runtime-wry 0.14.11
+    │       │       │       └── tauri 1.8.3
+    │       │       │           └── ebp_desktop 0.1.0
+    │       │       └── tauri-utils 1.6.2
+    │       │           ├── tauri-runtime-wry 0.14.11
+    │       │           ├── tauri-runtime 0.14.6
+    │       │           │   ├── tauri-runtime-wry 0.14.11
+    │       │           │   └── tauri 1.8.3
+    │       │           ├── tauri-macros 1.4.7
+    │       │           │   └── tauri 1.8.3
+    │       │           ├── tauri-codegen 1.4.6
+    │       │           │   └── tauri-macros 1.4.7
+    │       │           ├── tauri-build 1.5.6
+    │       │           │   └── ebp_desktop 0.1.0
+    │       │           └── tauri 1.8.3
+    │       └── cssparser 0.27.2
+    │           ├── selectors 0.22.0
+    │           └── kuchikiki 0.8.2
+    └── phf_codegen 0.8.0
+        └── selectors 0.22.0
+
+Crate:     rand
+Version:   0.8.5
+Warning:   unsound
+Title:     Rand is unsound with a custom logger using `rand::rng()`
+Date:      2026-04-09
+ID:        RUSTSEC-2026-0097
+URL:       https://rustsec.org/advisories/RUSTSEC-2026-0097
+Dependency tree:
+rand 0.8.5
+├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+│       └── ebp_desktop 0.1.0
+├── tauri-runtime 0.14.6
+│   ├── tauri-runtime-wry 0.14.11
+│   └── tauri 1.8.3
+├── tauri 1.8.3
+├── phf_generator 0.11.3
+│   ├── string_cache_codegen 0.5.4
+│   │   └── markup5ever 0.11.0
+│   │       └── html5ever 0.26.0
+│   │           ├── wry 0.24.11
+│   │           │   └── tauri-runtime-wry 0.14.11
+│   │           ├── tauri-utils 1.6.2
+│   │           │   ├── tauri-runtime-wry 0.14.11
+│   │           │   ├── tauri-runtime 0.14.6
+│   │           │   ├── tauri-macros 1.4.7
+│   │           │   │   └── tauri 1.8.3
+│   │           │   ├── tauri-codegen 1.4.6
+│   │           │   │   └── tauri-macros 1.4.7
+│   │           │   ├── tauri-build 1.5.6
+│   │           │   │   └── ebp_desktop 0.1.0
+│   │           │   └── tauri 1.8.3
+│   │           └── kuchikiki 0.8.2
+│   │               ├── wry 0.24.11
+│   │               └── tauri-utils 1.6.2
+│   └── phf_macros 0.11.3
+│       └── phf 0.11.3
+│           └── tauri-utils 1.6.2
+└── phf_generator 0.10.0
+    └── phf_codegen 0.10.0
+        └── markup5ever 0.11.0
+
+error: 2 vulnerabilities found!
+warning: 15 allowed warnings found

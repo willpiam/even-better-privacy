@@ -1,0 +1,86 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "imapflow": {
+      "name": "imapflow",
+      "severity": "low",
+      "isDirect": true,
+      "via": [
+        "nodemailer"
+      ],
+      "effects": [],
+      "range": "1.0.77 - 1.2.16",
+      "nodes": [
+        "node_modules/imapflow"
+      ],
+      "fixAvailable": true
+    },
+    "mailparser": {
+      "name": "mailparser",
+      "severity": "low",
+      "isDirect": true,
+      "via": [
+        "nodemailer"
+      ],
+      "effects": [],
+      "range": "2.3.1 - 3.9.5",
+      "nodes": [
+        "node_modules/mailparser"
+      ],
+      "fixAvailable": true
+    },
+    "nodemailer": {
+      "name": "nodemailer",
+      "severity": "moderate",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1115470,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer has SMTP command injection due to unsanitized `envelope.size` parameter",
+          "url": "https://github.com/advisories/GHSA-c7w3-x93f-qmm8",
+          "severity": "low",
+          "range": "<8.0.4"
+        },
+        {
+          "source": 1116270,
+          "name": "nodemailer",
+          "dependency": "nodemailer",
+          "title": "Nodemailer Vulnerable to SMTP Command Injection via CRLF in Transport name Option (EHLO/HELO) ",
+          "url": "https://github.com/advisories/GHSA-vvjj-xcjg-gr5g",
+          "severity": "moderate",
+          "range": "<=8.0.4"
+        }
+      ],
+      "effects": [
+        "imapflow",
+        "mailparser"
+      ],
+      "range": "<=8.0.4",
+      "nodes": [
+        "node_modules/mailparser/node_modules/nodemailer",
+        "node_modules/nodemailer"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 2,
+      "moderate": 1,
+      "high": 0,
+      "critical": 0,
+      "total": 3
+    },
+    "dependencies": {
+      "prod": 47,
+      "dev": 4,
+      "optional": 1,
+      "peer": 0,
+      "peerOptional": 0,
+      "total": 50
+    }
+  }
+}

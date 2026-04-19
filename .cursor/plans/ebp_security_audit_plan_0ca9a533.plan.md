@@ -13,22 +13,22 @@ todos:
     status: completed
   - id: phase4
     content: Phase 4 — GUI local backend + frontend review (gui/)
-    status: in_progress
+    status: completed
   - id: phase5
     content: Phase 5 — CLI, website verifier, Desktop/Tauri shell
-    status: pending
+    status: completed
   - id: phase6
     content: Phase 6 — Supply chain + build pipeline (Deno/npm/Rust deps, Dockerfile, build scripts, secret scan)
-    status: pending
+    status: completed
   - id: phase7
     content: Phase 7 — Identity storage & key-management review (~/.ebp, AES, KDF, perms)
-    status: pending
+    status: completed
   - id: phase8
     content: Phase 8 — Dynamic testing, fuzzing, exploit PoCs
-    status: pending
+    status: completed
   - id: phase9
     content: Phase 9 — Final report synthesis + wiki integration
-    status: pending
+    status: completed
 isProject: false
 ---
 

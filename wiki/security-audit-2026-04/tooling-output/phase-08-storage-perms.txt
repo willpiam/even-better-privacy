@@ -1,0 +1,4 @@
+tmp dir: /tmp/ebp-storage-poc-4ab857202d71f8dd
+~/.ebp                            mode = 40775 (want 0700)
+~/.ebp/audit-test.identity.json   mode = 100664 (want 0600)
+~/.ebp/state.json                 mode = 100664 (want 0600)

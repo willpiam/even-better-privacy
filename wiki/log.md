@@ -1,5 +1,15 @@
 # Wiki Log
 
+## [2026-04-18] complete | EBP Security Audit — April 2026 (final report)
+
+- Completed all 9 phases of the April 2026 security audit. Final report at [[security-audit-2026-04/report]].
+- **75 findings** total: 1 Critical, 11 High, 26 Medium, 23 Low, 14 Informational. Full register: [[security-audit-2026-04/findings]].
+- Highest-impact finding: **F-GUI-01** (Critical) — universal cross-origin access to the GUI local backend (CORS `*` + no Host validation + no CSRF token). Confirmed live with curl PoC reading identities/contexts and writing to `~/Downloads/` from `Origin: https://evil.example`.
+- Confirmed live: F-CRYPTO-01 (emergency-cert nonce collision), F-CRYPTO-02 (surreptitious forwarding), F-SERVER-01 (reflected XSS), F-SERVER-04 (CORS `*`), F-GUI-01 (4 vectors), F-STORAGE-01/04 (file/dir perms 0664/0775).
+- Created phase notes [[security-audit-2026-04/phase-02-crypto-core]] through [[security-audit-2026-04/phase-08-dynamic]]; runnable PoCs under `wiki/security-audit-2026-04/pocs/`; tooling output (`npm audit`, `cargo audit`, deno lint, live curl logs) under `wiki/security-audit-2026-04/tooling-output/`.
+- Updated [[index.md]] Security Audits entry to reflect completion. README at [[security-audit-2026-04/README]] now reflects all phases completed.
+- Top-12 prioritised remediation roadmap in [[security-audit-2026-04/report#top-12-prioritised-remediation]]; full week-1/month-1/quarter-1/backlog roadmap in Appendix A of the report.
+
 ## [2026-04-18] create | EBP Security Audit — April 2026 (kickoff)
 
 - Initiated phased security audit covering crypto core, server, GUI/local-backend, desktop/Tauri, CLI, website verifier, supply chain, and identity storage. Mobile and email Chrome extension are out of scope.

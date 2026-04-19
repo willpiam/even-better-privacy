@@ -1,0 +1,162 @@
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`MailSecretsStore` is never used[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/mail-oauth.ts[0m[0m[33m:7:2[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m7 | [0m  MailSecretsStore,
+ [0m[38;5;12m | [0m  [0m[1m[31m^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `MailSecretsStore as _MailSecretsStore`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-import-prefix][0m: [0m[1mInline 'npm:', 'jsr:' or 'https:' dependency not allowed[0m
+ [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/main_test.ts[0m[0m[33m:1:74[0m
+ [0m[38;5;12m | [0m
+[0m[38;5;12m1 | [0mimport { assertEquals, assert, assertExists, assertStringIncludes } from "jsr:@std/assert@^1.0.6";
+ [0m[38;5;12m | [0m                                                                         [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [0m[38;5;12m=[0m [0m[1mhint[0m: Add it as a dependency in a deno.json or package.json instead and reference it here via its bare specifier
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-import-prefix
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`home` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/main_test.ts[0m[0m[33m:99:28[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m99 | [0m    await withTestEnv(async (home, handler) => {
+  [0m[38;5;12m | [0m                             [0m[1m[31m^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_home`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`body` is never used[0m
+   [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/main_test.ts[0m[0m[33m:259:20[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m259 | [0m      const { status, body } = await makeRequest(
+   [0m[38;5;12m | [0m                      [0m[1m[31m^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_body`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`identity` is never used[0m
+    [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/main_test.ts[0m[0m[33m:1122:10[0m
+    [0m[38;5;12m | [0m
+[0m[38;5;12m1122 | [0m      const identity = await createTestIdentity(home, "test", "password123");
+    [0m[38;5;12m | [0m            [0m[1m[31m^^^^^^^^[0m
+     [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_identity`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`body` is never used[0m
+    [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/main_test.ts[0m[0m[33m:1200:20[0m
+    [0m[38;5;12m | [0m
+[0m[38;5;12m1200 | [0m      const { status, body } = await makeRequest(
+    [0m[38;5;12m | [0m                      [0m[1m[31m^^^^[0m
+     [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_body`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`buildStateFromExternal` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:23:2[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m23 | [0m  buildStateFromExternal,
+  [0m[38;5;12m | [0m  [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `buildStateFromExternal as _buildStateFromExternal`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`computeStateHash` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:24:2[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m24 | [0m  computeStateHash,
+  [0m[38;5;12m | [0m  [0m[1m[31m^^^^^^^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `computeStateHash as _computeStateHash`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`stableStringify` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:28:2[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m28 | [0m  stableStringify,
+  [0m[38;5;12m | [0m  [0m[1m[31m^^^^^^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `stableStringify as _stableStringify`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`apiUrl` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:30:2[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m30 | [0m  apiUrl,
+  [0m[38;5;12m | [0m  [0m[1m[31m^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `apiUrl as _apiUrl`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-control-regex][0m: [0m[1mUnexpected control character(s) in regular expression: \x0.[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:51:22[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m51 | [0m  return base.replace(/[\u0000-\u001F\u007F]/g, "").replace(/\.\./g, "_");
+  [0m[38;5;12m | [0m                      [0m[1m[31m^^^^^^^^^^^^^^^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: Disable the rule if the control character (\x... or \u00..) was intentional, otherwise rework your RegExp
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-control-regex
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`resolveServer` is never used[0m
+   [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:176:10[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m176 | [0mfunction resolveServer(ctx: CLIContext, override?: string): string {
+   [0m[38;5;12m | [0m         [0m[1m[31m^^^^^^^^^^^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_resolveServer`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-explicit-any][0m: [0m[1m`any` type is not allowed[0m
+   [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:576:35[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m576 | [0m      const signature = (identity as any).signMessage(message, salt);
+   [0m[38;5;12m | [0m                                     [0m[1m[31m^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Use a specific type other than `any`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-explicit-any
+
+
+[0m[1m[31merror[no-explicit-any][0m: [0m[1m`any` type is not allowed[0m
+   [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/tests/test_handler.ts[0m[0m[33m:708:34[0m
+   [0m[38;5;12m | [0m
+[0m[38;5;12m708 | [0m      const verified = (Identity as any).VerifySignature(contact, message, signature, salt);
+   [0m[38;5;12m | [0m                                    [0m[1m[31m^^^[0m
+    [0m[38;5;12m=[0m [0m[1mhint[0m: Use a specific type other than `any`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-explicit-any
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`CLIContext` is never used[0m
+  [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/routes.ts[0m[0m[33m:27:7[0m
+  [0m[38;5;12m | [0m
+[0m[38;5;12m27 | [0m  type CLIContext,
+  [0m[38;5;12m | [0m       [0m[1m[31m^^^^^^^^^^[0m
+   [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, alias it with an underscore like `CLIContext as _CLIContext`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+[0m[1m[31merror[no-unused-vars][0m: [0m[1m`serverOverride` is never used[0m
+    [0m[38;5;12m-->[0m [0m[36m/home/william/projects/even-better-privacy/gui/local-backend/routes.ts[0m[0m[33m:1279:10[0m
+    [0m[38;5;12m | [0m
+[0m[38;5;12m1279 | [0m      const serverOverride = url.searchParams.get("server") ?? undefined;
+    [0m[38;5;12m | [0m            [0m[1m[31m^^^^^^^^^^^^^^[0m
+     [0m[38;5;12m=[0m [0m[1mhint[0m: If this is intentional, prefix it with an underscore like `_serverOverride`
+
+  [0m[38;5;12mdocs[0m: https://docs.deno.com/lint/rules/no-unused-vars
+
+
+Found 16 problems
+Checked 11 files
