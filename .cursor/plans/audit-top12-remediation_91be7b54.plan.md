@@ -38,6 +38,9 @@ todos:
   - id: phase-12-web-01
     content: "Phase 12 — F-WEB-01: move signature verification client-side in website/verify.js, add CSP"
     status: completed
+  - id: phase-12-web-01-followup
+    content: "Phase 12 follow-up — reconcile verifier CSP with configurable server URL and add browser-level validation"
+    status: pending
   - id: todo-1776895443360-mpfdtzd5b
     content: "Review and summery "
     status: completed
@@ -207,6 +210,27 @@ Sub-tasks:
 4. Add a CSP to [website/verify.html](website/verify.html) (`default-src 'none'; script-src 'self'; connect-src <server>; style-src 'self'`) — co-located with F-WEB-03 from the roadmap.
 5. End-to-end test: run the server locally, submit a valid signature → success; flip the server to return `verified: true` for a bad signature → client still shows invalid.
 
+### Phase 12 completion addendum
+
+The first pass landed the core client-side verification flow, but two gaps remain: the verifier still exposes a user-editable server URL while [website/verify.html](website/verify.html) hard-codes a single `connect-src` host, and there is still no browser-level proof that the static page works end-to-end with the new `esm.sh`-backed crypto path.
+
+Follow-up tasks:
+
+1. Preserve the current "user can verify against any HTTPS server" behaviour rather than regressing to a fixed allowlist. Because [website/verify.html](website/verify.html) is a static page with a meta CSP, finish the phase by relaxing only `connect-src` while keeping the rest of the policy strict. Target shape:
+   - `default-src 'none'`
+   - `script-src 'self' https://esm.sh`
+   - `style-src 'self'`
+   - `img-src 'self' https://raw.githubusercontent.com`
+   - `connect-src 'self' https://esm.sh https: http://127.0.0.1:* http://localhost:*`
+   - `form-action 'self'; base-uri 'none'; frame-ancestors 'none'`
+   This keeps script/style execution locked down while allowing the existing configurable verifier UX and local development targets.
+2. Clean up [website/verify.js](website/verify.js) so the implementation matches the threat model exactly: remove the unused `clientSha256Hex` import, keep the server's `/api/v1/verify-signature` response purely advisory, and make the mismatch state (`serverConsistent`) explicit in the rendered result so there is no ambiguity about which party is authoritative.
+3. Add a real browser test using the repo's existing Playwright setup ([playwright.config.ts](playwright.config.ts), [gui/e2e/](gui/e2e/)). The implementation step should add a small static web server for `website/` alongside the existing API server, then add a spec such as [gui/e2e/website-verifier.spec.ts](gui/e2e/website-verifier.spec.ts) that covers:
+   - valid payload + valid identity => client reports verified
+   - invalid payload => client reports invalid even if the API advisory path is unavailable or disagrees
+   - page boot succeeds with the CSP in place and the `esm.sh` modules loaded
+4. Finish with a manual smoke-check against the actual static page: open [website/verify.html](website/verify.html) in a browser-served context, verify that a non-default HTTPS server URL is allowed by CSP, and confirm localhost development URLs still work. If any deployment caveat remains around third-party module loading from `esm.sh`, record it before calling Phase 12 done.
+
 ---
 
 ## Cross-cutting test/verification after all phases
@@ -214,4 +238,5 @@ Sub-tasks:
 - `deno lint && deno test && deno check` across the whole tree.
 - `npm audit` (expect clean), `cargo audit` inside `desktop/src-tauri/` (expect clean after Phase 7).
 - Re-run every PoC under [wiki/security-audit-2026-04/pocs/](wiki/security-audit-2026-04/pocs/) and confirm each one now fails to exploit.
+- Run the website verifier browser test and a final manual CSP smoke-check for [website/verify.html](website/verify.html) after the Phase 12 follow-up lands.
 - Update [wiki/security-audit-2026-04/findings.md](wiki/security-audit-2026-04/findings.md) to mark the 12 items `status: fixed` with a commit SHA; append a single "remediation complete" entry to [wiki/log.md](wiki/log.md).
