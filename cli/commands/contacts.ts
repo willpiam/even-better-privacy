@@ -2,7 +2,7 @@ import { parseArgs } from "@std/cli/parse-args";
 import { ExternalIdentity } from "../../core/Identity.ts";
 import {
 	type CLIContext,
-	ensureDir,
+	ensurePrivateDir,
 	readStdin,
 } from "../utils.ts";
 
@@ -31,12 +31,12 @@ export async function cmdImportContact(args: ReturnType<typeof parseArgs>, ctx: 
 		Deno.exit(1);
 	}
 	
-	await ensureDir(ctx.contactsDir);
-	
+	await ensurePrivateDir(ctx.contactsDir);
+
 	const contactName = name ?? external.fingerprint.substring(0, 16);
 	const contactPath = `${ctx.contactsDir}/${contactName}.json`;
-	
-	await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2));
+
+	await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), { mode: 0o600 });
 	console.log(`✓ Contact imported: ${contactName}`);
 	console.log(`  Fingerprint: ${external.fingerprint}`);
 }

@@ -198,7 +198,9 @@ export async function cmdGenerateRevocationCert(args: ReturnType<typeof parseArg
 	}, null, 2);
 
 	if (output) {
-		await Deno.writeTextFile(output, certData);
+		// F-STORAGE-06: emergency revocation certificates are secret-equivalent;
+		// write 0o600 regardless of the user-specified destination.
+		await Deno.writeTextFile(output, certData, { mode: 0o600 });
 		console.log(`✓ Emergency revocation certificate saved to: ${output}`);
 	} else {
 		console.log("⚠️  Emergency Revocation Certificate:");

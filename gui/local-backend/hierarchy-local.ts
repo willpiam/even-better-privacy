@@ -8,7 +8,7 @@ import { hexToString, stringToHex } from "../../core/Hex.ts";
 import { decodeFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { toHex } from "../../core/Hex.ts";
 import type { CLIContext } from "../../cli/utils.ts";
-import { ensureDir } from "../../cli/utils.ts";
+import { ensurePrivateDir } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 
 export type LocalPendingHierarchyProposal = {
@@ -74,9 +74,9 @@ export async function storeHierarchyCertificateLocal(ctx: CLIContext, encodedCer
 	if (!decoded) {
 		throw new HttpError(STATUS.BadRequest, "hierarchy certificate must include both signatures");
 	}
-	await ensureDir(getHierarchyDir(ctx));
+	await ensurePrivateDir(getHierarchyDir(ctx));
 	const path = `${getHierarchyDir(ctx)}/${decoded.childFingerprint}.json`;
-	await Deno.writeTextFile(path, JSON.stringify({ certificate: encodedCertificate }, null, 2));
+	await Deno.writeTextFile(path, JSON.stringify({ certificate: encodedCertificate }, null, 2), { mode: 0o600 });
 }
 
 export function getPendingHierarchyPath(ctx: CLIContext): string {
@@ -98,8 +98,8 @@ export async function readPendingHierarchyLocal(ctx: CLIContext): Promise<LocalP
 }
 
 export async function writePendingHierarchyLocal(ctx: CLIContext, proposals: LocalPendingHierarchyProposal[]): Promise<void> {
-	await ensureDir(ctx.identityDir);
-	await Deno.writeTextFile(getPendingHierarchyPath(ctx), JSON.stringify(proposals, null, 2));
+	await ensurePrivateDir(ctx.identityDir);
+	await Deno.writeTextFile(getPendingHierarchyPath(ctx), JSON.stringify(proposals, null, 2), { mode: 0o600 });
 }
 
 export async function addPendingHierarchyLocal(

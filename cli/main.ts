@@ -3,7 +3,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { PROTOCOL_VERSION } from "../core/version.ts";
 import { COMPONENT_VERSIONS } from "../app-version.ts";
-import { getContext } from "./utils.ts";
+import { getContext, fixLegacyPerms } from "./utils.ts";
 
 import {
 	cmdGenerate,
@@ -195,6 +195,12 @@ async function main(): Promise<void> {
 		args["identity"] as string | undefined,
 		args["server"] as string | undefined,
 	);
+
+	// F-STORAGE-01/04: tighten any pre-existing loose permissions under
+	// ~/.ebp/ on startup. Best-effort: no error if the directory does not
+	// exist yet or chmod is unsupported on this platform.
+	await fixLegacyPerms(ctx.identityDir);
+
 	const command = args._[0] as string;
 	args._ = args._.slice(1); // Remove command from args
 

@@ -5,7 +5,7 @@ import {
 	ensureServer,
 	apiUrl,
 	updateState,
-	ensureDir,
+	ensurePrivateDir,
 	loadIdentity,
 	buildStateFromExternal,
 	computeStateHash,
@@ -173,7 +173,7 @@ export async function cmdFetchIdentity(args: ReturnType<typeof parseArgs>, ctx: 
 		Deno.exit(1);
 	}
 
-	await ensureDir(ctx.contactsDir);
+	await ensurePrivateDir(ctx.contactsDir);
 	const contactName = name ?? external.fingerprint.substring(0, 16);
 	const contactPath = `${ctx.contactsDir}/${contactName}.json`;
 	try {
@@ -190,7 +190,7 @@ export async function cmdFetchIdentity(args: ReturnType<typeof parseArgs>, ctx: 
 			console.warn("failed to preserve resolved opaque details during fetch", e);
 		}
 	}
-	await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2));
+	await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), { mode: 0o600 });
 
 	console.log(`✓ Contact fetched from server ${server}`);
 	console.log(`  Stored as: ${contactName}`);

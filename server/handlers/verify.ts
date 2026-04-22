@@ -10,8 +10,8 @@ import {
   getIdentity,
   getRevokedDetailPaths,
   isIdentityRevoked,
-} from "../db.ts";
-import type { DatabaseAdapter } from "../db.ts";
+} from "../db/index.ts";
+import type { DatabaseAdapter } from "../db/index.ts";
 import { computeIdentityFingerprint } from "../crypto.ts";
 
 export type VerifyInput = {

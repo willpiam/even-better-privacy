@@ -257,18 +257,21 @@ Deno.test("Revocation: getDetailRevocationCertificate returns certificate for re
 
 Deno.test("Revocation: generateEmergencyRevocationCertificate creates valid certificate", () => {
 	const identity = new Identity("dilithium", "kyber");
-	
+
 	const emergencyCert = identity.generateEmergencyRevocationCertificate();
-	
+
 	// Certificate should be valid hex-encoded JSON
 	assert(typeof emergencyCert === "string");
 	assert(emergencyCert.length > 0);
-	
+
 	// Decode and verify structure
 	const decoded = decodeRevocationCertificate(emergencyCert);
 	assert(decoded !== null);
 	assertEquals(decoded.type, "identity");
-	assertEquals(decoded.nonce, 0); // Emergency certs use nonce 0
+	// F-CRYPTO-01: emergency certs now live in a separate nonce space
+	// (EMERGENCY_NONCE_BASE = 2**31) so they cannot be silently consumed
+	// by a regular revocation issued at nonce 0.
+	assertEquals(decoded.nonce, 2 ** 31);
 	assertEquals(decoded.fingerprint, identity.toFingerprint());
 	assert(decoded.signature !== null);
 });

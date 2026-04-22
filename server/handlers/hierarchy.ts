@@ -6,8 +6,11 @@ import {
   getIdentity,
   getPendingProposal,
   getPendingProposalsForIdentity,
-} from "../db.ts";
-import type { DatabaseAdapter } from "../db.ts";
+} from "../db/index.ts";
+import type { DatabaseAdapter } from "../db/index.ts";
+import { sha256Hex } from "../../core/MessageHash.ts";
+import { stableStringify } from "../../core/StateHash.ts";
+import { verifySignatureWithIdentity } from "./verify.ts";
 import {
   acceptPendingHierarchyProposal,
   getHierarchyCertificateByChild,
@@ -155,6 +158,26 @@ export async function handlePostHierarchyAccept(req: Request, db: DatabaseAdapte
   });
 }
 
+// F-SERVER-02: deleting a pending hierarchy proposal is now authenticated.
+// The rejecting party signs `{action, fingerprint, proposalId, timestamp}`
+// (canonicalised via stableStringify) with their identity's signing key.
+// The server looks up the identity's public signing key and verifies.
+export const HIERARCHY_REJECT_ACTION = "hierarchy::reject";
+export const HIERARCHY_REJECT_SKEW_MS = 5 * 60 * 1000;
+
+export function buildHierarchyRejectMessage(input: {
+  proposalId: number;
+  fingerprint: string;
+  timestamp: number;
+}): string {
+  return stableStringify({
+    action: HIERARCHY_REJECT_ACTION,
+    fingerprint: input.fingerprint,
+    proposalId: input.proposalId,
+    timestamp: input.timestamp,
+  });
+}
+
 export async function handlePostHierarchyReject(req: Request, db: DatabaseAdapter): Promise<Response> {
   const bodyResult = await readJsonBody<HierarchyRejectPayload>(req);
   if (!bodyResult.ok) {
@@ -171,6 +194,18 @@ export async function handlePostHierarchyReject(req: Request, db: DatabaseAdapte
     return json({ error: "fingerprint must be valid bech32" }, 400);
   }
 
+  const timestamp = Number(bodyResult.data.timestamp);
+  if (!Number.isInteger(timestamp) || timestamp <= 0) {
+    return json({ error: "timestamp must be a positive integer (unix-ms)" }, 400);
+  }
+  const now = Date.now();
+  if (Math.abs(now - timestamp) > HIERARCHY_REJECT_SKEW_MS) {
+    return json({ error: "timestamp skew too large" }, 400);
+  }
+
+  const signatureCheck = validateStringLength(bodyResult.data.signature, "signature", LIMITS.signature);
+  if (!signatureCheck.ok) return json({ error: signatureCheck.error }, 400);
+
   const proposal = await getPendingProposal(db, proposalId);
   if (!proposal) {
     return json({ error: "pending proposal not found" }, 404);
@@ -180,6 +215,30 @@ export async function handlePostHierarchyReject(req: Request, db: DatabaseAdapte
   }
   if (proposal.master_fingerprint !== fingerprint && proposal.child_fingerprint !== fingerprint) {
     return json({ error: "fingerprint is not part of this proposal" }, 403);
+  }
+
+  const identity = await getIdentity(db, fingerprint);
+  if (!identity) {
+    return json({ error: "rejecting identity not found" }, 404);
+  }
+  const signingVariant = (identity.signing_key_details as { variant?: string } | null)?.variant;
+  if (!signingVariant || typeof signingVariant !== "string") {
+    return json({ error: "missing signing variant for rejecting identity" }, 400);
+  }
+  const signingKeyType = identity.signing_key_type as "dilithium" | "sphincs";
+
+  const message = buildHierarchyRejectMessage({ proposalId, fingerprint, timestamp });
+  const messageHash = sha256Hex(message);
+  const verified = verifySignatureWithIdentity(
+    signingKeyType,
+    signingVariant,
+    messageHash,
+    "",
+    signatureCheck.value,
+    identity.signing_key,
+  );
+  if (!verified) {
+    return json({ error: "invalid signature for reject action" }, 401);
   }
 
   await deletePendingProposal(db, proposalId);

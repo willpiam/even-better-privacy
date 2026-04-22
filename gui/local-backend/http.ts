@@ -19,9 +19,12 @@ export const VERSION_MAP = FILE_FORMAT_VERSIONS as Readonly<Record<string, numbe
 export const ENCRYPTED_FILE_FORMAT_VERSION = VERSION_MAP.encryptedFile ?? 1;
 export const ENCRYPTED_SIGNED_FILE_FORMAT_VERSION = VERSION_MAP.encryptedSignedFile ?? 1;
 
+// CORS allow-origin is intentionally NOT set here. It is applied per-request
+// at the `handleRequest` boundary by security.ts::applyCorsHeaders so that
+// only origins on the allow-list are echoed back (F-GUI-01). This base map
+// advertises allowed headers and methods for preflight.
 export const CORS_HEADERS = {
-	"access-control-allow-origin": "*",
-	"access-control-allow-headers": "content-type",
+	"access-control-allow-headers": "content-type, x-ebp-csrf",
 	"access-control-allow-methods": "GET,POST,OPTIONS",
 };
 

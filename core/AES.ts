@@ -10,14 +10,29 @@ const decoder = new TextDecoder();
 
 const SALT_LENGTH = 16; // 128-bit salt
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
-const PBKDF2_ITERATIONS = 310_000; // strong default as of 2024
 const KEY_LENGTH = 32; // 256 bits
+
+// F-STORAGE-02: PBKDF2 iteration count was 310,000 (OWASP 2023 floor).
+// v2 raises this to 600,000 (OWASP 2024+ floor for SHA-256). The version
+// byte at the start of the ciphertext encodes which iteration count was
+// used at encrypt time, so old blobs remain decryptable and new writes
+// get the stronger parameter. A follow-up migration to Argon2id is
+// tracked separately.
+const PBKDF2_ITERATIONS_V1 = 310_000;
+const PBKDF2_ITERATIONS_V2 = 600_000;
+const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 2
+
+function iterationsForVersion(version: number): number {
+	if (version === 1) return PBKDF2_ITERATIONS_V1;
+	if (version === 2) return PBKDF2_ITERATIONS_V2;
+	throw new Error(`Unsupported ciphertext version: ${version}`);
+}
 
 export class AES {
 	static encrypt(password: string, plaintext: string): string {
 		const salt = randomBytes(SALT_LENGTH);
 		const iv = randomBytes(IV_LENGTH);
-		const key = deriveKey(password, salt);
+		const key = deriveKey(password, salt, iterationsForVersion(CURRENT_AES_VERSION));
 
 		const data = encoder.encode(plaintext);
 		const cipher = gcm(key, iv);
@@ -25,7 +40,7 @@ export class AES {
 
 		// [version(1)] [salt] [iv] [ciphertext]
 		const result = new Uint8Array(1 + salt.length + iv.length + ciphertext.length);
-		result[0] = FILE_FORMAT_VERSIONS.aesCiphertext; // version
+		result[0] = CURRENT_AES_VERSION;
 		result.set(salt, 1);
 		result.set(iv, 1 + salt.length);
 		result.set(ciphertext, 1 + salt.length + iv.length);
@@ -40,9 +55,7 @@ export class AES {
 		}
 
 		const version = data[0];
-		if (version !== FILE_FORMAT_VERSIONS.aesCiphertext) {
-			throw new Error("Unsupported ciphertext version");
-		}
+		const iterations = iterationsForVersion(version);
 
 		const saltStart = 1;
 		const saltEnd = saltStart + SALT_LENGTH;
@@ -52,7 +65,7 @@ export class AES {
 		const iv = data.slice(saltEnd, ivEnd);
 		const ciphertext = data.slice(ivEnd);
 
-		const key = deriveKey(password, salt);
+		const key = deriveKey(password, salt, iterations);
 
 		const decipher = gcm(key, iv);
 		let plaintextBytes: Uint8Array;
@@ -64,13 +77,30 @@ export class AES {
 
 		return decoder.decode(plaintextBytes);
 	}
+
+	// F-STORAGE-02: utility so callers (identity-unlock flow) can detect a
+	// legacy v1 blob and transparently rewrite it at v2 after a successful
+	// decrypt.
+	static getCiphertextVersion(encoded: string): number {
+		const data = base64ToBytes(encoded);
+		if (data.length < 1) throw new Error("Invalid ciphertext");
+		return data[0];
+	}
+
+	static isLegacyCiphertext(encoded: string): boolean {
+		try {
+			return AES.getCiphertextVersion(encoded) < CURRENT_AES_VERSION;
+		} catch {
+			return false;
+		}
+	}
 }
 
-function deriveKey(password: string, salt: Uint8Array): Uint8Array {
+function deriveKey(password: string, salt: Uint8Array, iterations: number): Uint8Array {
 	const passwordBytes = encoder.encode(password);
 
 	return pbkdf2(sha256, passwordBytes, salt, {
-		c: PBKDF2_ITERATIONS,
+		c: iterations,
 		dkLen: KEY_LENGTH,
 	});
 }

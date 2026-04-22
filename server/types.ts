@@ -54,6 +54,12 @@ export type HierarchyAcceptPayload = {
 export type HierarchyRejectPayload = {
   proposalId: number;
   fingerprint: string;
+  // F-SERVER-02: reject-action must be authenticated. `signature` is the
+  // bech32 signer's signature over the canonical JSON of
+  // {action:"reject", fingerprint, proposalId, timestamp}. `timestamp` is a
+  // unix-ms integer that the server rejects if more than 5 minutes off.
+  timestamp: number;
+  signature: string;
 };
 
 export type HierarchyCertificateRow = {

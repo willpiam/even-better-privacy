@@ -8,6 +8,7 @@ import {
 	readState,
 	getIdentityPath,
 	ensureDir,
+	ensurePrivateDir,
 	readPassword,
 	loadIdentity,
 	randomHex,
@@ -65,12 +66,13 @@ export async function cmdGenerate(args: ReturnType<typeof parseArgs>, ctx: CLICo
 		Deno.exit(1);
 	}
 
-	// Create directories and save in new format
-	await ensureDir(ctx.identityDir);
-	await ensureDir(ctx.contactsDir);
-	
+	// Create directories with restrictive perms (F-STORAGE-04) and save
+	// the identity file with mode 0o600 (F-STORAGE-01).
+	await ensurePrivateDir(ctx.identityDir);
+	await ensurePrivateDir(ctx.contactsDir);
+
 	const storageData = identity.toStorageFormat(password);
-	await Deno.writeTextFile(newFormatPath, storageData);
+	await Deno.writeTextFile(newFormatPath, storageData, { mode: 0o600 });
 	await updateState(ctx.identityDir, { currentIdentity: identityName });
 
 	console.log("\n✓ Identity generated successfully!");
@@ -91,7 +93,10 @@ export async function cmdGenerate(args: ReturnType<typeof parseArgs>, ctx: CLICo
 		}, null, 2);
 
 		if (revocationOutput) {
-			await Deno.writeTextFile(revocationOutput, certData);
+			// Emergency revocation certificates are a privileged artefact:
+			// anyone holding them can revoke this identity. Write 0o600 even
+			// when the user redirects the output to a custom path.
+			await Deno.writeTextFile(revocationOutput, certData, { mode: 0o600 });
 			console.log(`\n⚠️  Emergency revocation certificate saved to: ${revocationOutput}`);
 		} else {
 			console.log("\n⚠️  Emergency Revocation Certificate:");

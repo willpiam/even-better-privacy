@@ -4,8 +4,8 @@ import {
   getIdentity,
   getRevokedDetailPaths,
   isIdentityRevoked,
-} from "../db.ts";
-import type { DatabaseAdapter } from "../db.ts";
+} from "../db/index.ts";
+import type { DatabaseAdapter } from "../db/index.ts";
 
 export const DEFAULT_PAGE_SIZE = 5;
 

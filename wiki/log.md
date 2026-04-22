@@ -40,6 +40,17 @@
 
 ## [2026-04-10] create | message-payload-formats
 
+## [2026-04-22] update | audit-top12-remediation
+
+- Implemented the April 2026 audit's top-12 remediation set across `core/`, `cli/`, `server/`, `gui/`, `website/`, `desktop/`, and `Dockerfile`.
+- Closed F-GUI-01 with per-launch CSRF tokening, scoped CORS, and Host validation on the GUI local backend.
+- Closed F-STORAGE-01 / F-STORAGE-04 / F-STORAGE-02 with `0o600`/`0o700` permission hardening, legacy-permission repair, PBKDF2 uplift to 600k, and transparent legacy ciphertext upgrade on unlock.
+- Closed F-SERVER-01 / F-SERVER-02 / F-SERVER-03 / F-SERVER-05 with verify-email HTML escaping + CSP, signed hierarchy rejects, proxy-header trust gating, and `USER deno` in the container.
+- Closed F-CRYPTO-01 / F-CRYPTO-02 with recipient-bound signed envelopes and a separate emergency-revocation nonce space.
+- Closed F-CLI-01 with non-echoing terminal password reads.
+- Closed F-WEB-01 by moving website verification client-side and adding verifier CSP.
+- Mitigated F-TAURI-01 and part of F-DEP-02 by scoping `shell.open` and clearing `npm audit`; the full Tauri 2.x migration remains a follow-up.
+
 - Created [[message-payload-formats]] page documenting the wire format for all EBP message payload types.
 - Covers `ebp-encrypted-signed-message`, `ebp-encrypted-message`, `ebp-signed-message`, and `ebp-signature` with field-level tables.
 - Documents armor wrapping, ciphertext structure (ML-KEM encapsulated key + AES-256-GCM), inner payload layout, and the key-material-vs-fingerprint design decision.

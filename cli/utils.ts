@@ -33,8 +33,8 @@ export async function readState(identityDir: string): Promise<CLIState | undefin
 }
 
 export async function writeState(identityDir: string, state: CLIState): Promise<void> {
-	await ensureDir(identityDir);
-	await Deno.writeTextFile(`${identityDir}/state.json`, JSON.stringify(state, null, 2));
+	await ensurePrivateDir(identityDir);
+	await Deno.writeTextFile(`${identityDir}/state.json`, JSON.stringify(state, null, 2), { mode: 0o600 });
 }
 
 export async function updateState(identityDir: string, updates: Partial<CLIState>): Promise<CLIState> {
@@ -110,20 +110,110 @@ function resolveBaseDir(homeDir?: string): string {
 	return ".";
 }
 
-export async function ensureDir(path: string): Promise<void> {
+export async function ensureDir(path: string, options?: { mode?: number }): Promise<void> {
 	try {
-		await Deno.mkdir(path, { recursive: true });
+		await Deno.mkdir(path, { recursive: true, mode: options?.mode });
 	} catch (e) {
 		if (!(e instanceof Deno.errors.AlreadyExists)) throw e;
 	}
 }
 
+// Ensure a directory that must not be world-readable (identity/contacts/etc.
+// dirs under ~/.ebp/). Creates the directory with mode 0o700 and tightens
+// any pre-existing permissions. No-op for the mode on Windows. See F-STORAGE-04.
+export async function ensurePrivateDir(path: string): Promise<void> {
+	await ensureDir(path, { mode: 0o700 });
+	if (Deno.build.os === "windows") return;
+	try {
+		await Deno.chmod(path, 0o700);
+	} catch {
+		// best-effort: some platforms (e.g. Windows, mounted volumes) may not
+		// support chmod.
+	}
+}
+
+// Recursively tighten permissions on an existing ~/.ebp/ tree. Used on
+// startup to repair legacy installs that wrote identity files at mode 0o664
+// and the directory at 0o775 (F-STORAGE-01/04).
+export async function fixLegacyPerms(identityDir: string): Promise<void> {
+	if (Deno.build.os === "windows") return;
+	try {
+		await Deno.chmod(identityDir, 0o700);
+	} catch (e) {
+		if (e instanceof Deno.errors.NotFound) return;
+		return;
+	}
+	try {
+		for await (const entry of Deno.readDir(identityDir)) {
+			const childPath = `${identityDir}/${entry.name}`;
+			if (entry.isFile) {
+				try { await Deno.chmod(childPath, 0o600); } catch { /* best-effort */ }
+			} else if (entry.isDirectory) {
+				await fixLegacyPerms(childPath);
+			}
+		}
+	} catch {
+		// best-effort
+	}
+}
+
+// F-CLI-01: read a password from stdin without echoing it to the terminal.
+//
+// When stdin is a TTY, switch to raw mode (cbreak) so keystrokes are read
+// individually without being echoed by the terminal driver. When stdin is
+// not a TTY (e.g. a pipe under `deno test`), we fall back to an ordinary
+// line-read so scripts and test harnesses still work.
 export async function readPassword(prompt: string): Promise<string> {
-	const buf = new Uint8Array(1024);
 	await Deno.stdout.write(new TextEncoder().encode(prompt));
-	const n = await Deno.stdin.read(buf);
-	if (n === null) throw new Error("Failed to read password");
-	return new TextDecoder().decode(buf.subarray(0, n)).trim();
+
+	let rawSet = false;
+	try {
+		// setRaw is only valid on TTY stdin; throws otherwise.
+		Deno.stdin.setRaw(true, { cbreak: true });
+		rawSet = true;
+	} catch {
+		// not a TTY — fall through to buffered read path.
+	}
+
+	try {
+		if (!rawSet) {
+			const buf = new Uint8Array(1024);
+			const n = await Deno.stdin.read(buf);
+			if (n === null) throw new Error("Failed to read password");
+			return new TextDecoder().decode(buf.subarray(0, n)).trim();
+		}
+
+		const decoder = new TextDecoder();
+		const chunk = new Uint8Array(1);
+		const chars: number[] = [];
+		while (true) {
+			const n = await Deno.stdin.read(chunk);
+			if (n === null) break;
+			const b = chunk[0];
+			// CR, LF, EOT (Ctrl-D) — treat as end of input.
+			if (b === 0x0d || b === 0x0a || b === 0x04) {
+				break;
+			}
+			// Ctrl-C — propagate as a failed read rather than return partial.
+			if (b === 0x03) {
+				throw new Error("password read aborted");
+			}
+			// Backspace / DEL — pop one char.
+			if (b === 0x7f || b === 0x08) {
+				if (chars.length > 0) chars.pop();
+				continue;
+			}
+			chars.push(b);
+		}
+		// Write a newline after the (silent) input so the next prompt is on
+		// its own line.
+		await Deno.stdout.write(new TextEncoder().encode("\n"));
+		return decoder.decode(new Uint8Array(chars)).trim();
+	} finally {
+		if (rawSet) {
+			try { Deno.stdin.setRaw(false); } catch { /* best-effort */ }
+		}
+	}
 }
 
 export async function readStdin(): Promise<string> {
@@ -200,24 +290,39 @@ export async function loadIdentity(ctx: CLIContext, password?: string): Promise<
 	}
 
 	const pwd = password ?? await readPassword("Enter password: ");
-	
+
+	let identity: Identity;
 	try {
-		const identity = Identity.fromStorageFormat(storageData, pwd);
-		return { identity, password: pwd };
+		identity = Identity.fromStorageFormat(storageData, pwd);
 	} catch {
 		console.error("Failed to decrypt identity. Wrong password?");
 		Deno.exit(1);
 	}
+
+	// F-STORAGE-02: transparent re-encrypt when a legacy-KDF blob is
+	// successfully unlocked. We rewrite at the stronger parameters before
+	// handing the identity back to the caller.
+	if (Identity.isStorageEncryptedWithLegacyKDF(storageData)) {
+		try {
+			await saveIdentity(ctx, pwd, identity);
+			console.error("[ebp] upgraded identity file KDF to the current strength.");
+		} catch (e) {
+			console.error("[ebp] warning: failed to upgrade identity KDF:", e);
+		}
+	}
+
+	return { identity, password: pwd };
 }
 
 export async function saveIdentity(ctx: CLIContext, password: string, identity: Identity): Promise<void> {
 	const baseName = ctx.currentIdentity;
 	const dir = ctx.identityDir;
 	const newPath = `${dir}/${baseName}.identity.json`;
-	
+
+	await ensurePrivateDir(dir);
 	const storageData = identity.toStorageFormat(password);
-	await Deno.writeTextFile(newPath, storageData);
-	
+	await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
+
 	ctx.identityPath = newPath;
 }
 

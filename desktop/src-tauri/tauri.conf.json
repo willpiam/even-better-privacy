@@ -11,8 +11,10 @@
   },
   "tauri": {
     "allowlist": {
+      "all": false,
       "shell": {
-        "open": true
+        "all": false,
+        "open": "^https://[A-Za-z0-9.-]+(/.*)?$|^http://(127\\.0\\.0\\.1|localhost)(:\\d+)?(/.*)?$"
       }
     },
     "windows": [

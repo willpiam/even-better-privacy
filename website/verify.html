@@ -3,6 +3,17 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!--
+    F-WEB-01 / F-WEB-03: strict Content-Security-Policy. The verifier
+    imports `@noble/post-quantum` directly from esm.sh for browser-side
+    signature verification; `connect-src` allows the configured server
+    (default: ebp-cqyo.onrender.com) plus esm.sh's CDN for the ES
+    modules. Inline scripts and styles are forbidden.
+  -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; script-src 'self' https://esm.sh; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://esm.sh https://ebp-cqyo.onrender.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="no-referrer">
   <title>EBP Signature Verifier</title>
   <meta
     name="description"
@@ -89,38 +100,9 @@
     </section>
   </main>
 
-  <script src="./verify.js?v=3"></script>
-  <script>
-    (() => {
-      const clearButton = document.getElementById("clear-btn");
-      if (!clearButton) return;
-
-      clearButton.addEventListener("click", () => {
-        const payloadFile = document.getElementById("payload-file");
-        const verifyFile = document.getElementById("verify-file");
-        const publicFile = document.getElementById("public-file");
-        const payloadJson = document.getElementById("payload-json");
-        const publicJson = document.getElementById("public-json");
-        const message = document.getElementById("message");
-        const fileReconstructedMessage = document.getElementById("file-reconstructed-message");
-        const resultSummary = document.getElementById("result-summary");
-        const resultCode = document.querySelector("#result-json code");
-        const signerDetails = document.getElementById("signer-details");
-
-        if (payloadFile) payloadFile.value = "";
-        if (verifyFile) verifyFile.value = "";
-        if (publicFile) publicFile.value = "";
-        if (payloadJson) payloadJson.value = "";
-        if (publicJson) publicJson.value = "";
-        if (message) message.value = "";
-        if (fileReconstructedMessage) fileReconstructedMessage.value = "";
-        const reconstructedLabel = document.getElementById("reconstructed-label");
-        if (reconstructedLabel) reconstructedLabel.style.display = "none";
-        if (resultSummary) resultSummary.textContent = "No verification run yet.";
-        if (resultCode) resultCode.textContent = "{}";
-        if (signerDetails) signerDetails.innerHTML = "";
-      });
-    })();
-  </script>
+  <!-- F-WEB-03: inline scripts are forbidden by the CSP above. The
+       "Clear All" button handler is wired up in verify.js via
+       resetVerifierForm(). -->
+  <script type="module" src="./verify.js?v=4"></script>
 </body>
 </html>

@@ -1,3 +1,5 @@
+import { verifySignature, sha256Hex as clientSha256Hex } from "./crypto.mjs";
+
 const serverUrlInput = document.getElementById("server-url");
 const payloadFileInput = document.getElementById("payload-file");
 const verifyFileInput = document.getElementById("verify-file");
@@ -182,34 +184,86 @@ verifyButton.addEventListener("click", async () => {
       requestBody.publicIdentity = publicIdentity;
     }
 
-    const res = await fetch(`${serverBase}/api/v1/verify-signature`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(requestBody),
-    });
+    // F-WEB-01: client-side verification. The server is trusted ONLY to
+    // (a) host published public identities (fetched by fingerprint) and
+    // (b) provide an advisory "verified" hint that we cross-check against
+    // our own local verification result.
+    const effectivePayload = requestBody.payload;
+    const effectiveMessage = typeof requestBody.message === "string"
+      ? requestBody.message
+      : (typeof effectivePayload.message === "string" ? effectivePayload.message : "");
+    const embeddedIdentity = publicIdentity ?? effectivePayload.identity ?? null;
 
-    const body = await res.json().catch(() => ({}));
-    resultJson.textContent = JSON.stringify(body, null, 2);
-
-    if (!res.ok) {
-      throw new Error(body.error || `HTTP ${res.status}`);
+    let signerIdentity = embeddedIdentity;
+    let fetchedFromServer = false;
+    if (!signerIdentity && typeof effectivePayload.fingerprint === "string" && effectivePayload.fingerprint.length > 0) {
+      try {
+        const lookup = await fetch(
+          `${serverBase}/api/v1/identity/${encodeURIComponent(effectivePayload.fingerprint)}`,
+          { method: "GET" },
+        );
+        if (lookup.ok) {
+          signerIdentity = await lookup.json();
+          fetchedFromServer = true;
+        }
+      } catch {
+        // ignore network errors — we'll raise a clear error below.
+      }
     }
 
-    if (body.verified) {
-      if (payload.type === "ebp-signed-file" && fileReconstructedMessageInput?.value) {
-        resultSummary.textContent = "Signature is valid and file hash matches.";
-      } else if (typeof body.message === "string" && body.message.length > 0) {
-        resultSummary.textContent = body.message;
-      } else if (body.identityPublished) {
-        resultSummary.textContent = "Signature is valid. Signer identity is published on the server.";
-      } else {
-        resultSummary.textContent = "Signature is valid. Signer identity is not published on this server.";
+    if (!signerIdentity) {
+      throw new Error("Could not obtain the signer's public identity. Paste a public identity JSON or ensure the signer is published on the configured server.");
+    }
+
+    let clientVerified = false;
+    try {
+      clientVerified = verifySignature(signerIdentity, {
+        message: effectiveMessage,
+        messageHash: typeof effectivePayload.messageHash === "string" ? effectivePayload.messageHash : undefined,
+        salt: typeof effectivePayload.salt === "string" ? effectivePayload.salt : "",
+        signature: typeof effectivePayload.signature === "string" ? effectivePayload.signature : "",
+      });
+    } catch (err) {
+      throw new Error(`Client-side verification failed: ${err instanceof Error ? err.message : err}`);
+    }
+
+    // Optionally cross-check against the server's advisory "verified"
+    // flag. A mismatch is informational only — the client result is the
+    // authoritative answer.
+    let serverAdvisory = null;
+    try {
+      const res = await fetch(`${serverBase}/api/v1/verify-signature`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      if (res.ok) {
+        const body = await res.json();
+        serverAdvisory = Boolean(body?.verified);
       }
-      renderSignerDetails(body.signer);
+    } catch {
+      // ignore
+    }
+
+    const report = {
+      verified: clientVerified,
+      verifiedBy: "client",
+      serverAdvisory,
+      serverConsistent: serverAdvisory === null ? null : serverAdvisory === clientVerified,
+      signerFingerprint: signerIdentity?.fingerprint ?? null,
+      signerSource: fetchedFromServer ? "server" : (publicIdentity ? "pasted" : "payload"),
+    };
+    resultJson.textContent = JSON.stringify(report, null, 2);
+
+    if (clientVerified) {
+      if (payload.type === "ebp-signed-file" && fileReconstructedMessageInput?.value) {
+        resultSummary.textContent = "Signature is valid and file hash matches (verified client-side).";
+      } else {
+        resultSummary.textContent = "Signature is valid (verified client-side).";
+      }
+      renderSignerDetails(signerIdentity);
     } else {
-      resultSummary.textContent = typeof body.message === "string" && body.message.length > 0
-        ? body.message
-        : "Signature is invalid.";
+      resultSummary.textContent = "Signature is INVALID (verified client-side).";
     }
   } catch (err) {
     resultJson.textContent = JSON.stringify(

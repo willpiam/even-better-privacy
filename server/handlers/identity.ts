@@ -16,8 +16,8 @@ import {
   isIdentityRevoked,
   updateDetail,
   updateDetailVerification,
-} from "../db.ts";
-import type { DatabaseAdapter } from "../db.ts";
+} from "../db/index.ts";
+import type { DatabaseAdapter } from "../db/index.ts";
 import {
   computeIdentityFingerprint,
   computeSigningRawFingerprint,

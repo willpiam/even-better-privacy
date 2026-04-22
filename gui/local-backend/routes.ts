@@ -34,6 +34,7 @@ import {
 	stableStringify,
 	apiUrl,
 	ensureDir,
+	ensurePrivateDir,
 } from "../../cli/utils.ts";
 
 import {
@@ -49,6 +50,7 @@ import {
 	safeFileName,
 	bytesToBase64,
 } from "./http.ts";
+import { validateSecurity, applyCorsHeaders, getCsrfToken } from "./security.ts";
 import { loadIdentity, loadIdentityPublic, saveIdentity, resolveServer, toSafeString } from "./identity.ts";
 import { loadContact, listContacts, findContactRecord, deleteContact, computeExternalFingerprint } from "./contacts.ts";
 import {
@@ -99,6 +101,12 @@ import {
 } from "./hierarchy-local.ts";
 
 export async function handleRequest(req: Request): Promise<Response> {
+	const rejected = validateSecurity(req);
+	if (rejected) return applyCorsHeaders(req, rejected);
+	return applyCorsHeaders(req, await handleRequestInternal(req));
+}
+
+async function handleRequestInternal(req: Request): Promise<Response> {
 	if (req.method === "OPTIONS") {
 		return new Response(null, { status: 204, headers: CORS_HEADERS });
 	}
@@ -114,6 +122,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 				protocolVersion: PROTOCOL_VERSION,
 				componentVersion: COMPONENT_VERSIONS.guiLocalBackend,
 			});
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/csrf-token") {
+			return json({ token: getCsrfToken() });
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/context") {
@@ -862,8 +874,8 @@ export async function handleRequest(req: Request): Promise<Response> {
 				encryptionType as "kyber",
 			);
 
-			await ensureDir(ctx.identityDir);
-			await ensureDir(ctx.contactsDir);
+			await ensurePrivateDir(ctx.identityDir);
+			await ensurePrivateDir(ctx.contactsDir);
 			await saveIdentity(ctx, password, identity);
 			await updateState(ctx.identityDir, { currentIdentity: ctx.currentIdentity });
 
@@ -962,7 +974,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 			}
 
 			const ctx = await getContext(home);
-			await ensureDir(ctx.contactsDir);
+			await ensurePrivateDir(ctx.contactsDir);
 			const contactName = name ?? contact.fingerprint.substring(0, 16);
 			const contactPath = `${ctx.contactsDir}/${contactName}.json`;
 			try {
@@ -977,7 +989,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 			} catch {
 				// no existing file to preserve from
 			}
-			await Deno.writeTextFile(contactPath, JSON.stringify(contact, null, 2));
+			await Deno.writeTextFile(contactPath, JSON.stringify(contact, null, 2), { mode: 0o600 });
 
 			return json({ ok: true, name: contactName, fingerprint: contact.fingerprint });
 		}
@@ -1028,7 +1040,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 				...(found.contact.resolvedOpaqueDetails ?? {}),
 				[path]: value,
 			};
-			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
+			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2), { mode: 0o600 });
 			return json({ ok: true, matched: true, path });
 		}
 
@@ -1064,7 +1076,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 			} else if (body.localEmail === null) {
 				delete raw.localEmail;
 			}
-			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2));
+			await Deno.writeTextFile(found.path, JSON.stringify(found.contact, null, 2), { mode: 0o600 });
 			return json({ ok: true, fingerprint });
 		}
 
@@ -1368,11 +1380,13 @@ export async function handleRequest(req: Request): Promise<Response> {
 				home?: unknown;
 				identity?: unknown;
 				server?: unknown;
+				password?: unknown;
 			}>(req);
 			const proposalId = Number(body.proposalId);
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const identityName = typeof body.identity === "string" ? body.identity : undefined;
 			const serverOverride = typeof body.server === "string" ? body.server : undefined;
+			const password = typeof body.password === "string" ? body.password : undefined;
 			if (!Number.isInteger(proposalId) || proposalId <= 0) {
 				throw new HttpError(STATUS.BadRequest, "proposalId must be a positive integer");
 			}
@@ -1389,14 +1403,36 @@ export async function handleRequest(req: Request): Promise<Response> {
 			}
 			await writePendingHierarchyLocal(ctx, local.filter((p) => p.id !== proposalId));
 			if (serverOverride || ctx.server) {
+				// F-SERVER-02: the server now requires a signature over
+				// {action, fingerprint, proposalId, timestamp} from the
+				// rejecting identity's signing key.
+				if (!password) {
+					throw new HttpError(STATUS.BadRequest, "password is required to sign the reject request for the server");
+				}
 				try {
 					const server = resolveServer(ctx, serverOverride);
+					const identity = await loadIdentity(ctx, password);
+					const timestamp = Date.now();
+					const rejectMessage = stableStringify({
+						action: "hierarchy::reject",
+						fingerprint: pub.fingerprint,
+						proposalId,
+						timestamp,
+					});
+					const signature = identity.signMessage(rejectMessage);
 					await fetch(apiUrl(server, "/api/v1/hierarchy/reject"), {
 						method: "POST",
 						headers: { "content-type": "application/json" },
-						body: JSON.stringify({ proposalId, fingerprint: pub.fingerprint }),
+						body: JSON.stringify({
+							proposalId,
+							fingerprint: pub.fingerprint,
+							timestamp,
+							signature,
+						}),
 					});
-				} catch {
+				} catch (err) {
+					// propagate password errors, ignore network errors
+					if (err instanceof HttpError) throw err;
 					// ignore optional remote reject sync failures
 				}
 			}
@@ -2117,7 +2153,14 @@ export async function handleRequest(req: Request): Promise<Response> {
 					}
 
 					if (result.verified) {
-						const status = isKnownContact ? "valid" : "valid_unknown_signer";
+						// F-CRYPTO-02: distinguish recipient-bound (v2) from
+						// legacy unbound (v1) signatures so the UI can flag
+						// that recipient intent was not cryptographically
+						// proven for v1 messages.
+						const base = isKnownContact ? "valid" : "valid_unknown_signer";
+						const status = result.verifyStatus === "valid_unbound"
+							? `${base}_unbound`
+							: base;
 						return json({
 							message: result.message,
 							verified: result.verified,
@@ -2249,7 +2292,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 				} else {
 					throw new HttpError(STATUS.BadRequest, "sender is required for signed file payloads");
 				}
-				let result: { message: string; verified: boolean };
+				let result: { message: string; verified: boolean; verifyStatus: string };
 				try {
 					result = identity.decryptAndVerify(ciphertext, contact);
 				} catch {
@@ -2257,7 +2300,10 @@ export async function handleRequest(req: Request): Promise<Response> {
 				}
 				cleartextEnvelopeRaw = result.message;
 				verified = result.verified;
-				verifyStatus = result.verified ? "valid" : "invalid";
+				// F-CRYPTO-02: propagate recipient-binding state
+				// (valid, valid_unbound, invalid) to the UI so it can warn
+				// the user when a v1 (unbound) signature is encountered.
+				verifyStatus = result.verifyStatus;
 			} else {
 				throw new HttpError(STATUS.BadRequest, "unsupported file payload type");
 			}
@@ -2553,7 +2599,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 				throw new HttpError(STATUS.BadGateway, "invalid identity payload from server");
 			}
 
-			await ensureDir(ctx.contactsDir);
+			await ensurePrivateDir(ctx.contactsDir);
 			const contactName = name ?? external.fingerprint.substring(0, 16);
 			const contactPath = `${ctx.contactsDir}/${contactName}.json`;
 			try {
@@ -2576,7 +2622,7 @@ export async function handleRequest(req: Request): Promise<Response> {
 					console.warn("failed to preserve local data during fetch sync", e);
 				}
 			}
-			await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2));
+			await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), { mode: 0o600 });
 
 			return json({ ok: true, name: contactName, fingerprint: external.fingerprint });
 		}

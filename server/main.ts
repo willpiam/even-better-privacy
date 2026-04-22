@@ -1,10 +1,10 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-env
 
-import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { serve, type ConnInfo } from "https://deno.land/std@0.224.0/http/server.ts";
 import { PROTOCOL_VERSION } from "../core/version.ts";
 import { COMPONENT_VERSIONS } from "../app-version.ts";
-import { initDb } from "./db.ts";
-import type { DatabaseAdapter } from "./db.ts";
+import { initDb } from "./db/index.ts";
+import type { DatabaseAdapter } from "./db/index.ts";
 import { isOriginAllowed, buildCorsHeaders } from "./cors.ts";
 import { checkRateLimit, getClientIp, RATE_LIMIT_DISABLED, RATE_LIMIT_CLEANUP } from "./rate-limit.ts";
 import { json, attachCors, logRequest, generateTraceId } from "./response.ts";
@@ -100,15 +100,22 @@ if (import.meta.main) {
   startServer();
 }
 
-async function handleRequest(req: Request): Promise<Response> {
+async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Response> {
   const start = performance.now();
   const url = new URL(req.url);
-  const clientIp = getClientIp(req);
+  // F-SERVER-03: socket-peer IP is the source of truth unless TRUST_PROXY
+  // is set. Deno's `serve` passes ConnInfo on the 2nd argument; when this
+  // handler is invoked from tests with no ConnInfo, we fall back to
+  // "unknown" (which is safe for rate-limit bucketing).
+  const remoteAddr = connInfo && "remoteAddr" in connInfo
+    ? (connInfo.remoteAddr as { hostname?: string; transport?: string })
+    : undefined;
+  const clientIp = getClientIp(req, remoteAddr);
   const origin = req.headers.get("origin");
   const corsHeaders = buildCorsHeaders(origin);
 
   const respond = (response: Response, extra?: Record<string, unknown>): Response => {
-    logRequest(req, response.status, performance.now() - start, extra);
+    logRequest(req, response.status, performance.now() - start, { clientIp, ...extra });
     return response;
   };
   const jsonResponse = (body: unknown, status = 200): Response =>

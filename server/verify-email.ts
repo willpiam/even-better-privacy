@@ -1,14 +1,14 @@
 import nodemailer from "npm:nodemailer";
 import { readJsonBody, validateStringLength, LIMITS } from "./body.ts";
-import { json } from "./response.ts";
+import { json, escapeHtml } from "./response.ts";
 import { buildSecurityHeaders } from "./cors.ts";
 import { computeTokenHash, toHex } from "./crypto.ts";
 import {
   getDetailByVerificationToken,
   getDetailRecord,
   updateDetailVerification,
-} from "./db.ts";
-import type { DatabaseAdapter } from "./db.ts";
+} from "./db/index.ts";
+import type { DatabaseAdapter } from "./db/index.ts";
 import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
 
 // =============================================================================
@@ -82,10 +82,18 @@ export function wantsJson(req: Request): boolean {
 
 export function html(body: string, status = 200, corsHeaders?: HeadersInit): Response {
   const securityHeaders = buildSecurityHeaders();
+  // F-SERVER-01: strong CSP on verify-email HTML so an attacker who finds a
+  // future escape path still cannot execute script. `unsafe-inline` on
+  // `style-src` is intentional because the page uses none today and adding
+  // it is cheap; no inline <style> is needed but future tweaks won't break.
+  const csp = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
   return new Response(body, {
     status,
     headers: {
       "content-type": "text/html; charset=utf-8",
+      "content-security-policy": csp,
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
       ...securityHeaders,
       ...corsHeaders,
     },
@@ -98,9 +106,15 @@ export function renderVerifyEmailPage(options: {
   token?: string;
   showButton?: boolean;
 }): string {
+  // F-SERVER-01: every interpolation site must HTML-escape user-controlled
+  // data. `title` and `message` reach this function from query-parameter
+  // and validation-error strings; `token` is attacker-controlled via the
+  // `token` query param.
+  const safeTitle = escapeHtml(options.title);
+  const safeMessage = escapeHtml(options.message);
   const buttonHtml = options.showButton && options.token
     ? `<form method="POST" action="/api/v1/verify-email">
-    <input type="hidden" name="token" value="${options.token}">
+    <input type="hidden" name="token" value="${escapeHtml(options.token)}">
     <button type="submit">Confirm email verification</button>
   </form>`
     : "";
@@ -109,11 +123,11 @@ export function renderVerifyEmailPage(options: {
 <html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>${options.title}</title>
+    <title>${safeTitle}</title>
   </head>
   <body>
-    <h1>${options.title}</h1>
-    <p>${options.message}</p>
+    <h1>${safeTitle}</h1>
+    <p>${safeMessage}</p>
     ${buttonHtml}
   </body>
 </html>`;

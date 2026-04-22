@@ -1,5 +1,25 @@
 import { LOCAL_BACKEND_ORIGIN } from "./state.js";
 
+let csrfTokenPromise = null;
+function getCsrfToken() {
+  if (!csrfTokenPromise) {
+    csrfTokenPromise = fetch(`${LOCAL_BACKEND_ORIGIN}/api/v1/csrf-token`, { credentials: "include" })
+      .then((res) => {
+        if (!res.ok) throw new Error(`failed to fetch csrf token: HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((body) => {
+        if (!body || typeof body.token !== "string") throw new Error("csrf token missing");
+        return body.token;
+      })
+      .catch((err) => {
+        csrfTokenPromise = null;
+        throw err;
+      });
+  }
+  return csrfTokenPromise;
+}
+
 const statusEl = document.getElementById("status");
 
 let statusTimer = null;
@@ -36,9 +56,20 @@ export async function withLoading(btn, fn) {
 }
 
 export async function api(path, init = {}) {
+  const method = (init.method || "GET").toUpperCase();
+  const needsCsrf = method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && path !== "/csrf-token";
+  const extraHeaders = {};
+  if (needsCsrf) {
+    try {
+      extraHeaders["x-ebp-csrf"] = await getCsrfToken();
+    } catch (err) {
+      throw new Error(`failed to obtain csrf token: ${err && err.message ? err.message : err}`);
+    }
+  }
   const res = await fetch(`${LOCAL_BACKEND_ORIGIN}/api/v1${path}`, {
-    headers: { "content-type": "application/json" },
+    credentials: "include",
     ...init,
+    headers: { "content-type": "application/json", ...extraHeaders, ...(init.headers || {}) },
   });
   let body = null;
   try {

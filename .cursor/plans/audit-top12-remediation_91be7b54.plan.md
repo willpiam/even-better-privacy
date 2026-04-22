@@ -4,40 +4,43 @@ overview: Twelve sequential phases, each closing one High/Critical item from the
 todos:
   - id: phase-1-gui-01
     content: "Phase 1 — F-GUI-01: per-launch CSRF token + scoped CORS + Host validation in gui/local-backend/"
-    status: pending
+    status: completed
   - id: phase-2-storage-01-04
     content: "Phase 2 — F-STORAGE-01/04: apply 0o600 to identity files, 0o700 to ~/.ebp/, legacy-perms repair helper"
-    status: pending
+    status: completed
   - id: phase-3-server-01
     content: "Phase 3 — F-SERVER-01: HTML-escape token/message in verify-email.ts and tighten its CSP"
-    status: pending
+    status: completed
   - id: phase-4-server-02
     content: "Phase 4 — F-SERVER-02: require signed payload on hierarchy/reject endpoint"
-    status: pending
+    status: completed
   - id: phase-5-crypto-02
     content: "Phase 5 — F-CRYPTO-02: bind recipientFingerprint into signed envelope; update all producers/verifiers"
-    status: pending
+    status: completed
   - id: phase-6-crypto-01
     content: "Phase 6 — F-CRYPTO-01: separate emergency-revocation nonce space (EMERGENCY_NONCE_BASE)"
-    status: pending
+    status: completed
   - id: phase-7-dep-02
     content: "Phase 7 — F-DEP-02: migrate desktop shell to Tauri 2.x and scoped shell permissions"
-    status: pending
+    status: completed
   - id: phase-8-cli-01
     content: "Phase 8 — F-CLI-01: disable terminal echo in CLI readPassword with setRaw"
-    status: pending
+    status: completed
   - id: phase-9-server-03
     content: "Phase 9 — F-SERVER-03: gate X-Forwarded-For trust behind TRUST_PROXY env, use socket peer IP by default"
-    status: pending
+    status: completed
   - id: phase-10-server-05
     content: "Phase 10 — F-SERVER-05: add USER deno to Dockerfile"
-    status: pending
+    status: completed
   - id: phase-11-storage-02
     content: "Phase 11 — F-STORAGE-02: raise PBKDF2 to 600k with storage-format version bump and transparent re-encrypt"
-    status: pending
+    status: completed
   - id: phase-12-web-01
     content: "Phase 12 — F-WEB-01: move signature verification client-side in website/verify.js, add CSP"
-    status: pending
+    status: completed
+  - id: todo-1776895443360-mpfdtzd5b
+    content: "Review and summery "
+    status: completed
 isProject: false
 ---
 

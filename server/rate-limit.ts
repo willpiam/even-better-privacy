@@ -72,11 +72,34 @@ export function checkRateLimit(ip: string, method: string, pathname: string): st
   return null;
 }
 
+// F-SERVER-03: only honour X-Forwarded-For / X-Real-IP when the operator
+// has opted in via the TRUST_PROXY env var, which implies the server sits
+// behind a trusted reverse proxy. Default: trust only the TCP socket peer.
+// This prevents anonymous internet callers from spoofing their IP for
+// rate-limiting bypass and bogus audit logs.
+export const TRUST_PROXY =
+  (Deno.env.get("TRUST_PROXY") ?? "false").toLowerCase() === "true";
+
+export interface RemoteAddrLike {
+  hostname?: string;
+  transport?: string;
+}
+
 /**
- * Get client IP from request headers (handles proxies)
+ * Get client IP.
+ *
+ * When `TRUST_PROXY` is set, the leftmost hop of `x-forwarded-for`
+ * (or `x-real-ip`) is used. Otherwise, only the socket peer address is
+ * returned. `remoteAddr` is provided by the server loop's `ConnInfo` and
+ * should be preferred over header values in all untrusted deployments.
  */
-export function getClientIp(req: Request): string {
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() 
-    ?? req.headers.get("x-real-ip") 
-    ?? "unknown";
+export function getClientIp(req: Request, remoteAddr?: RemoteAddrLike): string {
+  const peer = remoteAddr?.hostname?.trim();
+  if (TRUST_PROXY) {
+    const xff = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+    if (xff) return xff;
+    const xri = req.headers.get("x-real-ip")?.trim();
+    if (xri) return xri;
+  }
+  return peer && peer.length > 0 ? peer : "unknown";
 }

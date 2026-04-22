@@ -3,7 +3,7 @@ import { readJsonBody, validateStringLength, LIMITS } from "../body.ts";
 import { json } from "../response.ts";
 import {
   getIdentity,
-  getMaxRevocationNonce,
+  getMaxRevocationNonceBelow,
   getRevocations,
   hasRevocationWithNonce,
   insertRevocation,
@@ -11,9 +11,10 @@ import {
   isIdentityRevoked,
   revokeDetail,
   revokeIdentity,
-} from "../db.ts";
-import type { DatabaseAdapter } from "../db.ts";
+} from "../db/index.ts";
+import type { DatabaseAdapter } from "../db/index.ts";
 import { verifyRevocationCertificate } from "../revocation.ts";
+import { EMERGENCY_NONCE_BASE, isEmergencyNonce } from "../../core/Revocation.ts";
 import type { RevocationPayload } from "../types.ts";
 
 export async function handlePostRevocation(req: Request, db: DatabaseAdapter): Promise<Response> {
@@ -67,14 +68,30 @@ export async function handlePostRevocation(req: Request, db: DatabaseAdapter): P
 
   const record = verifyResult.record;
 
-  const maxNonce = await getMaxRevocationNonce(db, fingerprint);
-  
-  if (record.nonce === 0 && type === "identity") {
-    if (await hasRevocationWithNonce(db, fingerprint, 0)) {
+  // F-CRYPTO-01: emergency certificates live in a separate nonce space
+  // (EMERGENCY_NONCE_BASE and above) so they are not silently consumed by
+  // a regular revocation issued first. Track max regular and max emergency
+  // nonces independently.
+  const isEmergency = isEmergencyNonce(record.nonce);
+
+  if (isEmergency) {
+    if (type !== "identity") {
+      return json({ error: "emergency nonce is reserved for identity revocations" }, 400);
+    }
+    // Emergency cert: must be unique within the emergency nonce space.
+    if (await hasRevocationWithNonce(db, fingerprint, record.nonce)) {
       return json({ error: "emergency revocation certificate already used" }, 400);
     }
-  } else if (record.nonce <= maxNonce) {
-    return json({ error: "revocation nonce must be greater than previous revocations" }, 400);
+  } else {
+    // Regular revocation must not accidentally use the emergency space.
+    if (record.nonce >= EMERGENCY_NONCE_BASE) {
+      return json({ error: "nonce is in reserved emergency range" }, 400);
+    }
+    // Monotonicity only against other regular revocations.
+    const maxRegular = await getMaxRevocationNonceBelow(db, fingerprint, EMERGENCY_NONCE_BASE);
+    if (record.nonce <= maxRegular) {
+      return json({ error: "revocation nonce must be greater than previous revocations" }, 400);
+    }
   }
 
   const now = Date.now();

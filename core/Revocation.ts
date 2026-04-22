@@ -218,4 +218,18 @@ export function isValidRevocationNonce(nonce: number, maxSeenNonce: number): boo
 	return Number.isInteger(nonce) && nonce >= 0 && nonce > maxSeenNonce;
 }
 
+// F-CRYPTO-01: emergency revocation certificates (pre-signed at identity
+// generation time and stored out-of-band) live in a separate nonce space
+// above regular revocation nonces, so they cannot be silently "consumed"
+// by a regular revocation issued first.
+//
+// 2 ** 31 is well above any reasonable regular-revocation counter, remains
+// within the safe-integer range, and leaves room for additional emergency
+// slots (EMERGENCY_NONCE_BASE + 1, +2, ...) without namespace collisions.
+export const EMERGENCY_NONCE_BASE = 2 ** 31;
+
+export function isEmergencyNonce(nonce: number): boolean {
+	return Number.isInteger(nonce) && nonce >= EMERGENCY_NONCE_BASE;
+}
+
 

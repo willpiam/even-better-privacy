@@ -27,7 +27,7 @@ export const FILE_FORMAT_VERSIONS = {
     encryptedSignedFile: 1,
     fileCleartextEnvelope: 1,
     emergencyRevocationCertificate: 1,
-    aesCiphertext: 1,
+    aesCiphertext: 2,
 } as const;
 
 /**

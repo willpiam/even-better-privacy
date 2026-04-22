@@ -304,6 +304,27 @@ export async function getMaxRevocationNonce(db: DatabaseAdapter, fingerprint: st
   return maxNonce;
 }
 
+// F-CRYPTO-01: return the max nonce among revocations with nonce strictly
+// less than `ceiling` (used to separate "regular" from "emergency" nonce
+// spaces). Returns -1 if no matching rows exist.
+export async function getMaxRevocationNonceBelow(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  ceiling: number,
+): Promise<number> {
+  let maxNonce = -1;
+  for (const [nonce] of await db.query<[number | string | bigint]>(
+    "SELECT nonce FROM revocations WHERE identity_fingerprint = ? AND nonce < ?",
+    [fingerprint, ceiling],
+  )) {
+    const parsedNonce = coerceNumber(nonce);
+    if (parsedNonce !== null && parsedNonce > maxNonce) {
+      maxNonce = parsedNonce;
+    }
+  }
+  return maxNonce;
+}
+
 export async function hasRevocationWithNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<boolean> {
   const rows = await db.query<[number]>(
     "SELECT 1 FROM revocations WHERE identity_fingerprint = ? AND nonce = ?",

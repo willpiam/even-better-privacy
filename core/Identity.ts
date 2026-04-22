@@ -11,13 +11,14 @@ import { AES } from "./AES.ts";
 import { stringToHex, hexToString } from "./Hex.ts";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
-import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import { buildMessageHashEnvelope, buildRecipientBoundEnvelope } from "./MessageHash.ts";
 import {
     createRevocationCertificate,
     getRevocationSignaturePayload,
     encodeRevocationCertificate,
     decodeRevocationCertificate,
     verifyRevocationCertificate,
+    EMERGENCY_NONCE_BASE,
     type SignedRevocationCertificate,
     type RevocationType,
 } from "./Revocation.ts";
@@ -81,6 +82,25 @@ export class Identity extends Key {
 
     static VerifySignature(sender: ExternalIdentity, message: string, signature: string, salt?: string) : boolean {
         const envelope = buildMessageHashEnvelope(message, salt);
+        return Identity._VerifyEnvelope(sender, envelope, signature);
+    }
+
+    // F-CRYPTO-02: verify a signature that is bound to a specific recipient
+    // fingerprint. Used by `decryptAndVerify` after successful decryption so
+    // a surreptitiously forwarded ciphertext cannot re-validate for a new
+    // recipient.
+    static VerifyRecipientBoundSignature(
+        sender: ExternalIdentity,
+        recipientFingerprint: string,
+        message: string,
+        signature: string,
+        salt?: string,
+    ): boolean {
+        const envelope = buildRecipientBoundEnvelope(recipientFingerprint, message, salt);
+        return Identity._VerifyEnvelope(sender, envelope, signature);
+    }
+
+    private static _VerifyEnvelope(sender: ExternalIdentity, envelope: string, signature: string): boolean {
         switch (sender.signingKeyType) {
             case 'dilithium':
                 return DilithiumSigningKey.verify(sender.signingKeyDetails.variant, envelope, signature, sender.signingKey);
@@ -124,21 +144,85 @@ export class Identity extends Key {
         return this.signingKey.sign(envelope);
     }
 
+    // F-CRYPTO-02: sign a message that is explicitly bound to a recipient
+    // fingerprint. The signed bytes include the recipient fingerprint so a
+    // verifier can confirm the sender intended THEM as the recipient.
+    signMessageForRecipient(message: string, recipientFingerprint: string, salt?: string): string {
+        const envelope = buildRecipientBoundEnvelope(recipientFingerprint, message, salt);
+        return this.signingKey.sign(envelope);
+    }
+
     signAndEncryptMessage(message: string, recipient: Identity) : string {
-        const signature = this.signMessage(message);
-        return recipient.encryptionKey.encrypt(JSON.stringify({ message, signature })); 
+        const recipientFingerprint = recipient.toFingerprint();
+        const signature = this.signMessageForRecipient(message, recipientFingerprint);
+        return recipient.encryptionKey.encrypt(JSON.stringify({
+            message,
+            signature,
+            // v2 envelope marker: a legacy verifier that does not know about
+            // v2 will fail-closed, which is exactly what we want.
+            envelopeVersion: 2,
+            recipientFingerprint,
+        }));
     }
 
     signAndEncryptFor(message: string, recipient: ExternalIdentity) : string {
-        const signature = this.signMessage(message);
-        return Identity.EncryptFor(recipient, JSON.stringify({ message, signature }));
+        const signature = this.signMessageForRecipient(message, recipient.fingerprint);
+        return Identity.EncryptFor(recipient, JSON.stringify({
+            message,
+            signature,
+            envelopeVersion: 2,
+            recipientFingerprint: recipient.fingerprint,
+        }));
     }
 
-    decryptAndVerify(ciphertext: string, sender: ExternalIdentity) : { message: string, verified: boolean } {
+    // F-CRYPTO-02: `decryptAndVerify` now returns a `verifyStatus` that
+    // distinguishes a properly recipient-bound v2 signature (`valid`) from a
+    // legacy v1 signature that carried no recipient binding
+    // (`valid_unbound`, a WARNING state that UIs should flag). v1 messages
+    // are still accepted for backward compatibility, but cannot be treated
+    // as "delivered to me" authoritatively.
+    decryptAndVerify(ciphertext: string, sender: ExternalIdentity):
+        { message: string; verified: boolean; verifyStatus: "valid" | "valid_unbound" | "invalid" }
+    {
         const decrypted = this.encryptionKey.decrypt(ciphertext);
-        const { message, signature } = JSON.parse(decrypted);
-        const verified = Identity.VerifySignature(sender, message, signature);
-        return { message, verified };
+        const parsed = JSON.parse(decrypted) as {
+            message: string;
+            signature: string;
+            envelopeVersion?: number;
+            recipientFingerprint?: string;
+        };
+        const { message, signature } = parsed;
+
+        // v2 recipient-bound envelope (preferred).
+        if (parsed.envelopeVersion === 2) {
+            const myFingerprint = this.toFingerprint();
+            // Fail-closed if the sender addressed a different recipient
+            // (surreptitious forwarding).
+            if (typeof parsed.recipientFingerprint === "string"
+                && parsed.recipientFingerprint !== myFingerprint) {
+                return { message, verified: false, verifyStatus: "invalid" };
+            }
+            const verified = Identity.VerifyRecipientBoundSignature(
+                sender,
+                myFingerprint,
+                message,
+                signature,
+            );
+            return {
+                message,
+                verified,
+                verifyStatus: verified ? "valid" : "invalid",
+            };
+        }
+
+        // v1 legacy envelope (unbound). Accept only for decrypt; UI must
+        // warn that recipient binding is not proven.
+        const legacyVerified = Identity.VerifySignature(sender, message, signature);
+        return {
+            message,
+            verified: legacyVerified,
+            verifyStatus: legacyVerified ? "valid_unbound" : "invalid",
+        };
     }
 
     verifyMessage(message: string, signature: string, salt?: string) : boolean {
@@ -394,9 +478,10 @@ export class Identity extends Key {
      * @returns The hex-encoded revocation certificate
      */
     generateEmergencyRevocationCertificate(reason?: string): string {
-        // Use a special nonce (0) for emergency certificates created at generation time
-        // This allows it to be used even if other revocations have occurred
-        const cert = createRevocationCertificate("identity", this.toFingerprint(), 0, {
+        // F-CRYPTO-01: emergency certs live in a separate nonce space
+        // (EMERGENCY_NONCE_BASE and above) so they are not silently
+        // consumed by a regular revocation at nonce 0.
+        const cert = createRevocationCertificate("identity", this.toFingerprint(), EMERGENCY_NONCE_BASE, {
             reason: reason ?? "Emergency revocation certificate",
         });
         
@@ -604,6 +689,22 @@ export class Identity extends Key {
         };
         
         return JSON.stringify(storage, null, 2);
+    }
+
+    // F-STORAGE-02: return true when the identity's on-disk encrypted blob
+    // was written with a legacy (pre-600k-PBKDF2) format. Callers can use
+    // this after a successful unlock to transparently re-encrypt at the
+    // current strength and rewrite the file.
+    static isStorageEncryptedWithLegacyKDF(storageData: string): boolean {
+        try {
+            const parsed = JSON.parse(storageData);
+            if (parsed.version === FILE_FORMAT_VERSIONS.identityStorage && typeof parsed.encrypted === "string") {
+                return AES.isLegacyCiphertext(parsed.encrypted);
+            }
+        } catch {
+            // not JSON / legacy format — not a v2 blob with legacy KDF.
+        }
+        return false;
     }
 
     /** Read just the public data from storage (no password needed). */
