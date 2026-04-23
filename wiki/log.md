@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-04-23] ingest | Semantic Versioning 2.0.0
+
+- Ingested `semver.md` → [[source-semver-2-0-0]].
+- Updated: [[semantic-versioning]], [[overview]], [[index.md]].
+
 ## [2026-04-18] complete | EBP Security Audit — April 2026 (final report)
 
 - Completed all 9 phases of the April 2026 security audit. Final report at [[security-audit-2026-04/report]].

@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-18
+Last updated: 2026-04-23
 
 ## Overview
 
@@ -18,6 +18,7 @@ Last updated: 2026-04-18
 - [[identity-model]] - Dual-key identity structure, merkle-tree fingerprints, bech32 encoding, details system.
 - [[message-payload-formats]] - Wire formats for signed, encrypted, and encrypted+signed message payloads.
 - [[revocation-system]] - Signed revocation certificates, nonce protection, emergency certs, server integration.
+- [[semantic-versioning]] - SemVer compatibility rules for release documentation, including pre-release/build metadata handling.
 
 ## Components
 
@@ -44,3 +45,4 @@ Last updated: 2026-04-18
 - [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).
 - [[source-rfc-8391]] - RFC 8391: XMSS stateful hash-based signature scheme (WOTS+, Merkle trees, parameter sets).
 - [[source-sp-800-208]] - NIST SP 800-208: Federal recommendation for stateful HBS schemes (LMS, XMSS, conformance requirements).
+- [[source-semver-2-0-0]] - Semantic Versioning 2.0.0 specification (MAJOR.MINOR.PATCH rules, precedence, metadata semantics).

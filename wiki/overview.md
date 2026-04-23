@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-04-12
-source_count: 7
+last_updated: 2026-04-23
+source_count: 8
 tags:
   - ebp
   - overview
@@ -68,6 +68,10 @@ The repository is organized as a multi-surface implementation:
 - `email/chrome-extension/` — browser extension for webmail
 - `desktop/` — Tauri shell for desktop packaging
 
+## Versioning Notes
+
+EBP documentation follows [[semantic-versioning]] conventions when describing release compatibility expectations, and keeps protocol payload schema versions documented separately in [[message-payload-formats]].
+
 ## Upcoming Features
 
 - FN-DSA (Falcon) support
@@ -86,3 +90,4 @@ The repository is organized as a multi-surface implementation:
 - `core/version.ts`
 - `wiki/raw/rfc8391.txt` → [[source-rfc-8391]]
 - `wiki/raw/NIST.SP.800-208.pdf` → [[source-sp-800-208]]
+- `wiki/raw/semver.md` → [[source-semver-2-0-0]]
