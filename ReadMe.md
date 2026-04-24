@@ -437,3 +437,10 @@ graph TD
     - scheduled send
     - more traditional "email inbox" layout for the email page
 - 
+
+
+## Questions & Answers
+
+**Do you support Hybrid crypto**
+
+No. EBP is not intended as a transitory protocol. 

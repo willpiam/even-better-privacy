@@ -33,6 +33,7 @@ Last updated: 2026-04-23
 
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
 - [[analysis-linux-build]] - Linux install and local AppImage build flow, including sidecar redirect architecture.
+- [[analysis-top-open-security-issues]] - Ranked top remaining open findings from the April 2026 security audit (post-2026-04-22 remediation pass).
 
 ## Security Audits
 

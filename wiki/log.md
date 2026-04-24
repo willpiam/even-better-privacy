@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-04-23] query | top remaining open security issues
+
+- Answered: Ranked the most important unresolved audit findings after the 2026-04-22 remediation pass — 1 High (`F-TAURI-02`), 1 High-mitigated (`F-DEP-02`), 1 conditional High (`F-GUI-05`), plus a prioritised set of Mediums.
+- Filed: [[analysis-top-open-security-issues]].
+
 ## [2026-04-23] ingest | Semantic Versioning 2.0.0
 
 - Ingested `semver.md` → [[source-semver-2-0-0]].
