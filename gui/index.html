@@ -2786,6 +2786,10 @@
                 ></iframe>
               </div>
               <div id="mail-message-loading" class="small muted" style="display: none;">Loading selected message...</div>
+              <div class="stack" id="mail-reader-attachments-wrap" style="margin-top: 10px;">
+                <div class="small muted">Attachments</div>
+                <ul id="mail-reader-attachments" class="small"></ul>
+              </div>
               <div class="row mail-reader-actions">
                 <button type="button" class="secondary" id="mail-reply-btn">Reply</button>
                 <div class="row">
@@ -2831,6 +2835,10 @@
             <label>Body
               <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
             </label>
+            <label>Attachments
+              <input id="mail-compose-attachments" type="file" multiple />
+            </label>
+            <ul id="mail-compose-attachments-list" class="small muted"></ul>
             <div>
               <button id="mail-compose-send-btn" type="submit">Send Email</button>
             </div>

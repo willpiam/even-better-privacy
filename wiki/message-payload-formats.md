@@ -2,8 +2,8 @@
 title: "Message Payload Formats"
 type: concept
 status: active
-last_updated: 2026-04-10
-source_count: 3
+last_updated: 2026-04-27
+source_count: 8
 tags:
   - payload
   - email
@@ -29,7 +29,7 @@ All payloads are transmitted as JSON wrapped in PEM-style armor markers:
 -----END EBP MESSAGE-----
 ```
 
-In the GUI's native email system, the armored block is placed directly in the plain-text body of the email (sent via SMTP as `text/plain`). The recipient's mail client displays it as-is; the EBP GUI extracts and parses the block on receipt.
+In the GUI's native email system, the armored block is placed directly in the plain-text body of the email (sent via SMTP as `text/plain`). SMTP is the transport layer described by [[source-rfc-5321]]; it carries the message but does not authenticate the EBP sender or encrypt the body. The recipient's mail client displays the block as-is; the EBP GUI can fetch the message through IMAP4rev2 concepts described by [[source-rfc-9051]], then extracts and parses the block on receipt.
 
 Implementation: `armorPayload()` and `extractArmoredPayload()` in `core/Payloads.ts`.
 
@@ -61,6 +61,8 @@ The `ciphertext` field is a hex-encoded byte sequence: `encapsulatedKey || nonce
 | AES ciphertext | variable | AES-256-GCM encrypted inner payload |
 
 The shared secret derived from ML-KEM decapsulation is used directly as the AES-256-GCM key (32 bytes). A fresh encapsulation is performed for every message.
+
+AES itself is specified by [[source-fips-197]], while GCM is specified by [[source-sp-800-38d]]. See [[aes-gcm]] for nonce/IV and associated-data context.
 
 #### Inner payload (after decryption)
 
@@ -118,6 +120,25 @@ Detached signature — the signature is separate from the message it covers.
 
 Same as `ebp-signed-message` but without the `message` field. The verifier must have the original message independently.
 
+### `ebp-encrypted-email-attachment` / `ebp-encrypted-signed-email-attachment` (version 1)
+
+Native GUI email supports MIME-native encrypted attachments using JSON attachment payloads with content type `application/ebp-encrypted-attachment+json`.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | `"ebp-encrypted-email-attachment"` or `"ebp-encrypted-signed-email-attachment"` |
+| `version` | number | `1` |
+| `recipientFingerprint` | string | Bech32 fingerprint of intended recipient |
+| `senderFingerprint` | string? | Present for signed attachment payloads |
+| `attachmentId` | string | Stable attachment identifier for reader/decrypt flow |
+| `ciphertext` | string | Hex-encoded ML-KEM + AES-GCM ciphertext of the attachment envelope |
+
+After decrypt, the cleartext envelope contains:
+
+- `fileName`, `mimeType`, `fileSize`, `fileDataBase64`
+- `attachmentId`
+- optional `bodyPayloadHash` used to bind the attachment to the encrypted message body payload
+
 ## Key Material in Payloads: Summary
 
 | Payload type | Sender public keys included? | Sender fingerprint included? |
@@ -140,11 +161,11 @@ When verification succeeds using embedded keys (i.e. the sender is not a known c
 The [[component-gui|GUI]] compose form offers two modes:
 
 - **Plain** — body sent as-is, no EBP payload.
-- **EBP sign + encrypt** — body is encrypted and signed via `POST /api/v1/encrypt` (with `sign: true`), armored, and sent as the email's plain-text body via SMTP.
+- **EBP sign + encrypt** — body is encrypted and signed, armored, and sent as the email's plain-text body via SMTP. If attachments are selected, each one is encrypted into a MIME attachment payload (`application/ebp-encrypted-attachment+json`) and sent in the same message.
 
 GUI compose always uses `sign: true`, so outbound EBP emails are always `ebp-encrypted-signed-message`.
 
-On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts any armored EBP payload from the text or HTML body. If the payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled. The user then triggers decryption via `POST /api/v1/decrypt`, which decapsulates the ML-KEM ciphertext, decrypts the AES payload, and verifies the signature against the resolved sender identity.
+On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts any armored EBP payload from the text or HTML body plus EBP-encrypted attachment payloads from MIME attachments. If the payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled. The user then triggers body decryption via `POST /api/v1/decrypt` and attachment decryption via `POST /api/v1/mail/decrypt-attachment`.
 
 ## Version Constants
 
@@ -156,13 +177,27 @@ Payload format versions are defined in `core/version.ts` under `FILE_FORMAT_VERS
 | `encryptedMessage` | 1 |
 | `signedMessage` | 2 |
 | `signature` | 2 |
+| `encryptedEmailAttachment` | 1 |
+| `encryptedSignedEmailAttachment` | 1 |
+| `emailAttachmentCleartextEnvelope` | 1 |
+
+## Standards Boundaries
+
+EBP armor is PEM-style wrapping around EBP JSON payloads. It is not OpenPGP armor and does not use OpenPGP packets. The IETF OpenPGP PQC draft summarized in [[source-draft-ietf-openpgp-pqc-17]] is useful comparison material for PQC messaging, but EBP's payloads are a separate format.
+
+EBP's identity and revocation fields also differ from X.509/PKIX certificates and CRLs. See [[x509-pki]] and [[source-rfc-5280]] for that contrast.
+
+Email standards provide carriage and access, not EBP semantics. [[email-transport]] summarizes the SMTP/IMAP boundary: SMTP envelope addresses and IMAP mailbox state are operational metadata, while EBP sender fingerprints, signatures, and encryption live inside the payload format documented here.
 
 ## Related Pages
 
 - [[identity-model]] — fingerprint construction and dual-key model
 - [[ml-kem]] — encryption/KEM scheme details
+- [[aes-gcm]] — AES-GCM mode and nonce context
 - [[ml-dsa]] — lattice-based signing scheme
 - [[slh-dsa]] — hash-based signing scheme
+- [[openpgp-pqc]] — related OpenPGP PQC standards context
+- [[email-transport]] — SMTP/IMAP carriage and mailbox access context
 - [[component-gui]] — GUI native email integration
 - [[component-cli]] — CLI sign/encrypt commands
 - [[overview]]
@@ -170,5 +205,12 @@ Payload format versions are defined in `core/version.ts` under `FILE_FORMAT_VERS
 ## Sources
 
 - `core/Payloads.ts`
+- `core/EmailAttachmentPayload.ts`
 - `core/Identity.ts`
 - `gui/local-backend/main.ts`
+- `gui/local-backend/routes.ts`
+- `wiki/raw/NIST.FIPS.197-upd1.pdf` → [[source-fips-197]]
+- `wiki/raw/nistspecialpublication800-38d.pdf` → [[source-sp-800-38d]]
+- `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
+- `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
+- `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]

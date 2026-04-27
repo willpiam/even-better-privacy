@@ -1,6 +1,12 @@
 import { assert, assertEquals } from "jsr:@std/assert";
 import { Identity } from "../core/Identity.ts";
 import { createFileCleartextEnvelope, parseFileCleartextEnvelope } from "../core/FilePayload.ts";
+import {
+	createEmailAttachmentCleartextEnvelope,
+	parseEmailAttachmentCleartextEnvelope,
+	parseEncryptedEmailAttachmentPayload,
+} from "../core/EmailAttachmentPayload.ts";
+import { FILE_FORMAT_VERSIONS } from "../core/version.ts";
 
 Deno.test("Alice and Bob: exchange signed encrypted messages using external identities", () => {
 	// Create identities for Alice and Bob
@@ -254,4 +260,39 @@ Deno.test("Alice and Bob: signed encrypted file verifies sender", () => {
 	const parsed = parseFileCleartextEnvelope(result.message);
 	assertEquals(parsed.fileName, "signed.bin");
 	assertEquals(Array.from(parsed.fileBytes), Array.from(fileBytes));
+});
+
+Deno.test("Alice and Bob: encrypted email attachment roundtrip", () => {
+	const alice = new Identity("dilithium", "kyber");
+	const bob = new Identity("dilithium", "kyber");
+	const fileBytes = new Uint8Array([10, 11, 12, 13, 14, 15]);
+	const envelope = createEmailAttachmentCleartextEnvelope({
+		attachmentId: "att-01",
+		fileBytes,
+		fileName: "hello.txt",
+		mimeType: "text/plain",
+		bodyPayloadHash: "abc123",
+	});
+	const ciphertext = alice.signAndEncryptFor(JSON.stringify(envelope), bob.summary);
+	const result = bob.decryptAndVerify(ciphertext, alice.summary);
+	assertEquals(result.verified, true);
+	const parsed = parseEmailAttachmentCleartextEnvelope(result.message);
+	assertEquals(parsed.attachmentId, "att-01");
+	assertEquals(parsed.fileName, "hello.txt");
+	assertEquals(parsed.mimeType, "text/plain");
+	assertEquals(parsed.bodyPayloadHash, "abc123");
+	assertEquals(Array.from(parsed.fileBytes), Array.from(fileBytes));
+});
+
+Deno.test("Encrypted email attachment payload parser validates shape", () => {
+	const parsed = parseEncryptedEmailAttachmentPayload({
+		type: "ebp-encrypted-signed-email-attachment",
+		version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+		recipientFingerprint: "ebp1recipient",
+		senderFingerprint: "ebp1sender",
+		attachmentId: "att-01",
+		ciphertext: "deadbeef",
+	});
+	assertEquals(parsed.type, "ebp-encrypted-signed-email-attachment");
+	assertEquals(parsed.attachmentId, "att-01");
 });

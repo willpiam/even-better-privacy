@@ -41,6 +41,8 @@ export const state = {
   mailOAuthProvider: "",
   mailOAuthEmail: "",
   mailActiveTab: "inbox",
+  mailComposeAttachments: [],
+  decryptedMailAttachments: {},
   decryptedFileResult: null,
   serverDefaultApplied: false,
 };

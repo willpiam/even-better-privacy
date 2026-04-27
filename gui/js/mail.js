@@ -402,6 +402,134 @@ function formatMailSize(value) {
   return `${rounded.replace(/\.0+$/, "").replace(/(\.\d*[1-9])0+$/, "$1")} ${units[unitIdx]}`;
 }
 
+function readFileAsBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const marker = "base64,";
+      const idx = result.indexOf(marker);
+      resolve(idx >= 0 ? result.slice(idx + marker.length) : result);
+    };
+    reader.onerror = () => reject(new Error(`Failed to read file: ${file?.name || "unknown"}`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function clearComposeAttachments() {
+  state.mailComposeAttachments = [];
+  const input = document.getElementById("mail-compose-attachments");
+  if (input) input.value = "";
+  renderComposeAttachments();
+}
+
+function renderComposeAttachments() {
+  const list = document.getElementById("mail-compose-attachments-list");
+  if (!list) return;
+  list.innerHTML = "";
+  if (!state.mailComposeAttachments.length) {
+    list.innerHTML = "<li>(no attachments selected)</li>";
+    return;
+  }
+  for (const file of state.mailComposeAttachments) {
+    const li = document.createElement("li");
+    li.textContent = `${file.name} (${formatMailSize(file.size)})`;
+    list.appendChild(li);
+  }
+}
+
+function renderMailReaderAttachments() {
+  const wrap = document.getElementById("mail-reader-attachments-wrap");
+  const list = document.getElementById("mail-reader-attachments");
+  if (!wrap || !list) return;
+  list.innerHTML = "";
+  const detail = state.selectedMailMessage;
+  if (!detail || !Array.isArray(detail.attachments) || detail.attachments.length === 0) {
+    wrap.style.display = "none";
+    return;
+  }
+  wrap.style.display = "";
+  for (const attachment of detail.attachments) {
+    const li = document.createElement("li");
+    const index = Number.isInteger(attachment.index) ? attachment.index : -1;
+    const key = String(index);
+    const decrypted = state.decryptedMailAttachments[key] || null;
+    const size = formatMailSize(attachment.size);
+    const contentType = attachment.contentType || "application/octet-stream";
+    const encryptedLabel = attachment.isEbpEncryptedAttachment ? " (EBP encrypted)" : "";
+    li.innerHTML = `
+      <div class="row" style="justify-content: space-between; align-items: center; gap: 8px;">
+        <span>${escapeHtml(attachment.filename || "attachment")}${escapeHtml(encryptedLabel)}</span>
+        <span class="small muted">${escapeHtml(size || contentType)}</span>
+      </div>
+    `;
+    const actions = document.createElement("div");
+    actions.className = "row";
+    actions.style.gap = "8px";
+    actions.style.marginTop = "4px";
+    li.appendChild(actions);
+    if (attachment.isEbpEncryptedAttachment && attachment.ebpPayload) {
+      const decryptBtn = document.createElement("button");
+      decryptBtn.type = "button";
+      decryptBtn.className = "secondary";
+      decryptBtn.textContent = decrypted ? "Decrypt Again" : "Decrypt";
+      decryptBtn.addEventListener("click", async () => {
+        try {
+          const sender = document.getElementById("mail-sender-contact").value.trim();
+          const password = await requestPassword("Enter password to decrypt encrypted attachment");
+          if (!password) return;
+          const res = await api("/mail/decrypt-attachment", {
+            method: "POST",
+            body: JSON.stringify({
+              payload: attachment.ebpPayload,
+              password,
+              sender: sender || undefined,
+              expectedBodyPayloadHash: state.selectedMailMessage?.ebpBodyPayloadHash || undefined,
+            }),
+          });
+          state.decryptedMailAttachments[key] = res;
+          renderMailReaderAttachments();
+          setStatus(`Attachment decrypted: ${res.fileName}`, "success");
+        } catch (err) {
+          setStatus(err.message, "error");
+        }
+      });
+      actions?.appendChild(decryptBtn);
+      if (decrypted && decrypted.fileDataBase64 && decrypted.fileName) {
+        const saveBtn = document.createElement("button");
+        saveBtn.type = "button";
+        saveBtn.className = "secondary";
+        saveBtn.textContent = "Save";
+        saveBtn.addEventListener("click", async () => {
+          try {
+            const out = await api("/save-file", {
+              method: "POST",
+              body: JSON.stringify({
+                filename: decrypted.fileName,
+                base64Content: decrypted.fileDataBase64,
+              }),
+            });
+            setStatus(`Saved to ${out.path}`, "success");
+          } catch (err) {
+            setStatus(err.message, "error");
+          }
+        });
+        actions?.appendChild(saveBtn);
+        const verifyBadge = document.createElement("span");
+        verifyBadge.className = "small muted";
+        verifyBadge.textContent = `status: ${decrypted.verifyStatus || "-"}`;
+        actions?.appendChild(verifyBadge);
+      }
+    } else {
+      const meta = document.createElement("span");
+      meta.className = "small muted";
+      meta.textContent = "Not an EBP encrypted attachment";
+      actions?.appendChild(meta);
+    }
+    list.appendChild(li);
+  }
+}
+
 function renderMailReaderHeader() {
   const detail = state.selectedMailMessage;
   const subjectEl = document.getElementById("mail-reader-subject");
@@ -431,15 +559,18 @@ function renderSelectedMailMessageBody() {
   renderMailReaderHeader();
   if (!detail) {
     setMailReaderPlaintext("");
+    renderMailReaderAttachments();
     return;
   }
   const textBody = typeof detail.text === "string" ? detail.text : "";
   const htmlBody = typeof detail.html === "string" ? detail.html : "";
   if (state.mailRenderHtml && htmlBody.trim()) {
     setMailReaderHtml(htmlBody);
+    renderMailReaderAttachments();
     return;
   }
   setMailReaderPlaintext(textBody || htmlBody || "");
+  renderMailReaderAttachments();
 }
 
 function setMailMessageLoading(loading) {
@@ -478,6 +609,7 @@ function renderMailMessages() {
       const requestId = state.mailMessageLoadRequestId + 1;
       state.mailMessageLoadRequestId = requestId;
       state.selectedMailMessage = null;
+      state.decryptedMailAttachments = {};
       state.selectedMailMessageUid = String(msg.uid);
       renderSelectedMailMessageBody();
       updateVerifyResult("mail-verify-result", null, null);
@@ -492,6 +624,7 @@ function renderMailMessages() {
         const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
         if (requestId !== state.mailMessageLoadRequestId) return;
         state.selectedMailMessage = detail;
+        state.decryptedMailAttachments = {};
         if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
         setMailMessageLoading(false);
         renderMailMessages();
@@ -638,6 +771,7 @@ export function initMailPage() {
         state.mailMessages = [];
         state.selectedMailMessage = null;
         state.selectedMailMessageUid = null;
+        state.decryptedMailAttachments = {};
         state.mailMessageLoadRequestId += 1;
         setMailMessageLoading(false);
         renderMailMessages();
@@ -677,6 +811,7 @@ export function initMailPage() {
       if (oauthStatus) oauthStatus.textContent = "Choose a provider to connect this account.";
       state.mailOAuthProvider = "";
       state.mailOAuthEmail = "";
+      clearComposeAttachments();
       applyMailAuthTypeUi();
       setStatus("Creating new mail account profile", "success");
     });
@@ -872,9 +1007,17 @@ export function initMailPage() {
   if (composeForm) {
     const modeEl = document.getElementById("mail-compose-mode");
     const recipientEl = document.getElementById("mail-compose-recipient");
+    const attachmentsEl = document.getElementById("mail-compose-attachments");
     if (modeEl) modeEl.addEventListener("change", updateMailComposeSendState);
     if (recipientEl) recipientEl.addEventListener("input", updateMailComposeSendState);
+    if (attachmentsEl) {
+      attachmentsEl.addEventListener("change", () => {
+        state.mailComposeAttachments = Array.from(attachmentsEl.files || []);
+        renderComposeAttachments();
+      });
+    }
     updateMailComposeSendState();
+    renderComposeAttachments();
 
     composeForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -887,41 +1030,47 @@ export function initMailPage() {
           const body = document.getElementById("mail-compose-body").value;
           const recipient = document.getElementById("mail-compose-recipient").value.trim();
           if (!to || !subject) throw new Error("To and subject are required");
+          const attachments = await Promise.all(
+            state.mailComposeAttachments.map(async (file) => ({
+              fileName: file.name || "attachment.bin",
+              mimeType: file.type || "application/octet-stream",
+              fileDataBase64: await readFileAsBase64(file),
+            })),
+          );
 
-          let outboundBody = body;
           if (mode === "ebp-encrypt") {
             if (!recipient) throw new Error("EBP recipient contact is required for EBP mode");
-            const password = await requestPassword("Enter password to sign/encrypt this email body");
+            const password = await requestPassword("Enter password to sign/encrypt this email and attachments");
             if (!password) return;
-            const encrypted = await api("/encrypt", {
+            await api("/mail/send-ebp", {
               method: "POST",
               body: JSON.stringify({
+                accountId: state.selectedMailAccountId || undefined,
+                to,
+                subject,
                 message: body,
                 recipient,
-                sign: true,
                 password,
                 includePublicKeys: state.mailIncludePublicKeys,
+                attachments,
               }),
             });
-            outboundBody = [
-              "-----BEGIN EBP MESSAGE-----",
-              JSON.stringify(encrypted, null, 2),
-              "-----END EBP MESSAGE-----",
-            ].join("\n");
+          } else {
+            await api("/mail/send", {
+              method: "POST",
+              body: JSON.stringify({
+                accountId: state.selectedMailAccountId || undefined,
+                to,
+                subject,
+                text: body,
+                attachments,
+              }),
+            });
           }
-
-          await api("/mail/send", {
-            method: "POST",
-            body: JSON.stringify({
-              accountId: state.selectedMailAccountId || undefined,
-              to,
-              subject,
-              text: outboundBody,
-            }),
-          });
           setStatus("Email sent", "success");
           document.getElementById("mail-compose-subject").value = "";
           document.getElementById("mail-compose-body").value = "";
+          clearComposeAttachments();
         } catch (err) {
           setStatus(err.message, "error");
         }

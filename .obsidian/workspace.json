@@ -1,0 +1,223 @@
+{
+  "main": {
+    "id": "d0218b06e91e17e2",
+    "type": "split",
+    "children": [
+      {
+        "id": "0ad733fc264106b2",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "ed34729633f763f7",
+            "type": "leaf",
+            "state": {
+              "type": "bases",
+              "state": {
+                "file": "Untitled 6.base",
+                "viewName": "Table"
+              },
+              "icon": "lucide-table",
+              "title": "Untitled 6"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "f5763a55a88af7e7",
+    "type": "split",
+    "children": [
+      {
+        "id": "a189c69fceb538b1",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "8c16ca4143a26160",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "dc22e1df394014e5",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "email",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "aced48e9ca543e05",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "a1aceca587dcf9bf",
+    "type": "split",
+    "children": [
+      {
+        "id": "11bfc89ca21b5f23",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "58a55e5243bb8927",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Untitled.base",
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Untitled"
+            }
+          },
+          {
+            "id": "ec9b1ea453d7e609",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Untitled.base",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Untitled"
+            }
+          },
+          {
+            "id": "be1dd6c5cbe68528",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "a0d0d71a8ef58b45",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "d01122c2c3b7c36c",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Untitled.base",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of Untitled"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300,
+    "collapsed": true
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "ed34729633f763f7",
+  "lastOpenFiles": [
+    "core/EmailAttachmentPayload.ts",
+    "wiki/decentralized-identifiers.md",
+    "wiki/source-did-1-1.md",
+    "wiki/email-transport.md",
+    "wiki/uri-syntax.md",
+    "wiki/source-rfc-9051.md",
+    "wiki/source-rfc-5321.md",
+    "wiki/source-rfc-3986.md",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1.html",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/parts-of-a-did.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/fixup.js",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/figure-c.2-group-did-controllers.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/figure-c.1-independent-did-controllers.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/figure-b.1-controller-and-subject-equivalence.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/figure-a.2-also-known-as-graph.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/figure-a.1-did-and-did-document-graph.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/did_detailed_architecture_overview.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/did_brief_architecture_overview.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/diagram-production-consumption.svg",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/W3C-CR",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/W3C",
+    "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files",
+    "wiki/raw/rfc3986.txt",
+    "2026-04-27.md",
+    "Untitled 6.base",
+    "wiki/overview.md",
+    "Untitled 5.base",
+    "Untitled 4.base",
+    "mobile/node_modules/@noble/curves/README.md",
+    "mobile/node_modules/eslint-plugin-react/README.md",
+    "wiki/component-server.md",
+    "wiki/key-management.md",
+    "wiki/log.md",
+    "wiki/index.md"
+  ]
+}

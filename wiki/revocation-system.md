@@ -2,8 +2,8 @@
 title: "EBP Revocation System"
 type: concept
 status: active
-last_updated: 2026-04-09
-source_count: 3
+last_updated: 2026-04-25
+source_count: 5
 tags:
   - revocation
   - trust
@@ -96,6 +96,12 @@ Anyone can verify a revocation certificate using the identity's public signing k
 
 Implementation: `verifyRevocationCertificate()` in `core/Revocation.ts`
 
+## Standards Context
+
+EBP revocation is not PKIX revocation. RFC 5280 defines X.509 certificate revocation lists and CRL validation for CA-issued certificate chains; EBP uses signed revocation certificates tied to an EBP fingerprint and verified with the identity's own signing key. See [[x509-pki]] and [[source-rfc-5280]].
+
+NIST SP 800-57 Part 1 treats revocation, compromise, recovery, and destruction as part of the broader key-management lifecycle. See [[key-management]] and [[source-sp-800-57-part-1-r5]].
+
 ## Related Pages
 
 - [[identity-model]]
@@ -103,6 +109,8 @@ Implementation: `verifyRevocationCertificate()` in `core/Revocation.ts`
 - [[component-server]]
 - [[component-gui]]
 - [[analysis-sync-revoked-details-bug]]
+- [[key-management]]
+- [[x509-pki]]
 - [[overview]]
 
 ## Sources
@@ -110,3 +118,5 @@ Implementation: `verifyRevocationCertificate()` in `core/Revocation.ts`
 - `ReadMe.md`
 - `core/Revocation.ts`
 - `core/Identity.ts`
+- `wiki/raw/rfc5280.txt` → [[source-rfc-5280]]
+- `wiki/raw/NIST.SP.800-57pt1r5.pdf` → [[source-sp-800-57-part-1-r5]]

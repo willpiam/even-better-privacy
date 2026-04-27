@@ -2,8 +2,8 @@
 title: "EBP Website"
 type: component
 status: active
-last_updated: 2026-04-09
-source_count: 4
+last_updated: 2026-04-27
+source_count: 5
 tags:
   - component
   - website
@@ -50,6 +50,8 @@ A client-side tool that verifies EBP signatures by delegating to the [[component
 - **Message** — for detached signatures (`ebp-signature` type).
 - **File upload** — for `ebp-signed-file` payloads.
 
+The configurable server URL is a URI-shaped input. [[source-rfc-3986]] provides the generic syntax and normalization background; scheme-specific HTTPS behavior and browser fetch behavior remain separate layers. See [[uri-syntax]] for the wiki's URL-handling notes.
+
 ### Output
 
 Displays the server's JSON response, a human-readable summary (valid/invalid/mismatch), and published signer details when available.
@@ -75,6 +77,7 @@ Warm, minimal aesthetic using CSS custom properties (`--brand: #d36f2f`, `--bg: 
 - [[component-cli]] — referenced in "How to Get It"
 - [[component-gui]] — referenced in "How to Get It"
 - [[component-email-extension]] — referenced in "How It Works"
+- [[uri-syntax]]
 - [[identity-model]] — landing page describes fingerprint-based identity
 - [[revocation-system]] — landing page describes revocation support
 - [[overview]]
@@ -85,3 +88,4 @@ Warm, minimal aesthetic using CSS custom properties (`--brand: #d36f2f`, `--bg: 
 - `website/verify.html`
 - `website/verify.js`
 - `website/privacy.html`
+- `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]

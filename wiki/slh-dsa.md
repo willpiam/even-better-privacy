@@ -2,8 +2,8 @@
 title: "SLH-DSA (SPHINCS+) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-12
-source_count: 5
+last_updated: 2026-04-25
+source_count: 7
 tags:
   - crypto
   - signatures
@@ -46,6 +46,12 @@ The tradeoff is signature size: at ~30 KB per signature, SLH-DSA signatures are 
 
 SLH-DSA is a **stateless** hash-based scheme, meaning the private key does not change between signatures. This is a deliberate design choice over the earlier **stateful** schemes XMSS ([[source-rfc-8391]]) and LMS, which NIST first approved for federal use in [[source-sp-800-208]]. Stateful schemes produce much smaller signatures (~2.8 KB for XMSS-SHA2\_20\_256) but require that a one-time key index is persisted to non-volatile storage before every signature — reusing a key index completely breaks security. SP 800-208 mandates hardware cryptographic modules (FIPS 140-3 Level 3+) to enforce this. SLH-DSA eliminates this operational burden entirely, at the cost of larger signatures, making it suitable for general-purpose software deployments like EBP.
 
+See [[cryptographic-module-validation]] for the distinction between this FIPS 140-3 hardware-module requirement for stateful HBS signing and EBP's software use of stateless SLH-DSA.
+
+## OpenPGP PQC Context
+
+The IETF OpenPGP PQC draft registers SLH-DSA-SHAKE variants for OpenPGP. EBP's documented default is SLH-DSA-SHA2-256s, so the draft is related context rather than an EBP algorithm-ID source. See [[openpgp-pqc]] and [[source-draft-ietf-openpgp-pqc-17]].
+
 ## Fingerprint Role
 
 The signing public key forms the **left leaf** of the identity merkle tree. It is hashed as `SHA-256(base64-decoded public key bytes)`. Identities using SLH-DSA receive the bech32 human-readable prefix **`ebpsk`** (SPHINCS+ + Kyber). See [[identity-model]].
@@ -62,8 +68,12 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - [[source-fips-205]]
 - [[source-rfc-8391]]
 - [[source-sp-800-208]]
+- [[source-fips-140-3]]
+- [[source-draft-ietf-openpgp-pqc-17]]
+- [[cryptographic-module-validation]]
 - [[ml-dsa]]
 - [[ml-kem]]
+- [[openpgp-pqc]]
 - [[revocation-system]]
 - [[overview]]
 
@@ -74,3 +84,5 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - `wiki/raw/NIST.FIPS.205.pdf` → [[source-fips-205]]
 - `wiki/raw/rfc8391.txt` → [[source-rfc-8391]]
 - `wiki/raw/NIST.SP.800-208.pdf` → [[source-sp-800-208]]
+- `wiki/raw/NIST.FIPS.140-3.pdf` → [[source-fips-140-3]]
+- `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]

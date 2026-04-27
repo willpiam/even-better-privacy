@@ -2,8 +2,8 @@
 title: "ML-KEM (Kyber) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-08
-source_count: 3
+last_updated: 2026-04-25
+source_count: 6
 tags:
   - crypto
   - kem
@@ -43,6 +43,12 @@ Decryption reverses this: decapsulate to recover the shared secret, then decrypt
 
 EBP generates a fresh shared secret for every message. Responses use a new encapsulation, not the key from the initial message. This is simpler than session-key negotiation and avoids key reuse across messages.
 
+## Standards Context
+
+EBP's symmetric layer uses AES-256-GCM after ML-KEM encapsulation. AES is specified by [[source-fips-197]], while GCM nonce, tag, and associated-data semantics are specified by [[source-sp-800-38d]] and summarized in [[aes-gcm]].
+
+The IETF OpenPGP PQC draft also profiles ML-KEM, but in composite OpenPGP KEMs such as ML-KEM-1024+X448. That is related context, not EBP's construction. See [[openpgp-pqc]] and [[source-draft-ietf-openpgp-pqc-17]].
+
 ## Implementation Details
 
 - Supported variants: `ml_kem512`, `ml_kem768`, `ml_kem1024` (all exposed by the library, only 1024 used by default).
@@ -57,9 +63,13 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 
 - [[identity-model]]
 - [[message-payload-formats]]
+- [[aes-gcm]]
 - [[source-fips-203]]
+- [[source-fips-197]]
+- [[source-sp-800-38d]]
 - [[ml-dsa]]
 - [[slh-dsa]]
+- [[openpgp-pqc]]
 - [[component-cli]]
 - [[overview]]
 
@@ -68,3 +78,6 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 - `ReadMe.md`
 - `core/Kyber.ts`
 - `wiki/raw/NIST.FIPS.203.pdf` → [[source-fips-203]]
+- `wiki/raw/NIST.FIPS.197-upd1.pdf` → [[source-fips-197]]
+- `wiki/raw/nistspecialpublication800-38d.pdf` → [[source-sp-800-38d]]
+- `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]

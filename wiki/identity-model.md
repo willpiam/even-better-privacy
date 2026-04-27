@@ -2,8 +2,8 @@
 title: "EBP Identity Model"
 type: concept
 status: active
-last_updated: 2026-04-09
-source_count: 4
+last_updated: 2026-04-27
+source_count: 7
 tags:
   - identity
   - fingerprint
@@ -79,6 +79,12 @@ Details can be marked as **opaque** (prefixed with `opaque::`). For opaque detai
 
 See [[revocation-system]] for how identities and individual details can be revoked using signed certificates.
 
+## Standards Context
+
+EBP identities are not OpenPGP keys, X.509 certificates, or W3C DIDs. The OpenPGP PQC draft summarized in [[source-draft-ietf-openpgp-pqc-17]] uses OpenPGP packet and certificate semantics, while RFC 5280 summarized in [[source-rfc-5280]] uses X.509 subjects, issuers, extensions, and certification paths. DID v1.1 summarized in [[source-did-1-1]] resolves URI-based identifiers to DID documents with method-defined verification methods and services. EBP instead identifies a fixed dual-key object by a bech32-encoded Merkle root.
+
+NIST SP 800-57 Part 1's key lifecycle vocabulary is useful for future identity expiry, rotation, compromise, and destruction work. See [[key-management]].
+
 ## Related Pages
 
 - [[ml-dsa]]
@@ -86,6 +92,10 @@ See [[revocation-system]] for how identities and individual details can be revok
 - [[ml-kem]]
 - [[message-payload-formats]]
 - [[revocation-system]]
+- [[key-management]]
+- [[decentralized-identifiers]]
+- [[openpgp-pqc]]
+- [[x509-pki]]
 - [[component-cli]]
 - [[component-gui]]
 - [[overview]]
@@ -96,3 +106,6 @@ See [[revocation-system]] for how identities and individual details can be revok
 - `core/Identity.ts`
 - `core/Fingerprint.ts`
 - `core/ExternalIdentity.ts`
+- `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
+- `wiki/raw/rfc5280.txt` → [[source-rfc-5280]]
+- `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]

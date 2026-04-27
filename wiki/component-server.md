@@ -2,8 +2,8 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-04-10
-source_count: 2
+last_updated: 2026-04-27
+source_count: 4
 tags:
   - component
   - server
@@ -84,9 +84,13 @@ The server (`server/main.ts`) is the publish/discovery layer for public identiti
 - **HSTS:** optional Strict-Transport-Security headers.
 - **Fingerprint validation:** all fingerprints are validated as proper bech32 before use.
 
+The server exposes HTTP URLs and receives URI paths/query strings through the HTTP stack. [[source-rfc-3986]] is the generic syntax reference for URI parsing and percent-encoding; server-side security checks should be applied after structured parsing and appropriate decoding, not through raw string-prefix assumptions. See [[uri-syntax]].
+
 ## Trust Boundary
 
 The server is useful for discovery and status, but **cryptographic verification remains essential on the client side**. Clients should verify signatures and fingerprints locally, not trust server assertions blindly.
+
+The server's publish/discovery role is adjacent to, but distinct from, DID resolution. [[source-did-1-1]] defines DID methods and DID documents for URI-based decentralized identifiers; EBP's server currently serves EBP identity records, details, revocations, and hierarchy state rather than acting as a DID method or DID resolver. See [[decentralized-identifiers]].
 
 ## Database
 
@@ -98,6 +102,8 @@ The server is useful for discovery and status, but **cryptographic verification 
 - [[component-cli]]
 - [[component-gui]]
 - [[component-website]] — hosts a browser-based verifier that calls `POST /api/v1/verify-signature`
+- [[uri-syntax]]
+- [[decentralized-identifiers]]
 - [[revocation-system]]
 - [[identity-model]]
 - [[overview]]
@@ -106,3 +112,5 @@ The server is useful for discovery and status, but **cryptographic verification 
 
 - `ReadMe.md`
 - `server/main.ts`, `server/handlers/`, `server/db/`
+- `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
+- `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]

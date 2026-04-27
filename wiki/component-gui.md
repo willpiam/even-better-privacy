@@ -2,8 +2,8 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-04-10
-source_count: 3
+last_updated: 2026-04-27
+source_count: 5
 tags:
   - component
   - gui
@@ -40,16 +40,19 @@ The loader page polls the sidecar health endpoint and redirects to `http://127.0
 
 The GUI includes a built-in email interface:
 
-- Connects directly over SMTP and IMAP protocols.
+- Connects directly over SMTP and IMAP protocols. [[source-rfc-5321]] anchors SMTP as the mail transport layer, while [[source-rfc-9051]] anchors IMAP4rev2 as the mailbox access layer.
 - Supports OAuth with Gmail (and partially Outlook).
 - Proton Mail users need Proton Mail Bridge running.
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. See [[message-payload-formats]] for the wire format.
+
+SMTP and IMAP do not provide EBP's end-to-end message security. The GUI uses them to send and fetch mail, then applies EBP payload encryption and signature verification at the application layer; see [[email-transport]] for the standards boundary.
 
 ## Key Features
 
 - All CLI features in a graphical format.
 - Contact management with server fetch/publish.
 - Sign, encrypt, decrypt, verify messages.
+- Native email body + attachment encryption/decryption (MIME-native encrypted attachments).
 - File encryption and decryption.
 - Identity generation and switching.
 - Detail management (attach, revoke, push).
@@ -76,6 +79,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[component-email-extension]]
 - [[component-server]]
 - [[analysis-linux-build]]
+- [[email-transport]]
 - [[identity-model]]
 - [[message-payload-formats]]
 - [[overview]]
@@ -85,3 +89,5 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - `ReadMe.md`
 - `gui/local-backend/main.ts`, `gui/local-backend/routes.ts`
 - `gui/index.html`, `gui/app.js`, `gui/js/`
+- `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
+- `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]

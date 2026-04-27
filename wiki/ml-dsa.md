@@ -2,8 +2,8 @@
 title: "ML-DSA (Dilithium) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-08
-source_count: 3
+last_updated: 2026-04-25
+source_count: 4
 tags:
   - crypto
   - signatures
@@ -49,6 +49,10 @@ ML-DSA and [[slh-dsa]] serve the same role in EBP (signing). The user chooses at
 
 ML-DSA offers compact signatures but relies on lattice assumptions. SLH-DSA offers minimal assumptions (hash-only) but produces much larger signatures.
 
+## OpenPGP PQC Context
+
+The IETF OpenPGP PQC draft profiles ML-DSA in composite OpenPGP signatures such as ML-DSA-87+Ed448. EBP uses ML-DSA-87 directly as one of its signing-key choices and does not use OpenPGP signature packets. See [[openpgp-pqc]] and [[source-draft-ietf-openpgp-pqc-17]].
+
 ## Fingerprint Role
 
 The signing public key forms the **left leaf** of the identity merkle tree. It is hashed as `SHA-256(base64-decoded public key bytes)`. Identities using ML-DSA receive the bech32 human-readable prefix **`ebpdk`** (Dilithium + Kyber). See [[identity-model]].
@@ -63,8 +67,10 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 
 - [[identity-model]]
 - [[source-fips-204]]
+- [[source-draft-ietf-openpgp-pqc-17]]
 - [[slh-dsa]]
 - [[ml-kem]]
+- [[openpgp-pqc]]
 - [[revocation-system]]
 - [[component-cli]]
 - [[overview]]
@@ -74,3 +80,4 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - `ReadMe.md`
 - `core/Dilithium.ts`
 - `wiki/raw/nist.fips.204.pdf` → [[source-fips-204]]
+- `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]

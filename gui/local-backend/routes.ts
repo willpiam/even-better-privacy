@@ -24,6 +24,12 @@ import {
 	MAX_ENCRYPTED_FILE_BYTES,
 } from "../../core/FilePayload.ts";
 import {
+	type AnyEncryptedEmailAttachmentPayload,
+	createEmailAttachmentCleartextEnvelope,
+	parseEmailAttachmentCleartextEnvelope,
+	parseEncryptedEmailAttachmentPayload,
+} from "../../core/EmailAttachmentPayload.ts";
+import {
 	type CLIContext,
 	buildStateFromExternal,
 	computeStateHash,
@@ -48,6 +54,7 @@ import {
 	tryServeStatic,
 	randomHex,
 	safeFileName,
+	base64ToBytes,
 	bytesToBase64,
 } from "./http.ts";
 import { validateSecurity, applyCorsHeaders, getCsrfToken } from "./security.ts";
@@ -99,6 +106,52 @@ import {
 	buildHierarchyTreeFromCertificates,
 	fingerprintColor,
 } from "./hierarchy-local.ts";
+
+const EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE = "application/ebp-encrypted-attachment+json";
+
+type MailAttachmentInput = {
+	fileName: string;
+	mimeType: string;
+	fileDataBase64: string;
+};
+
+type ParsedMailAttachmentInput = {
+	fileName: string;
+	mimeType: string;
+	fileBytes: Uint8Array;
+};
+
+function parseMailAttachmentInputs(input: unknown): ParsedMailAttachmentInput[] {
+	if (!Array.isArray(input)) return [];
+	return input.map((entry, index) => {
+		if (!entry || typeof entry !== "object") {
+			throw new HttpError(STATUS.BadRequest, `attachment #${index + 1} is invalid`);
+		}
+		const item = entry as Partial<MailAttachmentInput>;
+		const fileName = safeFileName(typeof item.fileName === "string" ? item.fileName : "");
+		const mimeType = typeof item.mimeType === "string" && item.mimeType.trim().length > 0
+			? item.mimeType
+			: "application/octet-stream";
+		if (!fileName) {
+			throw new HttpError(STATUS.BadRequest, `attachment #${index + 1} missing fileName`);
+		}
+		if (typeof item.fileDataBase64 !== "string" || !item.fileDataBase64.length) {
+			throw new HttpError(STATUS.BadRequest, `attachment #${index + 1} missing fileDataBase64`);
+		}
+		const fileBytes = base64ToBytes(item.fileDataBase64);
+		if (fileBytes.length > MAX_ENCRYPTED_FILE_BYTES) {
+			throw new HttpError(
+				STATUS.BadRequest,
+				`attachment #${index + 1} exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`,
+			);
+		}
+		return { fileName, mimeType, fileBytes };
+	});
+}
+
+function hashPayload(payload: unknown): string {
+	return sha256Hex(stableStringify(payload));
+}
 
 export async function handleRequest(req: Request): Promise<Response> {
 	const rejected = validateSecurity(req);
@@ -703,6 +756,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					const textBody = parsed.text ?? "";
 					const htmlBody = parsed.html ? String(parsed.html) : "";
 					const ebpPayload = extractEbpPayload(textBody || htmlBody);
+					const ebpBodyPayloadHash = ebpPayload ? hashPayload(ebpPayload) : null;
 					return json({
 						accountId: resolved.account.id,
 						uid: one.uid,
@@ -713,12 +767,40 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 						size: typeof one.size === "number" ? one.size : null,
 						text: textBody,
 						html: htmlBody,
-						attachments: parsed.attachments.map((att: { filename?: string; contentType?: string; size?: number }) => ({
-							filename: att.filename ?? "attachment",
-							contentType: att.contentType ?? "application/octet-stream",
-							size: att.size ?? 0,
-						})),
+						attachments: parsed.attachments.map((att: {
+							filename?: string;
+							contentType?: string;
+							size?: number;
+							content?: unknown;
+						}, index: number) => {
+							const base = {
+								filename: att.filename ?? "attachment",
+								contentType: att.contentType ?? "application/octet-stream",
+								size: att.size ?? 0,
+								index,
+							};
+							if (base.contentType !== EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE) return base;
+							let payload: AnyEncryptedEmailAttachmentPayload | null = null;
+							try {
+								let raw = "";
+								if (typeof att.content === "string") {
+									raw = att.content;
+								} else if (att.content instanceof Uint8Array) {
+									raw = new TextDecoder().decode(att.content);
+								}
+								payload = raw ? parseEncryptedEmailAttachmentPayload(JSON.parse(raw)) : null;
+							} catch {
+								payload = null;
+							}
+							return {
+								...base,
+								isEbpEncryptedAttachment: true,
+								attachmentId: payload?.attachmentId ?? null,
+								ebpPayload: payload,
+							};
+						}),
 						ebpPayload,
+						ebpBodyPayloadHash,
 					});
 				});
 			});
@@ -732,6 +814,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				subject?: unknown;
 				text?: unknown;
 				html?: unknown;
+				attachments?: unknown;
 			}>(req);
 			const home = typeof body.home === "string" ? body.home : undefined;
 			const accountId = toSafeString(body.accountId, 128) || undefined;
@@ -739,8 +822,11 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			const subject = toSafeString(body.subject, 512);
 			const text = typeof body.text === "string" ? body.text : "";
 			const htmlText = typeof body.html === "string" ? body.html : "";
+			const attachmentsInput = parseMailAttachmentInputs(body.attachments);
 			if (!to || !subject) throw new HttpError(STATUS.BadRequest, "to and subject are required");
-			if (!text && !htmlText) throw new HttpError(STATUS.BadRequest, "text or html body is required");
+			if (!text && !htmlText && attachmentsInput.length === 0) {
+				throw new HttpError(STATUS.BadRequest, "text, html, or attachments are required");
+			}
 			const ctx = await getContext(home ?? undefined);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
 			const account = resolved.account.config;
@@ -760,8 +846,124 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				subject,
 				text: text || undefined,
 				html: htmlText || undefined,
+				attachments: attachmentsInput.map((attachment) => ({
+					filename: attachment.fileName,
+					contentType: attachment.mimeType,
+					content: attachment.fileBytes,
+				})),
 			});
 			return json({ ok: true, accountId: resolved.account.id, messageId: info.messageId ?? null });
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/send-ebp") {
+			const body = await readJson<{
+				home?: unknown;
+				accountId?: unknown;
+				identity?: unknown;
+				to?: unknown;
+				subject?: unknown;
+				message?: unknown;
+				recipient?: unknown;
+				password?: unknown;
+				includePublicKeys?: unknown;
+				attachments?: unknown;
+			}>(req);
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const accountId = toSafeString(body.accountId, 128) || undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const to = toSafeString(body.to, 512);
+			const subject = toSafeString(body.subject, 512);
+			const message = typeof body.message === "string" ? body.message : "";
+			const recipient = typeof body.recipient === "string" ? body.recipient : undefined;
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const includePublicKeys = Boolean(body.includePublicKeys);
+			const attachmentsInput = parseMailAttachmentInputs(body.attachments);
+			if (!to || !subject) throw new HttpError(STATUS.BadRequest, "to and subject are required");
+			if (!recipient) throw new HttpError(STATUS.BadRequest, "recipient is required");
+			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+			if (!message && attachmentsInput.length === 0) {
+				throw new HttpError(STATUS.BadRequest, "message or attachments are required");
+			}
+
+			const ctx = await getContext(home ?? undefined, identityName);
+			const contact = await loadContact(ctx, recipient);
+			const identity = await loadIdentity(ctx, password);
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
+
+			const bodyCiphertext = identity.signAndEncryptFor(message, contact);
+			const summary = identity.summary;
+			const senderIdentity = includePublicKeys
+				? {
+					fingerprint: summary.fingerprint,
+					signingKeyType: summary.signingKeyType,
+					encryptionKeyType: summary.encryptionKeyType,
+					signingKey: summary.signingKey,
+					encryptionKey: summary.encryptionKey,
+					signingKeyDetails: summary.signingKeyDetails,
+					encryptionKeyDetails: summary.encryptionKeyDetails,
+				}
+				: undefined;
+			const bodyPayload = buildEncryptedSignedMessagePayload({
+				recipientFingerprint: contact.fingerprint,
+				senderFingerprint: identity.toFingerprint(),
+				ciphertext: bodyCiphertext,
+				senderIdentity,
+			});
+			const bodyPayloadHash = hashPayload(bodyPayload);
+			const armoredBody = [
+				"-----BEGIN EBP MESSAGE-----",
+				JSON.stringify(bodyPayload, null, 2),
+				"-----END EBP MESSAGE-----",
+			].join("\n");
+
+			const encryptedAttachments = attachmentsInput.map((attachment) => {
+				const attachmentId = randomHex(12);
+				const envelope = createEmailAttachmentCleartextEnvelope({
+					attachmentId,
+					fileBytes: attachment.fileBytes,
+					fileName: attachment.fileName,
+					mimeType: attachment.mimeType,
+					bodyPayloadHash,
+				});
+				const ciphertext = identity.signAndEncryptFor(JSON.stringify(envelope), contact);
+				return {
+					type: "ebp-encrypted-signed-email-attachment" as const,
+					version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+					recipientFingerprint: contact.fingerprint,
+					senderFingerprint: identity.toFingerprint(),
+					attachmentId,
+					ciphertext,
+				};
+			});
+
+			const transport = nodemailer.createTransport({
+				host: account.smtpHost,
+				port: account.smtpPort,
+				secure: account.smtpSecure,
+				auth: buildSmtpAuth(account, secrets),
+			});
+			const from = account.fromName
+				? `"${account.fromName.replace(/"/g, "")}" <${account.fromEmail}>`
+				: account.fromEmail;
+			const info = await transport.sendMail({
+				from,
+				to,
+				subject,
+				text: armoredBody,
+				attachments: encryptedAttachments.map((attachment, idx) => ({
+					filename: `ebp-attachment-${idx + 1}.json`,
+					contentType: EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE,
+					content: JSON.stringify(attachment, null, 2),
+				})),
+			});
+			return json({
+				ok: true,
+				accountId: resolved.account.id,
+				messageId: info.messageId ?? null,
+				attachmentCount: encryptedAttachments.length,
+			});
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/identities") {
@@ -2320,6 +2522,83 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				fileDataBase64,
 				verified,
 				verifyStatus,
+			});
+		}
+
+		if (req.method === "POST" && url.pathname === "/api/v1/mail/decrypt-attachment") {
+			const body = await readJson<{
+				payload?: unknown;
+				password?: unknown;
+				sender?: unknown;
+				home?: unknown;
+				identity?: unknown;
+				expectedBodyPayloadHash?: unknown;
+			}>(req);
+			const payloadInput = body.payload;
+			const password = typeof body.password === "string" ? body.password : undefined;
+			const sender = typeof body.sender === "string" ? body.sender : undefined;
+			const home = typeof body.home === "string" ? body.home : undefined;
+			const identityName = typeof body.identity === "string" ? body.identity : undefined;
+			const expectedBodyPayloadHash = typeof body.expectedBodyPayloadHash === "string"
+				? body.expectedBodyPayloadHash
+				: undefined;
+			if (!payloadInput) throw new HttpError(STATUS.BadRequest, "payload is required");
+			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+			const payload = parseEncryptedEmailAttachmentPayload(payloadInput);
+
+			const ctx = await getContext(home, identityName);
+			const identity = await loadIdentity(ctx, password);
+			let cleartextEnvelopeRaw = "";
+			let verified: boolean | null = null;
+			let verifyStatus = "unsigned";
+
+			if (payload.type === "ebp-encrypted-email-attachment") {
+				try {
+					cleartextEnvelopeRaw = identity.encryptionKey.decrypt(payload.ciphertext);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - attachment may be corrupted or not intended for this identity");
+				}
+			} else if (payload.type === "ebp-encrypted-signed-email-attachment") {
+				let contact: ExternalIdentity;
+				if (sender) {
+					contact = await loadContact(ctx, sender);
+				} else {
+					contact = await loadContact(ctx, payload.senderFingerprint.substring(0, 16));
+				}
+				let result: { message: string; verified: boolean; verifyStatus: string };
+				try {
+					result = identity.decryptAndVerify(payload.ciphertext, contact);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - attachment may be corrupted or not intended for this identity");
+				}
+				cleartextEnvelopeRaw = result.message;
+				verified = result.verified;
+				verifyStatus = result.verifyStatus;
+			} else {
+				throw new HttpError(STATUS.BadRequest, "unsupported encrypted email attachment payload type");
+			}
+
+			const envelope = parseEmailAttachmentCleartextEnvelope(cleartextEnvelopeRaw);
+			if (envelope.fileSize > MAX_ENCRYPTED_FILE_BYTES) {
+				throw new HttpError(STATUS.BadRequest, `decrypted attachment exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`);
+			}
+			const manifestMatched = expectedBodyPayloadHash
+				? envelope.bodyPayloadHash === expectedBodyPayloadHash
+				: null;
+			if (manifestMatched === false) {
+				verifyStatus = "manifest_mismatch";
+			}
+			const fileDataBase64 = bytesToBase64(envelope.fileBytes);
+			return json({
+				attachmentId: envelope.attachmentId,
+				fileName: safeFileName(envelope.fileName),
+				mimeType: envelope.mimeType || "application/octet-stream",
+				fileSize: envelope.fileSize,
+				fileDataBase64,
+				verified,
+				verifyStatus,
+				bodyPayloadHash: envelope.bodyPayloadHash ?? null,
+				manifestMatched,
 			});
 		}
 

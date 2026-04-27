@@ -1,5 +1,32 @@
 # Wiki Log
 
+## [2026-04-27] ingest | RFC 3986, RFC 5321, RFC 9051, and DID v1.1
+
+- Ingested `Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]].
+- Ingested `rfc3986.txt` → [[source-rfc-3986]].
+- Ingested `rfc5321.txt` → [[source-rfc-5321]].
+- Ingested `rfc9051.txt` → [[source-rfc-9051]].
+- Updated: [[decentralized-identifiers]], [[uri-syntax]], [[email-transport]], [[overview]], [[identity-model]], [[component-gui]], [[component-email-extension]], [[message-payload-formats]], [[component-server]], [[component-website]], [[index.md]].
+- Contradictions noted: none; the new sources clarify URI, email transport, and adjacent decentralized-identity boundaries rather than changing EBP's cryptographic identity or payload model.
+
+## [2026-04-25] ingest | Batch raw source ingest
+
+- Ingested `draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]].
+- Ingested `rfc5280.txt` → [[source-rfc-5280]].
+- Ingested `NIST.FIPS.140-3.pdf` → [[source-fips-140-3]].
+- Ingested `NIST.FIPS.197-upd1.pdf` → [[source-fips-197]].
+- Ingested `NIST.SP.800-131Ar2.pdf` → [[source-sp-800-131a-r2]].
+- Ingested `NIST.SP.800-57pt1r5.pdf` → [[source-sp-800-57-part-1-r5]].
+- Ingested `NIST.SP.800-57pt2r1.pdf` → [[source-sp-800-57-part-2-r1]].
+- Ingested `NIST.SP.800-57Pt3r1.pdf` → [[source-sp-800-57-part-3-r1]].
+- Ingested `NIST.SP.800-90Ar1.pdf` → [[source-sp-800-90a-r1]].
+- Ingested `NIST.SP.800-90B.pdf` → [[source-sp-800-90b]].
+- Ingested `NIST.SP.800-90C.pdf` → [[source-sp-800-90c]].
+- Ingested `nistspecialpublication800-38c.pdf` → [[source-sp-800-38c]].
+- Ingested `nistspecialpublication800-38d.pdf` → [[source-sp-800-38d]].
+- Updated: [[overview]], [[index.md]], [[ml-kem]], [[ml-dsa]], [[slh-dsa]], [[message-payload-formats]], [[identity-model]], [[revocation-system]], [[component-email-extension]], [[aes-gcm]], [[openpgp-pqc]], [[x509-pki]], [[random-bit-generation]], [[key-management]], [[cryptographic-algorithm-transitions]], [[cryptographic-module-validation]].
+- Contradictions noted: OpenPGP PQC is an adjacent packet/certificate standard rather than EBP's wire format; RFC 5280 PKIX revocation differs from EBP signed revocation certificates; FIPS 140-3 and SP 800-90 sources do not imply EBP module/RBG validation; SP 800-57 Part 3's 2015 protocol guidance may be stale for modern TLS/S/MIME/SSH allow-lists.
+
 ## [2026-04-23] query | top remaining open security issues
 
 - Answered: Ranked the most important unresolved audit findings after the 2026-04-22 remediation pass — 1 High (`F-TAURI-02`), 1 High-mitigated (`F-DEP-02`), 1 conditional High (`F-GUI-05`), plus a prioritised set of Mediums.

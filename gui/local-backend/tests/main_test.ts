@@ -3,6 +3,7 @@ import { Identity, ExternalIdentity } from "../../../core/Identity.ts";
 import { ensureDir, writeState } from "../../../cli/utils.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../../core/version.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
+import { createEmailAttachmentCleartextEnvelope } from "../../../core/EmailAttachmentPayload.ts";
 
 // We import the handler dynamically to avoid starting the server
 // Instead, we'll test the request handling logic directly
@@ -1004,6 +1005,107 @@ Deno.test({
 			assertEquals(b.verified, true);
 			assertEquals(b.verifyStatus, "valid");
 			assertEquals(b.fileDataBase64, fileDataBase64);
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/mail/decrypt-attachment decrypts signed attachment payload",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const sender = await createTestIdentity(home, "sender", "password123");
+			const recipient = await createTestIdentity(home, "recipient", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "recipient" });
+			await createTestContact(home, "sender", sender.summary);
+
+			const clear = createEmailAttachmentCleartextEnvelope({
+				attachmentId: "att-1",
+				fileBytes: new Uint8Array([1, 2, 3, 4]),
+				fileName: "photo.jpg",
+				mimeType: "image/jpeg",
+				bodyPayloadHash: "hash-123",
+			});
+			const ciphertext = sender.signAndEncryptFor(JSON.stringify(clear), recipient.summary);
+			const payload = {
+				type: "ebp-encrypted-signed-email-attachment",
+				version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+				recipientFingerprint: recipient.toFingerprint(),
+				senderFingerprint: sender.toFingerprint(),
+				attachmentId: "att-1",
+				ciphertext,
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/mail/decrypt-attachment",
+				jsonPost({
+					payload,
+					sender: "sender",
+					password: "password123",
+					expectedBodyPayloadHash: "hash-123",
+					home,
+				}),
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as {
+				attachmentId: string;
+				fileName: string;
+				fileSize: number;
+				verifyStatus: string;
+				manifestMatched: boolean;
+			};
+			assertEquals(b.attachmentId, "att-1");
+			assertEquals(b.fileName, "photo.jpg");
+			assertEquals(b.fileSize, 4);
+			assertEquals(b.verifyStatus, "valid");
+			assertEquals(b.manifestMatched, true);
+		});
+	},
+});
+
+Deno.test({
+	name: "POST /api/v1/mail/decrypt-attachment flags manifest mismatch",
+	permissions: { read: true, write: true, env: true, net: true },
+	fn: async () => {
+		await withTestEnv(async (home, handler) => {
+			const sender = await createTestIdentity(home, "sender", "password123");
+			const recipient = await createTestIdentity(home, "recipient", "password123");
+			await writeState(`${home}/.ebp`, { currentIdentity: "recipient" });
+			await createTestContact(home, "sender", sender.summary);
+
+			const clear = createEmailAttachmentCleartextEnvelope({
+				attachmentId: "att-2",
+				fileBytes: new Uint8Array([9, 8, 7]),
+				fileName: "note.txt",
+				mimeType: "text/plain",
+				bodyPayloadHash: "expected-hash",
+			});
+			const ciphertext = sender.signAndEncryptFor(JSON.stringify(clear), recipient.summary);
+			const payload = {
+				type: "ebp-encrypted-signed-email-attachment",
+				version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+				recipientFingerprint: recipient.toFingerprint(),
+				senderFingerprint: sender.toFingerprint(),
+				attachmentId: "att-2",
+				ciphertext,
+			};
+
+			const { status, body } = await makeRequest(
+				handler,
+				"/api/v1/mail/decrypt-attachment",
+				jsonPost({
+					payload,
+					sender: "sender",
+					password: "password123",
+					expectedBodyPayloadHash: "wrong-hash",
+					home,
+				}),
+			);
+			assertEquals(status, STATUS.OK);
+			const b = body as { verifyStatus: string; manifestMatched: boolean };
+			assertEquals(b.verifyStatus, "manifest_mismatch");
+			assertEquals(b.manifestMatched, false);
 		});
 	},
 });

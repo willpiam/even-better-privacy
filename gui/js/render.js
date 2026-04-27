@@ -666,9 +666,18 @@ export function updateVerifyResult(elementId, status, verifyStatus) {
   if (verifyStatus === "valid") {
     el.classList.add("valid");
     el.textContent = "✓ Valid";
+  } else if (verifyStatus === "valid_unbound") {
+    el.classList.add("warning");
+    el.textContent = "⚠ Valid (legacy unbound)";
   } else if (verifyStatus === "valid_unknown_signer") {
     el.classList.add("warning");
     el.textContent = "⚠ Valid (unknown signer)";
+  } else if (verifyStatus === "valid_unknown_signer_unbound") {
+    el.classList.add("warning");
+    el.textContent = "⚠ Valid unknown signer (legacy unbound)";
+  } else if (verifyStatus === "manifest_mismatch") {
+    el.classList.add("invalid");
+    el.textContent = "✗ Attachment/body mismatch";
   } else if (status === false && verifyStatus === "invalid") {
     el.classList.add("invalid");
     el.textContent = "✗ Invalid";
