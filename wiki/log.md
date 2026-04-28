@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-04-27] query | selected email messages sometimes never load
+
+- Answered: The inbox list is cheap envelope-only IMAP fetch, while selected messages fetch and parse full MIME source with no frontend timeout/cancellation; stale requests can continue consuming backend IMAP work.
+- Filed: [[analysis-mail-message-load-hang]].
+
 ## [2026-04-27] ingest | RFC 3986, RFC 5321, RFC 9051, and DID v1.1
 
 - Ingested `Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]].
