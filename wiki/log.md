@@ -1,5 +1,50 @@
 # Wiki Log
 
+## [2026-04-28] remediation | F-DEP-02
+
+- Migrated desktop shell dependencies/config from Tauri 1.x to Tauri 2.x baselines (`desktop/src-tauri/Cargo.toml`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/capabilities/default.json`, `desktop/package.json`) and enabled `tauri-plugin-shell`.
+- Verified with `cargo check`; dependency graph moved to Tauri 2.x, but local machine is missing WebKitGTK/libsoup dev packages required to complete Linux linking.
+
+## [2026-04-28] remediation | F-GUI-05
+
+- Isolated MIME parsing behind a dedicated worker (`gui/local-backend/mail-worker.ts`) and routed message/attachment parsing through `parseMailSourceInWorker` with source-size/time limits (`gui/local-backend/mail-imap.ts`, `gui/local-backend/routes.ts`).
+- Pinned high-risk mail parser dependencies and added daily dependency monitoring (`package.json`, `deno.json`, `.github/dependabot.yml`).
+
+## [2026-04-28] remediation | F-STORAGE-02
+
+- Migrated encrypted identity blobs to Argon2id-based KDF in AES ciphertext v3 (`core/AES.ts`, `core/version.ts`) while retaining decrypt compatibility for legacy v1/v2 ciphertext.
+- Confirmed migration behavior via `core/tests/AES_kdf_upgrade_test.ts`.
+
+## [2026-04-28] remediation | F-GUI-06
+
+- Added explicit per-action signing confirmation payload validation in `/api/v1/sign` and wired UI confirmation flow before signing requests (`gui/local-backend/routes.ts`, `gui/app.js`).
+
+## [2026-04-28] remediation | F-CRYPTO-03
+
+- Added per-purpose signature envelope domains (`message`, `detail-proof`, `revocation`, `hierarchy`) in `core/MessageHash.ts`.
+- Updated core/server hierarchy and revocation/detail proof flows to sign/verify with the new purpose-bound envelopes while retaining legacy verification fallback paths.
+
+## [2026-04-28] remediation | F-CRYPTO-05
+
+- Added canonical JSON serialization helper (`core/CanonicalJson.ts`) and moved signed revocation/detail/hierarchy payload generation to deterministic canonical encoding.
+
+## [2026-04-28] remediation | F-SERVER-09
+
+- Moved email-verification tokens out of query URLs into fragment-based client flow with POST submission (`server/verify-email.ts`).
+- Updated verification page tests to assert non-reflection of token values (`server/tests/verify_email_xss_test.ts`).
+
+## [2026-04-28] remediation | F-SERVER-04
+
+- Hardened server defaults by replacing wildcard CORS defaults, adding host allow validation hook, and adding baseline security headers (`server/cors.ts`, `server/main.ts`, `server/response.ts`).
+
+## [2026-04-28] remediation | F-TAURI-02
+
+- Added explicit restrictive CSP to desktop webview configuration (`desktop/src-tauri/tauri.conf.json`).
+
+## [2026-04-28] remediation | F-STORAGE-06
+
+- Added regression coverage to verify emergency revocation certificates are exported at `0o600` (`cli/tests/perms_test.ts`), matching hardened command implementations.
+
 ## [2026-04-28] fix | website verifier shared-host MIME
 
 - Renamed the browser verifier crypto module from `website/crypto.mjs` to `website/crypto.js` and updated `website/verify.js` to import `./crypto.js`.

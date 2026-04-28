@@ -2,10 +2,24 @@
 // CORS Configuration
 // =============================================================================
 
-export const RAW_ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+const DEFAULT_ALLOWED_ORIGINS = "http://127.0.0.1:8787,http://localhost:8787";
+
+export const RAW_ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGINS") ?? DEFAULT_ALLOWED_ORIGINS)
   .split(",")
   .map((o) => o.trim())
   .filter(Boolean);
+
+const EXPECTED_HOSTS_RAW = (Deno.env.get("EXPECTED_HOSTS") ?? "")
+  .split(",")
+  .map((host) => host.trim().toLowerCase())
+  .filter(Boolean);
+
+export function isHostAllowed(hostHeader: string | null): boolean {
+  if (EXPECTED_HOSTS_RAW.length === 0) return true;
+  if (!hostHeader) return false;
+  const host = hostHeader.trim().toLowerCase().split(":")[0];
+  return EXPECTED_HOSTS_RAW.includes(host);
+}
 
 // =============================================================================
 // HSTS Configuration (optional; enabled via env)
@@ -39,7 +53,10 @@ export function buildCorsHeaders(origin: string | null): Record<string, string> 
 }
 
 export function buildSecurityHeaders(): Record<string, string> {
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = {
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  };
   if (HSTS_ENABLED) {
     headers["strict-transport-security"] = `max-age=${HSTS_MAX_AGE}` +
       (HSTS_INCLUDE_SUBDOMAINS ? "; includeSubDomains" : "");

@@ -10,10 +10,10 @@ import { FILE_FORMAT_VERSIONS } from "../version.ts";
 
 // F-STORAGE-02 regression tests.
 
-Deno.test("F-STORAGE-02: AES.encrypt emits the current (v2) ciphertext version", () => {
+Deno.test("F-STORAGE-02: AES.encrypt emits the current ciphertext version", () => {
 	const ct = AES.encrypt("password12345", "hello");
 	assertEquals(AES.getCiphertextVersion(ct), FILE_FORMAT_VERSIONS.aesCiphertext);
-	assertEquals(FILE_FORMAT_VERSIONS.aesCiphertext, 2);
+	assertEquals(FILE_FORMAT_VERSIONS.aesCiphertext, 3);
 });
 
 Deno.test("F-STORAGE-02: AES.decrypt remains backward-compatible with v1 ciphertexts", () => {

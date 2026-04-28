@@ -1,5 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { Identity } from "../../core/Identity.ts";
+import { cmdGenerateRevocationCert } from "../commands/details.ts";
 import {
 	ensurePrivateDir,
 	fixLegacyPerms,
@@ -95,6 +96,37 @@ Deno.test({
 			assertEquals(await statMode(`${dir}/x.identity.json`), 0o600);
 			assertEquals(await statMode(subdir), 0o700);
 			assertEquals(await statMode(`${subdir}/a.json`), 0o600);
+		} finally {
+			await Deno.remove(tmp, { recursive: true });
+		}
+	},
+});
+
+Deno.test({
+	name: "F-STORAGE-06: generate-revocation-cert writes certificate at mode 0600",
+	ignore: !isUnix,
+	permissions: { read: true, write: true, env: true },
+	fn: async () => {
+		const tmp = await Deno.makeTempDir({ prefix: "ebp-perms-" });
+		try {
+			const identityDir = `${tmp}/.ebp`;
+			const identityPath = `${identityDir}/identity.identity.json`;
+			const contactsDir = `${identityDir}/contacts`;
+			await ensurePrivateDir(identityDir);
+			await ensurePrivateDir(contactsDir);
+			const ctx = { identityDir, identityPath, contactsDir, currentIdentity: "identity" };
+			const identity = new Identity("dilithium", "kyber");
+			await saveIdentity(ctx, "password12345", identity);
+			await writeState(identityDir, { currentIdentity: "identity" });
+
+			const outputPath = `${tmp}/emergency-revocation.json`;
+			await cmdGenerateRevocationCert({
+				_: [],
+				password: "password12345",
+				output: outputPath,
+			}, ctx);
+
+			assertEquals(await statMode(outputPath), 0o600);
 		} finally {
 			await Deno.remove(tmp, { recursive: true });
 		}

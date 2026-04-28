@@ -59,6 +59,21 @@ function initNavigation() {
   }
 }
 
+async function requestSignConfirmation(message) {
+  const preview = message.length > 240 ? `${message.slice(0, 240)}...` : message;
+  const approved = await showConfirmModal(
+    "Confirm Signing Request",
+    `You are signing this content:\n\n${preview}`,
+    "Sign",
+  );
+  if (!approved) return null;
+  return {
+    approved: true,
+    approvedAt: Date.now(),
+    messageHash: await hashTextSha256Hex(message),
+  };
+}
+
 window.addEventListener("hashchange", () => {
   const hash = window.location.hash.slice(1);
   const validPages = Array.from(navItems).map((item) => item.dataset.page);
@@ -499,9 +514,14 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
         setStatus("Password is required", "error");
         return;
       }
+      const signConfirmation = await requestSignConfirmation(message);
+      if (!signConfirmation) {
+        setStatus("Signing cancelled", "error");
+        return;
+      }
       const res = await api("/sign", {
         method: "POST",
-        body: JSON.stringify({ message, password, detached, includeIdentity, includeSalt }),
+        body: JSON.stringify({ message, password, detached, includeIdentity, includeSalt, signConfirmation }),
       });
       document.getElementById("sign-output").value = JSON.stringify(res, null, 2);
       setStatus("Signed", "success");
@@ -571,12 +591,18 @@ document.getElementById("sign-file-form").addEventListener("submit", async (e) =
         setStatus("Password is required", "error");
         return;
       }
+      const signConfirmation = await requestSignConfirmation(message);
+      if (!signConfirmation) {
+        setStatus("Signing cancelled", "error");
+        return;
+      }
 
       const signRes = await api("/sign", {
         method: "POST",
         body: JSON.stringify({
           message,
           password,
+          signConfirmation,
           detached: true,
           includeIdentity: true,
           includeSalt: false,

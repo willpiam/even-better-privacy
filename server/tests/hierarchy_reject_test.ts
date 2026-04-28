@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
-import { buildMessageHashEnvelope } from "../../core/MessageHash.ts";
+import { buildMessageHashEnvelope, buildPurposeHashEnvelope } from "../../core/MessageHash.ts";
 import {
   createHierarchyCertificate,
   encodeHierarchyCertificate,
@@ -37,6 +37,7 @@ async function registerIdentity(mod: MainModule) {
   return {
     fingerprint,
     sign: (message: string) => signingKey.sign(buildMessageHashEnvelope(message)),
+    signHierarchy: (message: string) => signingKey.sign(buildPurposeHashEnvelope("hierarchy", message)),
   };
 }
 
@@ -52,9 +53,9 @@ async function proposeRelation(
   });
   const payload = getHierarchySignaturePayload(cert);
   if (proposer.fingerprint === master.fingerprint) {
-    cert.masterSignature = master.sign(payload);
+    cert.masterSignature = master.signHierarchy(payload);
   } else {
-    cert.childSignature = child.sign(payload);
+    cert.childSignature = child.signHierarchy(payload);
   }
   const encoded = encodeHierarchyCertificate(cert as SignedHierarchyCertificate);
 

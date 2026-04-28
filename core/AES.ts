@@ -4,6 +4,7 @@ import { gcm } from "@noble/ciphers/aes";
 import { randomBytes } from "@noble/hashes/utils";
 import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import { sha256 } from "@noble/hashes/sha2";
+import { argon2id } from "@noble/hashes/argon2";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -12,19 +13,21 @@ const SALT_LENGTH = 16; // 128-bit salt
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
 const KEY_LENGTH = 32; // 256 bits
 
-// F-STORAGE-02: PBKDF2 iteration count was 310,000 (OWASP 2023 floor).
-// v2 raises this to 600,000 (OWASP 2024+ floor for SHA-256). The version
-// byte at the start of the ciphertext encodes which iteration count was
-// used at encrypt time, so old blobs remain decryptable and new writes
-// get the stronger parameter. A follow-up migration to Argon2id is
-// tracked separately.
+// F-STORAGE-02: v1 used PBKDF2-310k, v2 raised to PBKDF2-600k, and v3 moves
+// to Argon2id (m=64MiB,t=3,p=1). The leading version byte keeps all historic
+// ciphertexts decryptable while new writes use the stronger KDF.
 const PBKDF2_ITERATIONS_V1 = 310_000;
 const PBKDF2_ITERATIONS_V2 = 600_000;
-const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 2
+const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 3
+
+const ARGON2_MEMORY_KIB = 64 * 1024; // 64 MiB
+const ARGON2_ITERATIONS = 3;
+const ARGON2_PARALLELISM = 1;
 
 function iterationsForVersion(version: number): number {
 	if (version === 1) return PBKDF2_ITERATIONS_V1;
 	if (version === 2) return PBKDF2_ITERATIONS_V2;
+	if (version === 3) return PBKDF2_ITERATIONS_V2;
 	throw new Error(`Unsupported ciphertext version: ${version}`);
 }
 
@@ -32,7 +35,7 @@ export class AES {
 	static encrypt(password: string, plaintext: string): string {
 		const salt = randomBytes(SALT_LENGTH);
 		const iv = randomBytes(IV_LENGTH);
-		const key = deriveKey(password, salt, iterationsForVersion(CURRENT_AES_VERSION));
+		const key = deriveKey(password, salt, iterationsForVersion(CURRENT_AES_VERSION), CURRENT_AES_VERSION);
 
 		const data = encoder.encode(plaintext);
 		const cipher = gcm(key, iv);
@@ -65,7 +68,7 @@ export class AES {
 		const iv = data.slice(saltEnd, ivEnd);
 		const ciphertext = data.slice(ivEnd);
 
-		const key = deriveKey(password, salt, iterations);
+		const key = deriveKey(password, salt, iterations, version);
 
 		const decipher = gcm(key, iv);
 		let plaintextBytes: Uint8Array;
@@ -96,8 +99,17 @@ export class AES {
 	}
 }
 
-function deriveKey(password: string, salt: Uint8Array, iterations: number): Uint8Array {
+function deriveKey(password: string, salt: Uint8Array, iterations: number, version: number): Uint8Array {
 	const passwordBytes = encoder.encode(password);
+
+	if (version === 3) {
+		return argon2id(passwordBytes, salt, {
+			t: ARGON2_ITERATIONS,
+			m: ARGON2_MEMORY_KIB,
+			p: ARGON2_PARALLELISM,
+			dkLen: KEY_LENGTH,
+		});
+	}
 
 	return pbkdf2(sha256, passwordBytes, salt, {
 		c: iterations,

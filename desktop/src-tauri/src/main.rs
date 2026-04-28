@@ -15,6 +15,7 @@ fn main() {
   let sidecar_state = SidecarState(Arc::new(Mutex::new(None)));
 
   tauri::Builder::default()
+    .plugin(tauri_plugin_shell::init())
     .setup({
       let sidecar_state = sidecar_state.clone();
       move |app| {

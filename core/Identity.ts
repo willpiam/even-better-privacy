@@ -12,9 +12,12 @@ import { stringToHex, hexToString, toHex, hexToBytes } from "./Hex.ts";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
 import {
-    buildMessageHashEnvelope,
+    buildLegacyMessageHashEnvelopeFromHash,
+    buildPurposeHashEnvelope,
     buildMultiRecipientBoundEnvelope,
     buildRecipientBoundEnvelope,
+    type SignaturePurpose,
+    sha256Hex,
     type MultiRecipientAttachmentManifestEntry,
 } from "./MessageHash.ts";
 import { MultiRecipientCipher, type RecipientEncapsulation } from "./MultiRecipientCipher.ts";
@@ -28,6 +31,7 @@ import {
     type SignedRevocationCertificate,
     type RevocationType,
 } from "./Revocation.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 export type { ExternalIdentity } from "./ExternalIdentity.ts";
 
 type SigningKeyOptions = 'dilithium' | 'sphincs';
@@ -86,9 +90,20 @@ export class Identity extends Key {
         }
     }
 
-    static VerifySignature(sender: ExternalIdentity, message: string, signature: string, salt?: string) : boolean {
-        const envelope = buildMessageHashEnvelope(message, salt);
-        return Identity._VerifyEnvelope(sender, envelope, signature);
+    static VerifySignature(
+        sender: ExternalIdentity,
+        message: string,
+        signature: string,
+        salt?: string,
+        purpose: SignaturePurpose = "message",
+    ) : boolean {
+        const envelope = buildPurposeHashEnvelope(purpose, message, salt);
+        if (Identity._VerifyEnvelope(sender, envelope, signature)) return true;
+        if (purpose === "message") {
+            const legacy = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(message), salt);
+            return Identity._VerifyEnvelope(sender, legacy, signature);
+        }
+        return false;
     }
 
     // F-CRYPTO-02: verify a signature that is bound to a specific recipient
@@ -162,8 +177,8 @@ export class Identity extends Key {
         this.revocationCertificate = null;
     }
 
-    signMessage(message: string, salt?: string) : string {
-        const envelope = buildMessageHashEnvelope(message, salt);
+    signMessage(message: string, salt?: string, purpose: SignaturePurpose = "message") : string {
+        const envelope = buildPurposeHashEnvelope(purpose, message, salt);
         return this.signingKey.sign(envelope);
     }
 
@@ -405,9 +420,14 @@ export class Identity extends Key {
         };
     }
 
-    verifyMessage(message: string, signature: string, salt?: string) : boolean {
-        const envelope = buildMessageHashEnvelope(message, salt);
-        return this.signingKey.verify(envelope, signature);
+    verifyMessage(message: string, signature: string, salt?: string, purpose: SignaturePurpose = "message") : boolean {
+        const envelope = buildPurposeHashEnvelope(purpose, message, salt);
+        if (this.signingKey.verify(envelope, signature)) return true;
+        if (purpose === "message") {
+            const legacy = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(message), salt);
+            return this.signingKey.verify(legacy, signature);
+        }
+        return false;
     }
 
     attachDetail(path: string, detail: string) {
@@ -418,9 +438,9 @@ export class Identity extends Key {
             timestamp: Date.now(),
             signature: null as string | null,
         }
-        const detailRecordSignature = this.signMessage(JSON.stringify(detailRecord));
+        const detailRecordSignature = this.signMessage(canonicalJsonStringify(detailRecord), undefined, "detail-proof");
         detailRecord.signature = detailRecordSignature;
-        const proof = stringToHex(JSON.stringify(detailRecord));
+        const proof = stringToHex(canonicalJsonStringify(detailRecord));
         this.details.set(path, [detail, proof]);
         this.detailsNonce++;
     }
@@ -455,7 +475,7 @@ export class Identity extends Key {
             }
 
             // Reconstruct the original payload that was signed (with signature=null)
-            const signedPayload = JSON.stringify({
+            const signedPayload = canonicalJsonStringify({
                 nonce,
                 path,
                 detail,
@@ -463,7 +483,7 @@ export class Identity extends Key {
                 signature: null,
             });
 
-            const isValid = this.verifyMessage(signedPayload, signature);
+            const isValid = this.verifyMessage(signedPayload, signature, undefined, "detail-proof");
             if (!isValid) {
                 return null;
             }
@@ -576,7 +596,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signMessage(payload);
+        const signature = this.signMessage(payload, undefined, "revocation");
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         const encoded = encodeRevocationCertificate(signedCert);
 
@@ -605,7 +625,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signMessage(payload);
+        const signature = this.signMessage(payload, undefined, "revocation");
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         const encoded = encodeRevocationCertificate(signedCert);
 
@@ -666,7 +686,7 @@ export class Identity extends Key {
         });
         
         const payload = getRevocationSignaturePayload(cert);
-        const signature = this.signMessage(payload);
+        const signature = this.signMessage(payload, undefined, "revocation");
         const signedCert: SignedRevocationCertificate = { ...cert, signature };
         
         return encodeRevocationCertificate(signedCert);

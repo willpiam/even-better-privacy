@@ -4,34 +4,34 @@ overview: Address the top 10 unresolved findings from the April 2026 security au
 todos:
   - id: p1-storage-06
     content: "Phase 1: F-STORAGE-06 — emergency revocation cert exported with mode 0o600 (mirror F-STORAGE-01 fix); add perms test."
-    status: pending
+    status: completed
   - id: p2-tauri-02
     content: "Phase 2: F-TAURI-02 — add restrictive CSP to Tauri webview via tauri.conf.json security.csp; verify webview + local-backend XHR still work."
-    status: pending
+    status: completed
   - id: p3-server-04
     content: "Phase 3: F-SERVER-04 — strict ALLOWED_ORIGINS default, Host-header validation, security-headers middleware (X-Content-Type-Options, Referrer-Policy, HSTS, CSP)."
-    status: pending
+    status: completed
   - id: p4-server-09
     content: "Phase 4: F-SERVER-09 — move email-verification token out of URL into POST body / Authorization header; update mail template."
-    status: pending
+    status: completed
   - id: p5-crypto-05
     content: "Phase 5: F-CRYPTO-05 — introduce core/CanonicalJson.ts (RFC 8785) and replace JSON.stringify in all signing payloads; bump protocol version with deprecation window."
-    status: pending
+    status: completed
   - id: p6-crypto-03
     content: "Phase 6: F-CRYPTO-03 — replace single ebp::messagehash:: envelope with per-purpose v1 prefixes (message, detail-proof, revocation, hierarchy); ride P5 protocol bump."
-    status: pending
+    status: completed
   - id: p7-gui-06
     content: "Phase 7: F-GUI-06 — add Tauri dialog.ask confirmation in /api/v1/sign showing what is being signed; mock-friendly for tests."
-    status: pending
+    status: completed
   - id: p8-storage-02
     content: "Phase 8: F-STORAGE-02 — migrate KDF from PBKDF2 to Argon2id with OWASP 2024 params, storage-format bump, and lazy upgrade-on-load path."
-    status: pending
+    status: completed
   - id: p9-gui-05
     content: "Phase 9: F-GUI-05 — sandbox mailparser/imapflow in a Worker (or post-P10 Tauri sidecar), enforce size/time caps, pin versions + rapid-CVE policy."
-    status: pending
+    status: completed
   - id: p10-dep-02
     content: "Phase 10: F-DEP-02 — migrate desktop shell to Tauri 2.x (capabilities model), re-validate sidecar resolution, re-apply CSP under v2, confirm cargo audit clean."
-    status: pending
+    status: completed
 isProject: false
 ---
 

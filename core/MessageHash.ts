@@ -3,16 +3,51 @@ import { toHex } from "./Hex.ts";
 
 const textEncoder = new TextEncoder();
 
+export type SignaturePurpose = "message" | "detail-proof" | "revocation" | "hierarchy";
+
 export function sha256Hex(message: string): string {
 	return toHex(sha256(textEncoder.encode(message)));
 }
 
-export function buildMessageHashEnvelopeFromHash(messageHash: string, salt?: string): string {
+function purposePrefix(purpose: SignaturePurpose): string {
+	switch (purpose) {
+		case "message":
+			return "ebp::message::v1::";
+		case "detail-proof":
+			return "ebp::detail-proof::v1::";
+		case "revocation":
+			return "ebp::revocation::v1::";
+		case "hierarchy":
+			return "ebp::hierarchy::v1::";
+	}
+}
+
+export function buildLegacyMessageHashEnvelopeFromHash(messageHash: string, salt?: string): string {
 	return `ebp::messagehash::${messageHash}::${salt ?? ""}`;
 }
 
+export function buildPurposeHashEnvelopeFromHash(
+	purpose: SignaturePurpose,
+	messageHash: string,
+	salt?: string,
+): string {
+	return `${purposePrefix(purpose)}${messageHash}::${salt ?? ""}`;
+}
+
+export function buildPurposeHashEnvelope(
+	purpose: SignaturePurpose,
+	message: string,
+	salt?: string,
+): string {
+	return buildPurposeHashEnvelopeFromHash(purpose, sha256Hex(message), salt);
+}
+
+export function buildMessageHashEnvelopeFromHash(messageHash: string, salt?: string): string {
+	return buildPurposeHashEnvelopeFromHash("message", messageHash, salt);
+}
+
 export function buildMessageHashEnvelope(message: string, salt?: string): string {
-	return buildMessageHashEnvelopeFromHash(sha256Hex(message), salt);
+	return buildPurposeHashEnvelope("message", message, salt);
 }
 
 // F-CRYPTO-02: recipient-bound envelope. Binding the intended recipient's

@@ -10,7 +10,7 @@
  * - MINOR: New features that are backwards compatible
  * - PATCH: Bug fixes
  */
-export const PROTOCOL_VERSION = "0.0.1";
+export const PROTOCOL_VERSION = "0.1.0";
 
 /**
  * File/payload/ciphertext format versions.
@@ -32,7 +32,7 @@ export const FILE_FORMAT_VERSIONS = {
     encryptedSignedEmailAttachmentMulti: 1,
     emailAttachmentCleartextEnvelope: 1,
     emergencyRevocationCertificate: 1,
-    aesCiphertext: 2,
+    aesCiphertext: 3,
 } as const;
 
 /**

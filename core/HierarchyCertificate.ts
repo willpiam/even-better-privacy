@@ -1,7 +1,12 @@
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import {
+  buildLegacyMessageHashEnvelopeFromHash,
+  buildPurposeHashEnvelope,
+  sha256Hex,
+} from "./MessageHash.ts";
 import { stringToHex, hexToString, toHex } from "./Hex.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -75,19 +80,19 @@ export function getHierarchySignaturePayload(cert: Pick<
   HierarchyCertificateData,
   "masterFingerprint" | "childFingerprint" | "timestamp" | "expiry" | "context" | "salt"
 >): string {
-  return [
-    HIERARCHY_CERTIFICATE_PREFIX,
-    cert.masterFingerprint,
-    cert.childFingerprint,
-    String(cert.timestamp),
-    String(cert.expiry),
-    cert.context,
-    cert.salt,
-  ].join("::");
+  return canonicalJsonStringify({
+    type: HIERARCHY_CERTIFICATE_PREFIX,
+    masterFingerprint: cert.masterFingerprint,
+    childFingerprint: cert.childFingerprint,
+    timestamp: cert.timestamp,
+    expiry: cert.expiry,
+    context: cert.context,
+    salt: cert.salt,
+  });
 }
 
 export function encodeHierarchyCertificate(cert: SignedHierarchyCertificate): string {
-  return stringToHex(JSON.stringify(cert));
+  return stringToHex(canonicalJsonStringify(cert));
 }
 
 export function decodeHierarchyCertificate(encoded: string): SignedHierarchyCertificate | null {
@@ -123,12 +128,14 @@ export function verifyHierarchyCertificate(
   }
 
   const payload = getHierarchySignaturePayload(cert);
-  const envelope = buildMessageHashEnvelope(payload);
+  const envelope = buildPurposeHashEnvelope("hierarchy", payload);
+  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(payload));
 
   const masterOk = verifySignature(
     masterIdentity.signingKeyType,
     masterVariant,
     envelope,
+    legacyEnvelope,
     cert.masterSignature,
     masterIdentity.signingKey,
   );
@@ -140,6 +147,7 @@ export function verifyHierarchyCertificate(
     childIdentity.signingKeyType,
     childVariant,
     envelope,
+    legacyEnvelope,
     cert.childSignature,
     childIdentity.signingKey,
   );
@@ -222,14 +230,17 @@ function verifySignature(
   signingKeyType: "dilithium" | "sphincs",
   variant: string,
   envelope: string,
+  legacyEnvelope: string,
   signature: string,
   signingKey: string,
 ): boolean {
   try {
     if (signingKeyType === "dilithium") {
-      return DilithiumSigningKey.verify(variant, envelope, signature, signingKey);
+      return DilithiumSigningKey.verify(variant, envelope, signature, signingKey)
+        || DilithiumSigningKey.verify(variant, legacyEnvelope, signature, signingKey);
     }
-    return SphincsSigningKey.verify(variant, envelope, signature, signingKey);
+    return SphincsSigningKey.verify(variant, envelope, signature, signingKey)
+      || SphincsSigningKey.verify(variant, legacyEnvelope, signature, signingKey);
   } catch {
     return false;
   }

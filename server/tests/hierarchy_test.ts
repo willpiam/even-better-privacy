@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
-import { buildMessageHashEnvelope } from "../../core/MessageHash.ts";
+import { buildPurposeHashEnvelope } from "../../core/MessageHash.ts";
 import {
   createHierarchyCertificate,
   encodeHierarchyCertificate,
@@ -48,7 +48,7 @@ async function registerIdentity(mod: MainModule): Promise<{
   assertEquals(res.status, 200);
   return {
     fingerprint,
-    sign: (message) => signingKey.sign(buildMessageHashEnvelope(message)),
+    sign: (message) => signingKey.sign(buildPurposeHashEnvelope("hierarchy", message)),
   };
 }
 

@@ -7,6 +7,7 @@ export function json(body: unknown, status = 200, corsHeaders?: HeadersInit): Re
     status,
     headers: {
       "content-type": "application/json",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
       ...securityHeaders,
       ...corsHeaders,
     },

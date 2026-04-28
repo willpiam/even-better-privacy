@@ -1,7 +1,12 @@
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import {
+	buildLegacyMessageHashEnvelopeFromHash,
+	buildPurposeHashEnvelope,
+	sha256Hex,
+} from "./MessageHash.ts";
 import { stringToHex, hexToString } from "./Hex.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 /**
  * Types of revocations supported by the system
@@ -88,14 +93,14 @@ export function getRevocationSignaturePayload(cert: RevocationCertificateData): 
 		target: cert.target,
 		signature: null,
 	};
-	return JSON.stringify(payload);
+	return canonicalJsonStringify(payload);
 }
 
 /**
  * Encode a signed revocation certificate to hex-encoded JSON
  */
 export function encodeRevocationCertificate(cert: SignedRevocationCertificate): string {
-	return stringToHex(JSON.stringify(cert));
+	return stringToHex(canonicalJsonStringify(cert));
 }
 
 /**
@@ -156,14 +161,21 @@ export function verifyRevocationCertificate(
 
 	// Verify signature
 	const payload = getRevocationSignaturePayload(cert);
-	const envelope = buildMessageHashEnvelope(payload);
+	const envelope = buildPurposeHashEnvelope("revocation", payload);
+	const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(payload));
 	let verified = false;
 
 	try {
 		if (signingKeyType === "dilithium") {
 			verified = DilithiumSigningKey.verify(variant, envelope, cert.signature, signingKey);
+			if (!verified) {
+				verified = DilithiumSigningKey.verify(variant, legacyEnvelope, cert.signature, signingKey);
+			}
 		} else {
 			verified = SphincsSigningKey.verify(variant, envelope, cert.signature, signingKey);
+			if (!verified) {
+				verified = SphincsSigningKey.verify(variant, legacyEnvelope, cert.signature, signingKey);
+			}
 		}
 	} catch {
 		return { ok: false, error: "signature verification failed" };

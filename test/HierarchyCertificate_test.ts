@@ -34,8 +34,8 @@ Deno.test("HierarchyCertificate: dual signature verification succeeds with real 
     expiry: 0,
   });
   const payload = getHierarchySignaturePayload(cert);
-  cert.masterSignature = master.signMessage(payload);
-  cert.childSignature = child.signMessage(payload);
+  cert.masterSignature = master.signMessage(payload, undefined, "hierarchy");
+  cert.childSignature = child.signMessage(payload, undefined, "hierarchy");
   const encoded = encodeHierarchyCertificate(cert as SignedHierarchyCertificate);
 
   const result = decodeAndVerifyHierarchyCertificate(

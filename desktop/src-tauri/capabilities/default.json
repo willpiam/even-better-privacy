@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Default desktop capability set for EBP",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:allow-open"
+  ]
+}

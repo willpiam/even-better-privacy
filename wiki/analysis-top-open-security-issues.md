@@ -2,7 +2,7 @@
 title: "Analysis: Top Remaining Open Security Issues (post-2026-04-22 remediation)"
 type: analysis
 status: active
-last_updated: 2026-04-23
+last_updated: 2026-04-28
 source_count: 0
 tags:
   - security-audit
@@ -25,18 +25,21 @@ Remediation cutoff reflected here: **2026-04-22** (the first remediation pass, w
 
 ## Top 10 remaining issues
 
+Update 2026-04-28: this top-10 set has now been remediated in full. The table
+is retained as a closure ledger.
+
 | Rank | ID | Sev | Component | Title | Status |
 |---|---|---|---|---|---|
-| 1 | F-TAURI-02 | High | tauri | No CSP set on Tauri webview | open |
-| 2 | F-DEP-02 | High | supply-chain | Tauri 1.6 carries RUSTSEC-2026-0067/0068 (`tar`), `rand` unsoundness, 15 unmaintained-crate warnings — full Tauri 2.x migration outstanding | mitigated (shell-open scoped only) |
-| 3 | F-GUI-05 | High (cond.) | gui-local-backend | `mailparser` / `imapflow` parse attacker-controlled MIME & IMAP traffic — escalates on any upstream CVE | open |
-| 4 | F-STORAGE-02 | Medium | crypto/storage | Argon2id migration follow-up (PBKDF2 iteration bump already applied) | fixed partial; Argon2id still open |
-| 5 | F-CRYPTO-03 | Medium | core | Signature envelope lacks per-purpose domain separation (single `ebp::messagehash::` envelope reused across messages, detail proofs, revocations) | open |
-| 6 | F-CRYPTO-05 | Medium | core | Detail-proof and revocation-cert signing payloads use `JSON.stringify` insertion-order rather than canonical JSON | open |
-| 7 | F-SERVER-04 | Medium | server | Default `ALLOWED_ORIGINS=*`, no Host validation, no CSP / `X-Content-Type-Options` / `Referrer-Policy` on server responses | open |
-| 8 | F-STORAGE-06 | Medium | storage | Emergency revocation certificate exported with default `0644` — world-readable kill-switch on disk | open |
-| 9 | F-SERVER-09 | Medium | server | Email-verification token transmitted in URL — leaks via access logs, browser history, future Referer headers | open |
-| 10 | F-GUI-06 | Medium | gui-local-backend | `/api/v1/sign` requires only the password — no per-action OS-native confirmation of *what* is being signed | open |
+| 1 | F-TAURI-02 | High | tauri | No CSP set on Tauri webview | fixed (2026-04-28) |
+| 2 | F-DEP-02 | High | supply-chain | Tauri 1.6 carries RUSTSEC-2026-0067/0068 (`tar`), `rand` unsoundness, 15 unmaintained-crate warnings — full Tauri 2.x migration outstanding | fixed (2026-04-28) |
+| 3 | F-GUI-05 | High (cond.) | gui-local-backend | `mailparser` / `imapflow` parse attacker-controlled MIME & IMAP traffic — escalates on any upstream CVE | fixed (2026-04-28) |
+| 4 | F-STORAGE-02 | Medium | crypto/storage | Argon2id migration follow-up (PBKDF2 iteration bump already applied) | fixed (2026-04-28) |
+| 5 | F-CRYPTO-03 | Medium | core | Signature envelope lacks per-purpose domain separation (single `ebp::messagehash::` envelope reused across messages, detail proofs, revocations) | fixed (2026-04-28) |
+| 6 | F-CRYPTO-05 | Medium | core | Detail-proof and revocation-cert signing payloads use `JSON.stringify` insertion-order rather than canonical JSON | fixed (2026-04-28) |
+| 7 | F-SERVER-04 | Medium | server | Default `ALLOWED_ORIGINS=*`, no Host validation, no CSP / `X-Content-Type-Options` / `Referrer-Policy` on server responses | fixed (2026-04-28) |
+| 8 | F-STORAGE-06 | Medium | storage | Emergency revocation certificate exported with default `0644` — world-readable kill-switch on disk | fixed (2026-04-28) |
+| 9 | F-SERVER-09 | Medium | server | Email-verification token transmitted in URL — leaks via access logs, browser history, future Referer headers | fixed (2026-04-28) |
+| 10 | F-GUI-06 | Medium | gui-local-backend | `/api/v1/sign` requires only the password — no per-action OS-native confirmation of *what* is being signed | fixed (2026-04-28) |
 
 ## Rationale and remediation notes
 

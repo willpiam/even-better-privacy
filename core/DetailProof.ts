@@ -1,7 +1,12 @@
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import { buildMessageHashEnvelope } from "./MessageHash.ts";
+import {
+  buildLegacyMessageHashEnvelopeFromHash,
+  buildPurposeHashEnvelope,
+  sha256Hex,
+} from "./MessageHash.ts";
 import { hexToString } from "./Hex.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 export type DetailProofRecord = {
   nonce: number;
@@ -42,21 +47,28 @@ export function verifyDetailProof(input: {
     return { ok: false, error: "missing signature" };
   }
 
-  const signedPayload = JSON.stringify({
+  const signedPayload = canonicalJsonStringify({
     nonce: record.nonce,
     path: record.path,
     detail: record.detail,
     timestamp: record.timestamp,
     signature: null,
   });
-  const envelope = buildMessageHashEnvelope(signedPayload);
+  const envelope = buildPurposeHashEnvelope("detail-proof", signedPayload);
+  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(signedPayload));
 
   let verified = false;
   try {
     if (input.signingKeyType === "dilithium") {
       verified = DilithiumSigningKey.verify(input.signingVariant, envelope, record.signature, input.signingKey);
+      if (!verified) {
+        verified = DilithiumSigningKey.verify(input.signingVariant, legacyEnvelope, record.signature, input.signingKey);
+      }
     } else {
       verified = SphincsSigningKey.verify(input.signingVariant, envelope, record.signature, input.signingKey);
+      if (!verified) {
+        verified = SphincsSigningKey.verify(input.signingVariant, legacyEnvelope, record.signature, input.signingKey);
+      }
     }
   } catch {
     return { ok: false, error: "failed to verify signature" };

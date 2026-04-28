@@ -143,3 +143,62 @@ export function extractEmailAddress(value: string): string {
 export function extractEbpPayload(text: string): Record<string, unknown> | null {
 	return extractArmoredPayload(text);
 }
+
+const MAX_MAIL_SOURCE_BYTES = Number(Deno.env.get("MAIL_PARSE_MAX_BYTES") ?? `${5 * 1024 * 1024}`);
+
+function sourceToString(source: unknown): string {
+	if (typeof source === "string") return source;
+	if (source instanceof Uint8Array) {
+		return new TextDecoder().decode(source);
+	}
+	if (source instanceof ArrayBuffer) {
+		return new TextDecoder().decode(new Uint8Array(source));
+	}
+	if (ArrayBuffer.isView(source)) {
+		return new TextDecoder().decode(new Uint8Array(source.buffer));
+	}
+	return "";
+}
+
+export async function parseMailSourceInWorker(
+	source: unknown,
+	mode: "message" | "attachment",
+	timeoutMs = 10_000,
+): Promise<Record<string, unknown>> {
+	const sourceText = sourceToString(source);
+	const sourceBytes = new TextEncoder().encode(sourceText).byteLength;
+	if (!sourceText || sourceBytes === 0) {
+		throw new HttpError(STATUS.BadRequest, "mail source is empty");
+	}
+	if (sourceBytes > MAX_MAIL_SOURCE_BYTES) {
+		throw new HttpError(
+			STATUS.BadRequest,
+			`mail source exceeds parse limit (${MAX_MAIL_SOURCE_BYTES} bytes)`,
+		);
+	}
+	const worker = new Worker(new URL("./mail-worker.ts", import.meta.url).href, {
+		type: "module",
+		deno: { permissions: { read: false, write: false, net: false, env: false, run: false, ffi: false } },
+	});
+	try {
+		return await withTimeout(
+			new Promise<Record<string, unknown>>((resolve, reject) => {
+				worker.onmessage = (event: MessageEvent<{ ok: boolean; data?: Record<string, unknown>; error?: string }>) => {
+					if (event.data.ok && event.data.data) {
+						resolve(event.data.data);
+					} else {
+						reject(new HttpError(STATUS.BadGateway, event.data.error ?? "mail parse failed"));
+					}
+				};
+				worker.onerror = (event) => {
+					reject(new HttpError(STATUS.BadGateway, event.message || "mail parse worker crashed"));
+				};
+				worker.postMessage({ mode, source: sourceText });
+			}),
+			timeoutMs,
+			`mail-parse-${mode}`,
+		);
+	} finally {
+		worker.terminate();
+	}
+}

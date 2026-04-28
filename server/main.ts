@@ -5,7 +5,7 @@ import { PROTOCOL_VERSION } from "../core/version.ts";
 import { COMPONENT_VERSIONS } from "../app-version.ts";
 import { initDb } from "./db/index.ts";
 import type { DatabaseAdapter } from "./db/index.ts";
-import { isOriginAllowed, buildCorsHeaders } from "./cors.ts";
+import { isOriginAllowed, buildCorsHeaders, isHostAllowed } from "./cors.ts";
 import { checkRateLimit, getClientIp, RATE_LIMIT_DISABLED, RATE_LIMIT_CLEANUP } from "./rate-limit.ts";
 import { json, attachCors, logRequest, generateTraceId } from "./response.ts";
 import { handleOAuthExchange, handleOAuthRefresh } from "./mail-oauth.ts";
@@ -122,6 +122,10 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
     respond(json(body, status, corsHeaders));
 
   try {
+    if (!isHostAllowed(req.headers.get("host"))) {
+      return jsonResponse({ error: "host not allowed" }, 403);
+    }
+
     if (origin && !isOriginAllowed(origin)) {
       return jsonResponse({ error: "origin not allowed" }, 403);
     }

@@ -1,21 +1,17 @@
 {
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EBP",
+  "version": "0.1.0",
+  "identifier": "com.ebp.app",
   "build": {
     "beforeDevCommand": "deno task -c ../deno.json desktop:backend:dev",
     "beforeBuildCommand": "deno task -c ../deno.json desktop:backend:build",
-    "devPath": "http://127.0.0.1:8787/",
-    "distDir": "../dist"
+    "devUrl": "http://127.0.0.1:8787/",
+    "frontendDist": "../dist"
   },
-  "package": {
-    "productName": "EBP",
-    "version": "0.1.0"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": "^https://[A-Za-z0-9.-]+(/.*)?$|^http://(127\\.0\\.0\\.1|localhost)(:\\d+)?(/.*)?$"
-      }
+  "app": {
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8787 http://localhost:8787; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
     },
     "windows": [
       {
@@ -25,19 +21,22 @@
         "minWidth": 900,
         "minHeight": 600
       }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "appimage"
     ],
-    "bundle": {
-      "active": true,
-      "targets": "appimage",
-      "identifier": "com.ebp.app",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ],
-      "externalBin": ["bin/ebp-gui-backend"]
-    }
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "externalBin": [
+      "bin/ebp-gui-backend"
+    ]
   }
 }

@@ -16,8 +16,8 @@
     "npm:@playwright/test@^1.58.2": "1.58.2",
     "npm:@types/node@*": "24.2.0",
     "npm:bech32@2": "2.0.0",
-    "npm:imapflow@^1.2.12": "1.2.12",
-    "npm:mailparser@^3.9.3": "3.9.3",
+    "npm:imapflow@1.2.12": "1.2.12",
+    "npm:mailparser@3.9.3": "3.9.3",
     "npm:nodemailer@*": "8.0.1",
     "npm:nodemailer@^6.10.1": "6.10.1",
     "npm:playwright@1.57.0": "1.57.0",
@@ -491,15 +491,15 @@
       "jsr:@noble/post-quantum@~0.5.4",
       "jsr:@std/cli@^1.0.28",
       "npm:bech32@2",
-      "npm:imapflow@^1.2.12",
-      "npm:mailparser@^3.9.3",
+      "npm:imapflow@1.2.12",
+      "npm:mailparser@3.9.3",
       "npm:nodemailer@^6.10.1"
     ],
     "packageJson": {
       "dependencies": [
         "npm:@playwright/test@^1.58.2",
-        "npm:imapflow@^1.2.12",
-        "npm:mailparser@^3.9.3",
+        "npm:imapflow@1.2.12",
+        "npm:mailparser@3.9.3",
         "npm:playwright@1.58.2"
       ]
     }

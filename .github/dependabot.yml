@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    labels:
+      - "security"
+      - "dependencies"
+    allow:
+      - dependency-name: "imapflow"
+      - dependency-name: "mailparser"
+  - package-ecosystem: "cargo"
+    directory: "/desktop/src-tauri"
+    schedule:
+      interval: "daily"
+    labels:
+      - "security"
+      - "dependencies"

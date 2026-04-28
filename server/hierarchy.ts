@@ -8,7 +8,11 @@ import {
   type SignedHierarchyCertificate,
 } from "../core/HierarchyCertificate.ts";
 import { hexToString } from "../core/Hex.ts";
-import { buildMessageHashEnvelope } from "../core/MessageHash.ts";
+import {
+  buildLegacyMessageHashEnvelopeFromHash,
+  buildPurposeHashEnvelope,
+  sha256Hex,
+} from "../core/MessageHash.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
 import {
@@ -234,12 +238,15 @@ function verifySignerEnvelope(
   payload: string,
   signature: string,
 ): boolean {
-  const envelope = buildMessageHashEnvelope(payload);
+  const envelope = buildPurposeHashEnvelope("hierarchy", payload);
+  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(payload));
   try {
     if (signer.signingKeyType === "dilithium") {
-      return DilithiumSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
+      return DilithiumSigningKey.verify(signer.variant, envelope, signature, signer.signingKey)
+        || DilithiumSigningKey.verify(signer.variant, legacyEnvelope, signature, signer.signingKey);
     }
-    return SphincsSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
+    return SphincsSigningKey.verify(signer.variant, envelope, signature, signer.signingKey)
+      || SphincsSigningKey.verify(signer.variant, legacyEnvelope, signature, signer.signingKey);
   } catch {
     return false;
   }

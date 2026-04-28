@@ -1,5 +1,4 @@
 import nodemailer from "nodemailer";
-import { simpleParser } from "mailparser";
 import { Identity, type ExternalIdentity } from "../../core/Identity.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
@@ -89,6 +88,7 @@ import {
 	getIdentityDetailMeta,
 	extractEmailAddress,
 	extractEbpPayload,
+	parseMailSourceInWorker,
 } from "./mail-imap.ts";
 import {
 	getOAuthProviderConfig,
@@ -875,7 +875,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
 					sourceBytes = sourceByteLength(one.source);
 					const parseStartedAt = performance.now();
-					const parsed = await withTimeout(simpleParser(one.source), 10_000, "parse-message-source") as {
+					const parsed = await parseMailSourceInWorker(one.source, "message", 10_000) as {
 						text?: string;
 						html?: unknown;
 						attachments: Array<{
@@ -973,7 +973,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
 					sourceBytes = sourceByteLength(one.source);
 					const parseStartedAt = performance.now();
-					const parsed = await withTimeout(simpleParser(one.source), 10_000, "parse-attachment-source") as {
+					const parsed = await parseMailSourceInWorker(one.source, "attachment", 10_000) as {
 						attachments: Array<{
 							filename?: string;
 							contentType?: string;
@@ -1614,7 +1614,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			}
 			const cert = createHierarchyCertificate(masterFingerprint, childFingerprint, { expiry, context });
 			const payload = getHierarchySignaturePayload(cert);
-			const signature = identity.signMessage(payload);
+			const signature = identity.signMessage(payload, undefined, "hierarchy");
 			if (proposerFingerprint === masterFingerprint) {
 				cert.masterSignature = signature;
 			} else {
@@ -1820,7 +1820,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				throw new HttpError(STATUS.BadRequest, "current identity is not part of this certificate");
 			}
 			const payload = getHierarchySignaturePayload(cert);
-			const signature = identity.signMessage(payload);
+			const signature = identity.signMessage(payload, undefined, "hierarchy");
 			if (myFingerprint === cert.masterFingerprint) cert.masterSignature = signature;
 			if (myFingerprint === cert.childFingerprint) cert.childSignature = signature;
 			const signed = stringToHex(JSON.stringify(cert));
@@ -2061,6 +2061,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				includeIdentity?: unknown;
 				includeSalt?: unknown;
 				salt?: unknown;
+				signConfirmation?: unknown;
 			}>(req);
 			const message = typeof body.message === "string" ? body.message : undefined;
 			const password = typeof body.password === "string" ? body.password : undefined;
@@ -2070,14 +2071,30 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			const includeIdentity = Boolean(body.includeIdentity);
 			const includeSalt = body.includeSalt === undefined ? true : Boolean(body.includeSalt);
 			const providedSalt = typeof body.salt === "string" ? body.salt : undefined;
+			const signConfirmation = body.signConfirmation as Record<string, unknown> | undefined;
 			if (!message) throw new HttpError(STATUS.BadRequest, "message is required");
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+			if ((Deno.env.get("GUI_SIGN_CONFIRM_BYPASS") ?? "false").toLowerCase() !== "true") {
+				const approved = signConfirmation?.approved === true;
+				const approvedAt = typeof signConfirmation?.approvedAt === "number" ? signConfirmation.approvedAt : NaN;
+				const confirmedMessageHash = typeof signConfirmation?.messageHash === "string"
+					? signConfirmation.messageHash
+					: "";
+				const expectedHash = sha256Hex(message);
+				const stale = !Number.isFinite(approvedAt) || Math.abs(Date.now() - approvedAt) > 60_000;
+				if (!approved || stale || confirmedMessageHash !== expectedHash) {
+					throw new HttpError(
+						STATUS.BadRequest,
+						"sign confirmation required (approve the exact message immediately before signing)",
+					);
+				}
+			}
 
 			const ctx = await getContext(home, identityName);
 			const identity = await loadIdentity(ctx, password);
 			const salt = providedSalt ?? (includeSalt ? randomHex(16) : "");
-			const signature = (identity as Identity & { signMessage: (value: string, optionalSalt?: string) => string })
-				.signMessage(message, salt);
+			const signature = (identity as Identity & { signMessage: (value: string, optionalSalt?: string, purpose?: "message") => string })
+				.signMessage(message, salt, "message");
 			const messageHash = sha256Hex(message);
 			const summary = identity.summary;
 			const identityPayload = includeIdentity

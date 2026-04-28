@@ -86,7 +86,7 @@ export function html(body: string, status = 200, corsHeaders?: HeadersInit): Res
   // future escape path still cannot execute script. `unsafe-inline` on
   // `style-src` is intentional because the page uses none today and adding
   // it is cheap; no inline <style> is needed but future tweaks won't break.
-  const csp = "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+  const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
   return new Response(body, {
     status,
     headers: {
@@ -103,8 +103,6 @@ export function html(body: string, status = 200, corsHeaders?: HeadersInit): Res
 export function renderVerifyEmailPage(options: {
   title: string;
   message: string;
-  token?: string;
-  showButton?: boolean;
 }): string {
   // F-SERVER-01: every interpolation site must HTML-escape user-controlled
   // data. `title` and `message` reach this function from query-parameter
@@ -112,12 +110,6 @@ export function renderVerifyEmailPage(options: {
   // `token` query param.
   const safeTitle = escapeHtml(options.title);
   const safeMessage = escapeHtml(options.message);
-  const buttonHtml = options.showButton && options.token
-    ? `<form method="POST" action="/api/v1/verify-email">
-    <input type="hidden" name="token" value="${escapeHtml(options.token)}">
-    <button type="submit">Confirm email verification</button>
-  </form>`
-    : "";
 
   return `<!doctype html>
 <html lang="en">
@@ -127,8 +119,38 @@ export function renderVerifyEmailPage(options: {
   </head>
   <body>
     <h1>${safeTitle}</h1>
-    <p>${safeMessage}</p>
-    ${buttonHtml}
+    <p id="message">${safeMessage}</p>
+    <button id="confirmBtn" type="button">Confirm email verification</button>
+    <script>
+      (function () {
+        const msg = document.getElementById("message");
+        const btn = document.getElementById("confirmBtn");
+        const token = decodeURIComponent((window.location.hash || "").replace(/^#token=/, ""));
+        if (!token) {
+          if (msg) msg.textContent = "Missing token in verification link.";
+          if (btn) btn.style.display = "none";
+          return;
+        }
+        btn && btn.addEventListener("click", async () => {
+          try {
+            const res = await fetch("/api/v1/verify-email", {
+              method: "POST",
+              headers: { "content-type": "application/json", "accept": "application/json" },
+              body: JSON.stringify({ token }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (res.ok) {
+              if (msg) msg.textContent = "Your email address has been verified.";
+              if (btn) btn.style.display = "none";
+              return;
+            }
+            if (msg) msg.textContent = typeof body.error === "string" ? body.error : "Email verification failed.";
+          } catch {
+            if (msg) msg.textContent = "Email verification failed.";
+          }
+        });
+      })();
+    </script>
   </body>
 </html>`;
 }
@@ -202,7 +224,9 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
     return json({ error: "public base url not configured" }, 500);
   }
 
-  const link = `${baseUrl}/api/v1/verify-email?token=${encodeURIComponent(token)}`;
+  // F-SERVER-09: keep tokens out of request URLs/logs by placing them in the
+  // fragment; fragments are processed client-side and never sent to the server.
+  const link = `${baseUrl}/api/v1/verify-email#token=${encodeURIComponent(token)}`;
   try {
     await sendVerificationEmail(record.detail, link, fingerprint);
   } catch (err) {
@@ -213,19 +237,12 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
 }
 
 export function handleVerifyEmailPage(url: URL): Response {
-  const tokenCheck = validateStringLength(url.searchParams.get("token"), "token", LIMITS.verificationToken);
-  if (!tokenCheck.ok) {
-    return html(renderVerifyEmailPage({
-      title: "Email verification failed",
-      message: tokenCheck.error,
-    }), 400);
-  }
-
+  // F-SERVER-09: ignore query token entirely; verification token lives in
+  // the URL fragment and is submitted via POST.
+  void url;
   return html(renderVerifyEmailPage({
     title: "Confirm email verification",
     message: "Click the button below to confirm your email verification.",
-    token: tokenCheck.value,
-    showButton: true,
   }));
 }
 

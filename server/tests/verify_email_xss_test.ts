@@ -7,20 +7,6 @@ import { handleVerifyEmailPage, renderVerifyEmailPage } from "../verify-email.ts
 // Content-Security-Policy to defence-in-depth against any future bypass.
 
 Deno.test({
-	name: "F-SERVER-01: renderVerifyEmailPage escapes malicious token attribute",
-	fn: () => {
-		const rendered = renderVerifyEmailPage({
-			title: "Confirm email verification",
-			message: "Click the button below.",
-			token: `"><script>alert(1)</script><`,
-			showButton: true,
-		});
-		assert(!rendered.includes("<script>alert(1)</script>"));
-		assertStringIncludes(rendered, "&lt;script&gt;alert(1)&lt;/script&gt;");
-	},
-});
-
-Deno.test({
 	name: "F-SERVER-01: renderVerifyEmailPage escapes injected title/message",
 	fn: () => {
 		const rendered = renderVerifyEmailPage({
@@ -37,23 +23,23 @@ Deno.test({
 Deno.test({
 	name: "F-SERVER-01: handleVerifyEmailPage emits strong CSP",
 	fn: () => {
-		const res = handleVerifyEmailPage(new URL("https://example.test/api/v1/verify-email?token=abc"));
+		const res = handleVerifyEmailPage(new URL("https://example.test/api/v1/verify-email#token=abc"));
 		const csp = res.headers.get("content-security-policy") ?? "";
 		assertStringIncludes(csp, "default-src 'none'");
-		assertStringIncludes(csp, "form-action 'self'");
+		assertStringIncludes(csp, "connect-src 'self'");
 		assertEquals(res.headers.get("x-content-type-options"), "nosniff");
 	},
 });
 
 Deno.test({
-	name: "F-SERVER-01: handleVerifyEmailPage escapes the reflected token in the HTML response",
+	name: "F-SERVER-09: verify page does not reflect token in HTML body",
 	fn: async () => {
-		const payload = `"><script>alert('x')</script>`;
+		const payload = "sensitive-token-value";
 		const res = handleVerifyEmailPage(
-			new URL(`https://example.test/api/v1/verify-email?token=${encodeURIComponent(payload)}`),
+			new URL(`https://example.test/api/v1/verify-email#token=${encodeURIComponent(payload)}`),
 		);
 		const body = await res.text();
-		assert(!body.includes("<script>alert('x')</script>"));
-		assertStringIncludes(body, "&lt;script&gt;alert(&#x27;x&#x27;)&lt;/script&gt;");
+		assert(!body.includes(payload));
+		assertStringIncludes(body, "Confirm email verification");
 	},
 });
