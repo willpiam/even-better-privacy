@@ -498,6 +498,149 @@ test.skip("mail reader defaults to plaintext and can render HTML from settings",
   await expect(page.locator("#settings-mail-render-html")).toBeChecked();
 });
 
+test.skip("mail message load timeout surfaces error and later selection still loads", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalSetTimeout = window.setTimeout.bind(window);
+    window.setTimeout = ((handler: any, timeout?: number, ...args: any[]) => {
+      const ms = timeout === 30_000 ? 60 : timeout;
+      return originalSetTimeout(handler, ms as number, ...args);
+    }) as typeof window.setTimeout;
+  });
+
+  const now = Date.now();
+  const slowUid = 501;
+  const fastUid = 502;
+
+  await page.route("http://127.0.0.1:8787/api/v1/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const { pathname } = url;
+
+    const json = (body: unknown) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+
+    if (pathname === "/api/v1/health") {
+      return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
+    }
+    if (pathname === "/api/v1/context") {
+      return json({
+        identityDir: "/tmp/ebp-test",
+        contactsDir: "/tmp/ebp-test/contacts",
+        currentIdentity: null,
+        server: null,
+        protocolVersion: "test",
+      });
+    }
+    if (pathname === "/api/v1/identities") {
+      return json({ identities: [], currentIdentity: null });
+    }
+    if (pathname === "/api/v1/contacts") {
+      return json({ contacts: [] });
+    }
+    if (pathname === "/api/v1/server/identities") {
+      return json({ identities: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    }
+    if (pathname === "/api/v1/mail/account") {
+      return json({
+        accountId: "mock-account",
+        accountName: "Mock account",
+        account: {
+          gmailMode: false,
+          imapHost: "imap.example.com",
+          imapPort: 993,
+          imapSecure: true,
+          smtpHost: "smtp.example.com",
+          smtpPort: 465,
+          smtpSecure: true,
+          username: "user@example.com",
+          fromEmail: "user@example.com",
+          fromName: "Mock User",
+          persistSecrets: false,
+        },
+        selectedAccountId: "mock-account",
+        accounts: [{ id: "mock-account", name: "Mock account" }],
+        hasImapPassword: true,
+        hasSmtpPassword: true,
+        secretsInMemory: true,
+        secretsLocked: false,
+      });
+    }
+    if (pathname === "/api/v1/mail/accounts") {
+      return json({
+        selectedAccountId: "mock-account",
+        secretsInMemory: true,
+        secretsLocked: false,
+        accounts: [],
+      });
+    }
+    if (pathname === "/api/v1/mail/messages") {
+      return json({
+        accountId: "mock-account",
+        folder: "INBOX",
+        messages: [
+          {
+            uid: slowUid,
+            subject: "Slow Message",
+            from: "Sender <sender@example.com>",
+            to: "Recipient <recipient@example.com>",
+            date: now,
+            seen: false,
+            size: 64,
+          },
+          {
+            uid: fastUid,
+            subject: "Fast Message",
+            from: "Sender <sender@example.com>",
+            to: "Recipient <recipient@example.com>",
+            date: now + 1,
+            seen: false,
+            size: 64,
+          },
+        ],
+      });
+    }
+    if (pathname === "/api/v1/mail/message") {
+      const uid = Number(url.searchParams.get("uid") || "0");
+      if (uid === slowUid) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      return json({
+        accountId: "mock-account",
+        uid,
+        subject: uid === slowUid ? "Slow Message" : "Fast Message",
+        from: "Sender <sender@example.com>",
+        to: "Recipient <recipient@example.com>",
+        date: now,
+        size: 128,
+        text: uid === slowUid ? "slow body" : "fast body",
+        html: "",
+        attachments: [],
+        ebpPayload: null,
+      });
+    }
+    if (request.method() === "POST") {
+      return json({ ok: true });
+    }
+    return route.fulfill({ status: 404, body: "not mocked" });
+  });
+
+  await goToMailPage(page);
+  await page.locator("#mail-inbox-form button[type='submit']").click();
+  await expect(page.locator("#mail-message-list")).toContainText("Slow Message");
+  await expect(page.locator("#mail-message-list")).toContainText("Fast Message");
+
+  await page.locator("#mail-message-list li", { hasText: "Slow Message" }).click();
+  await expect(page.locator("#status")).toContainText(/timed out/i);
+
+  await page.locator("#mail-message-list li", { hasText: "Slow Message" }).click();
+  await page.locator("#mail-message-list li", { hasText: "Fast Message" }).click();
+  await expect(page.locator("#mail-reader-subject")).toContainText("Fast Message");
+  await expect(page.locator("#mail-message-body")).toHaveValue("fast body");
+});
+
 test.skip("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
   page,
   request,

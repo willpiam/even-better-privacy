@@ -1494,3 +1494,30 @@ Deno.test({
 		});
 	},
 });
+
+Deno.test({
+	name: "withTimeout returns resolved value before timeout",
+	fn: async () => {
+		const { withTimeout } = await import("../mail-imap.ts");
+		const value = await withTimeout(Promise.resolve("ok"), 50, "unit-fast");
+		assertEquals(value, "ok");
+	},
+});
+
+Deno.test({
+	name: "withTimeout throws HttpError on timeout",
+	fn: async () => {
+		const { withTimeout } = await import("../mail-imap.ts");
+		const { HttpError, STATUS } = await import("../http.ts");
+		let caught: unknown = null;
+		try {
+			await withTimeout(new Promise(() => {}), 5, "unit-hang");
+		} catch (err) {
+			caught = err;
+		}
+		assert(caught instanceof HttpError);
+		const timedOut = caught as { status: number; message: string };
+		assertEquals(timedOut.status, STATUS.BadGateway);
+		assertStringIncludes(timedOut.message, "mail step timed out: unit-hang");
+	},
+});

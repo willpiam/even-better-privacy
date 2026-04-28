@@ -4,6 +4,7 @@ export const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
 export const MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY = "ebp.mail.includePublicKeys";
 export const STARTUP_RETRY_ATTEMPTS = 12;
 export const STARTUP_RETRY_DELAY_MS = 500;
+export const TOAST_LOG_LIMIT = 50;
 
 export const state = {
   currentIdentity: null,
@@ -44,6 +45,7 @@ export const state = {
   mailComposeAttachments: [],
   decryptedMailAttachments: {},
   decryptedFileResult: null,
+  toastLogs: [],
   serverDefaultApplied: false,
 };
 

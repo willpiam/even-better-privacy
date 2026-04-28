@@ -1,10 +1,10 @@
 import { state, loadUiPreferences } from "./js/state.js";
-import { api, setStatus, setButtonLoading, withLoading, escapeHtml } from "./js/ui.js";
+import { api, setStatus, onStatusChange, setButtonLoading, withLoading, escapeHtml } from "./js/ui.js";
 import { showConfirmModal, requestPassword } from "./js/modals.js";
 import { hashTextSha256Hex, hashFileSha256Hex, generateRandomSaltHex, buildFileSignMessage, readFileAsBase64, safeDownloadFileName, downloadJsonFromTextarea, loadJsonFileIntoTextarea } from "./js/crypto-utils.js";
 import { initContactSearch } from "./js/contact-search.js";
 import { renderCertificatesPage, resolveCertificateFingerprint, navigateToHierarchyWithContact, loadHierarchyTree, loadContactHierarchyDiagram } from "./js/hierarchy.js";
-import { updateVerifyResult, setResultBadge, loadPublicIdentityInfo, renderServerIdentities, loadServerIdentities, renderIdentityDetails, loadAll, setMailLoaders, syncContact, deleteLocalContact } from "./js/render.js";
+import { updateVerifyResult, setResultBadge, loadPublicIdentityInfo, renderServerIdentities, loadServerIdentities, renderIdentityDetails, renderToastLogs, loadAll, setMailLoaders, syncContact, deleteLocalContact } from "./js/render.js";
 import { initMailPage, loadMailAccount, loadStoredMailCredentials, renderStoredMailCredentials, ensureMailPageUnlocked, loadMailMessages } from "./js/mail.js";
 import { updateRevokeDetailPathOptions } from "./js/revocation.js";
 
@@ -228,6 +228,15 @@ document.getElementById("copy-fingerprint-btn").addEventListener("click", async 
     console.error("Copy failed:", err);
   }
 });
+
+const clearLogsBtn = document.getElementById("settings-logs-clear");
+if (clearLogsBtn) {
+  clearLogsBtn.addEventListener("click", () => {
+    state.toastLogs = [];
+    renderToastLogs();
+    setStatus("Logs cleared", "success", { log: false });
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Download / file-input buttons
@@ -1143,8 +1152,10 @@ document.getElementById("revoke-identity-form").addEventListener("submit", async
 // ─────────────────────────────────────────────────────────────────────────────
 
 loadUiPreferences();
+onStatusChange(() => renderToastLogs());
 initNavigation();
 initCollapsibleSections();
 initContactSearch();
 initMailPage();
+renderToastLogs();
 loadAll();

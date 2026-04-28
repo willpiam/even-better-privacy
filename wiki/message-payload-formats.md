@@ -2,7 +2,7 @@
 title: "Message Payload Formats"
 type: concept
 status: active
-last_updated: 2026-04-27
+last_updated: 2026-04-28
 source_count: 8
 tags:
   - payload
@@ -165,7 +165,7 @@ The [[component-gui|GUI]] compose form offers two modes:
 
 GUI compose always uses `sign: true`, so outbound EBP emails are always `ebp-encrypted-signed-message`.
 
-On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts any armored EBP payload from the text or HTML body plus EBP-encrypted attachment payloads from MIME attachments. If the payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled. The user then triggers body decryption via `POST /api/v1/decrypt` and attachment decryption via `POST /api/v1/mail/decrypt-attachment`.
+On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts armored EBP payload markers from the text/HTML body plus attachment metadata (`filename`, `contentType`, `size`, `index`, `isEbpEncryptedAttachment`). For encrypted attachments, the GUI now lazily loads the attachment payload via `GET /api/v1/mail/message/attachment` only when the user clicks decrypt, then performs attachment decryption via `POST /api/v1/mail/decrypt-attachment`. If the body payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled.
 
 ## Version Constants
 

@@ -24,7 +24,6 @@ import {
 	MAX_ENCRYPTED_FILE_BYTES,
 } from "../../core/FilePayload.ts";
 import {
-	type AnyEncryptedEmailAttachmentPayload,
 	createEmailAttachmentCleartextEnvelope,
 	parseEmailAttachmentCleartextEnvelope,
 	parseEncryptedEmailAttachmentPayload,
@@ -81,6 +80,7 @@ import {
 	buildImapClient,
 	safeImapDisconnect,
 	withImapReconnect,
+	withTimeout,
 	withMailboxLock,
 	getAddressText,
 	getIdentityDetailValue,
@@ -151,6 +151,17 @@ function parseMailAttachmentInputs(input: unknown): ParsedMailAttachmentInput[] 
 
 function hashPayload(payload: unknown): string {
 	return sha256Hex(stableStringify(payload));
+}
+
+function sourceByteLength(source: unknown): number {
+	if (typeof source === "string") return new TextEncoder().encode(source).length;
+	if (source instanceof Uint8Array) return source.byteLength;
+	if (source instanceof ArrayBuffer) return source.byteLength;
+	return 0;
+}
+
+function durationMs(startedAt: number): number {
+	return Math.round(performance.now() - startedAt);
 }
 
 export async function handleRequest(req: Request): Promise<Response> {
@@ -647,24 +658,47 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/messages") {
+			const requestStartedAt = performance.now();
 			const home = url.searchParams.get("home") ?? undefined;
 			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
 			const limit = Math.max(1, Math.min(100, Number(url.searchParams.get("limit") ?? "20") || 20));
 			const searchQuery = toSafeString(url.searchParams.get("search"), 256) || "";
 			const pageRaw = Math.max(1, Number(url.searchParams.get("page") ?? "1") || 1);
+			const resolveStartedAt = performance.now();
 			const ctx = await getContext(home ?? undefined);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const resolveMs = durationMs(resolveStartedAt);
 			const account = resolved.account.config;
 			const secrets = resolved.secrets;
+			let mailboxExists = 0;
+			let fetchedCount = 0;
+			let searchMs = 0;
+			let fetchMs = 0;
 
-			return await withImapReconnect(account, secrets, async (imap) => {
-				return await withMailboxLock(imap, folder, async () => {
+			try {
+				const response = await withImapReconnect(account, secrets, async (imap) => {
+					return await withMailboxLock(imap, folder, async () => {
 					const mailboxRaw = imap.mailbox as { exists?: number } | false | undefined;
-					const mailboxExists = mailboxRaw && typeof mailboxRaw === "object"
+					mailboxExists = mailboxRaw && typeof mailboxRaw === "object"
 						? Number(mailboxRaw.exists ?? 0)
 						: 0;
-					if (!mailboxExists) return json({ folder, messages: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+					if (!mailboxExists) {
+						return json({
+							folder,
+							messages: [],
+							pagination: { page: 1, totalPages: 1, total: 0 },
+							_timing: {
+								resolveMs,
+								oauthMs: resolved.oauthRefreshMs,
+								searchMs,
+								fetchMs,
+								totalMs: durationMs(requestStartedAt),
+								mailboxExists,
+								fetchedCount,
+							},
+						});
+					}
 
 					const fetchOpts = {
 						uid: true,
@@ -690,10 +724,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					});
 
 					if (searchQuery) {
+						const searchStartedAt = performance.now();
 						const uids = await imap.search(
 							{ or: [{ from: searchQuery }, { subject: searchQuery }, { body: searchQuery }] },
 							{ uid: true },
 						);
+						searchMs = durationMs(searchStartedAt);
 						if (!uids || uids.length === 0) {
 							return json({ accountId: resolved.account.id, folder, messages: [], pagination: { page: 1, totalPages: 1, total: 0 } });
 						}
@@ -704,11 +740,28 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 						const sliceStart = Math.max(0, sliceEnd - limit);
 						const uidSlice = uids.slice(sliceStart, sliceEnd);
 						const results: Array<Record<string, unknown>> = [];
+						const fetchStartedAt = performance.now();
 						for await (const msg of imap.fetch(uidSlice.join(","), fetchOpts, { uid: true })) {
 							results.push(buildResult(msg));
 						}
+						fetchMs = durationMs(fetchStartedAt);
+						fetchedCount = results.length;
 						results.reverse();
-						return json({ accountId: resolved.account.id, folder, messages: results, pagination: { page, totalPages, total } });
+						return json({
+							accountId: resolved.account.id,
+							folder,
+							messages: results,
+							pagination: { page, totalPages, total },
+							_timing: {
+								resolveMs,
+								oauthMs: resolved.oauthRefreshMs,
+								searchMs,
+								fetchMs,
+								totalMs: durationMs(requestStartedAt),
+								mailboxExists,
+								fetchedCount,
+							},
+						});
 					}
 
 					const total = mailboxExists;
@@ -718,16 +771,44 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					const start = Math.max(1, end - limit + 1);
 					const range = `${start}:${end}`;
 					const results: Array<Record<string, unknown>> = [];
+					const fetchStartedAt = performance.now();
 					for await (const msg of imap.fetch(range, fetchOpts)) {
 						results.push(buildResult(msg));
 					}
+					fetchMs = durationMs(fetchStartedAt);
+					fetchedCount = results.length;
 					results.reverse();
-					return json({ accountId: resolved.account.id, folder, messages: results, pagination: { page, totalPages, total } });
+					return json({
+						accountId: resolved.account.id,
+						folder,
+						messages: results,
+						pagination: { page, totalPages, total },
+						_timing: {
+							resolveMs,
+							oauthMs: resolved.oauthRefreshMs,
+							searchMs,
+							fetchMs,
+							totalMs: durationMs(requestStartedAt),
+							mailboxExists,
+							fetchedCount,
+						},
+					});
+					});
 				});
-			});
+				console.warn(
+					`mail/messages account=${resolved.account.id} folder=${folder} search=${searchQuery ? "yes" : "no"} resolveMs=${resolveMs} oauthMs=${resolved.oauthRefreshMs ?? 0} searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${durationMs(requestStartedAt)} mailboxExists=${mailboxExists} fetchedCount=${fetchedCount}`,
+				);
+				return response;
+			} catch (err) {
+				console.warn(
+					`mail/messages error account=${resolved.account.id} folder=${folder} search=${searchQuery ? "yes" : "no"} resolveMs=${resolveMs} oauthMs=${resolved.oauthRefreshMs ?? 0} searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${durationMs(requestStartedAt)} mailboxExists=${mailboxExists} fetchedCount=${fetchedCount} error=${err instanceof Error ? err.message : String(err)}`,
+				);
+				throw err;
+			}
 		}
 
 		if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
+			const requestStartedAt = performance.now();
 			const home = url.searchParams.get("home") ?? undefined;
 			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
 			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
@@ -736,27 +817,61 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			if (!Number.isInteger(uid) || uid <= 0) {
 				throw new HttpError(STATUS.BadRequest, "uid must be a positive integer");
 			}
+			const resolveStartedAt = performance.now();
 			const ctx = await getContext(home ?? undefined);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const resolveMs = durationMs(resolveStartedAt);
 			const account = resolved.account.config;
 			const secrets = resolved.secrets;
+			let connectMs = 0;
+			let lockMs = 0;
+			let fetchMs = 0;
+			let parseMs = 0;
+			let attachMs = 0;
+			let sourceBytes = 0;
 
-			return await withImapReconnect(account, secrets, async (imap) => {
-				return await withMailboxLock(imap, folder, async () => {
-					const one = await imap.fetchOne(uid, {
+			try {
+				const response = await withImapReconnect(account, secrets, async (imap) => {
+					connectMs = durationMs(requestStartedAt) - resolveMs;
+					const lockStartedAt = performance.now();
+					return await withMailboxLock(imap, folder, async () => {
+					lockMs = durationMs(lockStartedAt);
+					const fetchStartedAt = performance.now();
+					const one = await withTimeout(imap.fetchOne(uid, {
 						uid: true,
 						envelope: true,
 						internalDate: true,
 						flags: true,
 						size: true,
 						source: true,
-					}, { uid: true });
+					}, { uid: true }), 25_000, "fetch-message-source");
+					fetchMs = durationMs(fetchStartedAt);
 					if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
-					const parsed = await simpleParser(one.source);
+					sourceBytes = sourceByteLength(one.source);
+					const parseStartedAt = performance.now();
+					const parsed = await withTimeout(simpleParser(one.source), 10_000, "parse-message-source") as {
+						text?: string;
+						html?: unknown;
+						attachments: Array<{
+							filename?: string;
+							contentType?: string;
+							size?: number;
+						}>;
+					};
+					parseMs = durationMs(parseStartedAt);
 					const textBody = parsed.text ?? "";
 					const htmlBody = parsed.html ? String(parsed.html) : "";
 					const ebpPayload = extractEbpPayload(textBody || htmlBody);
 					const ebpBodyPayloadHash = ebpPayload ? hashPayload(ebpPayload) : null;
+					const attachStartedAt = performance.now();
+					const attachments = parsed.attachments.map((att, index: number) => ({
+						filename: att.filename ?? "attachment",
+						contentType: att.contentType ?? "application/octet-stream",
+						size: att.size ?? 0,
+						index,
+						isEbpEncryptedAttachment: (att.contentType ?? "application/octet-stream") === EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE,
+					}));
+					attachMs = durationMs(attachStartedAt);
 					return json({
 						accountId: resolved.account.id,
 						uid: one.uid,
@@ -767,43 +882,118 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 						size: typeof one.size === "number" ? one.size : null,
 						text: textBody,
 						html: htmlBody,
-						attachments: parsed.attachments.map((att: {
+						attachments,
+						ebpPayload,
+						ebpBodyPayloadHash,
+						_timing: {
+							resolveMs,
+							oauthMs: resolved.oauthRefreshMs,
+							connectMs,
+							lockMs,
+							fetchMs,
+							parseMs,
+							attachMs,
+							totalMs: durationMs(requestStartedAt),
+							sourceBytes,
+						},
+					});
+					}, { lockTimeoutMs: 10_000 });
+				}, { connectTimeoutMs: 10_000 });
+				console.warn(
+					`mail/message account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} oauthMs=${resolved.oauthRefreshMs ?? 0} connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${durationMs(requestStartedAt)} bytes=${sourceBytes}`,
+				);
+				return response;
+			} catch (err) {
+				console.warn(
+					`mail/message error account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} oauthMs=${resolved.oauthRefreshMs ?? 0} connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${durationMs(requestStartedAt)} bytes=${sourceBytes} error=${err instanceof Error ? err.message : String(err)}`,
+				);
+				throw err;
+			}
+		}
+
+		if (req.method === "GET" && url.pathname === "/api/v1/mail/message/attachment") {
+			const requestStartedAt = performance.now();
+			const home = url.searchParams.get("home") ?? undefined;
+			const accountId = toSafeString(url.searchParams.get("accountId"), 128) || undefined;
+			const folder = toSafeString(url.searchParams.get("folder") ?? "INBOX", 128) || "INBOX";
+			const uidRaw = url.searchParams.get("uid");
+			const indexRaw = url.searchParams.get("index");
+			const uid = Number(uidRaw);
+			const index = Number(indexRaw);
+			if (!Number.isInteger(uid) || uid <= 0) {
+				throw new HttpError(STATUS.BadRequest, "uid must be a positive integer");
+			}
+			if (!Number.isInteger(index) || index < 0) {
+				throw new HttpError(STATUS.BadRequest, "index must be a non-negative integer");
+			}
+			const resolveStartedAt = performance.now();
+			const ctx = await getContext(home ?? undefined);
+			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+			const resolveMs = durationMs(resolveStartedAt);
+			const account = resolved.account.config;
+			const secrets = resolved.secrets;
+			let fetchMs = 0;
+			let parseMs = 0;
+			let sourceBytes = 0;
+
+			const response = await withImapReconnect(account, secrets, async (imap) => {
+				return await withMailboxLock(imap, folder, async () => {
+					const fetchStartedAt = performance.now();
+					const one = await withTimeout(imap.fetchOne(uid, {
+						uid: true,
+						source: true,
+					}, { uid: true }), 25_000, "fetch-attachment-source");
+					fetchMs = durationMs(fetchStartedAt);
+					if (!one || !one.source) throw new HttpError(STATUS.NotFound, "message not found");
+					sourceBytes = sourceByteLength(one.source);
+					const parseStartedAt = performance.now();
+					const parsed = await withTimeout(simpleParser(one.source), 10_000, "parse-attachment-source") as {
+						attachments: Array<{
 							filename?: string;
 							contentType?: string;
 							size?: number;
 							content?: unknown;
-						}, index: number) => {
-							const base = {
-								filename: att.filename ?? "attachment",
-								contentType: att.contentType ?? "application/octet-stream",
-								size: att.size ?? 0,
-								index,
-							};
-							if (base.contentType !== EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE) return base;
-							let payload: AnyEncryptedEmailAttachmentPayload | null = null;
-							try {
-								let raw = "";
-								if (typeof att.content === "string") {
-									raw = att.content;
-								} else if (att.content instanceof Uint8Array) {
-									raw = new TextDecoder().decode(att.content);
-								}
-								payload = raw ? parseEncryptedEmailAttachmentPayload(JSON.parse(raw)) : null;
-							} catch {
-								payload = null;
-							}
-							return {
-								...base,
-								isEbpEncryptedAttachment: true,
-								attachmentId: payload?.attachmentId ?? null,
-								ebpPayload: payload,
-							};
-						}),
-						ebpPayload,
-						ebpBodyPayloadHash,
+						}>;
+					};
+					parseMs = durationMs(parseStartedAt);
+					const attachment = parsed.attachments[index];
+					if (!attachment) throw new HttpError(STATUS.NotFound, "attachment not found");
+					const contentType = attachment.contentType ?? "application/octet-stream";
+					if (contentType !== EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE) {
+						throw new HttpError(STATUS.BadRequest, "attachment is not an EBP encrypted attachment");
+					}
+					let raw = "";
+					if (typeof attachment.content === "string") {
+						raw = attachment.content;
+					} else if (attachment.content instanceof Uint8Array) {
+						raw = new TextDecoder().decode(attachment.content);
+					}
+					if (!raw) throw new HttpError(STATUS.BadRequest, "attachment payload is empty");
+					const payload = parseEncryptedEmailAttachmentPayload(JSON.parse(raw));
+					return json({
+						accountId: resolved.account.id,
+						uid,
+						index,
+						filename: attachment.filename ?? "attachment",
+						contentType,
+						size: attachment.size ?? 0,
+						attachmentId: payload.attachmentId,
+						ebpPayload: payload,
+						_timing: {
+							resolveMs,
+							oauthMs: resolved.oauthRefreshMs,
+							fetchMs,
+							parseMs,
+							totalMs: durationMs(requestStartedAt),
+							sourceBytes,
+						},
 					});
-				});
-			});
+				}, { lockTimeoutMs: 10_000 });
+			}, { connectTimeoutMs: 10_000 });
+			console.warn(
+				`mail/message/attachment account=${resolved.account.id} folder=${folder} uid=${uid} index=${index} resolveMs=${resolveMs} oauthMs=${resolved.oauthRefreshMs ?? 0} fetchMs=${fetchMs} parseMs=${parseMs} totalMs=${durationMs(requestStartedAt)} bytes=${sourceBytes}`,
+			);
+			return response;
 		}
 
 		if (req.method === "POST" && url.pathname === "/api/v1/mail/send") {

@@ -13,6 +13,7 @@ const identityList = document.getElementById("identity-list");
 const identityDetailsList = document.getElementById("identity-details-list");
 const contactsList = document.getElementById("contacts-list");
 const serverIdentitiesList = document.getElementById("server-identities-list");
+const settingsLogsList = document.getElementById("settings-logs-list");
 
 export function updateCurrentFingerprint(fingerprint) {
   state.currentFingerprint = fingerprint;
@@ -614,6 +615,33 @@ export function renderServerIdentitiesPagination() {
   nextBtn.disabled = page >= totalPages;
 }
 
+function formatToastTime(timestamp) {
+  const d = new Date(timestamp);
+  return `${d.toLocaleDateString()} ${d.toLocaleTimeString()}`;
+}
+
+export function renderToastLogs() {
+  if (!settingsLogsList) return;
+  settingsLogsList.innerHTML = "";
+  if (!Array.isArray(state.toastLogs) || state.toastLogs.length === 0) {
+    settingsLogsList.innerHTML = "<li class='muted'>(no logs yet in this session)</li>";
+    return;
+  }
+
+  for (const entry of state.toastLogs) {
+    const li = document.createElement("li");
+    const kind = entry.kind || "info";
+    const message = entry.message || "";
+    const timestamp = Number.isFinite(entry.timestamp) ? entry.timestamp : Date.now();
+    li.innerHTML = `
+      <span class="settings-log-time">${escapeHtml(formatToastTime(timestamp))}</span>
+      <span class="settings-log-kind ${escapeHtml(kind)}">${escapeHtml(kind)}</span>
+      <span class="settings-log-message">${escapeHtml(message)}</span>
+    `;
+    settingsLogsList.appendChild(li);
+  }
+}
+
 export async function importServerIdentityAsContact(fingerprint, btn) {
   if (btn) setButtonLoading(btn, true);
   try {
@@ -854,6 +882,7 @@ export async function loadAll() {
     await _loadMailAccount();
     await _loadStoredMailCredentials();
     _renderStoredMailCredentials();
+    renderToastLogs();
 
     setStatus("Ready", "success");
   } catch (e) {

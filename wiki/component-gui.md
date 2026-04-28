@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-04-27
+last_updated: 2026-04-28
 source_count: 5
 tags:
   - component
@@ -43,7 +43,7 @@ The GUI includes a built-in email interface:
 - Connects directly over SMTP and IMAP protocols. [[source-rfc-5321]] anchors SMTP as the mail transport layer, while [[source-rfc-9051]] anchors IMAP4rev2 as the mailbox access layer.
 - Supports OAuth with Gmail (and partially Outlook).
 - Proton Mail users need Proton Mail Bridge running.
-- Email operations integrate with EBP sign/encrypt/decrypt/verify flows. See [[message-payload-formats]] for the wire format.
+- Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
 
 SMTP and IMAP do not provide EBP's end-to-end message security. The GUI uses them to send and fetch mail, then applies EBP payload encryption and signature verification at the application layer; see [[email-transport]] for the standards boundary.
 

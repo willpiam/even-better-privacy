@@ -2,8 +2,8 @@
 title: "Mail Message Selection Can Hang"
 type: analysis
 status: active
-last_updated: 2026-04-27
-source_count: 5
+last_updated: 2026-04-28
+source_count: 7
 tags:
   - gui
   - email
@@ -38,11 +38,14 @@ The inconsistent behavior is expected from the current implementation:
 - Rapidly selecting messages can leave previous full-message fetches running on the backend even after the frontend has decided to ignore their responses.
 - OAuth accounts may add token-refresh latency before connecting to IMAP.
 
-## Likely Fix Direction
+## Resolution
 
-The most direct fix is to make selected-message loading cancelable and bounded: use an `AbortController` in the frontend, abort the previous message-detail request when a new message is selected, and add a visible timeout/error state.
+The reliability pass implemented four concrete changes:
 
-Backend-side improvements would further reduce stalls: fetch body structure or text parts first, defer attachment content parsing until the user opens or decrypts an attachment, and use shorter operation-specific timeouts around full-message fetch and MIME parsing.
+- Added per-request timing instrumentation for `GET /api/v1/mail/messages`, `GET /api/v1/mail/message`, and `GET /api/v1/mail/message/attachment`, including step-level timing and source byte counts.
+- Added frontend cancellation and timeout handling for selected-message loads. New clicks abort prior fetches; stalled loads surface a retry toast instead of appearing to hang.
+- Added backend step timeouts (`imap.connect`, mailbox lock, `fetchOne(source)`, and `simpleParser`) so provider stalls do not hold requests indefinitely.
+- Switched encrypted attachment payload parsing to lazy-on-demand fetch via `GET /api/v1/mail/message/attachment` so message body rendering does not block on attachment payload decode.
 
 ## Sources
 
@@ -53,3 +56,5 @@ Backend-side improvements would further reduce stalls: fetch body structure or t
 - `gui/js/ui.js`
 - `gui/local-backend/routes.ts`
 - `gui/local-backend/mail-imap.ts`
+- `gui/local-backend/mail-account.ts`
+- `gui/e2e/mail.spec.ts`

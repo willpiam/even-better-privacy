@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-04-28] update | mail message load reliability remediation
+
+- Implemented bounded and instrumented message-read flow: `GET /api/v1/mail/messages`, `GET /api/v1/mail/message`, and `GET /api/v1/mail/message/attachment` now emit timing metadata/logs and apply step timeouts to IMAP connect/lock/fetch/parse stages.
+- Implemented frontend cancel + timeout behavior for selected-message fetches, including aborting stale requests on new selection/refresh/account-folder transitions and surfacing timeout feedback instead of silent hangs.
+- Implemented lazy encrypted-attachment payload fetch via `GET /api/v1/mail/message/attachment`; body render no longer eagerly parses encrypted attachment payloads.
+- Updated: [[analysis-mail-message-load-hang]], [[message-payload-formats]], [[component-gui]].
+
 ## [2026-04-27] query | selected email messages sometimes never load
 
 - Answered: The inbox list is cheap envelope-only IMAP fetch, while selected messages fetch and parse full MIME source with no frontend timeout/cancellation; stale requests can continue consuming backend IMAP work.

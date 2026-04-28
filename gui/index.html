@@ -180,7 +180,9 @@
       word-break: break-word;
       box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
       animation: toastIn 0.25s ease;
-      pointer-events: none;
+      pointer-events: auto;
+      cursor: copy;
+      transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
     }
 
     #status:empty, #status.hidden {
@@ -197,6 +199,12 @@
       background: var(--success-bg);
       border-color: var(--success);
       color: var(--success);
+    }
+
+    #status[data-copied="true"] {
+      border-color: var(--success);
+      color: var(--success);
+      background: var(--success-bg);
     }
 
     /* Revocation badge */
@@ -582,6 +590,49 @@
     li.current {
       border-color: var(--accent);
       background: var(--accent-bg);
+    }
+
+    .settings-logs-list {
+      max-height: 280px;
+      overflow-y: auto;
+    }
+
+    .settings-logs-list li {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      gap: 8px;
+      align-items: start;
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .settings-log-time {
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .settings-log-kind {
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      font-weight: 600;
+    }
+
+    .settings-log-kind.success {
+      color: var(--success);
+    }
+
+    .settings-log-kind.error {
+      color: var(--error);
+    }
+
+    .settings-log-kind.info {
+      color: var(--accent);
+    }
+
+    .settings-log-message {
+      color: var(--text-primary);
+      word-break: break-word;
     }
 
     #mail-message-list li.current {
@@ -2989,6 +3040,14 @@
         <h3>Stored Mail Credentials</h3>
         <p class="small muted" style="margin-bottom: 12px;">Saved mail account entries on this device. Deleting an entry removes its stored credentials.</p>
         <ul id="settings-mail-credentials-list" class="small"></ul>
+      </section>
+      <section>
+        <h3>Logs</h3>
+        <p class="small muted" style="margin-bottom: 12px;">Recent toast messages from this app session.</p>
+        <div class="row" style="margin-bottom: 12px;">
+          <button type="button" class="secondary" id="settings-logs-clear">Clear Logs</button>
+        </div>
+        <ul id="settings-logs-list" class="small settings-logs-list"></ul>
       </section>
     </div>
 

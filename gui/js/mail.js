@@ -4,6 +4,23 @@ import { requestPassword } from "./modals.js";
 import { updateMailComposeSendState, setMailTab, initMailTabs, syncMailFolderCustomUi, getSelectedMailFolder } from "./contact-search.js";
 import { updateVerifyResult, autoFillSenderContact, extractEbpPayloadFromText, extractEmailAddress, renderMailVerifyMeta, loadAll } from "./render.js";
 
+let mailMessageAbortController = null;
+let mailMessageTimeoutId = null;
+let mailMessageAbortReason = "";
+const MAIL_MESSAGE_TIMEOUT_MS = 30_000;
+
+function cancelMailMessageRequest(reason = "request aborted") {
+  if (mailMessageTimeoutId !== null) {
+    clearTimeout(mailMessageTimeoutId);
+    mailMessageTimeoutId = null;
+  }
+  if (mailMessageAbortController) {
+    mailMessageAbortReason = reason;
+    mailMessageAbortController.abort(reason);
+    mailMessageAbortController = null;
+  }
+}
+
 export async function loadMailAccount() {
   try {
     const res = await api("/mail/account");
@@ -468,20 +485,32 @@ function renderMailReaderAttachments() {
     actions.style.gap = "8px";
     actions.style.marginTop = "4px";
     li.appendChild(actions);
-    if (attachment.isEbpEncryptedAttachment && attachment.ebpPayload) {
+    if (attachment.isEbpEncryptedAttachment) {
       const decryptBtn = document.createElement("button");
       decryptBtn.type = "button";
       decryptBtn.className = "secondary";
       decryptBtn.textContent = decrypted ? "Decrypt Again" : "Decrypt";
       decryptBtn.addEventListener("click", async () => {
         try {
+          const folder = getSelectedMailFolder();
+          const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+          const uid = state.selectedMailMessage?.uid;
+          if (!Number.isInteger(uid) || uid <= 0) throw new Error("Selected message is missing uid");
+          let payload = attachment.ebpPayload || null;
+          if (!payload) {
+            const detail = await api(`/mail/message/attachment?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(uid))}&index=${encodeURIComponent(String(index))}${accountQ}`);
+            payload = detail?.ebpPayload || null;
+            if (!payload) throw new Error("Attachment payload is unavailable");
+            attachment.ebpPayload = payload;
+            attachment.attachmentId = detail?.attachmentId || null;
+          }
           const sender = document.getElementById("mail-sender-contact").value.trim();
           const password = await requestPassword("Enter password to decrypt encrypted attachment");
           if (!password) return;
           const res = await api("/mail/decrypt-attachment", {
             method: "POST",
             body: JSON.stringify({
-              payload: attachment.ebpPayload,
+              payload,
               password,
               sender: sender || undefined,
               expectedBodyPayloadHash: state.selectedMailMessage?.ebpBodyPayloadHash || undefined,
@@ -606,6 +635,7 @@ function renderMailMessages() {
       <div class="small muted mail-message-from">${escapeHtml(fromMeta)}</div>
     `;
     li.addEventListener("click", async () => {
+      cancelMailMessageRequest();
       const requestId = state.mailMessageLoadRequestId + 1;
       state.mailMessageLoadRequestId = requestId;
       state.selectedMailMessage = null;
@@ -621,7 +651,25 @@ function renderMailMessages() {
       try {
         const folder = getSelectedMailFolder();
         const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
-        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`);
+        mailMessageAbortController = new AbortController();
+        mailMessageAbortReason = "";
+        mailMessageTimeoutId = setTimeout(() => {
+          if (!mailMessageAbortController) return;
+          mailMessageAbortReason = "timeout";
+          mailMessageAbortController.abort("mail message load timeout");
+        }, MAIL_MESSAGE_TIMEOUT_MS);
+        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`, {
+          signal: mailMessageAbortController.signal,
+        });
+        if (mailMessageTimeoutId !== null) {
+          clearTimeout(mailMessageTimeoutId);
+          mailMessageTimeoutId = null;
+        }
+        mailMessageAbortController = null;
+        mailMessageAbortReason = "";
+        if (detail?._timing) {
+          console.warn("mail/message timing", detail._timing);
+        }
         if (requestId !== state.mailMessageLoadRequestId) return;
         state.selectedMailMessage = detail;
         state.decryptedMailAttachments = {};
@@ -633,7 +681,21 @@ function renderMailMessages() {
         renderMailVerifyMeta(null);
         autoFillSenderContact(detail);
       } catch (err) {
+        if (mailMessageTimeoutId !== null) {
+          clearTimeout(mailMessageTimeoutId);
+          mailMessageTimeoutId = null;
+        }
+        mailMessageAbortController = null;
+        const abortReason = mailMessageAbortReason;
+        mailMessageAbortReason = "";
         if (requestId !== state.mailMessageLoadRequestId) return;
+        if (err?.message === "request aborted") {
+          setMailMessageLoading(false);
+          if (abortReason === "timeout") {
+            setStatus("Loading message timed out, click again to retry", "error");
+          }
+          return;
+        }
         setMailMessageLoading(false);
         setStatus(err.message, "error");
       }
@@ -643,6 +705,7 @@ function renderMailMessages() {
 }
 
 export async function loadMailMessages(page = 1) {
+  cancelMailMessageRequest();
   const folder = getSelectedMailFolder();
   const limit = Number(document.getElementById("mail-limit").value || 20);
   const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
@@ -650,6 +713,9 @@ export async function loadMailMessages(page = 1) {
   const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
   const pageQ = `&page=${encodeURIComponent(String(page))}`;
   const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}${pageQ}`);
+  if (res?._timing) {
+    console.warn("mail/messages timing", res._timing);
+  }
   state.mailMessages = res?.messages || [];
   if (res?.pagination) {
     state.mailPagination = {
@@ -698,6 +764,7 @@ export function initMailPage() {
   const folderEl = document.getElementById("mail-folder");
   if (folderEl) {
     folderEl.addEventListener("change", () => {
+      cancelMailMessageRequest();
       syncMailFolderCustomUi();
     });
   }
@@ -772,6 +839,7 @@ export function initMailPage() {
         state.selectedMailMessage = null;
         state.selectedMailMessageUid = null;
         state.decryptedMailAttachments = {};
+        cancelMailMessageRequest();
         state.mailMessageLoadRequestId += 1;
         setMailMessageLoading(false);
         renderMailMessages();

@@ -1,6 +1,7 @@
 import { ImapFlow } from "imapflow";
 import { extractArmoredPayload } from "../../core/Payloads.ts";
 import type { MailAccountConfig, MailAuthSecrets } from "./mail-account.ts";
+import { HttpError, STATUS } from "./http.ts";
 
 export function buildImapClient(config: MailAccountConfig, secrets: MailAuthSecrets): ImapFlow {
 	const auth = config.authType === "oauth"
@@ -49,12 +50,14 @@ export async function withImapReconnect<T>(
 	config: MailAccountConfig,
 	secrets: MailAuthSecrets,
 	work: (imap: ImapFlow) => Promise<T>,
+	options?: { connectTimeoutMs?: number },
 ): Promise<T> {
 	let lastErr: unknown = null;
+	const connectTimeoutMs = options?.connectTimeoutMs ?? 10_000;
 	for (let attempt = 0; attempt < 2; attempt += 1) {
 		const imap = buildImapClient(config, secrets);
 		try {
-			await imap.connect();
+			await withTimeout(imap.connect(), connectTimeoutMs, "imap-connect");
 			return await work(imap);
 		} catch (err) {
 			lastErr = err;
@@ -73,13 +76,34 @@ export async function withMailboxLock<T>(
 	imap: ImapFlow,
 	folder: string,
 	work: () => Promise<T>,
+	options?: { lockTimeoutMs?: number },
 ): Promise<T> {
 	// ImapFlow recommends getMailboxLock() over mailboxOpen() for safer transactional mailbox operations.
-	const lock = await imap.getMailboxLock(folder, { readOnly: true });
+	const lock = await withTimeout(
+		imap.getMailboxLock(folder, { readOnly: true }),
+		options?.lockTimeoutMs ?? 10_000,
+		`mailbox-lock:${folder}`,
+	);
 	try {
 		return await work();
 	} finally {
 		lock.release();
+	}
+}
+
+export async function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+	let timerId: number | null = null;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				timerId = setTimeout(() => {
+					reject(new HttpError(STATUS.BadGateway, `mail step timed out: ${label}`));
+				}, ms);
+			}),
+		]);
+	} finally {
+		if (timerId !== null) clearTimeout(timerId);
 	}
 }
 

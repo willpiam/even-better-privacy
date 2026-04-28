@@ -361,7 +361,10 @@ export function buildSmtpAuth(config: MailAccountConfig, secrets: MailAuthSecret
 	return { user: config.username, pass: secrets.smtpPassword };
 }
 
-export async function resolveMailAccount(identityDir: string, accountId?: string): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets }> {
+export async function resolveMailAccount(
+	identityDir: string,
+	accountId?: string,
+): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets; oauthRefreshMs: number | null }> {
 	const store = await getMailStore(identityDir);
 	if (!store.accounts.length) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
 	const selected = accountId ?? store.selectedAccountId ?? store.accounts[0].id;
@@ -370,15 +373,16 @@ export async function resolveMailAccount(identityDir: string, accountId?: string
 	const secretStore = await getMailSecretsStore(identityDir);
 	let secrets = secretStore[account.id];
 	if (account.config.authType === "oauth") {
+		const oauthStartedAt = performance.now();
 		if (!secrets?.refreshToken && !secrets?.accessToken) {
 			throw new HttpError(STATUS.BadRequest, "mail oauth credentials are not configured");
 		}
 		secrets = await refreshOAuthToken(identityDir, account.id, account.config, secrets ?? { imapPassword: "", smtpPassword: "" });
 		if (!secrets.accessToken) throw new HttpError(STATUS.BadRequest, "mail oauth credentials are not configured");
-		return { account, secrets };
+		return { account, secrets, oauthRefreshMs: Math.round(performance.now() - oauthStartedAt) };
 	}
 	if (!secrets?.imapPassword || !secrets?.smtpPassword) {
 		throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
 	}
-	return { account, secrets };
+	return { account, secrets, oauthRefreshMs: null };
 }

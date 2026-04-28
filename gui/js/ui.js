@@ -1,4 +1,4 @@
-import { LOCAL_BACKEND_ORIGIN } from "./state.js";
+import { LOCAL_BACKEND_ORIGIN, TOAST_LOG_LIMIT, state } from "./state.js";
 
 let csrfTokenPromise = null;
 function getCsrfToken() {
@@ -21,19 +21,78 @@ function getCsrfToken() {
 }
 
 const statusEl = document.getElementById("status");
+const statusSubscribers = new Set();
+let statusCopyFeedbackTimer = null;
 
 let statusTimer = null;
-export function setStatus(msg, kind = "info") {
+function notifyStatusSubscribers() {
+  for (const subscriber of statusSubscribers) {
+    try {
+      subscriber();
+    } catch (err) {
+      console.error("status subscriber failed", err);
+    }
+  }
+}
+
+export function onStatusChange(subscriber) {
+  if (typeof subscriber !== "function") return () => {};
+  statusSubscribers.add(subscriber);
+  return () => statusSubscribers.delete(subscriber);
+}
+
+function pushToastLog(message, kind) {
+  state.toastLogs.unshift({
+    message,
+    kind,
+    timestamp: Date.now(),
+  });
+  if (state.toastLogs.length > TOAST_LOG_LIMIT) {
+    state.toastLogs.length = TOAST_LOG_LIMIT;
+  }
+}
+
+export function setStatus(msg, kind = "info", options = {}) {
+  const { log = true } = options;
+  const message = typeof msg === "string" ? msg : String(msg ?? "");
   if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
-  statusEl.textContent = msg;
+  statusEl.textContent = message;
   statusEl.dataset.kind = kind;
+  delete statusEl.dataset.copied;
+  statusEl.title = "Click to copy";
   statusEl.classList.remove("hidden");
   statusEl.style.animation = "none";
   statusEl.offsetHeight;
   statusEl.style.animation = "";
+  if (log) pushToastLog(message, kind);
+  notifyStatusSubscribers();
   if (kind !== "error") {
     statusTimer = setTimeout(() => { statusEl.classList.add("hidden"); }, 5000);
   }
+}
+
+if (statusEl) {
+  statusEl.addEventListener("click", async () => {
+    const message = statusEl.textContent?.trim();
+    if (!message || statusEl.classList.contains("hidden")) return;
+    try {
+      await navigator.clipboard.writeText(message);
+      statusEl.dataset.copied = "true";
+      statusEl.title = "Copied";
+      if (statusCopyFeedbackTimer) clearTimeout(statusCopyFeedbackTimer);
+      statusCopyFeedbackTimer = setTimeout(() => {
+        delete statusEl.dataset.copied;
+        statusEl.title = "Click to copy";
+      }, 1200);
+    } catch (err) {
+      console.error("Failed to copy status", err);
+      statusEl.title = "Copy failed";
+      if (statusCopyFeedbackTimer) clearTimeout(statusCopyFeedbackTimer);
+      statusCopyFeedbackTimer = setTimeout(() => {
+        statusEl.title = "Click to copy";
+      }, 1200);
+    }
+  });
 }
 
 export function setButtonLoading(btn, loading) {
@@ -66,11 +125,18 @@ export async function api(path, init = {}) {
       throw new Error(`failed to obtain csrf token: ${err && err.message ? err.message : err}`);
     }
   }
-  const res = await fetch(`${LOCAL_BACKEND_ORIGIN}/api/v1${path}`, {
-    credentials: "include",
-    ...init,
-    headers: { "content-type": "application/json", ...extraHeaders, ...(init.headers || {}) },
-  });
+  let res;
+  try {
+    res = await fetch(`${LOCAL_BACKEND_ORIGIN}/api/v1${path}`, {
+      credentials: "include",
+      ...init,
+      headers: { "content-type": "application/json", ...extraHeaders, ...(init.headers || {}) },
+    });
+  } catch (err) {
+    const maybeAbort = err && typeof err === "object" ? err.name : "";
+    if (maybeAbort === "AbortError") throw new Error("request aborted");
+    throw err;
+  }
   let body = null;
   try {
     body = await res.json();
