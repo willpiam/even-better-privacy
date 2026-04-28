@@ -1,1 +1,7 @@
-{}
+{
+  "userIgnoreFilters": [
+    "mobile/",
+    "final_builds/",
+    "desktop/"
+  ]
+}

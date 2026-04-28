@@ -4,20 +4,17 @@
     "type": "split",
     "children": [
       {
-        "id": "0ad733fc264106b2",
+        "id": "39ebda1513d75ad7",
         "type": "tabs",
         "children": [
           {
-            "id": "ed34729633f763f7",
+            "id": "b3b8f0b4c9f99bbf",
             "type": "leaf",
             "state": {
-              "type": "bases",
-              "state": {
-                "file": "Untitled 6.base",
-                "viewName": "Table"
-              },
-              "icon": "lucide-table",
-              "title": "Untitled 6"
+              "type": "empty",
+              "state": {},
+              "icon": "lucide-file",
+              "title": "New tab"
             }
           }
         ]
@@ -183,8 +180,17 @@
       "bases:Create new base": false
     }
   },
-  "active": "ed34729633f763f7",
+  "active": "b3b8f0b4c9f99bbf",
   "lastOpenFiles": [
+    "6e656e2.md",
+    "llm-wiki.md",
+    "PRIVACY.md",
+    "ReadMe.md",
+    "README_ja.md",
+    "mobile/node_modules/query-string/readme.md",
+    "wiki/identity-model.md",
+    "wiki/log.md",
+    "mobile/node_modules/eslint-plugin-jest/README.md",
     "core/EmailAttachmentPayload.ts",
     "wiki/decentralized-identifiers.md",
     "wiki/source-did-1-1.md",
@@ -213,12 +219,10 @@
     "Untitled 6.base",
     "wiki/overview.md",
     "Untitled 5.base",
-    "Untitled 4.base",
     "mobile/node_modules/@noble/curves/README.md",
     "mobile/node_modules/eslint-plugin-react/README.md",
     "wiki/component-server.md",
     "wiki/key-management.md",
-    "wiki/log.md",
     "wiki/index.md"
   ]
 }
