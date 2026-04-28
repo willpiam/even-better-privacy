@@ -3,38 +3,105 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { PROTOCOL_VERSION } from "../core/version.ts";
 import { COMPONENT_VERSIONS } from "../app-version.ts";
-import { getContext, fixLegacyPerms } from "./utils.ts";
+import { fixLegacyPerms, getContext } from "./utils.ts";
 
 import {
-	cmdGenerate,
-	cmdInfo,
-	cmdExportPublic,
-	cmdListIdentities,
-	cmdUseIdentity,
-	cmdShowDetails,
+  cmdExportPublic,
+  cmdGenerate,
+  cmdInfo,
+  cmdListIdentities,
+  cmdShowDetails,
+  cmdUseIdentity,
 } from "./commands/identity.ts";
 import { cmdImportContact, cmdListContacts } from "./commands/contacts.ts";
-import { cmdSign, cmdVerify, cmdEncrypt, cmdDecrypt } from "./commands/crypto.ts";
-import { cmdEncryptFile, cmdDecryptFile } from "./commands/files.ts";
 import {
-	cmdAttachDetail,
-	cmdRevokeDetail,
-	cmdRevokeIdentity,
-	cmdGenerateRevocationCert,
+  cmdDecrypt,
+  cmdEncrypt,
+  cmdSign,
+  cmdVerify,
+} from "./commands/crypto.ts";
+import { cmdDecryptFile, cmdEncryptFile } from "./commands/files.ts";
+import {
+  cmdAttachDetail,
+  cmdGenerateRevocationCert,
+  cmdRevokeDetail,
+  cmdRevokeIdentity,
 } from "./commands/details.ts";
 import {
-	cmdPublishIdentity,
-	cmdFetchIdentity,
-	cmdListServerIdentities,
-	cmdServer,
+  cmdFetchIdentity,
+  cmdListServerIdentities,
+  cmdPublishIdentity,
+  cmdServer,
 } from "./commands/server.ts";
 
 // ============================================================================
 // Main
 // ============================================================================
 
+const STRING_FLAGS = [
+  "signing",
+  "encryption",
+  "output",
+  "name",
+  "recipient",
+  "sender",
+  "signature",
+  "password",
+  "home",
+  "identity",
+  "server",
+  "page",
+  "reason",
+  "revocation-output",
+  "search",
+];
+const BOOLEAN_FLAGS = [
+  "help",
+  "version",
+  "force",
+  "detached",
+  "sign",
+  "push",
+  "clear",
+  "revocation-cert",
+  "no-salt",
+  "opaque",
+];
+const FLAG_ALIASES: Record<string, string> = {
+  h: "help",
+  v: "version",
+  o: "output",
+  r: "recipient",
+  s: "sender",
+};
+const KNOWN_FLAGS = new Set([
+  ...STRING_FLAGS,
+  ...BOOLEAN_FLAGS,
+  ...Object.keys(FLAG_ALIASES),
+]);
+
+function findUnknownFlags(argv: string[]): string[] {
+  const unknown: string[] = [];
+  for (const token of argv) {
+    if (token === "--") break;
+    if (!token.startsWith("-") || token === "-") continue;
+
+    if (token.startsWith("--")) {
+      const name = token.slice(2).split("=", 1)[0];
+      if (name && !KNOWN_FLAGS.has(name)) unknown.push(`--${name}`);
+      continue;
+    }
+
+    for (const alias of token.slice(1)) {
+      if (!KNOWN_FLAGS.has(alias)) unknown.push(`-${alias}`);
+    }
+  }
+  return [...new Set(unknown)];
+}
+
 function printHelp(): void {
-	console.log(`ebp - Post-quantum cryptography CLI (v${COMPONENT_VERSIONS.cli}, protocol ${PROTOCOL_VERSION})
+  console.log(
+    `ebp - Post-quantum cryptography CLI (v${COMPONENT_VERSIONS.cli}, protocol ${PROTOCOL_VERSION})
 
 USAGE:
   ebp <command> [options] [arguments]
@@ -170,114 +237,134 @@ EXAMPLES:
 
   # Revoke entire identity (if compromised)
   ebp revoke --reason "Key compromised" --force --push
-`);
+`,
+  );
 }
 
 async function main(): Promise<void> {
-	const args = parseArgs(Deno.args, {
-		string: ["signing", "encryption", "output", "name", "recipient", "sender", "signature", "password", "home", "identity", "server", "page", "reason", "revocation-output", "search"],
-		boolean: ["help", "version", "force", "detached", "sign", "push", "clear", "revocation-cert", "no-salt", "opaque"],
-		alias: { h: "help", v: "version", o: "output", r: "recipient", s: "sender" },
-	});
+  const unknownFlags = findUnknownFlags(Deno.args);
+  if (unknownFlags.length > 0) {
+    console.error(
+      `Unknown option${unknownFlags.length === 1 ? "" : "s"}: ${
+        unknownFlags.join(", ")
+      }`,
+    );
+    console.error("Run 'ebp --help' for usage information.");
+    Deno.exit(1);
+  }
 
-	if (args.version) {
-		console.log(`ebp v${COMPONENT_VERSIONS.cli} (protocol ${PROTOCOL_VERSION})`);
-		Deno.exit(0);
-	}
+  const args = parseArgs(Deno.args, {
+    string: STRING_FLAGS,
+    boolean: BOOLEAN_FLAGS,
+    alias: FLAG_ALIASES,
+  });
 
-	if (args.help || args._.length === 0) {
-		printHelp();
-		Deno.exit(0);
-	}
+  if (typeof args["password"] === "string") {
+    console.error(
+      "[ebp] warning: --password exposes secrets via shell history/process listings; prefer the interactive prompt.",
+    );
+  }
 
-	const ctx = await getContext(
-		args["home"] as string | undefined,
-		args["identity"] as string | undefined,
-		args["server"] as string | undefined,
-	);
+  if (args.version) {
+    console.log(
+      `ebp v${COMPONENT_VERSIONS.cli} (protocol ${PROTOCOL_VERSION})`,
+    );
+    Deno.exit(0);
+  }
 
-	// F-STORAGE-01/04: tighten any pre-existing loose permissions under
-	// ~/.ebp/ on startup. Best-effort: no error if the directory does not
-	// exist yet or chmod is unsupported on this platform.
-	await fixLegacyPerms(ctx.identityDir);
+  if (args.help || args._.length === 0) {
+    printHelp();
+    Deno.exit(0);
+  }
 
-	const command = args._[0] as string;
-	args._ = args._.slice(1); // Remove command from args
+  const ctx = await getContext(
+    args["home"] as string | undefined,
+    args["identity"] as string | undefined,
+    args["server"] as string | undefined,
+  );
 
-	switch (command) {
-		case "generate":
-			await cmdGenerate(args, ctx);
-			break;
-		case "details":
-			await cmdShowDetails(args, ctx);
-			break;
-		case "info":
-			await cmdInfo(args, ctx);
-			break;
-		case "export-public":
-		case "export":
-			await cmdExportPublic(args, ctx);
-			break;
-		case "import":
-			await cmdImportContact(args, ctx);
-			break;
-		case "contacts":
-		case "list":
-			await cmdListContacts(args, ctx);
-			break;
-		case "identities":
-			await cmdListIdentities(ctx);
-			break;
-		case "use":
-			await cmdUseIdentity(args, ctx);
-			break;
-		case "detail":
-			await cmdAttachDetail(args, ctx);
-			break;
-		case "revoke-detail":
-			await cmdRevokeDetail(args, ctx);
-			break;
-		case "revoke":
-			await cmdRevokeIdentity(args, ctx);
-			break;
-		case "generate-revocation-cert":
-			await cmdGenerateRevocationCert(args, ctx);
-			break;
-		case "publish":
-			await cmdPublishIdentity(args, ctx);
-			break;
-		case "server-identities":
-			await cmdListServerIdentities(args, ctx);
-			break;
-		case "fetch":
-			await cmdFetchIdentity(args, ctx);
-			break;
-		case "server":
-			await cmdServer(args, ctx);
-			break;
-		case "sign":
-			await cmdSign(args, ctx);
-			break;
-		case "verify":
-			await cmdVerify(args, ctx);
-			break;
-		case "encrypt":
-			await cmdEncrypt(args, ctx);
-			break;
-		case "decrypt":
-			await cmdDecrypt(args, ctx);
-			break;
-		case "encrypt-file":
-			await cmdEncryptFile(args, ctx);
-			break;
-		case "decrypt-file":
-			await cmdDecryptFile(args, ctx);
-			break;
-		default:
-			console.error(`Unknown command: ${command}`);
-			console.error("Run 'ebp --help' for usage information.");
-			Deno.exit(1);
-	}
+  // F-STORAGE-01/04: tighten any pre-existing loose permissions under
+  // ~/.ebp/ on startup. Best-effort: no error if the directory does not
+  // exist yet or chmod is unsupported on this platform.
+  await fixLegacyPerms(ctx.identityDir);
+
+  const command = args._[0] as string;
+  args._ = args._.slice(1); // Remove command from args
+
+  switch (command) {
+    case "generate":
+      await cmdGenerate(args, ctx);
+      break;
+    case "details":
+      await cmdShowDetails(args, ctx);
+      break;
+    case "info":
+      await cmdInfo(args, ctx);
+      break;
+    case "export-public":
+    case "export":
+      await cmdExportPublic(args, ctx);
+      break;
+    case "import":
+      await cmdImportContact(args, ctx);
+      break;
+    case "contacts":
+    case "list":
+      await cmdListContacts(args, ctx);
+      break;
+    case "identities":
+      await cmdListIdentities(ctx);
+      break;
+    case "use":
+      await cmdUseIdentity(args, ctx);
+      break;
+    case "detail":
+      await cmdAttachDetail(args, ctx);
+      break;
+    case "revoke-detail":
+      await cmdRevokeDetail(args, ctx);
+      break;
+    case "revoke":
+      await cmdRevokeIdentity(args, ctx);
+      break;
+    case "generate-revocation-cert":
+      await cmdGenerateRevocationCert(args, ctx);
+      break;
+    case "publish":
+      await cmdPublishIdentity(args, ctx);
+      break;
+    case "server-identities":
+      await cmdListServerIdentities(args, ctx);
+      break;
+    case "fetch":
+      await cmdFetchIdentity(args, ctx);
+      break;
+    case "server":
+      await cmdServer(args, ctx);
+      break;
+    case "sign":
+      await cmdSign(args, ctx);
+      break;
+    case "verify":
+      await cmdVerify(args, ctx);
+      break;
+    case "encrypt":
+      await cmdEncrypt(args, ctx);
+      break;
+    case "decrypt":
+      await cmdDecrypt(args, ctx);
+      break;
+    case "encrypt-file":
+      await cmdEncryptFile(args, ctx);
+      break;
+    case "decrypt-file":
+      await cmdDecryptFile(args, ctx);
+      break;
+    default:
+      console.error(`Unknown command: ${command}`);
+      console.error("Run 'ebp --help' for usage information.");
+      Deno.exit(1);
+  }
 }
 
 main();

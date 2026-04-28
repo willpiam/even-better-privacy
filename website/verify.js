@@ -51,6 +51,29 @@ function buildFileSignMessage(fileHash, salt, contextMessage) {
   return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 
+function isLoopbackHost(hostname) {
+  const normalized = String(hostname || "").toLowerCase();
+  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+}
+
+function validateServerBase(rawValue) {
+  const serverBase = rawValue.trim().replace(/\/+$/, "");
+  if (!serverBase) throw new Error("Server URL is required.");
+
+  let parsed;
+  try {
+    parsed = new URL(serverBase);
+  } catch {
+    throw new Error("Server URL must be an absolute URL.");
+  }
+
+  if (parsed.protocol === "https:" || (parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))) {
+    return serverBase;
+  }
+
+  throw new Error("Server URL must use HTTPS unless it targets localhost/127.0.0.1.");
+}
+
 // Mirror of the GUI verify-file flow: confirm that `publicIdentity`'s
 // signing+encryption keys actually correspond to its claimed fingerprint.
 // Returns { ok, computedFingerprint, error? }. Without this check, a
@@ -159,20 +182,7 @@ verifyButton.addEventListener("click", async () => {
   if (fileReconstructedMessageInput) fileReconstructedMessageInput.value = "";
 
   try {
-    const serverBase = serverUrlInput.value.trim().replace(/\/+$/, "");
-    if (!serverBase) throw new Error("Server URL is required.");
-
-    // F-WEB-02: warn before contacting an http:// server. A hostile
-    // network can otherwise rewrite identity lookups in transit.
-    if (/^http:\/\//i.test(serverBase)) {
-      const proceed = confirm(
-        "Server URL is not HTTPS. Identity lookups can be tampered with on the network. Continue anyway?",
-      );
-      if (!proceed) {
-        resultSummary.textContent = "Cancelled — non-HTTPS server URL.";
-        return;
-      }
-    }
+    const serverBase = validateServerBase(serverUrlInput.value);
 
     const payload = tryParseJson(payloadJsonInput.value);
     if (!payload || typeof payload !== "object") {

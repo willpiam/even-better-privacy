@@ -8,6 +8,7 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
   constructor(path: string) {
     super();
     this.db = new DB(path);
+    this.db.execute("PRAGMA foreign_keys = ON");
     this.initializeSchema();
   }
 
@@ -16,8 +17,13 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     return Promise.resolve();
   }
 
-  query<T extends unknown[]>(sql: string, params: DatabaseQueryParams = []): Promise<T[]> {
-    return Promise.resolve([...this.db.query<T>(sql, params as QueryParameterSet | undefined)]);
+  query<T extends unknown[]>(
+    sql: string,
+    params: DatabaseQueryParams = [],
+  ): Promise<T[]> {
+    return Promise.resolve([
+      ...this.db.query<T>(sql, params as QueryParameterSet | undefined),
+    ]);
   }
 
   close(): Promise<void> {
@@ -114,7 +120,9 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       /* column already exists */
     }
     try {
-      this.db.execute(`ALTER TABLE identities ADD COLUMN revocation_certificate TEXT`);
+      this.db.execute(
+        `ALTER TABLE identities ADD COLUMN revocation_certificate TEXT`,
+      );
     } catch {
       /* column already exists */
     }
@@ -124,7 +132,9 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       /* column already exists */
     }
     try {
-      this.db.execute(`ALTER TABLE details ADD COLUMN revocation_certificate TEXT`);
+      this.db.execute(
+        `ALTER TABLE details ADD COLUMN revocation_certificate TEXT`,
+      );
     } catch {
       /* column already exists */
     }
@@ -139,17 +149,23 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       /* column already exists */
     }
     try {
-      this.db.execute(`ALTER TABLE details ADD COLUMN verification_token_hash TEXT`);
+      this.db.execute(
+        `ALTER TABLE details ADD COLUMN verification_token_hash TEXT`,
+      );
     } catch {
       /* column already exists */
     }
     try {
-      this.db.execute(`ALTER TABLE details ADD COLUMN verification_expires_at INTEGER`);
+      this.db.execute(
+        `ALTER TABLE details ADD COLUMN verification_expires_at INTEGER`,
+      );
     } catch {
       /* column already exists */
     }
     try {
-      this.db.execute(`ALTER TABLE details ADD COLUMN verification_sent_at INTEGER`);
+      this.db.execute(
+        `ALTER TABLE details ADD COLUMN verification_sent_at INTEGER`,
+      );
     } catch {
       /* column already exists */
     }

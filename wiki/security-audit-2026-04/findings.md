@@ -35,20 +35,20 @@ CVSS 3.1 scores are advisory and use the EBP-specific environmental consideratio
 | F-CRYPTO-06 | Medium | core | `Identity.fromStorageFormat` constructs Identity via `Object.create` bypassing constructor invariants; later signing on public-only instance fails opaquely | open |
 | F-CRYPTO-07 | Low | core | Hierarchy certificate signing payload uses `::` joining over user-supplied `context` field; not a parser-secure encoding | open |
 | F-CRYPTO-08 | Low | core | `Hex.hexToBytes` accepts any character via `parseInt(_, 16)` rather than validating `[0-9a-fA-F]` (NaN bytes become 0) | open |
-| F-CRYPTO-09 | Low | core | `Identity.signAndEncryptMessage` builds inner JSON `{message, signature}` with no version/type tag — parser ambiguity | open |
-| F-CRYPTO-10 | Informational | core | `MAX_CONTEXT_LENGTH` for hierarchy is 256 chars but no length cap on `reason` strings in revocation certs | open |
+| F-CRYPTO-09 | Low | core | `Identity.signAndEncryptMessage` builds inner JSON `{message, signature}` with no version/type tag — parser ambiguity | fixed (2026-04-28) |
+| F-CRYPTO-10 | Informational | core | `MAX_CONTEXT_LENGTH` for hierarchy is 256 chars but no length cap on `reason` strings in revocation certs | fixed (2026-04-28) |
 | F-CRYPTO-11 | Informational | core | `PROTOCOL_VERSION` is `0.0.1` and `isProtocolVersionSupported` only compares major+minor — patch ignored | open |
 | F-SERVER-01 | High | server | Reflected XSS in `GET /api/v1/verify-email` — token query param interpolated unescaped into HTML response | fixed (2026-04-22) |
 | F-SERVER-02 | High | server | Unauthenticated deletion of pending hierarchy proposals: `POST /api/v1/hierarchy/reject` requires no signature, only a fingerprint that is part of the proposal | fixed (2026-04-22) |
 | F-SERVER-03 | High | server | `getClientIp` blindly trusts `X-Forwarded-For`; rate-limit bypass and log forgery on any deployment without a strict reverse proxy | fixed (2026-04-22) |
 | F-SERVER-04 | Medium | server | Default `ALLOWED_ORIGINS=*`, no Host validation, no CSP, no `X-Content-Type-Options`, no `Referrer-Policy` | fixed (2026-04-28) |
 | F-SERVER-05 | High | server | Dockerfile runs as root (no `USER` directive) — broader blast radius for any RCE | fixed (2026-04-22) |
-| F-SERVER-06 | Medium | server | SQLite adapter does not set `PRAGMA foreign_keys = ON`; declared FK constraints are advisory | open |
-| F-SERVER-07 | Medium | server | Search `LIKE %query%` does not escape `%`/`_`; attacker-controlled wildcards force expensive scans | open |
+| F-SERVER-06 | Medium | server | SQLite adapter does not set `PRAGMA foreign_keys = ON`; declared FK constraints are advisory | fixed (2026-04-28) |
+| F-SERVER-07 | Medium | server | Search `LIKE %query%` does not escape `%`/`_`; attacker-controlled wildcards force expensive scans | fixed (2026-04-28) |
 | F-SERVER-08 | Medium | server | Identity-existence enumeration via registration response codes (200 vs 400 vs 404) | open |
 | F-SERVER-09 | Medium | server | Email-verification token transmitted in URL — leaks via access logs, browser history, future Referer headers | fixed (2026-04-28) |
-| F-SERVER-10 | Low | server | Email-verification fallback compares plaintext token via SQL `=`; not constant-time. Mitigated by `EMAIL_VERIFICATION_STORE_PLAINTEXT=false` default | open |
-| F-SERVER-11 | Informational | server | `computeSigningRawFingerprint` invoked only for side-effect of throwing on bad keys; explicit `validatePostQuantumKey` would be clearer | open |
+| F-SERVER-10 | Low | server | Email-verification fallback compares plaintext token via SQL `=`; not constant-time. Mitigated by `EMAIL_VERIFICATION_STORE_PLAINTEXT=false` default | fixed (2026-04-28) |
+| F-SERVER-11 | Informational | server | `computeSigningRawFingerprint` invoked only for side-effect of throwing on bad keys; explicit `validatePostQuantumKey` would be clearer | fixed (2026-04-28) |
 | F-SERVER-13 | Low | server | Server `main.ts` references non-existent `./db.ts`; `deno check server/main.ts` fails. Repo is in build-broken state on master | open |
 | F-GUI-01 | Critical | gui-local-backend | Universal cross-origin access: CORS `*` + no Host check + no CSRF token allows any browser tab to read identities, contacts, mail accounts, drop arbitrary `~/Downloads/` files, hijack mail OAuth, etc. | fixed (2026-04-22) |
 | F-GUI-02 | Medium | gui-local-backend | `/api/v1/save-file` overwrites existing files in `~/Downloads/` without confirmation | open |
@@ -61,15 +61,15 @@ CVSS 3.1 scores are advisory and use the EBP-specific environmental consideratio
 | F-GUI-09 | Low | gui-local-backend | `/api/v1/context` and `/save-file` leak full home/disk paths in responses — tailored-attack input via F-GUI-01 | open |
 | F-GUI-10 | Medium | gui-local-backend | `mailOauthStarts` Map can be flooded cross-origin to exhaust memory (DoS) | open |
 | F-GUI-11 | Low | gui-local-backend | Static-file traversal check runs on single-decoded path; double-encoded `%252e%252e` not re-checked. Likely safe via URL normalisation but worth hardening | open |
-| F-GUI-12 | Low | gui-local-backend | Mail-OAuth callback HTML interpolates provider-supplied `error`/`message` strings without HTML escaping | open |
+| F-GUI-12 | Low | gui-local-backend | Mail-OAuth callback HTML interpolates provider-supplied `error`/`message` strings without HTML escaping | fixed (2026-04-28) |
 | F-CLI-01 | High | cli | `readPassword` does not disable terminal echo; password visible to shoulder-surfing, scrollback, terminal recorders | fixed (2026-04-22) |
-| F-CLI-02 | Medium | cli | `--password` flag accepts secret in shell history; only documented warning, no runtime warning | open |
-| F-CLI-03 | Medium | cli | Persisted `server` URL not scheme-checked; HTTP server URLs silently accepted | open |
+| F-CLI-02 | Medium | cli | `--password` flag accepts secret in shell history; only documented warning, no runtime warning | fixed (2026-04-28) |
+| F-CLI-03 | Medium | cli | Persisted `server` URL not scheme-checked; HTTP server URLs silently accepted | fixed (2026-04-28) |
 | F-CLI-04 | Low | cli | `safeFileName` does not cap length | open |
-| F-CLI-05 | Informational | cli | `parseArgs` silently accepts unknown flags | open |
+| F-CLI-05 | Informational | cli | `parseArgs` silently accepts unknown flags | fixed (2026-04-28) |
 | F-CLI-06 | Low | cli | Wrong-password and corruption errors are conflated | open |
 | F-WEB-01 | Medium | website | Verifier trusts server `body.verified` boolean; no client-side cryptographic verification | fixed (2026-04-22) |
-| F-WEB-02 | Medium | website | Server URL input accepts `http://` without warning | open |
+| F-WEB-02 | Medium | website | Server URL input accepts `http://` without warning | fixed (2026-04-28) |
 | F-WEB-03 | Medium | website | No CSP set on `verify.html` | open |
 | F-WEB-04 | Low | website | `JSON.parse` on attacker-pasted content (mitigated by V8/SpiderMonkey safe handling of `__proto__`) | open |
 | F-TAURI-01 | High | tauri | `allowlist.shell.open=true` with no scope; webview can open arbitrary URL schemes | fixed (2026-04-22) |

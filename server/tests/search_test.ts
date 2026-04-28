@@ -1,6 +1,11 @@
-import { assertEquals, assert } from "jsr:@std/assert@^1.0.6";
-import { initDb, insertIdentity, insertDetail, searchIdentities } from "../db/index.ts";
-import { createSphincsIdentity, createSignedProof } from "./helpers.ts";
+import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
+import {
+  initDb,
+  insertDetail,
+  insertIdentity,
+  searchIdentities,
+} from "../db/index.ts";
+import { createSignedProof, createSphincsIdentity } from "./helpers.ts";
 
 async function withTempDb(fn: (dbPath: string) => Promise<void>) {
   const path = Deno.makeTempFileSync({ suffix: ".sqlite" });
@@ -234,22 +239,34 @@ Deno.test("searchIdentities: pagination works correctly", async () => {
       }
 
       // Page 1 with limit 3
-      const page1 = await searchIdentities(db, "testuser", { page: 1, limit: 3 });
+      const page1 = await searchIdentities(db, "testuser", {
+        page: 1,
+        limit: 3,
+      });
       assertEquals(page1.total, 8);
       assertEquals(page1.results.length, 3);
 
       // Page 2
-      const page2 = await searchIdentities(db, "testuser", { page: 2, limit: 3 });
+      const page2 = await searchIdentities(db, "testuser", {
+        page: 2,
+        limit: 3,
+      });
       assertEquals(page2.total, 8);
       assertEquals(page2.results.length, 3);
 
       // Page 3 (partial - only 2 remaining)
-      const page3 = await searchIdentities(db, "testuser", { page: 3, limit: 3 });
+      const page3 = await searchIdentities(db, "testuser", {
+        page: 3,
+        limit: 3,
+      });
       assertEquals(page3.total, 8);
       assertEquals(page3.results.length, 2);
 
       // Page 4 (empty)
-      const page4 = await searchIdentities(db, "testuser", { page: 4, limit: 3 });
+      const page4 = await searchIdentities(db, "testuser", {
+        page: 4,
+        limit: 3,
+      });
       assertEquals(page4.total, 8);
       assertEquals(page4.results.length, 0);
 
@@ -303,6 +320,80 @@ Deno.test("searchIdentities: does not search other detail paths", async () => {
       const { results, total } = await searchIdentities(db, "555-1234");
       assertEquals(total, 0);
       assertEquals(results.length, 0);
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+Deno.test("searchIdentities: treats LIKE wildcards as literal query text", async () => {
+  await withTempDb(async (dbPath) => {
+    const db = await initDb(dbPath);
+    const { identity: plainIdentity, signingKey: plainSigningKey } =
+      createSphincsIdentity();
+    const { identity: literalIdentity, signingKey: literalSigningKey } =
+      createSphincsIdentity();
+
+    try {
+      await insertIdentity(db, {
+        fingerprint: plainIdentity.fingerprint,
+        signingKeyType: plainIdentity.signing_key_type,
+        encryptionKeyType: plainIdentity.encryption_key_type,
+        signingKey: plainIdentity.signing_key,
+        encryptionKey: plainIdentity.encryption_key,
+        signingKeyDetails: plainIdentity.signing_key_details,
+        encryptionKeyDetails: plainIdentity.encryption_key_details,
+        createdAt: plainIdentity.created_at,
+      });
+      await insertIdentity(db, {
+        fingerprint: literalIdentity.fingerprint,
+        signingKeyType: literalIdentity.signing_key_type,
+        encryptionKeyType: literalIdentity.encryption_key_type,
+        signingKey: literalIdentity.signing_key,
+        encryptionKey: literalIdentity.encryption_key,
+        signingKeyDetails: literalIdentity.signing_key_details,
+        encryptionKeyDetails: literalIdentity.encryption_key_details,
+        createdAt: literalIdentity.created_at + 1,
+      });
+
+      const { proof: plainProof } = createSignedProof(plainSigningKey, {
+        nonce: 0,
+        path: "name",
+        detail: "Alice Plain",
+        timestamp: Date.now(),
+      });
+      await insertDetail(db, {
+        fingerprint: plainIdentity.fingerprint,
+        path: "name",
+        detail: "Alice Plain",
+        proof: plainProof,
+        createdAt: Date.now(),
+      });
+
+      const { proof: literalProof } = createSignedProof(literalSigningKey, {
+        nonce: 0,
+        path: "name",
+        detail: "Alice %_ Literal",
+        timestamp: Date.now(),
+      });
+      await insertDetail(db, {
+        fingerprint: literalIdentity.fingerprint,
+        path: "name",
+        detail: "Alice %_ Literal",
+        proof: literalProof,
+        createdAt: Date.now(),
+      });
+
+      const percent = await searchIdentities(db, "%");
+      assertEquals(percent.total, 1);
+      assertEquals(percent.results[0].fingerprint, literalIdentity.fingerprint);
+
+      const underscore = await searchIdentities(db, "_");
+      assertEquals(underscore.total, 1);
+      assertEquals(
+        underscore.results[0].fingerprint,
+        literalIdentity.fingerprint,
+      );
     } finally {
       await db.close();
     }

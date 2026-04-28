@@ -75,18 +75,19 @@ Any caller that has the password can invoke `/api/v1/sign` with arbitrary conten
 
 ## Honourable mentions (still open, medium/low — track but not top 10)
 
+Update 2026-04-28: the above-`foo(x)=8` remediation batch closed several
+items that were previously listed here (`F-CRYPTO-09`, `F-CRYPTO-10`,
+`F-SERVER-06`, `F-SERVER-07`, `F-SERVER-10`, `F-SERVER-11`, `F-GUI-12`,
+`F-CLI-02`, `F-CLI-03`, and `F-WEB-02`). Remaining open mentions are:
+
 - `F-CRYPTO-04` — Fingerprint leaf hashing inconsistency (signing leaf hashes decoded bytes, encryption leaf hashes hex-string bytes).
 - `F-CRYPTO-06` — `Identity.fromStorageFormat` uses `Object.create`, bypassing constructor invariants.
-- `F-SERVER-06` — SQLite adapter does not set `PRAGMA foreign_keys = ON`.
-- `F-SERVER-07` — Search `LIKE %query%` does not escape wildcards.
 - `F-SERVER-08` — Identity-existence enumeration via registration response codes.
 - `F-GUI-02` — `/api/v1/save-file` overwrites existing files without confirmation.
 - `F-GUI-03` — Deno `tasks.gui` permissions unconstrained.
 - `F-GUI-08` — `readJson` has no body-size cap (DoS).
 - `F-GUI-10` — `mailOauthStarts` Map can be flooded.
-- `F-CLI-02` — `--password` flag accepts secret in shell history.
-- `F-CLI-03` — Persisted server URL not scheme-checked.
-- `F-WEB-02` / `F-WEB-03` — Website verifier accepts `http://` + no CSP on `verify.html`.
+- `F-WEB-03` — No CSP on `verify.html`.
 - `F-TAURI-03` — Sidecar resolution falls back to PATH-like locations.
 - `F-BUILD-01` — `appimagetool` downloaded from `continuous` without checksum pinning.
 - `F-STORAGE-05` / `F-STORAGE-10` — `state.json` written `0644` and unauthenticated.

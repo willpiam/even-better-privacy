@@ -1,11 +1,15 @@
-export { DatabaseAdapter, coerceNumber, type DatabaseQueryParams } from "./adapter.ts";
+export {
+  coerceNumber,
+  DatabaseAdapter,
+  type DatabaseQueryParams,
+} from "./adapter.ts";
 export { SqliteDatabaseAdapter } from "./sqlite.ts";
-export { PostgresDatabaseAdapter, loadEnvOnce } from "./postgres.ts";
+export { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 
-import { hexToBytes } from "../crypto.ts";
-import { DatabaseAdapter, coerceNumber } from "./adapter.ts";
+import { constantTimeStringEqual, hexToBytes } from "../crypto.ts";
+import { coerceNumber, DatabaseAdapter } from "./adapter.ts";
 import { SqliteDatabaseAdapter } from "./sqlite.ts";
-import { PostgresDatabaseAdapter, loadEnvOnce } from "./postgres.ts";
+import { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 import type {
   AllDetailsMap,
   DetailsMap,
@@ -16,11 +20,18 @@ import type {
 
 const textDecoder = new TextDecoder();
 
+export function escapeLikePattern(value: string): string {
+  return value.replace(/[\\%_]/g, (char) => `\\${char}`);
+}
+
 export async function initDb(path: string): Promise<DatabaseAdapter> {
   loadEnvOnce();
-  const dbTypeRaw = Deno.env.get("DB_TYPE") ?? Deno.env.get("DB_BACKEND") ?? "sqlite";
+  const dbTypeRaw = Deno.env.get("DB_TYPE") ?? Deno.env.get("DB_BACKEND") ??
+    "sqlite";
   const backend = dbTypeRaw.toLowerCase();
-  if (backend === "psql" || backend === "postgres" || backend === "postgresql") {
+  if (
+    backend === "psql" || backend === "postgres" || backend === "postgresql"
+  ) {
     const adapter = PostgresDatabaseAdapter.createFromEnv();
     await adapter.initializeSchema();
     return adapter;
@@ -51,8 +62,12 @@ export async function insertIdentity(db: DatabaseAdapter, record: {
       record.encryptionKeyType,
       record.signingKey,
       record.encryptionKey,
-      record.signingKeyDetails ? JSON.stringify(record.signingKeyDetails) : null,
-      record.encryptionKeyDetails ? JSON.stringify(record.encryptionKeyDetails) : null,
+      record.signingKeyDetails
+        ? JSON.stringify(record.signingKeyDetails)
+        : null,
+      record.encryptionKeyDetails
+        ? JSON.stringify(record.encryptionKeyDetails)
+        : null,
       record.createdAt,
     ],
   );
@@ -68,7 +83,13 @@ export async function insertDetail(db: DatabaseAdapter, record: {
   await db.query(
     `INSERT INTO details (identity_fingerprint, path, detail, proof, created_at)
      VALUES (?, ?, ?, ?, ?)`,
-    [record.fingerprint, record.path, record.detail, record.proof, record.createdAt],
+    [
+      record.fingerprint,
+      record.path,
+      record.detail,
+      record.proof,
+      record.createdAt,
+    ],
   );
 }
 
@@ -76,25 +97,49 @@ export async function getDetailRecord(
   db: DatabaseAdapter,
   fingerprint: string,
   path: string,
-): Promise<{
-  detail: string;
-  proof: string;
-  revoked_at: number | null;
-  revocation_certificate: string | null;
-  verified_at: number | null;
-  verification_token: string | null;
-  verification_token_hash: string | null;
-  verification_expires_at: number | null;
-  verification_sent_at: number | null;
-} | null> {
-  const rows = await db.query<[string, string, number | string | bigint | null, string | null, number | string | bigint | null, string | null, string | null, number | string | bigint | null, number | string | bigint | null]>(
+): Promise<
+  {
+    detail: string;
+    proof: string;
+    revoked_at: number | null;
+    revocation_certificate: string | null;
+    verified_at: number | null;
+    verification_token: string | null;
+    verification_token_hash: string | null;
+    verification_expires_at: number | null;
+    verification_sent_at: number | null;
+  } | null
+> {
+  const rows = await db.query<
+    [
+      string,
+      string,
+      number | string | bigint | null,
+      string | null,
+      number | string | bigint | null,
+      string | null,
+      string | null,
+      number | string | bigint | null,
+      number | string | bigint | null,
+    ]
+  >(
     "SELECT detail, proof, revoked_at, revocation_certificate, verified_at, verification_token, verification_token_hash, verification_expires_at, verification_sent_at FROM details WHERE identity_fingerprint = ? AND path = ?",
     [fingerprint, path],
   );
   if (rows.length === 0) {
     return null;
   }
-  const [detail, proof, revoked_at, revocation_certificate, verified_at, verification_token, verification_token_hash, verification_expires_at, verification_sent_at] = rows[0];
+  const [
+    detail,
+    proof,
+    revoked_at,
+    revocation_certificate,
+    verified_at,
+    verification_token,
+    verification_token_hash,
+    verification_expires_at,
+    verification_sent_at,
+  ] = rows[0];
   return {
     detail,
     proof,
@@ -121,7 +166,13 @@ export async function updateDetail(db: DatabaseAdapter, record: {
          verified_at = NULL, verification_token = NULL, verification_token_hash = NULL,
          verification_expires_at = NULL, verification_sent_at = NULL
      WHERE identity_fingerprint = ? AND path = ?`,
-    [record.detail, record.proof, record.createdAt, record.fingerprint, record.path],
+    [
+      record.detail,
+      record.proof,
+      record.createdAt,
+      record.fingerprint,
+      record.path,
+    ],
   );
 }
 
@@ -154,22 +205,73 @@ export async function getDetailByVerificationToken(
   db: DatabaseAdapter,
   tokenHash: string,
   tokenPlaintext: string,
-): Promise<{
-  fingerprint: string;
-  path: string;
-  detail: string;
-  verified_at: number | null;
-  verification_expires_at: number | null;
-  verification_sent_at: number | null;
-  revoked_at: number | null;
-} | null> {
-  const rows = await db.query<[string, string, string, number | string | bigint | null, number | string | bigint | null, number | string | bigint | null, number | string | bigint | null]>(
+): Promise<
+  {
+    fingerprint: string;
+    path: string;
+    detail: string;
+    verified_at: number | null;
+    verification_expires_at: number | null;
+    verification_sent_at: number | null;
+    revoked_at: number | null;
+  } | null
+> {
+  const hashRows = await db.query<
+    [
+      string,
+      string,
+      string,
+      number | string | bigint | null,
+      number | string | bigint | null,
+      number | string | bigint | null,
+      number | string | bigint | null,
+    ]
+  >(
     `SELECT identity_fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at
-     FROM details WHERE verification_token_hash = ? OR verification_token = ?`,
-    [tokenHash, tokenPlaintext],
+     FROM details WHERE verification_token_hash = ?`,
+    [tokenHash],
   );
+  let rows = hashRows;
+  if (rows.length === 0) {
+    const plaintextRows = await db.query<
+      [
+        string,
+        string,
+        string,
+        number | string | bigint | null,
+        number | string | bigint | null,
+        number | string | bigint | null,
+        number | string | bigint | null,
+        string,
+      ]
+    >(
+      `SELECT identity_fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at, verification_token
+       FROM details WHERE verification_token IS NOT NULL`,
+    );
+    rows = plaintextRows
+      .filter((row) => constantTimeStringEqual(row[7], tokenPlaintext))
+      .map((
+        [fingerprint, path, detail, verifiedAt, expiresAt, sentAt, revokedAt],
+      ) => [
+        fingerprint,
+        path,
+        detail,
+        verifiedAt,
+        expiresAt,
+        sentAt,
+        revokedAt,
+      ]);
+  }
   if (rows.length === 0) return null;
-  const [fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at] = rows[0];
+  const [
+    fingerprint,
+    path,
+    detail,
+    verified_at,
+    verification_expires_at,
+    verification_sent_at,
+    revoked_at,
+  ] = rows[0];
   return {
     fingerprint,
     path,
@@ -181,8 +283,24 @@ export async function getDetailByVerificationToken(
   };
 }
 
-export async function getIdentity(db: DatabaseAdapter, fingerprint: string): Promise<IdentityRow | undefined> {
-  const rows = await db.query<[string, string, string, string, string, string | null, string | null, number | string | bigint, number | string | bigint | null, string | null]>(
+export async function getIdentity(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<IdentityRow | undefined> {
+  const rows = await db.query<
+    [
+      string,
+      string,
+      string,
+      string,
+      string,
+      string | null,
+      string | null,
+      number | string | bigint,
+      number | string | bigint | null,
+      string | null,
+    ]
+  >(
     `SELECT fingerprint, signing_key_type, encryption_key_type, signing_key, encryption_key,
             signing_key_details, encryption_key_details, created_at, revoked_at, revocation_certificate
      FROM identities WHERE fingerprint = ?`,
@@ -191,7 +309,18 @@ export async function getIdentity(db: DatabaseAdapter, fingerprint: string): Pro
   const row = rows[0];
 
   if (!row) return undefined;
-  const [fp, skt, ekt, sk, ek, skd, ekd, created_at, revoked_at, revocation_certificate] = row;
+  const [
+    fp,
+    skt,
+    ekt,
+    sk,
+    ek,
+    skd,
+    ekd,
+    created_at,
+    revoked_at,
+    revocation_certificate,
+  ] = row;
   return {
     fingerprint: fp,
     signing_key_type: skt as IdentityRow["signing_key_type"],
@@ -206,12 +335,19 @@ export async function getIdentity(db: DatabaseAdapter, fingerprint: string): Pro
   };
 }
 
-export async function getDetailsMap(db: DatabaseAdapter, fingerprint: string): Promise<DetailsMap> {
+export async function getDetailsMap(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<DetailsMap> {
   const details: DetailsMap = {};
-  for (const [path, detailValue, proof] of await db.query<[string, string, string]>(
-    "SELECT path, detail, proof FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
-    [fingerprint],
-  )) {
+  for (
+    const [path, detailValue, proof] of await db.query<
+      [string, string, string]
+    >(
+      "SELECT path, detail, proof FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
+      [fingerprint],
+    )
+  ) {
     details[path] = [detailValue, proof];
   }
   return details;
@@ -221,23 +357,37 @@ export async function getDetailsMetaMap(
   db: DatabaseAdapter,
   fingerprint: string,
 ): Promise<Record<string, { verified: boolean; verifiedAt: number | null }>> {
-  const meta: Record<string, { verified: boolean; verifiedAt: number | null }> = {};
-  for (const [path, verified_at, revoked_at] of await db.query<[string, number | string | bigint | null, number | string | bigint | null]>(
-    "SELECT path, verified_at, revoked_at FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
-    [fingerprint],
-  )) {
+  const meta: Record<string, { verified: boolean; verifiedAt: number | null }> =
+    {};
+  for (
+    const [path, verified_at, revoked_at] of await db.query<
+      [string, number | string | bigint | null, number | string | bigint | null]
+    >(
+      "SELECT path, verified_at, revoked_at FROM details WHERE identity_fingerprint = ? ORDER BY id ASC",
+      [fingerprint],
+    )
+  ) {
     const verifiedAt = coerceNumber(verified_at);
     const revokedAt = coerceNumber(revoked_at);
-    meta[path] = { verified: verifiedAt !== null && revokedAt === null, verifiedAt };
+    meta[path] = {
+      verified: verifiedAt !== null && revokedAt === null,
+      verifiedAt,
+    };
   }
   return meta;
 }
 
-export async function getAllDetailsMap(db: DatabaseAdapter): Promise<AllDetailsMap> {
+export async function getAllDetailsMap(
+  db: DatabaseAdapter,
+): Promise<AllDetailsMap> {
   const detailsByIdentity: AllDetailsMap = {};
-  for (const [identityFingerprint, path, detail, proof] of await db.query<[string, string, string, string]>(
-    "SELECT identity_fingerprint, path, detail, proof FROM details ORDER BY id ASC",
-  )) {
+  for (
+    const [identityFingerprint, path, detail, proof] of await db.query<
+      [string, string, string, string]
+    >(
+      "SELECT identity_fingerprint, path, detail, proof FROM details ORDER BY id ASC",
+    )
+  ) {
     if (!detailsByIdentity[identityFingerprint]) {
       detailsByIdentity[identityFingerprint] = {};
     }
@@ -246,15 +396,23 @@ export async function getAllDetailsMap(db: DatabaseAdapter): Promise<AllDetailsM
   return detailsByIdentity;
 }
 
-export async function ensureNewNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function ensureNewNonce(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  nonce: number,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   let maxNonce = -1;
-  for (const [proof] of await db.query<[string]>(
-    "SELECT proof FROM details WHERE identity_fingerprint = ?",
-    [fingerprint],
-  )) {
+  for (
+    const [proof] of await db.query<[string]>(
+      "SELECT proof FROM details WHERE identity_fingerprint = ?",
+      [fingerprint],
+    )
+  ) {
     try {
       const decoded = hexToBytes(proof);
-      const record = JSON.parse(textDecoder.decode(decoded)) as { nonce?: number };
+      const record = JSON.parse(textDecoder.decode(decoded)) as {
+        nonce?: number;
+      };
       if (typeof record.nonce === "number") {
         if (record.nonce === nonce) {
           return { ok: false, error: "nonce already used" };
@@ -286,16 +444,28 @@ export async function insertRevocation(db: DatabaseAdapter, record: {
   await db.query(
     `INSERT INTO revocations (identity_fingerprint, type, target, nonce, certificate, created_at)
      VALUES (?, ?, ?, ?, ?, ?)`,
-    [record.fingerprint, record.type, record.target, record.nonce, record.certificate, record.createdAt],
+    [
+      record.fingerprint,
+      record.type,
+      record.target,
+      record.nonce,
+      record.certificate,
+      record.createdAt,
+    ],
   );
 }
 
-export async function getMaxRevocationNonce(db: DatabaseAdapter, fingerprint: string): Promise<number> {
+export async function getMaxRevocationNonce(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<number> {
   let maxNonce = -1;
-  for (const [nonce] of await db.query<[number | string | bigint]>(
-    "SELECT nonce FROM revocations WHERE identity_fingerprint = ?",
-    [fingerprint],
-  )) {
+  for (
+    const [nonce] of await db.query<[number | string | bigint]>(
+      "SELECT nonce FROM revocations WHERE identity_fingerprint = ?",
+      [fingerprint],
+    )
+  ) {
     const parsedNonce = coerceNumber(nonce);
     if (parsedNonce !== null && parsedNonce > maxNonce) {
       maxNonce = parsedNonce;
@@ -313,10 +483,12 @@ export async function getMaxRevocationNonceBelow(
   ceiling: number,
 ): Promise<number> {
   let maxNonce = -1;
-  for (const [nonce] of await db.query<[number | string | bigint]>(
-    "SELECT nonce FROM revocations WHERE identity_fingerprint = ? AND nonce < ?",
-    [fingerprint, ceiling],
-  )) {
+  for (
+    const [nonce] of await db.query<[number | string | bigint]>(
+      "SELECT nonce FROM revocations WHERE identity_fingerprint = ? AND nonce < ?",
+      [fingerprint, ceiling],
+    )
+  ) {
     const parsedNonce = coerceNumber(nonce);
     if (parsedNonce !== null && parsedNonce > maxNonce) {
       maxNonce = parsedNonce;
@@ -325,7 +497,11 @@ export async function getMaxRevocationNonceBelow(
   return maxNonce;
 }
 
-export async function hasRevocationWithNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<boolean> {
+export async function hasRevocationWithNonce(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  nonce: number,
+): Promise<boolean> {
   const rows = await db.query<[number]>(
     "SELECT 1 FROM revocations WHERE identity_fingerprint = ? AND nonce = ?",
     [fingerprint, nonce],
@@ -333,14 +509,25 @@ export async function hasRevocationWithNonce(db: DatabaseAdapter, fingerprint: s
   return rows.length > 0;
 }
 
-export async function revokeIdentity(db: DatabaseAdapter, fingerprint: string, certificate: string, revokedAt: number): Promise<void> {
+export async function revokeIdentity(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  certificate: string,
+  revokedAt: number,
+): Promise<void> {
   await db.query(
     `UPDATE identities SET revoked_at = ?, revocation_certificate = ? WHERE fingerprint = ?`,
     [revokedAt, certificate, fingerprint],
   );
 }
 
-export async function revokeDetail(db: DatabaseAdapter, fingerprint: string, path: string, certificate: string, revokedAt: number): Promise<void> {
+export async function revokeDetail(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  path: string,
+  certificate: string,
+  revokedAt: number,
+): Promise<void> {
   await db.query(
     `UPDATE details
      SET revoked_at = ?, revocation_certificate = ?,
@@ -351,7 +538,10 @@ export async function revokeDetail(db: DatabaseAdapter, fingerprint: string, pat
   );
 }
 
-export async function isIdentityRevoked(db: DatabaseAdapter, fingerprint: string): Promise<boolean> {
+export async function isIdentityRevoked(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<boolean> {
   const rows = await db.query<[number | string | bigint | null]>(
     "SELECT revoked_at FROM identities WHERE fingerprint = ?",
     [fingerprint],
@@ -360,7 +550,11 @@ export async function isIdentityRevoked(db: DatabaseAdapter, fingerprint: string
   return revokedAt !== null;
 }
 
-export async function isDetailRevoked(db: DatabaseAdapter, fingerprint: string, path: string): Promise<boolean> {
+export async function isDetailRevoked(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  path: string,
+): Promise<boolean> {
   const rows = await db.query<[number | string | bigint | null]>(
     "SELECT revoked_at FROM details WHERE identity_fingerprint = ? AND path = ?",
     [fingerprint, path],
@@ -369,12 +563,28 @@ export async function isDetailRevoked(db: DatabaseAdapter, fingerprint: string, 
   return revokedAt !== null;
 }
 
-export async function getRevocations(db: DatabaseAdapter, fingerprint: string): Promise<RevocationRow[]> {
+export async function getRevocations(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<RevocationRow[]> {
   const rows: RevocationRow[] = [];
-  for (const [id, identityFp, type, target, nonce, certificate, createdAt] of await db.query<[number | string | bigint, string, string, string | null, number | string | bigint, string, number | string | bigint]>(
-    "SELECT id, identity_fingerprint, type, target, nonce, certificate, created_at FROM revocations WHERE identity_fingerprint = ? ORDER BY nonce ASC",
-    [fingerprint],
-  )) {
+  for (
+    const [id, identityFp, type, target, nonce, certificate, createdAt]
+      of await db.query<
+        [
+          number | string | bigint,
+          string,
+          string,
+          string | null,
+          number | string | bigint,
+          string,
+          number | string | bigint,
+        ]
+      >(
+        "SELECT id, identity_fingerprint, type, target, nonce, certificate, created_at FROM revocations WHERE identity_fingerprint = ? ORDER BY nonce ASC",
+        [fingerprint],
+      )
+  ) {
     rows.push({
       id: coerceNumber(id) ?? 0,
       identity_fingerprint: identityFp,
@@ -388,12 +598,17 @@ export async function getRevocations(db: DatabaseAdapter, fingerprint: string): 
   return rows;
 }
 
-export async function getRevokedDetailPaths(db: DatabaseAdapter, fingerprint: string): Promise<string[]> {
+export async function getRevokedDetailPaths(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<string[]> {
   const paths: string[] = [];
-  for (const [path] of await db.query<[string]>(
-    "SELECT path FROM details WHERE identity_fingerprint = ? AND revoked_at IS NOT NULL",
-    [fingerprint],
-  )) {
+  for (
+    const [path] of await db.query<[string]>(
+      "SELECT path FROM details WHERE identity_fingerprint = ? AND revoked_at IS NOT NULL",
+      [fingerprint],
+    )
+  ) {
     paths.push(path);
   }
   return paths;
@@ -444,7 +659,16 @@ export async function getPendingProposal(
     [id],
   );
   if (!rows.length) return null;
-  const [rowId, master, child, proposer, certificate, context, expiry, createdAt] = rows[0];
+  const [
+    rowId,
+    master,
+    child,
+    proposer,
+    certificate,
+    context,
+    expiry,
+    createdAt,
+  ] = rows[0];
   return {
     id: coerceNumber(rowId) ?? 0,
     master_fingerprint: master,
@@ -463,22 +687,23 @@ export async function getPendingProposalsForIdentity(
 ): Promise<PendingHierarchyProposalRow[]> {
   const rows: PendingHierarchyProposalRow[] = [];
   for (
-    const [id, master, child, proposer, certificate, context, expiry, createdAt] of await db.query<[
-      number | string | bigint,
-      string,
-      string,
-      string,
-      string,
-      string,
-      number | string | bigint,
-      number | string | bigint,
-    ]>(
-      `SELECT id, master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
+    const [id, master, child, proposer, certificate, context, expiry, createdAt]
+      of await db.query<[
+        number | string | bigint,
+        string,
+        string,
+        string,
+        string,
+        string,
+        number | string | bigint,
+        number | string | bigint,
+      ]>(
+        `SELECT id, master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
        FROM pending_hierarchy_proposals
        WHERE (master_fingerprint = ? OR child_fingerprint = ?) AND proposer_fingerprint != ?
        ORDER BY created_at ASC, id ASC`,
-      [fingerprint, fingerprint, fingerprint],
-    )
+        [fingerprint, fingerprint, fingerprint],
+      )
   ) {
     rows.push({
       id: coerceNumber(id) ?? 0,
@@ -515,7 +740,8 @@ export async function getPendingProposalByPair(
     [masterFingerprint, childFingerprint],
   );
   if (!rows.length) return null;
-  const [id, master, child, proposer, certificate, context, expiry, createdAt] = rows[0];
+  const [id, master, child, proposer, certificate, context, expiry, createdAt] =
+    rows[0];
   return {
     id: coerceNumber(id) ?? 0,
     master_fingerprint: master,
@@ -528,7 +754,10 @@ export async function getPendingProposalByPair(
   };
 }
 
-export async function deletePendingProposal(db: DatabaseAdapter, id: number): Promise<void> {
+export async function deletePendingProposal(
+  db: DatabaseAdapter,
+  id: number,
+): Promise<void> {
   await db.query("DELETE FROM pending_hierarchy_proposals WHERE id = ?", [id]);
 }
 
@@ -546,23 +775,30 @@ export async function searchIdentities(
 ): Promise<{ results: SearchResult[]; total: number }> {
   const { page = 1, limit = 10, includeRevoked = false } = options;
   const offset = (page - 1) * limit;
-  const like = `%${query.toLowerCase()}%`;
+  const like = `%${escapeLikePattern(query.toLowerCase())}%`;
 
   const baseJoin =
     "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email')";
-  const matchClause = "(LOWER(i.fingerprint) LIKE ? OR LOWER(d.detail) LIKE ?)";
+  const matchClause =
+    "(LOWER(i.fingerprint) LIKE ? ESCAPE '\\' OR LOWER(d.detail) LIKE ? ESCAPE '\\')";
   const revokedFilter = includeRevoked
     ? ""
     : "AND NOT EXISTS (SELECT 1 FROM revocations r WHERE r.identity_fingerprint = i.fingerprint AND r.type = 'identity')";
 
-  const countQuery = `SELECT COUNT(DISTINCT i.fingerprint) ${baseJoin} WHERE ${matchClause} ${revokedFilter}`;
-  const totalRows = await db.query<[number | string | bigint]>(countQuery, [like, like]);
+  const countQuery =
+    `SELECT COUNT(DISTINCT i.fingerprint) ${baseJoin} WHERE ${matchClause} ${revokedFilter}`;
+  const totalRows = await db.query<[number | string | bigint]>(countQuery, [
+    like,
+    like,
+  ]);
   const total = coerceNumber(totalRows[0]?.[0] ?? null) ?? 0;
 
   const listQuery =
     `SELECT DISTINCT i.fingerprint, i.signing_key_type, i.encryption_key_type, i.created_at ` +
     `${baseJoin} WHERE ${matchClause} ${revokedFilter} ORDER BY i.created_at ASC LIMIT ? OFFSET ?`;
-  const rows = await db.query<[string, string, string, number | string | bigint]>(listQuery, [like, like, limit, offset]);
+  const rows = await db.query<
+    [string, string, string, number | string | bigint]
+  >(listQuery, [like, like, limit, offset]);
   const results: SearchResult[] = [];
   for (const [fp, skt, ekt, created_at] of rows) {
     results.push({

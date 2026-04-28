@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-04-28] remediation | above-foo findings batch
+
+- Remediated the findings that plotted above `foo(x)=8` in `remaining-findings-plot.png`: F-SERVER-06/07/10/11, F-CLI-02/03/05, F-WEB-02, F-GUI-12, F-CRYPTO-09/10.
+- Added targeted regression coverage for SQLite foreign keys, escaped SQL LIKE patterns, plaintext verification-token fallback, CLI server URL validation, GUI OAuth callback HTML escaping, encrypted-signed inner payload type tags, and revocation-reason length limits.
+- Regenerated [[security-audit-2026-04/findings]] statuses and the remaining findings plot.
+
 ## [2026-04-28] remediation | F-DEP-02
 
 - Migrated desktop shell dependencies/config from Tauri 1.x to Tauri 2.x baselines (`desktop/src-tauri/Cargo.toml`, `desktop/src-tauri/tauri.conf.json`, `desktop/src-tauri/capabilities/default.json`, `desktop/package.json`) and enabled `tauri-plugin-shell`.

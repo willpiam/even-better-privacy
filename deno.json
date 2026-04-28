@@ -29,7 +29,7 @@
     "server:remote": "deno task server",
     "postgres": "sh -c 'if docker ps -a --format \"{{.Names}}\" | grep -q \"^ebp-postgres$\"; then docker start ebp-postgres >/dev/null 2>&1 || true; else docker run -d --name ebp-postgres -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ebp -p 55432:5432 postgres:16-alpine; fi'",
     "gui:local-backend": "deno run --allow-read --allow-write --allow-env --allow-net --allow-run ./gui/local-backend/main.ts",
-    "gui": "deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ./gui/local-backend/main.ts",
+    "gui": "deno run --unstable-worker-options --allow-read --allow-write --allow-env --allow-net --allow-run --allow-sys ./gui/local-backend/main.ts",
     "gui:open": "sh -c 'deno task gui & gui_pid=$!; sleep 0.5; url=\"http://${GUI_BACKEND_HOST:-127.0.0.1}:${GUI_BACKEND_PORT:-8787}\"; xdg-open \"$url\" >/dev/null 2>&1 || true; wait $gui_pid'",
     "desktop:backend:dev": "deno run --allow-run --allow-read --allow-write --allow-env ./scripts/build_desktop_backend_sidecar.ts",
     "desktop:backend:build": "deno run --allow-run --allow-read --allow-write --allow-env ./scripts/build_desktop_backend_sidecar.ts",

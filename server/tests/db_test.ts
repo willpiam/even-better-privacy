@@ -1,6 +1,19 @@
-import { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
-import { insertDetail, insertIdentity, ensureNewNonce, initDb } from "../db/index.ts";
-import { encodeProof, createSphincsIdentity } from "./helpers.ts";
+import {
+  assert,
+  assertEquals,
+  assertFalse,
+  assertRejects,
+} from "jsr:@std/assert@^1.0.6";
+import { computeTokenHash } from "../crypto.ts";
+import {
+  ensureNewNonce,
+  getDetailByVerificationToken,
+  initDb,
+  insertDetail,
+  insertIdentity,
+  updateDetailVerification,
+} from "../db/index.ts";
+import { createSphincsIdentity, encodeProof } from "./helpers.ts";
 
 async function withTempDb(fn: (dbPath: string) => Promise<void>) {
   const path = Deno.makeTempFileSync({ suffix: ".sqlite" });
@@ -65,3 +78,69 @@ Deno.test("ensureNewNonce allows increasing nonces and rejects reuse", async () 
   });
 });
 
+Deno.test("sqlite enables foreign-key constraints", async () => {
+  await withTempDb(async (dbPath) => {
+    const db = await initDb(dbPath);
+
+    try {
+      await assertRejects(() =>
+        insertDetail(db, {
+          fingerprint: "missing-identity",
+          path: "name",
+          detail: "orphan",
+          proof: "proof",
+          createdAt: Date.now(),
+        })
+      );
+    } finally {
+      await db.close();
+    }
+  });
+});
+
+Deno.test("plaintext verification token fallback still matches through constant-time comparison path", async () => {
+  await withTempDb(async (dbPath) => {
+    const db = await initDb(dbPath);
+    const { identity } = createSphincsIdentity();
+    const token = "legacy-plaintext-token";
+
+    try {
+      await insertIdentity(db, {
+        fingerprint: identity.fingerprint,
+        signingKeyType: identity.signing_key_type,
+        encryptionKeyType: identity.encryption_key_type,
+        signingKey: identity.signing_key,
+        encryptionKey: identity.encryption_key,
+        signingKeyDetails: identity.signing_key_details,
+        encryptionKeyDetails: identity.encryption_key_details,
+        createdAt: identity.created_at,
+      });
+      await insertDetail(db, {
+        fingerprint: identity.fingerprint,
+        path: "email",
+        detail: "alice@example.com",
+        proof: "proof",
+        createdAt: Date.now(),
+      });
+      await updateDetailVerification(db, {
+        fingerprint: identity.fingerprint,
+        path: "email",
+        verifiedAt: null,
+        verificationToken: token,
+        verificationTokenHash: null,
+        verificationExpiresAt: Date.now() + 60_000,
+        verificationSentAt: Date.now(),
+      });
+
+      const record = await getDetailByVerificationToken(
+        db,
+        computeTokenHash("different-token"),
+        token,
+      );
+      assertEquals(record?.fingerprint, identity.fingerprint);
+      assertEquals(record?.path, "email");
+    } finally {
+      await db.close();
+    }
+  });
+});

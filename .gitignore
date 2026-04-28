@@ -74,4 +74,5 @@ final_builds/
 temp_env
 undefined/
 Untitled*.base
+plot_remaining_findings.py
 
