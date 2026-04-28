@@ -1,5 +1,34 @@
 # Wiki Log
 
+## [2026-04-28] fix | website verifier shared-host MIME
+
+- Renamed the browser verifier crypto module from `website/crypto.mjs` to `website/crypto.js` and updated `website/verify.js` to import `./crypto.js`.
+- Rationale: iPage/shared hosting may serve `.mjs` with an empty or incorrect MIME type; browsers enforce strict MIME checking for `type="module"` scripts. A `.js` module avoids the hosting MIME mapping issue while preserving ESM semantics.
+- Bumped `website/verify.html` script cache buster to `?v=8`.
+- Updated [[component-website]] to document the `.js` extension choice.
+
+## [2026-04-28] fix | website verifier noble argument order
+
+- Fixed `website/crypto.mjs::verifySignature` to call noble post-quantum verification as `verify(signature, message, publicKey)`, matching `core/Dilithium.ts` and `core/Sphincs.ts`. The previous browser call used `verify(publicKey, message, signature)`, so client-side verification still returned `false` even after the base64 decoding fix.
+- Verified locally against `ebp-signed-message-756ec50c.json`; the website verifier module now returns `true` for that payload.
+- Bumped `website/verify.html` script cache buster to `?v=7`.
+
+## [2026-04-28] fix | website verifier signature decoding
+
+- Fixed an encoding bug in `website/crypto.mjs::verifySignature`: the function was decoding `signingKey` and `signature` with `hexToBytes`, but per `core/Dilithium.ts` and `core/Sphincs.ts` (`bytesToBase64` on the public key, `bytesToBase64` on the signed bytes) both fields are **base64-encoded**. Real EBP signatures (e.g. `ebp-signed-message-756ec50c.json`) therefore always failed client-side verification while the server's `verify-signature` endpoint reported them valid — the resulting `serverConsistent: false` was visible in the verifier's JSON output.
+- Switched `verify.js` to a `is-hidden` class (defined in `styles.css`) and moved static inline `style="…"` attributes out of `verify.html` so the page no longer trips `style-src 'self'` CSP violations. Also dropped the meta-only `frame-ancestors` directive (ignored when delivered via `<meta>`).
+- Bumped the `verify.js` cache buster to `?v=6`.
+- Updated [[message-payload-formats]] to label `signature` as **base64-encoded** (the previous "hex-encoded" wording was the underlying documentation contradiction that hid this bug); added a contradiction note to its frontmatter.
+
+## [2026-04-28] update | website verifier consistency
+
+- Brought `website/verify.js` and `website/crypto.mjs` in line with the rest of the app's verification logic.
+- Added browser-side fingerprint computation mirroring `core/Fingerprint.ts` (sha256 merkle root + bech32 with `ebpdk`/`ebpsk` HRPs); the verifier now re-derives the fingerprint from each identity's signing+encryption keys and rejects identities whose keys do not match the claimed fingerprint, mirroring the GUI's `verify-file-form` flow.
+- Added bech32 format validation on payload and pasted-identity fingerprints (matching `server/handlers/verify.ts`) and a payload-vs-embedded-identity fingerprint cross-check.
+- Added an HTTPS warning prompt when the configured server URL uses `http://` (partial mitigation for [[security-audit-2026-04/findings|F-WEB-02]]).
+- Removed the now-stale "delegates to the server" description from [[component-website]] and documented the actual client-side verification pipeline.
+- Updated: [[component-website]].
+
 ## [2026-04-28] feature | multi-recipient-email
 
 - Added multi-recipient payload documentation: `ebp-encrypted-signed-message-multi` and `ebp-encrypted-signed-email-attachment-multi` with envelope v3 recipient-set/attachment-manifest signature binding.

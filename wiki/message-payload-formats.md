@@ -4,6 +4,8 @@ type: concept
 status: active
 last_updated: 2026-04-28
 source_count: 8
+contradiction_log:
+  - 2026-04-28: Earlier revisions of this page described `signature` and signing-key fields as "hex-encoded". They are base64-encoded per `core/Dilithium.ts::sign`/`verify` and `core/Sphincs.ts::sign`/`verify`. The website verifier was silently failing because of this; see [[log#2026-04-28] fix | website verifier signature decoding]].
 tags:
   - payload
   - email
@@ -131,9 +133,9 @@ Cleartext signed message — the message is readable without decryption, but its
 | `version` | number | `2` |
 | `fingerprint` | string | Bech32 fingerprint of the signer |
 | `message` | string | The cleartext message |
-| `messageHash` | string | Hash of the message envelope |
-| `salt` | string | Random salt used in the hash envelope |
-| `signature` | string | Hex-encoded signature over the hash envelope |
+| `messageHash` | string | SHA-256 hex digest of the message |
+| `salt` | string | Random salt used in the hash envelope (hex) |
+| `signature` | string | Base64-encoded signature over the hash envelope |
 | `identity` | object? | Optional: full public identity of the signer |
 
 Unlike the encrypted variants, this type **may** include the signer's full public identity in the `identity` field, allowing standalone verification without a server lookup.
@@ -147,10 +149,12 @@ Detached signature — the signature is separate from the message it covers.
 | `type` | string | `"ebp-signature"` |
 | `version` | number | `2` |
 | `fingerprint` | string | Bech32 fingerprint of the signer |
-| `messageHash` | string | Hash of the message envelope |
-| `salt` | string | Random salt used in the hash envelope |
-| `signature` | string | Hex-encoded signature over the hash envelope |
+| `messageHash` | string | SHA-256 hex digest of the message |
+| `salt` | string | Random salt used in the hash envelope (hex) |
+| `signature` | string | Base64-encoded signature over the hash envelope |
 | `identity` | object? | Optional: full public identity of the signer |
+
+The signer's `identity.signingKey` is a base64-encoded ML-DSA / SLH-DSA public key (per `core/Dilithium.ts` / `core/Sphincs.ts`). Verifiers must base64-decode `signingKey` and `signature` before passing them to the post-quantum verify primitive.
 
 Same as `ebp-signed-message` but without the `message` field. The verifier must have the original message independently.
 

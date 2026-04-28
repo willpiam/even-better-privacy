@@ -308,6 +308,23 @@ textarea {
   word-break: break-word;
 }
 
+/* Verifier page: keeping these in styles.css instead of inline `style="…"`
+   attributes lets the strict CSP on `verify.html` use `style-src 'self'`
+   without `'unsafe-inline'`. */
+.verifier-title {
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  max-width: none;
+}
+
+.input-help {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.is-hidden {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .top-nav {
     flex-wrap: wrap;

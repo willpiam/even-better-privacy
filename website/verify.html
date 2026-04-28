@@ -11,7 +11,7 @@
     modules. Inline scripts and styles are forbidden.
   -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'self' https://esm.sh; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://esm.sh https://ebp-cqyo.onrender.com; form-action 'self'; base-uri 'none'; frame-ancestors 'none'">
+    content="default-src 'none'; script-src 'self' https://esm.sh; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://esm.sh https://ebp-cqyo.onrender.com; form-action 'self'; base-uri 'none'">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta http-equiv="Referrer-Policy" content="no-referrer">
   <title>EBP Signature Verifier</title>
@@ -40,7 +40,7 @@
   </header>
 
   <main class="container panel">
-    <h1 style="font-size: clamp(1.5rem, 4vw, 2.2rem); max-width: none;">Verify Signature</h1>
+    <h1 class="verifier-title">Verify Signature</h1>
     <p class="lead">
       Paste or upload a signature payload and optional public identity file. Detached signatures require a message. Signed files (<code>ebp-signed-file</code>) require uploading the file being verified.
     </p>
@@ -50,7 +50,7 @@
         <label>
           Server URL
           <input id="server-url" type="text" value="https://ebp-cqyo.onrender.com" />
-          <small style="color: var(--ink-soft); font-weight: 400;">First request may take a moment if the server is waking up.</small>
+          <small class="input-help">First request may take a moment if the server is waking up.</small>
         </label>
         <label>
           Signature JSON file
@@ -81,7 +81,7 @@
         <textarea id="message" rows="6" placeholder="Original message text"></textarea>
       </label>
 
-      <label id="reconstructed-label" style="display: none;">
+      <label id="reconstructed-label" class="is-hidden">
         Reconstructed signed message (for signed files)
         <textarea id="file-reconstructed-message" rows="4" readonly placeholder="Shown when verifying ebp-signed-file payloads."></textarea>
       </label>
@@ -103,6 +103,6 @@
   <!-- F-WEB-03: inline scripts are forbidden by the CSP above. The
        "Clear All" button handler is wired up in verify.js via
        resetVerifierForm(). -->
-  <script type="module" src="./verify.js?v=4"></script>
+  <script type="module" src="./verify.js?v=8"></script>
 </body>
 </html>

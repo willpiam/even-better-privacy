@@ -1,4 +1,8 @@
-import { verifySignature, sha256Hex as clientSha256Hex } from "./crypto.mjs";
+import {
+  verifySignature,
+  computeIdentityFingerprint,
+  isValidFingerprintBech32,
+} from "./crypto.js";
 
 const serverUrlInput = document.getElementById("server-url");
 const payloadFileInput = document.getElementById("payload-file");
@@ -47,6 +51,35 @@ function buildFileSignMessage(fileHash, salt, contextMessage) {
   return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 
+// Mirror of the GUI verify-file flow: confirm that `publicIdentity`'s
+// signing+encryption keys actually correspond to its claimed fingerprint.
+// Returns { ok, computedFingerprint, error? }. Without this check, a
+// hostile server response or an attacker-pasted identity could pair a
+// matching `fingerprint` field with a mismatched `signingKey`, causing
+// us to verify against the wrong key.
+function deriveAndCheckFingerprint(publicIdentity, expectedFingerprint) {
+  let computedFingerprint = "";
+  try {
+    computedFingerprint = computeIdentityFingerprint(publicIdentity);
+  } catch (err) {
+    return {
+      ok: false,
+      computedFingerprint: "",
+      error: `Failed to compute fingerprint from public keys: ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+    };
+  }
+  if (expectedFingerprint && computedFingerprint !== expectedFingerprint) {
+    return {
+      ok: false,
+      computedFingerprint,
+      error: `Public keys do not match the expected fingerprint. Expected ${expectedFingerprint}, computed ${computedFingerprint}.`,
+    };
+  }
+  return { ok: true, computedFingerprint };
+}
+
 function renderSignerDetails(signer) {
   if (!signer || typeof signer !== "object") {
     signerDetails.innerHTML = "";
@@ -86,7 +119,7 @@ function resetVerifierForm() {
   if (publicJsonInput) publicJsonInput.value = "";
   if (messageInput) messageInput.value = "";
   if (fileReconstructedMessageInput) fileReconstructedMessageInput.value = "";
-  if (reconstructedLabel) reconstructedLabel.style.display = "none";
+  if (reconstructedLabel) reconstructedLabel.classList.add("is-hidden");
   if (resultSummary) resultSummary.textContent = "No verification run yet.";
   if (resultJson) resultJson.textContent = "{}";
   if (signerDetails) signerDetails.innerHTML = "";
@@ -129,12 +162,52 @@ verifyButton.addEventListener("click", async () => {
     const serverBase = serverUrlInput.value.trim().replace(/\/+$/, "");
     if (!serverBase) throw new Error("Server URL is required.");
 
+    // F-WEB-02: warn before contacting an http:// server. A hostile
+    // network can otherwise rewrite identity lookups in transit.
+    if (/^http:\/\//i.test(serverBase)) {
+      const proceed = confirm(
+        "Server URL is not HTTPS. Identity lookups can be tampered with on the network. Continue anyway?",
+      );
+      if (!proceed) {
+        resultSummary.textContent = "Cancelled — non-HTTPS server URL.";
+        return;
+      }
+    }
+
     const payload = tryParseJson(payloadJsonInput.value);
     if (!payload || typeof payload !== "object") {
       throw new Error("Signature payload JSON is required.");
     }
 
     const publicIdentity = tryParseJson(publicJsonInput.value);
+
+    // Mirror of `core/handlers/verify.ts`: reject obviously malformed
+    // fingerprints early so we never even ask the server about them.
+    if (typeof payload.fingerprint === "string" && payload.fingerprint.length > 0
+      && !isValidFingerprintBech32(payload.fingerprint)) {
+      throw new Error("Signature payload fingerprint is not a valid EBP bech32 fingerprint.");
+    }
+    if (publicIdentity && typeof publicIdentity === "object"
+      && typeof publicIdentity.fingerprint === "string" && publicIdentity.fingerprint.length > 0
+      && !isValidFingerprintBech32(publicIdentity.fingerprint)) {
+      throw new Error("Pasted public identity fingerprint is not a valid EBP bech32 fingerprint.");
+    }
+
+    // Mirror of GUI verify-file flow: when both the payload and the
+    // embedded identity carry a fingerprint, they must agree.
+    const embeddedIdentityCandidate = publicIdentity ?? (
+      payload.identity && typeof payload.identity === "object" ? payload.identity : null
+    );
+    if (embeddedIdentityCandidate
+      && typeof payload.fingerprint === "string" && payload.fingerprint.length > 0
+      && typeof embeddedIdentityCandidate.fingerprint === "string"
+      && embeddedIdentityCandidate.fingerprint.length > 0
+      && payload.fingerprint !== embeddedIdentityCandidate.fingerprint) {
+      throw new Error(
+        `Fingerprint mismatch between payload (${payload.fingerprint}) and embedded public identity (${embeddedIdentityCandidate.fingerprint}).`,
+      );
+    }
+
     const requestBody = { payload };
     if (payload.type === "ebp-signed-file") {
       const file = verifyFileInput?.files?.[0];
@@ -161,7 +234,7 @@ verifyButton.addEventListener("click", async () => {
       requestBody.message = reconstructedMessage;
       if (fileReconstructedMessageInput) {
         fileReconstructedMessageInput.value = reconstructedMessage;
-        if (reconstructedLabel) reconstructedLabel.style.display = "";
+        if (reconstructedLabel) reconstructedLabel.classList.remove("is-hidden");
       }
 
       if (computedFileHash !== expectedFileHash) {
@@ -196,6 +269,7 @@ verifyButton.addEventListener("click", async () => {
 
     let signerIdentity = embeddedIdentity;
     let fetchedFromServer = false;
+    let signerSource = publicIdentity ? "pasted" : (signerIdentity ? "payload" : "");
     if (!signerIdentity && typeof effectivePayload.fingerprint === "string" && effectivePayload.fingerprint.length > 0) {
       try {
         const lookup = await fetch(
@@ -205,6 +279,7 @@ verifyButton.addEventListener("click", async () => {
         if (lookup.ok) {
           signerIdentity = await lookup.json();
           fetchedFromServer = true;
+          signerSource = "server";
         }
       } catch {
         // ignore network errors — we'll raise a clear error below.
@@ -213,6 +288,26 @@ verifyButton.addEventListener("click", async () => {
 
     if (!signerIdentity) {
       throw new Error("Could not obtain the signer's public identity. Paste a public identity JSON or ensure the signer is published on the configured server.");
+    }
+
+    // Mirror of `gui/app.js` verify-file flow: re-derive the fingerprint
+    // from the public keys we are about to verify with, and reject the
+    // identity if the keys do not actually match the claimed fingerprint.
+    // This closes the gap where a hostile server (or hostile pasted JSON)
+    // could pair a real fingerprint with a different `signingKey`, making
+    // verification "succeed" against the wrong key.
+    const expectedSignerFingerprint = (typeof signerIdentity.fingerprint === "string" && signerIdentity.fingerprint.length > 0)
+      ? signerIdentity.fingerprint
+      : (typeof effectivePayload.fingerprint === "string" ? effectivePayload.fingerprint : "");
+    const fingerprintCheck = deriveAndCheckFingerprint(signerIdentity, expectedSignerFingerprint);
+    if (!fingerprintCheck.ok) {
+      throw new Error(fingerprintCheck.error);
+    }
+    if (typeof effectivePayload.fingerprint === "string" && effectivePayload.fingerprint.length > 0
+      && fingerprintCheck.computedFingerprint !== effectivePayload.fingerprint) {
+      throw new Error(
+        `Signer fingerprint mismatch: payload claims ${effectivePayload.fingerprint} but the supplied public keys hash to ${fingerprintCheck.computedFingerprint}.`,
+      );
     }
 
     let clientVerified = false;
@@ -250,8 +345,9 @@ verifyButton.addEventListener("click", async () => {
       verifiedBy: "client",
       serverAdvisory,
       serverConsistent: serverAdvisory === null ? null : serverAdvisory === clientVerified,
-      signerFingerprint: signerIdentity?.fingerprint ?? null,
-      signerSource: fetchedFromServer ? "server" : (publicIdentity ? "pasted" : "payload"),
+      signerFingerprint: fingerprintCheck.computedFingerprint || (signerIdentity?.fingerprint ?? null),
+      signerFingerprintConfirmedFromKeys: true,
+      signerSource: signerSource || (fetchedFromServer ? "server" : (publicIdentity ? "pasted" : "payload")),
     };
     resultJson.textContent = JSON.stringify(report, null, 2);
 

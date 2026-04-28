@@ -366,6 +366,14 @@
       "integrity": "sha512-t5Fy/nfn+14LuOc2KNYg75vZqClpAiqscVvMygNnlsHBFpSXdJaYtXMcdNLpl/Qvc3P2cB3s6lOV51nqsFq4ag=="
     }
   },
+  "redirects": {
+    "https://esm.sh/@noble/curves@~2.0.0/abstract/fft?target=denonext": "https://esm.sh/@noble/curves@2.0.1/abstract/fft?target=denonext",
+    "https://esm.sh/@noble/curves@~2.0.0/utils?target=denonext": "https://esm.sh/@noble/curves@2.0.1/utils?target=denonext",
+    "https://esm.sh/@noble/hashes@~2.0.0/hmac?target=denonext": "https://esm.sh/@noble/hashes@2.0.1/hmac?target=denonext",
+    "https://esm.sh/@noble/hashes@~2.0.0/sha2?target=denonext": "https://esm.sh/@noble/hashes@2.0.1/sha2?target=denonext",
+    "https://esm.sh/@noble/hashes@~2.0.0/sha3?target=denonext": "https://esm.sh/@noble/hashes@2.0.1/sha3?target=denonext",
+    "https://esm.sh/@noble/hashes@~2.0.0/utils?target=denonext": "https://esm.sh/@noble/hashes@2.0.1/utils?target=denonext"
+  },
   "remote": {
     "https://deno.land/std@0.160.0/_util/assert.ts": "e94f2eb37cebd7f199952e242c77654e43333c1ac4c5c700e929ea3aa5489f74",
     "https://deno.land/std@0.160.0/_util/os.ts": "8a33345f74990e627b9dfe2de9b040004b08ea5146c7c9e8fe9a29070d193934",
@@ -446,7 +454,35 @@
     "https://deno.land/x/sqlite@v3.9.1/src/error.ts": "f7a15cb00d7c3797da1aefee3cf86d23e0ae92e73f0ba3165496c3816ab9503a",
     "https://deno.land/x/sqlite@v3.9.1/src/function.ts": "bc778cab7a6d771f690afa27264c524d22fcb96f1bb61959ade7922c15a4ab8d",
     "https://deno.land/x/sqlite@v3.9.1/src/query.ts": "d58abda928f6582d77bad685ecf551b1be8a15e8e38403e293ec38522e030cad",
-    "https://deno.land/x/sqlite@v3.9.1/src/wasm.ts": "e79d0baa6e42423257fb3c7cc98091c54399254867e0f34a09b5bdef37bd9487"
+    "https://deno.land/x/sqlite@v3.9.1/src/wasm.ts": "e79d0baa6e42423257fb3c7cc98091c54399254867e0f34a09b5bdef37bd9487",
+    "https://esm.sh/@noble/curves@2.0.1/abstract/fft?target=denonext": "5b70ccbd6d57d21b6f6ea29ff14d6b8868a3bc206444dc76957f5758e17886c6",
+    "https://esm.sh/@noble/curves@2.0.1/denonext/abstract/fft.mjs": "32eca7bddc037a6a1fc9a11c2f5172ec04a759c8c588225bfa7194039736c527",
+    "https://esm.sh/@noble/curves@2.0.1/denonext/utils.mjs": "77330072b9e46b7354eb63d4348f661e7c01d0133068b6e0dec79297c916afd7",
+    "https://esm.sh/@noble/curves@2.0.1/utils?target=denonext": "b6fe62b7d8ca21c73d11b03d0cdfe105f12fdc241cde10e1c9f8be9db9e60e7a",
+    "https://esm.sh/@noble/hashes@1.8.0/denonext/_md.mjs": "e30debbd8e964d8bd4ae9c807c75601e3ef7ec73eaed005f703709f64a4b2257",
+    "https://esm.sh/@noble/hashes@1.8.0/denonext/crypto.mjs": "cabc4468470c6f6d15891c4a6037aebed19289e1a12eb9905c5579c26767a721",
+    "https://esm.sh/@noble/hashes@1.8.0/denonext/esm/_u64.mjs": "6282b7bcd11b7aad271b5507cca4209ce5cf1de8b5504d21b670e365a0ad04b0",
+    "https://esm.sh/@noble/hashes@1.8.0/denonext/sha2.mjs": "c0581dc7c760dc2835f9faa22a5612f0db25bd9a824bb4312c09a7d223799c63",
+    "https://esm.sh/@noble/hashes@1.8.0/denonext/utils.mjs": "18b15a49e98c9e136e4bfcdce69b9461630b7dc3389ba932f535ad4a47221b08",
+    "https://esm.sh/@noble/hashes@1.8.0/sha2": "0286f7ac7d4ac758a346304c48955ea474ef732f945720273c0a8096acf42cbb",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/_md.mjs": "9bb9822cc8fdaa2920bee40d6144674497336ff87479db53f7a968409efdcd3a",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/_u64.mjs": "8a759b7294226d3d0a3fa24bc733ffac8ad7a703479c6ee2985b39762939d603",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/hmac.mjs": "5338eb1d436cfc443c6daac25a87261d6c9b4fdc3ebe15ce325ad67ee2bd492a",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/sha2.mjs": "a9b645fee4f3b3a797ca49eaa6ff86eedf8382728d97c9e96e32858e81843b6c",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/sha3.mjs": "278a57fd53a8baf197d1930975322361b17984d9468d079dc4024bcc33b9ab30",
+    "https://esm.sh/@noble/hashes@2.0.1/denonext/utils.mjs": "791b6e5af54b7f310e560257a19c8cd7fc267772ef3ec2082563c5f245231fb7",
+    "https://esm.sh/@noble/hashes@2.0.1/hmac?target=denonext": "23d1586d6fddbda5c76427de0fdbd3115b5ac8c2e3709950665843a5c0bdeb09",
+    "https://esm.sh/@noble/hashes@2.0.1/sha2?target=denonext": "b47b8ddbb3cbf53ee2902a077771d9566f02acced3b63141227fe27166ec26f1",
+    "https://esm.sh/@noble/hashes@2.0.1/sha3?target=denonext": "ec76684c650d3e35b2be58acb74dbc9e5fbfab355f239b6c8754e367a86e7956",
+    "https://esm.sh/@noble/hashes@2.0.1/utils?target=denonext": "d842a1ef4fe1a77fbe2b332209fc65ddc68c59ec7e8bf3084c7c35017d7ce14f",
+    "https://esm.sh/@noble/post-quantum@0.5.4/denonext/_crystals.mjs": "f7c05897e0e48ec57bb5d958ffe998e3eabfcd5ae27c208b127a0b1c9a38a428",
+    "https://esm.sh/@noble/post-quantum@0.5.4/denonext/ml-dsa.mjs": "eaa5c2bc5c5180ae6c869953a1761f316186600dea685d7ca4d0af208a18477b",
+    "https://esm.sh/@noble/post-quantum@0.5.4/denonext/slh-dsa.mjs": "2f1796568a097585b76ce121548c7ffa1151219cc8f6fd3381e691507c807f5c",
+    "https://esm.sh/@noble/post-quantum@0.5.4/denonext/utils.mjs": "b0ae1a4c3ab60033eec4afaa6888ff7f521bd9b7e28dd26def5e9931ecdb6b9f",
+    "https://esm.sh/@noble/post-quantum@0.5.4/ml-dsa": "99af684ed14c87b61a5d583ace4e2196bec9ae222bdf700fdda330ecf67422b9",
+    "https://esm.sh/@noble/post-quantum@0.5.4/slh-dsa": "3d8ff6a5d880b8d1f33943c4b3cc315c67dd8d43845c078d824fd1fbe756da34",
+    "https://esm.sh/bech32@2.0.0": "1b943d1583f3708812c3cfccc8236cf92d8f9b191881984e26e0b9decaed9a16",
+    "https://esm.sh/bech32@2.0.0/denonext/bech32.mjs": "bd58859b4bb56d272885e0a7f72fcc27c86447485629e12ab99a5c5ec3cb131b"
   },
   "workspace": {
     "dependencies": [
