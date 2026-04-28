@@ -800,6 +800,9 @@ export function renderMailVerifyMeta(result) {
   if (typeof result.serverIdentityMatch === "boolean") {
     lines.push(`Server identity match: ${result.serverIdentityMatch ? "yes" : "no"}`);
   }
+  if (Array.isArray(result.recipientFingerprints) && result.recipientFingerprints.length > 0) {
+    lines.push(`Recipients: ${result.recipientFingerprints.join(", ")}`);
+  }
   metaEl.textContent = lines.join(" • ");
 }
 

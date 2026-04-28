@@ -8,10 +8,16 @@ import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import { AES } from "./AES.ts";
-import { stringToHex, hexToString } from "./Hex.ts";
+import { stringToHex, hexToString, toHex, hexToBytes } from "./Hex.ts";
 import { PROTOCOL_VERSION, isProtocolVersionSupported, FILE_FORMAT_VERSIONS } from "./version.ts";
 import { computeIdentityFingerprint, computeIdentityMerkleRootRaw } from "./Fingerprint.ts";
-import { buildMessageHashEnvelope, buildRecipientBoundEnvelope } from "./MessageHash.ts";
+import {
+    buildMessageHashEnvelope,
+    buildMultiRecipientBoundEnvelope,
+    buildRecipientBoundEnvelope,
+    type MultiRecipientAttachmentManifestEntry,
+} from "./MessageHash.ts";
+import { MultiRecipientCipher, type RecipientEncapsulation } from "./MultiRecipientCipher.ts";
 import {
     createRevocationCertificate,
     getRevocationSignaturePayload,
@@ -100,6 +106,23 @@ export class Identity extends Key {
         return Identity._VerifyEnvelope(sender, envelope, signature);
     }
 
+    static VerifyMultiRecipientBoundSignature(
+        sender: ExternalIdentity,
+        recipientFingerprints: string[],
+        message: string,
+        signature: string,
+        attachmentManifest?: MultiRecipientAttachmentManifestEntry[],
+        salt?: string,
+    ): boolean {
+        const envelope = buildMultiRecipientBoundEnvelope(
+            recipientFingerprints,
+            message,
+            attachmentManifest,
+            salt,
+        );
+        return Identity._VerifyEnvelope(sender, envelope, signature);
+    }
+
     private static _VerifyEnvelope(sender: ExternalIdentity, envelope: string, signature: string): boolean {
         switch (sender.signingKeyType) {
             case 'dilithium':
@@ -152,6 +175,21 @@ export class Identity extends Key {
         return this.signingKey.sign(envelope);
     }
 
+    signMessageForRecipients(
+        message: string,
+        recipientFingerprints: string[],
+        attachmentManifest?: MultiRecipientAttachmentManifestEntry[],
+        salt?: string,
+    ): string {
+        const envelope = buildMultiRecipientBoundEnvelope(
+            recipientFingerprints,
+            message,
+            attachmentManifest,
+            salt,
+        );
+        return this.signingKey.sign(envelope);
+    }
+
     signAndEncryptMessage(message: string, recipient: Identity) : string {
         const recipientFingerprint = recipient.toFingerprint();
         const signature = this.signMessageForRecipient(message, recipientFingerprint);
@@ -173,6 +211,64 @@ export class Identity extends Key {
             envelopeVersion: 2,
             recipientFingerprint: recipient.fingerprint,
         }));
+    }
+
+    signAndEncryptForMany(
+        message: string,
+        recipients: ExternalIdentity[],
+        options?: {
+            attachmentManifest?: MultiRecipientAttachmentManifestEntry[];
+            contentKeyHex?: string;
+        },
+    ): {
+        recipients: RecipientEncapsulation[];
+        contentNonce: string;
+        ciphertext: string;
+        contentKey: string;
+        signature: string;
+        recipientFingerprints: string[];
+        attachmentManifest: MultiRecipientAttachmentManifestEntry[];
+    } {
+        if (!Array.isArray(recipients) || recipients.length === 0) {
+            throw new Error("at least one recipient is required");
+        }
+        const recipientFingerprints = [...new Set(
+            recipients
+                .map((recipient) => recipient.fingerprint)
+                .filter((fingerprint) => typeof fingerprint === "string" && fingerprint.length > 0),
+        )].sort();
+        if (recipientFingerprints.length === 0) {
+            throw new Error("at least one recipient fingerprint is required");
+        }
+        const attachmentManifest = (options?.attachmentManifest ?? [])
+            .map((entry) => ({
+                attachmentId: entry.attachmentId,
+                ciphertextSha256: entry.ciphertextSha256,
+            }))
+            .sort((a, b) => a.attachmentId.localeCompare(b.attachmentId));
+        const signature = this.signMessageForRecipients(message, recipientFingerprints, attachmentManifest);
+        const innerPayload = JSON.stringify({
+            message,
+            signature,
+            envelopeVersion: 3,
+            recipientFingerprints,
+            attachmentManifest,
+        });
+        const contentKey = options?.contentKeyHex ? hexToBytes(options.contentKeyHex) : undefined;
+        const encrypted = MultiRecipientCipher.encryptForMany(
+            new TextEncoder().encode(innerPayload),
+            recipients,
+            contentKey ? { contentKey } : undefined,
+        );
+        return {
+            recipients: encrypted.recipients,
+            contentNonce: encrypted.contentNonce,
+            ciphertext: encrypted.ciphertext,
+            contentKey: toHex(encrypted.contentKey),
+            signature,
+            recipientFingerprints,
+            attachmentManifest,
+        };
     }
 
     // F-CRYPTO-02: `decryptAndVerify` now returns a `verifyStatus` that
@@ -222,6 +318,90 @@ export class Identity extends Key {
             message,
             verified: legacyVerified,
             verifyStatus: legacyVerified ? "valid_unbound" : "invalid",
+        };
+    }
+
+    decryptAndVerifyMulti(
+        payload: {
+            recipients: RecipientEncapsulation[];
+            contentNonce: string;
+            ciphertext: string;
+        },
+        sender: ExternalIdentity,
+    ): {
+        message: string;
+        verified: boolean;
+        verifyStatus: "valid" | "invalid";
+        contentKey: string;
+        recipientFingerprints: string[];
+        attachmentManifest: MultiRecipientAttachmentManifestEntry[];
+    } {
+        const myFingerprint = this.toFingerprint();
+        const recipientEntry = payload.recipients.find((entry) => entry.fingerprint === myFingerprint);
+        if (!recipientEntry) {
+            return {
+                message: "",
+                verified: false,
+                verifyStatus: "invalid",
+                contentKey: "",
+                recipientFingerprints: [],
+                attachmentManifest: [],
+            };
+        }
+        if (!(this.encryptionKey instanceof KyberEncryptionKey)) {
+            throw new Error("multi-recipient decrypt requires kyber encryption key");
+        }
+        const contentKey = MultiRecipientCipher.unwrapContentKey(recipientEntry, this.encryptionKey);
+        const decryptedBytes = MultiRecipientCipher.decryptWithContentKey(
+            payload.ciphertext,
+            payload.contentNonce,
+            contentKey,
+        );
+        const parsed = JSON.parse(new TextDecoder().decode(decryptedBytes)) as {
+            message: string;
+            signature: string;
+            envelopeVersion?: number;
+            recipientFingerprints?: string[];
+            attachmentManifest?: MultiRecipientAttachmentManifestEntry[];
+        };
+        const message = typeof parsed.message === "string" ? parsed.message : "";
+        const signature = typeof parsed.signature === "string" ? parsed.signature : "";
+        const recipientFingerprints = Array.isArray(parsed.recipientFingerprints)
+            ? parsed.recipientFingerprints.filter((value): value is string => typeof value === "string").sort()
+            : [];
+        const attachmentManifest = Array.isArray(parsed.attachmentManifest)
+            ? parsed.attachmentManifest
+                .filter((entry): entry is MultiRecipientAttachmentManifestEntry => (
+                    !!entry
+                    && typeof entry.attachmentId === "string"
+                    && typeof entry.ciphertextSha256 === "string"
+                ))
+                .sort((a, b) => a.attachmentId.localeCompare(b.attachmentId))
+            : [];
+        if (parsed.envelopeVersion !== 3 || !recipientFingerprints.includes(myFingerprint)) {
+            return {
+                message,
+                verified: false,
+                verifyStatus: "invalid",
+                contentKey: toHex(contentKey),
+                recipientFingerprints,
+                attachmentManifest,
+            };
+        }
+        const verified = Identity.VerifyMultiRecipientBoundSignature(
+            sender,
+            recipientFingerprints,
+            message,
+            signature,
+            attachmentManifest,
+        );
+        return {
+            message,
+            verified,
+            verifyStatus: verified ? "valid" : "invalid",
+            contentKey: toHex(contentKey),
+            recipientFingerprints,
+            attachmentManifest,
         };
     }
 

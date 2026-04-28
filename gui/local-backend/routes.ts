@@ -4,18 +4,20 @@ import { Identity, type ExternalIdentity } from "../../core/Identity.ts";
 import { PROTOCOL_VERSION, FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
-import { sha256Hex } from "../../core/MessageHash.ts";
+import { sha256Hex, type MultiRecipientAttachmentManifestEntry } from "../../core/MessageHash.ts";
+import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
 import {
 	createHierarchyCertificate,
 	decodeHierarchyCertificate,
 	getHierarchySignaturePayload,
 	isHierarchyCertificateExpired,
 } from "../../core/HierarchyCertificate.ts";
-import { stringToHex } from "../../core/Hex.ts";
+import { stringToHex, hexToBytes } from "../../core/Hex.ts";
 import {
 	buildDetachedSignaturePayload,
 	buildEncryptedMessagePayload,
 	buildEncryptedSignedMessagePayload,
+	buildEncryptedSignedMessageMultiPayload,
 	buildSignedMessagePayload,
 } from "../../core/Payloads.ts";
 import {
@@ -121,6 +123,11 @@ type ParsedMailAttachmentInput = {
 	fileBytes: Uint8Array;
 };
 
+type MailRecipientInput = {
+	contact: string;
+	email: string;
+};
+
 function parseMailAttachmentInputs(input: unknown): ParsedMailAttachmentInput[] {
 	if (!Array.isArray(input)) return [];
 	return input.map((entry, index) => {
@@ -146,6 +153,25 @@ function parseMailAttachmentInputs(input: unknown): ParsedMailAttachmentInput[] 
 			);
 		}
 		return { fileName, mimeType, fileBytes };
+	});
+}
+
+function parseMailRecipientsInput(input: unknown): MailRecipientInput[] {
+	if (!Array.isArray(input)) return [];
+	return input.map((entry, index) => {
+		if (!entry || typeof entry !== "object") {
+			throw new HttpError(STATUS.BadRequest, `recipient #${index + 1} is invalid`);
+		}
+		const item = entry as { contact?: unknown; email?: unknown };
+		const contact = toSafeString(item.contact, 256);
+		const email = toSafeString(item.email, 512);
+		if (!contact) {
+			throw new HttpError(STATUS.BadRequest, `recipient #${index + 1} missing contact`);
+		}
+		if (!email) {
+			throw new HttpError(STATUS.BadRequest, `recipient #${index + 1} missing email`);
+		}
+		return { contact, email };
 	});
 }
 
@@ -1054,6 +1080,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				subject?: unknown;
 				message?: unknown;
 				recipient?: unknown;
+				recipients?: unknown;
 				password?: unknown;
 				includePublicKeys?: unknown;
 				attachments?: unknown;
@@ -1065,24 +1092,35 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			const subject = toSafeString(body.subject, 512);
 			const message = typeof body.message === "string" ? body.message : "";
 			const recipient = typeof body.recipient === "string" ? body.recipient : undefined;
+			const recipientsInput = parseMailRecipientsInput(body.recipients);
 			const password = typeof body.password === "string" ? body.password : undefined;
 			const includePublicKeys = Boolean(body.includePublicKeys);
 			const attachmentsInput = parseMailAttachmentInputs(body.attachments);
-			if (!to || !subject) throw new HttpError(STATUS.BadRequest, "to and subject are required");
-			if (!recipient) throw new HttpError(STATUS.BadRequest, "recipient is required");
+			const resolvedRecipients = recipientsInput.length
+				? recipientsInput
+				: (recipient && to ? [{ contact: recipient, email: to }] : []);
+			if (!subject) throw new HttpError(STATUS.BadRequest, "subject is required");
+			if (!resolvedRecipients.length) {
+				throw new HttpError(STATUS.BadRequest, "at least one recipient is required");
+			}
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
 			if (!message && attachmentsInput.length === 0) {
 				throw new HttpError(STATUS.BadRequest, "message or attachments are required");
 			}
 
 			const ctx = await getContext(home ?? undefined, identityName);
-			const contact = await loadContact(ctx, recipient);
 			const identity = await loadIdentity(ctx, password);
 			const resolved = await resolveMailAccount(ctx.identityDir, accountId);
 			const account = resolved.account.config;
 			const secrets = resolved.secrets;
+			const recipients = await Promise.all(
+				resolvedRecipients.map(async (item) => ({
+					email: item.email,
+					contact: await loadContact(ctx, item.contact),
+				})),
+			);
+			const toHeader = recipients.map((item) => item.email).join(", ");
 
-			const bodyCiphertext = identity.signAndEncryptFor(message, contact);
 			const summary = identity.summary;
 			const senderIdentity = includePublicKeys
 				? {
@@ -1095,38 +1133,86 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 					encryptionKeyDetails: summary.encryptionKeyDetails,
 				}
 				: undefined;
-			const bodyPayload = buildEncryptedSignedMessagePayload({
-				recipientFingerprint: contact.fingerprint,
-				senderFingerprint: identity.toFingerprint(),
-				ciphertext: bodyCiphertext,
-				senderIdentity,
-			});
-			const bodyPayloadHash = hashPayload(bodyPayload);
+			let bodyPayload: Record<string, unknown>;
+			let encryptedAttachments: Array<Record<string, unknown>> = [];
+			if (recipients.length === 1 && recipientsInput.length === 0) {
+				const [single] = recipients;
+				const bodyCiphertext = identity.signAndEncryptFor(message, single.contact);
+				bodyPayload = buildEncryptedSignedMessagePayload({
+					recipientFingerprint: single.contact.fingerprint,
+					senderFingerprint: identity.toFingerprint(),
+					ciphertext: bodyCiphertext,
+					senderIdentity,
+				});
+				const bodyPayloadHash = hashPayload(bodyPayload);
+				encryptedAttachments = attachmentsInput.map((attachment) => {
+					const attachmentId = randomHex(12);
+					const envelope = createEmailAttachmentCleartextEnvelope({
+						attachmentId,
+						fileBytes: attachment.fileBytes,
+						fileName: attachment.fileName,
+						mimeType: attachment.mimeType,
+						bodyPayloadHash,
+					});
+					const ciphertext = identity.signAndEncryptFor(JSON.stringify(envelope), single.contact);
+					return {
+						type: "ebp-encrypted-signed-email-attachment" as const,
+						version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+						recipientFingerprint: single.contact.fingerprint,
+						senderFingerprint: identity.toFingerprint(),
+						attachmentId,
+						ciphertext,
+					};
+				});
+			} else {
+				const contacts = recipients.map((entry) => entry.contact);
+				const provisional = identity.signAndEncryptForMany(message, contacts, {
+					attachmentManifest: [],
+				});
+				const contentKey = hexToBytes(provisional.contentKey);
+				const encryptedAttachmentsMulti = attachmentsInput.map((attachment) => {
+					const attachmentId = randomHex(12);
+					const envelope = createEmailAttachmentCleartextEnvelope({
+						attachmentId,
+						fileBytes: attachment.fileBytes,
+						fileName: attachment.fileName,
+						mimeType: attachment.mimeType,
+					});
+					const encrypted = MultiRecipientCipher.encryptWithContentKey(
+						new TextEncoder().encode(JSON.stringify(envelope)),
+						contentKey,
+					);
+					return {
+						type: "ebp-encrypted-signed-email-attachment-multi" as const,
+						version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachmentMulti,
+						senderFingerprint: identity.toFingerprint(),
+						attachmentId,
+						contentNonce: encrypted.contentNonce,
+						ciphertext: encrypted.ciphertext,
+					};
+				});
+				const attachmentManifest: MultiRecipientAttachmentManifestEntry[] = encryptedAttachmentsMulti.map((item) => ({
+					attachmentId: item.attachmentId,
+					ciphertextSha256: sha256Hex(item.ciphertext),
+				}));
+				const bodyEncrypted = identity.signAndEncryptForMany(message, contacts, {
+					attachmentManifest,
+					contentKeyHex: provisional.contentKey,
+				});
+				bodyPayload = buildEncryptedSignedMessageMultiPayload({
+					senderFingerprint: identity.toFingerprint(),
+					recipients: bodyEncrypted.recipients,
+					contentNonce: bodyEncrypted.contentNonce,
+					ciphertext: bodyEncrypted.ciphertext,
+					senderIdentity,
+				});
+				encryptedAttachments = encryptedAttachmentsMulti;
+			}
 			const armoredBody = [
 				"-----BEGIN EBP MESSAGE-----",
 				JSON.stringify(bodyPayload, null, 2),
 				"-----END EBP MESSAGE-----",
 			].join("\n");
-
-			const encryptedAttachments = attachmentsInput.map((attachment) => {
-				const attachmentId = randomHex(12);
-				const envelope = createEmailAttachmentCleartextEnvelope({
-					attachmentId,
-					fileBytes: attachment.fileBytes,
-					fileName: attachment.fileName,
-					mimeType: attachment.mimeType,
-					bodyPayloadHash,
-				});
-				const ciphertext = identity.signAndEncryptFor(JSON.stringify(envelope), contact);
-				return {
-					type: "ebp-encrypted-signed-email-attachment" as const,
-					version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
-					recipientFingerprint: contact.fingerprint,
-					senderFingerprint: identity.toFingerprint(),
-					attachmentId,
-					ciphertext,
-				};
-			});
 
 			const transport = nodemailer.createTransport({
 				host: account.smtpHost,
@@ -1139,7 +1225,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				: account.fromEmail;
 			const info = await transport.sendMail({
 				from,
-				to,
+				to: toHeader,
 				subject,
 				text: armoredBody,
 				attachments: encryptedAttachments.map((attachment, idx) => ({
@@ -2266,6 +2352,112 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				});
 			}
 
+			if (type === "ebp-encrypted-signed-message-multi") {
+				const ciphertext = String(payload.ciphertext ?? "");
+				const contentNonce = String(payload.contentNonce ?? "");
+				const senderFp = typeof payload.senderFingerprint === "string" ? payload.senderFingerprint : undefined;
+				const embeddedIdentity = payload.senderIdentity as Record<string, unknown> | undefined;
+				const recipientsRaw = Array.isArray(payload.recipients) ? payload.recipients : [];
+				const recipients = recipientsRaw
+					.map((entry) => ({
+						fingerprint: typeof entry?.fingerprint === "string" ? entry.fingerprint : "",
+						kemCiphertext: typeof entry?.kemCiphertext === "string" ? entry.kemCiphertext : "",
+						keyWrapNonce: typeof entry?.keyWrapNonce === "string" ? entry.keyWrapNonce : "",
+						wrappedContentKey: typeof entry?.wrappedContentKey === "string" ? entry.wrappedContentKey : "",
+					}))
+					.filter((entry) => (
+						entry.fingerprint.length > 0
+						&& entry.kemCiphertext.length > 0
+						&& entry.keyWrapNonce.length > 0
+						&& entry.wrappedContentKey.length > 0
+					));
+				if (!ciphertext || !contentNonce || recipients.length === 0) {
+					throw new HttpError(STATUS.BadRequest, "invalid multi-recipient payload");
+				}
+
+				let contact: ExternalIdentity | undefined;
+				let isKnownContact = false;
+				if (sender) {
+					contact = await loadContact(ctx, sender);
+					isKnownContact = true;
+				} else if (senderFp) {
+					try {
+						contact = await loadContact(ctx, senderFp.substring(0, 16));
+						isKnownContact = true;
+					} catch {
+						contact = undefined;
+					}
+				}
+				if (!contact && embeddedIdentity) {
+					const signingKey = typeof embeddedIdentity.signingKey === "string" ? embeddedIdentity.signingKey : undefined;
+					const encryptionKey = typeof embeddedIdentity.encryptionKey === "string" ? embeddedIdentity.encryptionKey : undefined;
+					if (signingKey && encryptionKey) {
+						const signingKeyType = embeddedIdentity.signingKeyType === "sphincs" ? "sphincs" as const : "dilithium" as const;
+						const ext: ExternalIdentity = {
+							fingerprint: typeof embeddedIdentity.fingerprint === "string" ? embeddedIdentity.fingerprint : "",
+							signingKeyType,
+							encryptionKeyType: "kyber",
+							signingKey,
+							encryptionKey,
+							signingKeyDetails: (embeddedIdentity.signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ?? { variant: signingKeyType === "sphincs" ? "slh_dsa_sha2_256s" : "ml_dsa87" },
+							encryptionKeyDetails: (embeddedIdentity.encryptionKeyDetails as ExternalIdentity["encryptionKeyDetails"]) ?? { variant: "ml_kem1024" },
+							details: {},
+						};
+						const computed = computeExternalFingerprint(ext);
+						if (computed && (!senderFp || computed === senderFp)) {
+							ext.fingerprint = computed;
+							contact = ext;
+						}
+					}
+				}
+				if (!contact) {
+					throw new HttpError(STATUS.BadRequest, "sender contact is required for multi-recipient signed payloads");
+				}
+				const computedFingerprint = computeExternalFingerprint(contact);
+				if (!computedFingerprint || computedFingerprint !== contact.fingerprint || (senderFp && computedFingerprint !== senderFp)) {
+					throw new HttpError(STATUS.BadRequest, "sender identity fingerprint mismatch");
+				}
+				let result: ReturnType<Identity["decryptAndVerifyMulti"]>;
+				try {
+					result = identity.decryptAndVerifyMulti({
+						recipients,
+						contentNonce,
+						ciphertext,
+					}, contact);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - message may be corrupted or not intended for this identity");
+				}
+				const signerEmail = getIdentityDetailValue(contact.details, "email");
+				const emailMeta = getIdentityDetailMeta(
+					(contact as ExternalIdentity & { detailsMeta?: unknown }).detailsMeta,
+					"email",
+				);
+				const signerEmailVerified = emailMeta && typeof emailMeta.verified === "boolean"
+					? Boolean(emailMeta.verified)
+					: null;
+				const senderEmailNormalized = extractEmailAddress(senderEmail ?? "");
+				const signerEmailNormalized = extractEmailAddress(signerEmail ?? "");
+				const signerMatchesSenderEmail = senderEmailNormalized && signerEmailNormalized
+					? senderEmailNormalized === signerEmailNormalized
+					: null;
+				const status = result.verified
+					? (isKnownContact ? "valid" : "valid_unknown_signer")
+					: "invalid";
+				return json({
+					message: result.message,
+					verified: result.verified,
+					verifyStatus: status,
+					signerFingerprint: contact.fingerprint,
+					signerEmail,
+					signerEmailVerified,
+					signerMatchesSenderEmail,
+					serverIdentityMatch: null,
+					contentKey: result.contentKey,
+					recipientFingerprints: result.recipientFingerprints,
+					attachmentManifest: result.attachmentManifest,
+				});
+			}
+
 			if (type === "ebp-encrypted-signed-message") {
 				const ciphertext = String(payload.ciphertext ?? "");
 				const senderFp = typeof payload.senderFingerprint === "string" ? payload.senderFingerprint : undefined;
@@ -2723,6 +2915,8 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				home?: unknown;
 				identity?: unknown;
 				expectedBodyPayloadHash?: unknown;
+				contentKey?: unknown;
+				expectedAttachmentHash?: unknown;
 			}>(req);
 			const payloadInput = body.payload;
 			const password = typeof body.password === "string" ? body.password : undefined;
@@ -2732,6 +2926,8 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 			const expectedBodyPayloadHash = typeof body.expectedBodyPayloadHash === "string"
 				? body.expectedBodyPayloadHash
 				: undefined;
+			const contentKey = typeof body.contentKey === "string" ? body.contentKey : undefined;
+			const expectedAttachmentHash = typeof body.expectedAttachmentHash === "string" ? body.expectedAttachmentHash : undefined;
 			if (!payloadInput) throw new HttpError(STATUS.BadRequest, "payload is required");
 			if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
 			const payload = parseEncryptedEmailAttachmentPayload(payloadInput);
@@ -2764,6 +2960,27 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				cleartextEnvelopeRaw = result.message;
 				verified = result.verified;
 				verifyStatus = result.verifyStatus;
+			} else if (payload.type === "ebp-encrypted-signed-email-attachment-multi") {
+				if (!contentKey) {
+					throw new HttpError(STATUS.BadRequest, "contentKey is required for multi-recipient attachments");
+				}
+				if (sender) {
+					await loadContact(ctx, sender);
+				} else {
+					await loadContact(ctx, payload.senderFingerprint.substring(0, 16));
+				}
+				try {
+					const cleartextBytes = MultiRecipientCipher.decryptWithContentKey(
+						payload.ciphertext,
+						payload.contentNonce,
+						hexToBytes(contentKey),
+					);
+					cleartextEnvelopeRaw = new TextDecoder().decode(cleartextBytes);
+				} catch {
+					throw new HttpError(STATUS.BadRequest, "decryption failed - attachment may be corrupted or not intended for this identity");
+				}
+				verified = null;
+				verifyStatus = "valid";
 			} else {
 				throw new HttpError(STATUS.BadRequest, "unsupported encrypted email attachment payload type");
 			}
@@ -2776,6 +2993,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 				? envelope.bodyPayloadHash === expectedBodyPayloadHash
 				: null;
 			if (manifestMatched === false) {
+				verifyStatus = "manifest_mismatch";
+			}
+			if (expectedAttachmentHash && expectedAttachmentHash !== sha256Hex(payload.ciphertext)) {
 				verifyStatus = "manifest_mismatch";
 			}
 			const fileDataBase64 = bytesToBase64(envelope.fileBytes);

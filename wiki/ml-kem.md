@@ -2,8 +2,8 @@
 title: "ML-KEM (Kyber) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-25
-source_count: 6
+last_updated: 2026-04-28
+source_count: 7
 tags:
   - crypto
   - kem
@@ -43,6 +43,17 @@ Decryption reverses this: decapsulate to recover the shared secret, then decrypt
 
 EBP generates a fresh shared secret for every message. Responses use a new encapsulation, not the key from the initial message. This is simpler than session-key negotiation and avoids key reuse across messages.
 
+## Multi-Recipient Key Wrap Pattern
+
+For multi-recipient native email, EBP uses ML-KEM as a key-encryption layer over a single AES-256 content key:
+
+1. Generate one random 32-byte AES content key.
+2. Encrypt message/attachments once with that content key (fresh nonce per ciphertext).
+3. For each recipient identity, run ML-KEM encapsulation and use the resulting shared secret to AES-GCM-wrap the content key.
+4. Store one wrap record per recipient: `{ fingerprint, kemCiphertext, keyWrapNonce, wrappedContentKey }`.
+
+This keeps payload encryption cost constant while preserving recipient-specific KEM confidentiality.
+
 ## Standards Context
 
 EBP's symmetric layer uses AES-256-GCM after ML-KEM encapsulation. AES is specified by [[source-fips-197]], while GCM nonce, tag, and associated-data semantics are specified by [[source-sp-800-38d]] and summarized in [[aes-gcm]].
@@ -77,6 +88,7 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 
 - `ReadMe.md`
 - `core/Kyber.ts`
+- `core/MultiRecipientCipher.ts`
 - `wiki/raw/NIST.FIPS.203.pdf` → [[source-fips-203]]
 - `wiki/raw/NIST.FIPS.197-upd1.pdf` → [[source-fips-197]]
 - `wiki/raw/nistspecialpublication800-38d.pdf` → [[source-sp-800-38d]]

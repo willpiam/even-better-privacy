@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-04-27
-source_count: 19
+last_updated: 2026-04-28
+source_count: 20
 tags:
   - ebp
   - overview
@@ -61,6 +61,8 @@ IETF and W3C infrastructure sources document the non-cryptographic layers EBP ri
 3. Import contacts' public identities.
 4. Sign messages — recipients verify using your public signing key.
 5. Encrypt messages (including native-email attachments in GUI flows) — recipients decrypt using their private encryption key.
+
+For multi-recipient native email, EBP now supports a one-pass symmetric encryption pattern: one AES-256 content key encrypts the body and attachments, while ML-KEM encapsulates/wraps that content key separately for each recipient identity.
 
 ## Revocation and Trust Maintenance
 

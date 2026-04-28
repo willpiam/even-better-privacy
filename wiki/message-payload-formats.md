@@ -87,6 +87,40 @@ Encryption-only payload (no signature). Used when `sign: false` is passed to the
 
 The ciphertext structure is identical to the encrypted-signed variant, but the inner payload is the raw message string (not wrapped in a `{ message, signature }` JSON object). No sender fingerprint is included since there is no signer.
 
+### `ebp-encrypted-signed-message-multi` (version 1)
+
+Multi-recipient encrypted+signed payload used by GUI native email when more than one recipient is selected.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | `"ebp-encrypted-signed-message-multi"` |
+| `version` | number | `1` |
+| `senderFingerprint` | string | Bech32 fingerprint of sender/signer |
+| `recipients` | array | Per-recipient content-key encapsulations: `{ fingerprint, kemCiphertext, keyWrapNonce, wrappedContentKey }` |
+| `contentNonce` | string | Hex-encoded AES-GCM nonce for the body ciphertext |
+| `ciphertext` | string | Hex-encoded AES-GCM ciphertext for the inner JSON body |
+| `senderIdentity` | object? | Optional embedded sender public identity |
+
+The inner JSON (after decrypting `ciphertext` with the unwrapped content key) is:
+
+```json
+{
+  "message": "<plaintext>",
+  "signature": "<hex signature>",
+  "envelopeVersion": 3,
+  "recipientFingerprints": ["ebp..."],
+  "attachmentManifest": [{ "attachmentId": "...", "ciphertextSha256": "..." }]
+}
+```
+
+`signature` is produced once over a canonical envelope that binds:
+
+- message content
+- sorted recipient fingerprint set
+- sorted attachment manifest
+
+This preserves recipient-intent binding while allowing one signature for many recipients.
+
 ### `ebp-signed-message` (version 2)
 
 Cleartext signed message — the message is readable without decryption, but its integrity and origin are verifiable.
@@ -139,6 +173,19 @@ After decrypt, the cleartext envelope contains:
 - `attachmentId`
 - optional `bodyPayloadHash` used to bind the attachment to the encrypted message body payload
 
+### `ebp-encrypted-signed-email-attachment-multi` (version 1)
+
+Used with `ebp-encrypted-signed-message-multi`. The attachment is encrypted with the same AES content key used for the message body; it does not carry per-recipient encapsulations.
+
+| Field | Type | Description |
+|---|---|---|
+| `type` | string | `"ebp-encrypted-signed-email-attachment-multi"` |
+| `version` | number | `1` |
+| `senderFingerprint` | string | Sender fingerprint |
+| `attachmentId` | string | Attachment identifier |
+| `contentNonce` | string | AES-GCM nonce for this attachment ciphertext |
+| `ciphertext` | string | AES-GCM encrypted cleartext attachment envelope |
+
 ## Key Material in Payloads: Summary
 
 | Payload type | Sender public keys included? | Sender fingerprint included? |
@@ -163,7 +210,10 @@ The [[component-gui|GUI]] compose form offers two modes:
 - **Plain** — body sent as-is, no EBP payload.
 - **EBP sign + encrypt** — body is encrypted and signed, armored, and sent as the email's plain-text body via SMTP. If attachments are selected, each one is encrypted into a MIME attachment payload (`application/ebp-encrypted-attachment+json`) and sent in the same message.
 
-GUI compose always uses `sign: true`, so outbound EBP emails are always `ebp-encrypted-signed-message`.
+GUI compose always uses `sign: true`. Outbound EBP emails are:
+
+- `ebp-encrypted-signed-message` for one recipient
+- `ebp-encrypted-signed-message-multi` for multiple recipients
 
 On the receiving side, `GET /api/v1/mail/message` parses the full MIME source and extracts armored EBP payload markers from the text/HTML body plus attachment metadata (`filename`, `contentType`, `size`, `index`, `isEbpEncryptedAttachment`). For encrypted attachments, the GUI now lazily loads the attachment payload via `GET /api/v1/mail/message/attachment` only when the user clicks decrypt, then performs attachment decryption via `POST /api/v1/mail/decrypt-attachment`. If the body payload contains a `senderFingerprint` that matches a local contact, the "Sender contact" field is auto-filled.
 
@@ -174,11 +224,13 @@ Payload format versions are defined in `core/version.ts` under `FILE_FORMAT_VERS
 | Payload | Version |
 |---|---|
 | `encryptedSignedMessage` | 1 |
+| `encryptedSignedMessageMulti` | 1 |
 | `encryptedMessage` | 1 |
 | `signedMessage` | 2 |
 | `signature` | 2 |
 | `encryptedEmailAttachment` | 1 |
 | `encryptedSignedEmailAttachment` | 1 |
+| `encryptedSignedEmailAttachmentMulti` | 1 |
 | `emailAttachmentCleartextEnvelope` | 1 |
 
 ## Standards Boundaries
@@ -207,6 +259,7 @@ Email standards provide carriage and access, not EBP semantics. [[email-transpor
 - `core/Payloads.ts`
 - `core/EmailAttachmentPayload.ts`
 - `core/Identity.ts`
+- `core/MultiRecipientCipher.ts`
 - `gui/local-backend/main.ts`
 - `gui/local-backend/routes.ts`
 - `wiki/raw/NIST.FIPS.197-upd1.pdf` → [[source-fips-197]]

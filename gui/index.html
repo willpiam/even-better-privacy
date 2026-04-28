@@ -2863,7 +2863,7 @@
               <input id="mail-compose-from" type="text" readonly placeholder="No sender account selected" />
             </label>
             <div class="two">
-              <label>To
+              <label id="mail-compose-to-wrap">To (Plain mode)
                 <input id="mail-compose-to" type="text" placeholder="recipient@example.com" />
               </label>
               <label>Subject
@@ -2876,13 +2876,14 @@
                 <option value="ebp-encrypt" selected>EBP sign + encrypt payload in email body</option>
               </select>
             </label>
-            <label>EBP Recipient (contact name or fingerprint; required for EBP mode)
-              <div class="contact-search-wrapper">
-                <input id="mail-compose-recipient" type="text" placeholder="Search contacts..." autocomplete="off" />
-                <button type="button" class="contact-search-clear" data-target="mail-compose-recipient" title="Clear">×</button>
-                <div class="contact-search-dropdown" id="mail-compose-recipient-dropdown"></div>
+            <div id="mail-compose-recipients-wrap" class="stack">
+              <div class="row" style="justify-content: space-between; align-items: center;">
+                <label style="margin: 0;">EBP Recipients (contact + SMTP email)</label>
+                <button type="button" class="secondary" id="mail-compose-add-recipient">Add recipient</button>
               </div>
-            </label>
+              <div id="mail-compose-recipients" class="stack"></div>
+              <div class="small muted">Each recipient row links one EBP identity to one SMTP email address.</div>
+            </div>
             <label>Body
               <textarea id="mail-compose-body" placeholder="Write your email..."></textarea>
             </label>

@@ -455,6 +455,289 @@ function renderComposeAttachments() {
   }
 }
 
+let composeRecipientOutsideClickBound = false;
+
+function getComposeContactSearchFields(contact) {
+  const name = String(contact.name || "");
+  const fingerprint = String(contact.fingerprint || "");
+  const detailEmail = (contact.details?.email && Array.isArray(contact.details.email))
+    ? String(contact.details.email[0] || "")
+    : "";
+  const email = String(detailEmail || contact.localEmail || "");
+  const alias = String(contact.localAlias || "");
+  const detailName = (contact.details?.name && Array.isArray(contact.details.name))
+    ? String(contact.details.name[0] || "")
+    : "";
+  return { name, fingerprint, email, alias, detailName };
+}
+
+function closeComposeRecipientDropdown(row) {
+  const dropdown = row?.querySelector("[data-mail-recipient-dropdown='true']");
+  if (dropdown) dropdown.classList.remove("active");
+  row?.setAttribute("data-mail-recipient-highlight", "-1");
+}
+
+function ensureComposeRecipientOutsideClickListener() {
+  if (composeRecipientOutsideClickBound) return;
+  composeRecipientOutsideClickBound = true;
+  document.addEventListener("click", (event) => {
+    const wrapper = event.target?.closest?.("[data-mail-recipient-search='true']");
+    if (wrapper) return;
+    document.querySelectorAll("[data-mail-recipient-row='true']").forEach((row) => {
+      closeComposeRecipientDropdown(row);
+    });
+  });
+}
+
+function findContactForComposeRecipient(query) {
+  const value = String(query || "").trim().toLowerCase();
+  if (!value) return null;
+  const exactMatch = state.contacts.find((contact) => {
+    const fields = getComposeContactSearchFields(contact);
+    const name = fields.name.toLowerCase();
+    const fingerprint = fields.fingerprint.toLowerCase();
+    const email = fields.email.toLowerCase();
+    const alias = fields.alias.toLowerCase();
+    const detailName = fields.detailName.toLowerCase();
+    return (
+      name === value
+      || detailName === value
+      || fingerprint === value
+      || fingerprint.startsWith(value)
+      || email === value
+      || alias === value
+    );
+  });
+  if (exactMatch) return exactMatch;
+  const partialMatches = state.contacts.filter((contact) => {
+    const fields = getComposeContactSearchFields(contact);
+    const name = fields.name.toLowerCase();
+    const detailName = fields.detailName.toLowerCase();
+    const fingerprint = fields.fingerprint.toLowerCase();
+    const email = fields.email.toLowerCase();
+    const alias = fields.alias.toLowerCase();
+    return (
+      name.includes(value)
+      || detailName.includes(value)
+      || fingerprint.includes(value)
+      || email.includes(value)
+      || alias.includes(value)
+    );
+  });
+  return partialMatches.length === 1 ? partialMatches[0] : null;
+}
+
+function computeComposeRecipientMatches(queryRaw) {
+  const query = String(queryRaw || "").trim().toLowerCase();
+  if (!query) return state.contacts.slice(0, 8);
+  return state.contacts
+    .filter((contact) => {
+      const fields = getComposeContactSearchFields(contact);
+      const haystack = [
+        fields.name,
+        fields.detailName,
+        fields.alias,
+        fields.email,
+        fields.fingerprint,
+      ].join(" ").toLowerCase();
+      return haystack.includes(query);
+    })
+    .slice(0, 8);
+}
+
+function selectComposeRecipientFromDropdown(row, contact) {
+  const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+  if (!contactInput) return;
+  contactInput.value = contact.name || contact.fingerprint;
+  closeComposeRecipientDropdown(row);
+  updateComposeRecipientRowMeta(row);
+}
+
+function renderComposeRecipientDropdown(row, matches, query) {
+  const dropdown = row.querySelector("[data-mail-recipient-dropdown='true']");
+  if (!dropdown) return;
+  dropdown.innerHTML = "";
+  row.setAttribute("data-mail-recipient-highlight", "-1");
+  if (!matches.length) {
+    dropdown.innerHTML = '<div class="contact-search-no-results">No matching contacts</div>';
+    dropdown.classList.add("active");
+    return;
+  }
+  matches.forEach((contact, index) => {
+    const fields = getComposeContactSearchFields(contact);
+    const aliasLabel = fields.alias ? ` • alias: ${fields.alias}` : "";
+    const emailLabel = fields.email ? ` • ${fields.email}` : "";
+    const detailLabel = fields.detailName ? ` • ${fields.detailName}` : "";
+    const item = document.createElement("div");
+    item.className = "contact-search-item";
+    item.dataset.index = String(index);
+    item.innerHTML = `
+      <div class="contact-search-item-name">${escapeHtml(fields.name || "(no name)")}</div>
+      <div class="contact-search-item-details">
+        <span class="contact-search-item-detail">${escapeHtml(`${detailLabel}${aliasLabel}${emailLabel}`.replace(/^ • /, ""))}</span>
+      </div>
+      <div class="contact-search-item-fingerprint">${escapeHtml(`${fields.fingerprint.slice(0, 24)}...`)}</div>
+    `;
+    item.addEventListener("click", () => {
+      selectComposeRecipientFromDropdown(row, contact);
+    });
+    item.addEventListener("mouseenter", () => {
+      row.setAttribute("data-mail-recipient-highlight", String(index));
+      updateComposeRecipientHighlight(row);
+    });
+    dropdown.appendChild(item);
+  });
+  if (query) {
+    dropdown.classList.add("active");
+  } else {
+    dropdown.classList.add("active");
+  }
+}
+
+function updateComposeRecipientHighlight(row) {
+  const dropdown = row.querySelector("[data-mail-recipient-dropdown='true']");
+  if (!dropdown) return;
+  const highlighted = Number(row.getAttribute("data-mail-recipient-highlight") || "-1");
+  const items = dropdown.querySelectorAll(".contact-search-item");
+  items.forEach((item, idx) => {
+    item.classList.toggle("highlighted", idx === highlighted);
+    if (idx === highlighted) {
+      item.scrollIntoView({ block: "nearest" });
+    }
+  });
+}
+
+function updateComposeRecipientRowMeta(row) {
+  const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+  const emailInput = row.querySelector("input[data-mail-recipient-email='true']");
+  const fingerprintEl = row.querySelector("[data-mail-recipient-fingerprint='true']");
+  const warningEl = row.querySelector("[data-mail-recipient-warning='true']");
+  if (!contactInput || !emailInput || !fingerprintEl || !warningEl) return;
+
+  const query = contactInput.value.trim().toLowerCase();
+  const matches = computeComposeRecipientMatches(query);
+  renderComposeRecipientDropdown(row, matches, query);
+
+  const contact = findContactForComposeRecipient(contactInput.value);
+  if (!contact) {
+    fingerprintEl.textContent = "Fingerprint: (contact not resolved)";
+    warningEl.textContent = "";
+    updateMailComposeSendState();
+    return;
+  }
+  const detailEmail = (contact.details?.email && Array.isArray(contact.details.email))
+    ? contact.details.email[0]
+    : (contact.localEmail || "");
+  if (!emailInput.value.trim() && detailEmail) {
+    emailInput.value = detailEmail;
+  }
+  const typedEmail = emailInput.value.trim().toLowerCase();
+  const contactEmail = String(detailEmail || "").trim().toLowerCase();
+  warningEl.textContent = typedEmail && contactEmail && typedEmail !== contactEmail
+    ? "Email does not match this contact's published email detail."
+    : "";
+  fingerprintEl.textContent = `Fingerprint: ${contact.fingerprint}`;
+  updateMailComposeSendState();
+}
+
+function addComposeRecipientRow(prefill = {}) {
+  const list = document.getElementById("mail-compose-recipients");
+  if (!list) return;
+  const row = document.createElement("div");
+  row.className = "stack";
+  row.dataset.mailRecipientRow = "true";
+  row.innerHTML = `
+    <div class="two">
+      <label>Contact
+        <div class="contact-search-wrapper" data-mail-recipient-search="true">
+          <input type="text" data-mail-recipient-contact="true" placeholder="Search by name, email, alias, or fingerprint" autocomplete="off" />
+          <button type="button" class="contact-search-clear" data-mail-recipient-clear="true" title="Clear">×</button>
+          <div class="contact-search-dropdown" data-mail-recipient-dropdown="true"></div>
+        </div>
+      </label>
+      <label>Email
+        <input type="email" data-mail-recipient-email="true" placeholder="recipient@example.com" />
+      </label>
+    </div>
+    <div class="row" style="justify-content: space-between; align-items: center;">
+      <span class="small muted" data-mail-recipient-fingerprint="true">Fingerprint: (contact not resolved)</span>
+      <button type="button" class="secondary" data-mail-recipient-remove="true">Remove</button>
+    </div>
+    <div class="small" style="color: #c97a00;" data-mail-recipient-warning="true"></div>
+  `;
+  list.appendChild(row);
+  const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+  const emailInput = row.querySelector("input[data-mail-recipient-email='true']");
+  const removeBtn = row.querySelector("button[data-mail-recipient-remove='true']");
+  if (contactInput) contactInput.value = String(prefill.contact || "");
+  if (emailInput) emailInput.value = String(prefill.email || "");
+  ensureComposeRecipientOutsideClickListener();
+  contactInput?.addEventListener("input", () => updateComposeRecipientRowMeta(row));
+  contactInput?.addEventListener("focus", () => updateComposeRecipientRowMeta(row));
+  contactInput?.addEventListener("keydown", (event) => {
+    const dropdown = row.querySelector("[data-mail-recipient-dropdown='true']");
+    const items = dropdown?.querySelectorAll(".contact-search-item") || [];
+    let highlighted = Number(row.getAttribute("data-mail-recipient-highlight") || "-1");
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      highlighted = Math.min(highlighted + 1, items.length - 1);
+      row.setAttribute("data-mail-recipient-highlight", String(highlighted));
+      updateComposeRecipientHighlight(row);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      highlighted = Math.max(highlighted - 1, 0);
+      row.setAttribute("data-mail-recipient-highlight", String(highlighted));
+      updateComposeRecipientHighlight(row);
+      return;
+    }
+    if (event.key === "Escape") {
+      closeComposeRecipientDropdown(row);
+      return;
+    }
+    if (event.key === "Enter" && items.length) {
+      event.preventDefault();
+      const target = highlighted >= 0 ? items[highlighted] : items[0];
+      target?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    }
+  });
+  emailInput?.addEventListener("input", () => updateComposeRecipientRowMeta(row));
+  const clearBtn = row.querySelector("button[data-mail-recipient-clear='true']");
+  clearBtn?.addEventListener("click", () => {
+    if (contactInput) contactInput.value = "";
+    closeComposeRecipientDropdown(row);
+    updateComposeRecipientRowMeta(row);
+    contactInput?.focus();
+  });
+  removeBtn?.addEventListener("click", () => {
+    row.remove();
+    updateMailComposeSendState();
+  });
+  updateComposeRecipientRowMeta(row);
+}
+
+function getComposeRecipientsPayload() {
+  const rows = Array.from(document.querySelectorAll("[data-mail-recipient-row='true']"));
+  const recipients = [];
+  for (const row of rows) {
+    const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+    const emailInput = row.querySelector("input[data-mail-recipient-email='true']");
+    const contact = contactInput?.value?.trim() || "";
+    const email = emailInput?.value?.trim() || "";
+    if (!contact && !email) continue;
+    const resolved = findContactForComposeRecipient(contact);
+    if (!resolved) {
+      throw new Error(`Contact not found: ${contact || "(empty)"}`);
+    }
+    if (!email) {
+      throw new Error(`Email is required for contact ${resolved.name}`);
+    }
+    recipients.push({ contact: resolved.name, email });
+  }
+  return recipients;
+}
+
 function renderMailReaderAttachments() {
   const wrap = document.getElementById("mail-reader-attachments-wrap");
   const list = document.getElementById("mail-reader-attachments");
@@ -514,6 +797,10 @@ function renderMailReaderAttachments() {
               password,
               sender: sender || undefined,
               expectedBodyPayloadHash: state.selectedMailMessage?.ebpBodyPayloadHash || undefined,
+              contentKey: state.selectedMailMessageContentKey || undefined,
+              expectedAttachmentHash: (
+                state.selectedMailMessageAttachmentManifest || []
+              ).find((entry) => entry.attachmentId === payload?.attachmentId)?.ciphertextSha256 || undefined,
             }),
           });
           state.decryptedMailAttachments[key] = res;
@@ -640,6 +927,9 @@ function renderMailMessages() {
       state.mailMessageLoadRequestId = requestId;
       state.selectedMailMessage = null;
       state.decryptedMailAttachments = {};
+      state.selectedMailMessageContentKey = null;
+      state.selectedMailMessageAttachmentManifest = [];
+      state.selectedMailMessageRecipientFingerprints = [];
       state.selectedMailMessageUid = String(msg.uid);
       renderSelectedMailMessageBody();
       updateVerifyResult("mail-verify-result", null, null);
@@ -673,6 +963,9 @@ function renderMailMessages() {
         if (requestId !== state.mailMessageLoadRequestId) return;
         state.selectedMailMessage = detail;
         state.decryptedMailAttachments = {};
+        state.selectedMailMessageContentKey = null;
+        state.selectedMailMessageAttachmentManifest = [];
+        state.selectedMailMessageRecipientFingerprints = [];
         if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
         setMailMessageLoading(false);
         renderMailMessages();
@@ -1039,11 +1332,21 @@ export function initMailPage() {
           text: res.message || "",
           html: "",
         };
+        state.selectedMailMessageContentKey = res.contentKey || null;
+        state.selectedMailMessageAttachmentManifest = Array.isArray(res.attachmentManifest)
+          ? res.attachmentManifest
+          : [];
+        state.selectedMailMessageRecipientFingerprints = Array.isArray(res.recipientFingerprints)
+          ? res.recipientFingerprints
+          : [];
         renderSelectedMailMessageBody();
         updateVerifyResult("mail-verify-result", res.verified, res.verifyStatus);
         renderMailVerifyMeta(res);
         setStatus("EBP payload decrypted", "success");
       } catch (err) {
+        state.selectedMailMessageContentKey = null;
+        state.selectedMailMessageAttachmentManifest = [];
+        state.selectedMailMessageRecipientFingerprints = [];
         updateVerifyResult("mail-verify-result", null, null);
         renderMailVerifyMeta(null);
         setStatus(err.message, "error");
@@ -1064,6 +1367,11 @@ export function initMailPage() {
       const composeSubject = document.getElementById("mail-compose-subject");
       const composeBody = document.getElementById("mail-compose-body");
       if (composeTo) composeTo.value = fromAddress;
+      const recipientsWrap = document.getElementById("mail-compose-recipients");
+      if (recipientsWrap) {
+        recipientsWrap.innerHTML = "";
+        addComposeRecipientRow({ email: fromAddress });
+      }
       if (composeSubject) composeSubject.value = subject.toLowerCase().startsWith("re:") ? subject : `Re: ${subject || "(no subject)"}`;
       setMailTab("compose");
       composeBody?.focus();
@@ -1074,18 +1382,40 @@ export function initMailPage() {
   const composeForm = document.getElementById("mail-compose-form");
   if (composeForm) {
     const modeEl = document.getElementById("mail-compose-mode");
-    const recipientEl = document.getElementById("mail-compose-recipient");
+    const addRecipientBtn = document.getElementById("mail-compose-add-recipient");
+    const toWrap = document.getElementById("mail-compose-to-wrap");
+    const recipientsWrap = document.getElementById("mail-compose-recipients-wrap");
     const attachmentsEl = document.getElementById("mail-compose-attachments");
-    if (modeEl) modeEl.addEventListener("change", updateMailComposeSendState);
-    if (recipientEl) recipientEl.addEventListener("input", updateMailComposeSendState);
+    if (modeEl) {
+      modeEl.addEventListener("change", () => {
+        const isEbp = modeEl.value === "ebp-encrypt";
+        if (toWrap) toWrap.style.display = isEbp ? "none" : "";
+        if (recipientsWrap) recipientsWrap.style.display = isEbp ? "" : "none";
+        updateMailComposeSendState();
+      });
+    }
+    if (addRecipientBtn) {
+      addRecipientBtn.addEventListener("click", () => {
+        addComposeRecipientRow();
+      });
+    }
     if (attachmentsEl) {
       attachmentsEl.addEventListener("change", () => {
         state.mailComposeAttachments = Array.from(attachmentsEl.files || []);
         renderComposeAttachments();
       });
     }
+    const recipientList = document.getElementById("mail-compose-recipients");
+    if (recipientList && !recipientList.children.length) {
+      addComposeRecipientRow();
+    }
     updateMailComposeSendState();
     renderComposeAttachments();
+    if (modeEl) {
+      const isEbp = modeEl.value === "ebp-encrypt";
+      if (toWrap) toWrap.style.display = isEbp ? "none" : "";
+      if (recipientsWrap) recipientsWrap.style.display = isEbp ? "" : "none";
+    }
 
     composeForm.addEventListener("submit", async (e) => {
       e.preventDefault();
@@ -1096,8 +1426,8 @@ export function initMailPage() {
           const subject = document.getElementById("mail-compose-subject").value.trim();
           const mode = document.getElementById("mail-compose-mode").value;
           const body = document.getElementById("mail-compose-body").value;
-          const recipient = document.getElementById("mail-compose-recipient").value.trim();
-          if (!to || !subject) throw new Error("To and subject are required");
+          if (!subject) throw new Error("Subject is required");
+          if (mode !== "ebp-encrypt" && !to) throw new Error("To and subject are required");
           const attachments = await Promise.all(
             state.mailComposeAttachments.map(async (file) => ({
               fileName: file.name || "attachment.bin",
@@ -1107,17 +1437,19 @@ export function initMailPage() {
           );
 
           if (mode === "ebp-encrypt") {
-            if (!recipient) throw new Error("EBP recipient contact is required for EBP mode");
+            const recipients = getComposeRecipientsPayload();
+            if (!recipients.length) {
+              throw new Error("At least one EBP recipient row is required");
+            }
             const password = await requestPassword("Enter password to sign/encrypt this email and attachments");
             if (!password) return;
             await api("/mail/send-ebp", {
               method: "POST",
               body: JSON.stringify({
                 accountId: state.selectedMailAccountId || undefined,
-                to,
                 subject,
                 message: body,
-                recipient,
+                recipients,
                 password,
                 includePublicKeys: state.mailIncludePublicKeys,
                 attachments,
@@ -1138,6 +1470,13 @@ export function initMailPage() {
           setStatus("Email sent", "success");
           document.getElementById("mail-compose-subject").value = "";
           document.getElementById("mail-compose-body").value = "";
+          if (mode === "ebp-encrypt") {
+            const list = document.getElementById("mail-compose-recipients");
+            if (list) {
+              list.innerHTML = "";
+              addComposeRecipientRow();
+            }
+          }
           clearComposeAttachments();
         } catch (err) {
           setStatus(err.message, "error");

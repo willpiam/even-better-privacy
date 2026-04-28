@@ -34,3 +34,34 @@ export function buildRecipientBoundEnvelope(
 ): string {
 	return buildRecipientBoundEnvelopeFromHash(recipientFingerprint, sha256Hex(message), salt);
 }
+
+export type MultiRecipientAttachmentManifestEntry = {
+	attachmentId: string;
+	ciphertextSha256: string;
+};
+
+export function buildMultiRecipientBoundEnvelope(
+	recipientFingerprints: string[],
+	message: string,
+	attachmentManifest?: MultiRecipientAttachmentManifestEntry[],
+	salt?: string,
+): string {
+	const canonicalRecipients = [...recipientFingerprints]
+		.map((item) => item.trim())
+		.filter((item) => item.length > 0)
+		.sort();
+	const canonicalManifest = (attachmentManifest ?? [])
+		.map((item) => ({
+			attachmentId: item.attachmentId,
+			ciphertextSha256: item.ciphertextSha256,
+		}))
+		.sort((a, b) => a.attachmentId.localeCompare(b.attachmentId));
+	const canonicalJson = JSON.stringify({
+		tag: "EBP-MULTIRECIPIENT-V3",
+		message,
+		recipientFingerprints: canonicalRecipients,
+		attachmentManifest: canonicalManifest,
+	});
+	const canonicalHash = sha256Hex(canonicalJson);
+	return `ebp::messagehash::v3::${canonicalHash}::${salt ?? ""}`;
+}

@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-04-28] feature | multi-recipient-email
+
+- Added multi-recipient payload documentation: `ebp-encrypted-signed-message-multi` and `ebp-encrypted-signed-email-attachment-multi` with envelope v3 recipient-set/attachment-manifest signature binding.
+- Updated [[ml-kem]] with the ML-KEM key-wrap pattern used to encapsulate one AES content key for many recipients.
+- Updated [[overview]] to reflect shared-content-key multi-recipient native email support.
+- Updated: [[message-payload-formats]], [[ml-kem]], [[overview]].
+
 ## [2026-04-28] update | mail message load reliability remediation
 
 - Implemented bounded and instrumented message-read flow: `GET /api/v1/mail/messages`, `GET /api/v1/mail/message`, and `GET /api/v1/mail/message/attachment` now emit timing metadata/logs and apply step timeouts to IMAP connect/lock/fetch/parse stages.

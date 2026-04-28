@@ -7,7 +7,6 @@ const contactSearchFields = [
   { inputId: "dec-sender", dropdownId: "dec-sender-dropdown" },
   { inputId: "enc-file-recipient", dropdownId: "enc-file-recipient-dropdown" },
   { inputId: "dec-file-sender", dropdownId: "dec-file-sender-dropdown" },
-  { inputId: "mail-compose-recipient", dropdownId: "mail-compose-recipient-dropdown" },
   { inputId: "certificate-other-fingerprint", dropdownId: "certificate-other-fingerprint-dropdown" },
 ];
 
@@ -219,11 +218,15 @@ export function closeAllDropdowns() {
 
 export function updateMailComposeSendState() {
   const modeEl = document.getElementById("mail-compose-mode");
-  const recipientEl = document.getElementById("mail-compose-recipient");
   const sendBtn = document.getElementById("mail-compose-send-btn");
-  if (!modeEl || !recipientEl || !sendBtn) return;
+  if (!modeEl || !sendBtn) return;
   const requiresRecipient = modeEl.value === "ebp-encrypt";
-  const hasRecipient = recipientEl.value.trim().length > 0;
+  const rows = Array.from(document.querySelectorAll("[data-mail-recipient-row='true']"));
+  const hasRecipient = rows.some((row) => {
+    const contact = row.querySelector("input[data-mail-recipient-contact='true']");
+    const email = row.querySelector("input[data-mail-recipient-email='true']");
+    return Boolean(contact?.value?.trim() && email?.value?.trim());
+  });
   sendBtn.disabled = requiresRecipient && !hasRecipient;
 }
 

@@ -29,9 +29,19 @@ export type EncryptedSignedEmailAttachmentPayload = {
 	ciphertext: string;
 };
 
+export type EncryptedSignedEmailAttachmentMultiPayload = {
+	type: "ebp-encrypted-signed-email-attachment-multi";
+	version: typeof FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachmentMulti;
+	senderFingerprint: string;
+	attachmentId: string;
+	contentNonce: string;
+	ciphertext: string;
+};
+
 export type AnyEncryptedEmailAttachmentPayload =
 	| EncryptedEmailAttachmentPayload
-	| EncryptedSignedEmailAttachmentPayload;
+	| EncryptedSignedEmailAttachmentPayload
+	| EncryptedSignedEmailAttachmentMultiPayload;
 
 function isNonEmptyString(value: unknown): value is string {
 	return typeof value === "string" && value.trim().length > 0;
@@ -115,9 +125,6 @@ export function parseEncryptedEmailAttachmentPayload(
 	if (!isNonEmptyString(payload.type)) {
 		throw new Error("Missing encrypted email attachment payload type");
 	}
-	if (!isNonEmptyString(payload.recipientFingerprint)) {
-		throw new Error("Missing encrypted email attachment recipientFingerprint");
-	}
 	if (!isNonEmptyString(payload.attachmentId)) {
 		throw new Error("Missing encrypted email attachment attachmentId");
 	}
@@ -125,6 +132,9 @@ export function parseEncryptedEmailAttachmentPayload(
 		throw new Error("Missing encrypted email attachment ciphertext");
 	}
 	if (payload.type === "ebp-encrypted-email-attachment") {
+		if (!isNonEmptyString(payload.recipientFingerprint)) {
+			throw new Error("Missing encrypted email attachment recipientFingerprint");
+		}
 		if (payload.version !== FILE_FORMAT_VERSIONS.encryptedEmailAttachment) {
 			throw new Error("Unsupported encrypted email attachment version");
 		}
@@ -137,6 +147,9 @@ export function parseEncryptedEmailAttachmentPayload(
 		};
 	}
 	if (payload.type === "ebp-encrypted-signed-email-attachment") {
+		if (!isNonEmptyString(payload.recipientFingerprint)) {
+			throw new Error("Missing encrypted email attachment recipientFingerprint");
+		}
 		if (payload.version !== FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment) {
 			throw new Error("Unsupported signed encrypted email attachment version");
 		}
@@ -149,6 +162,25 @@ export function parseEncryptedEmailAttachmentPayload(
 			recipientFingerprint: payload.recipientFingerprint,
 			senderFingerprint: payload.senderFingerprint,
 			attachmentId: payload.attachmentId,
+			ciphertext: payload.ciphertext,
+		};
+	}
+	if (payload.type === "ebp-encrypted-signed-email-attachment-multi") {
+		if (payload.version !== FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachmentMulti) {
+			throw new Error("Unsupported signed encrypted email attachment multi version");
+		}
+		if (!isNonEmptyString(payload.senderFingerprint)) {
+			throw new Error("Missing encrypted signed email attachment senderFingerprint");
+		}
+		if (!isNonEmptyString(payload.contentNonce)) {
+			throw new Error("Missing encrypted signed email attachment contentNonce");
+		}
+		return {
+			type: payload.type,
+			version: payload.version,
+			senderFingerprint: payload.senderFingerprint,
+			attachmentId: payload.attachmentId,
+			contentNonce: payload.contentNonce,
 			ciphertext: payload.ciphertext,
 		};
 	}

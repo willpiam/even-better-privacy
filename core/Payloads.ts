@@ -40,11 +40,29 @@ export type EbpEncryptedSignedMessagePayload = {
   senderIdentity?: Record<string, unknown>;
 };
 
+export type EbpRecipientEncapsulationPayload = {
+  fingerprint: string;
+  kemCiphertext: string;
+  keyWrapNonce: string;
+  wrappedContentKey: string;
+};
+
+export type EbpEncryptedSignedMessageMultiPayload = {
+  type: "ebp-encrypted-signed-message-multi";
+  version: typeof FILE_FORMAT_VERSIONS.encryptedSignedMessageMulti;
+  senderFingerprint: string;
+  recipients: EbpRecipientEncapsulationPayload[];
+  contentNonce: string;
+  ciphertext: string;
+  senderIdentity?: Record<string, unknown>;
+};
+
 export type AnyMessagePayload =
   | EbpSignaturePayload
   | EbpSignedMessagePayload
   | EbpEncryptedMessagePayload
-  | EbpEncryptedSignedMessagePayload;
+  | EbpEncryptedSignedMessagePayload
+  | EbpEncryptedSignedMessageMultiPayload;
 
 export function buildDetachedSignaturePayload(input: {
   fingerprint: string;
@@ -107,6 +125,24 @@ export function buildEncryptedSignedMessagePayload(input: {
     version: FILE_FORMAT_VERSIONS.encryptedSignedMessage,
     recipientFingerprint: input.recipientFingerprint,
     senderFingerprint: input.senderFingerprint,
+    ciphertext: input.ciphertext,
+    senderIdentity: input.senderIdentity,
+  };
+}
+
+export function buildEncryptedSignedMessageMultiPayload(input: {
+  senderFingerprint: string;
+  recipients: EbpRecipientEncapsulationPayload[];
+  contentNonce: string;
+  ciphertext: string;
+  senderIdentity?: Record<string, unknown>;
+}): EbpEncryptedSignedMessageMultiPayload {
+  return {
+    type: "ebp-encrypted-signed-message-multi",
+    version: FILE_FORMAT_VERSIONS.encryptedSignedMessageMulti,
+    senderFingerprint: input.senderFingerprint,
+    recipients: input.recipients,
+    contentNonce: input.contentNonce,
     ciphertext: input.ciphertext,
     senderIdentity: input.senderIdentity,
   };
