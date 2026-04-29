@@ -7,14 +7,17 @@ import {
   ensureDir,
   ensureServer,
   getContext,
+  identityLoadErrorMessage,
   listIdentityNames,
   normalizeServerUrl,
   readState,
+  safeFileName,
   stableStringify,
   updateState,
   writeState,
 } from "../utils.ts";
 import { ExternalIdentity } from "../../core/Identity.ts";
+import { DecryptionAuthError, StorageFormatError } from "../../core/AES.ts";
 
 Deno.test({
   name: "state helpers read/write/update round trip",
@@ -183,6 +186,33 @@ Deno.test("ensureServer uses override then context and trims slashes", () => {
 Deno.test("apiUrl joins paths safely", () => {
   assertEquals(apiUrl("http://example.com", "/api"), "http://example.com/api");
   assertEquals(apiUrl("http://example.com/", "api"), "http://example.com/api");
+});
+
+Deno.test("safeFileName sanitizes path traversal and caps long names", () => {
+  assertEquals(safeFileName("../nested/evil\u0000..name.txt"), "evil_name.txt");
+
+  const long = `${"a".repeat(250)}.txt`;
+  const safe = safeFileName(long);
+  assert(safe.endsWith(".txt"));
+  assert(new TextEncoder().encode(safe).length <= 200);
+});
+
+Deno.test("safeFileName does not split multibyte characters", () => {
+  const safe = safeFileName(`${"é".repeat(120)}.txt`);
+  assert(safe.endsWith(".txt"));
+  assert(new TextEncoder().encode(safe).length <= 200);
+  assert(!safe.includes("\uFFFD"));
+});
+
+Deno.test("identityLoadErrorMessage distinguishes auth and storage failures", () => {
+  assertEquals(
+    identityLoadErrorMessage(new DecryptionAuthError()),
+    "Failed to decrypt identity: wrong password or tampered data.",
+  );
+  assertEquals(
+    identityLoadErrorMessage(new StorageFormatError("Identity file is not valid JSON")),
+    "Failed to load identity: Identity file is not valid JSON",
+  );
 });
 
 Deno.test("normalizeServerUrl requires HTTPS except loopback HTTP", () => {

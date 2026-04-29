@@ -10,7 +10,7 @@
  * - MINOR: New features that are backwards compatible
  * - PATCH: Bug fixes
  */
-export const PROTOCOL_VERSION = "0.1.0";
+export const PROTOCOL_VERSION = "0.1.1";
 
 /**
  * File/payload/ciphertext format versions.
@@ -41,15 +41,37 @@ export const FILE_FORMAT_VERSIONS = {
  */
 export const MIN_SUPPORTED_PROTOCOL_VERSION = "0.0.1";
 
+type ParsedProtocolVersion = {
+    major: number;
+    minor: number;
+    patch: number;
+};
+
+function parseProtocolVersion(version: string): ParsedProtocolVersion | null {
+    const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(version);
+    if (!match) return null;
+    return {
+        major: Number(match[1]),
+        minor: Number(match[2]),
+        patch: Number(match[3]),
+    };
+}
+
 /**
  * Check if a protocol version is supported by this implementation.
+ *
+ * Protocol compatibility is scoped to the current major version. Patch is
+ * parsed and compared for malformed/stale-version rejection, but patch-only
+ * differences are intentionally compatible.
  */
 export function isProtocolVersionSupported(version: string): boolean {
-    const [major, minor] = version.split('.').map(Number);
-    const [minMajor, minMinor] = MIN_SUPPORTED_PROTOCOL_VERSION.split('.').map(Number);
-    
-    if (major < minMajor) return false;
-    if (major === minMajor && minor < minMinor) return false;
+    const parsed = parseProtocolVersion(version);
+    const min = parseProtocolVersion(MIN_SUPPORTED_PROTOCOL_VERSION);
+    const current = parseProtocolVersion(PROTOCOL_VERSION);
+    if (!parsed || !min || !current) return false;
+
+    if (parsed.major !== current.major) return false;
+    if (compareProtocolVersions(version, MIN_SUPPORTED_PROTOCOL_VERSION) < 0) return false;
     return true;
 }
 

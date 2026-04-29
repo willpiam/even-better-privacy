@@ -1,0 +1,4 @@
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://esm.sh; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://esm.sh https://ebp-cqyo.onrender.com; form-action 'self'; base-uri 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer

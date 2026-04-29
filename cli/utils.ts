@@ -1,4 +1,5 @@
 import { ExternalIdentity, Identity } from "../core/Identity.ts";
+import { DecryptionAuthError, StorageFormatError } from "../core/AES.ts";
 import {
   buildIdentityStateFromExternal,
   canonicalize,
@@ -337,11 +338,45 @@ export function baseName(path: string): string {
   return parts[parts.length - 1] || "encrypted.bin";
 }
 
+const MAX_SAFE_FILE_NAME_BYTES = 200;
+
 export function safeFileName(fileName: string): string {
-  return baseName(fileName).replace(/[\u0000-\u001F\u007F]/g, "").replace(
+  const cleaned = baseName(fileName).replace(/[\u0000-\u001F\u007F]/g, "").replace(
     /\.\./g,
     "_",
   );
+  return truncateUtf8FileName(cleaned, MAX_SAFE_FILE_NAME_BYTES);
+}
+
+function truncateUtf8FileName(fileName: string, maxBytes: number): string {
+  const encoder = new TextEncoder();
+  if (encoder.encode(fileName).length <= maxBytes) return fileName;
+
+  const dot = fileName.lastIndexOf(".");
+  const extension = dot > 0 && dot < fileName.length - 1 ? fileName.slice(dot) : "";
+  const extensionBytes = encoder.encode(extension).length;
+  const stemBudget = Math.max(1, maxBytes - extensionBytes);
+  const stem = extension ? fileName.slice(0, dot) : fileName;
+
+  let out = "";
+  let used = 0;
+  for (const ch of stem) {
+    const len = encoder.encode(ch).length;
+    if (used + len > stemBudget) break;
+    out += ch;
+    used += len;
+  }
+  return `${out}${extension}`;
+}
+
+export function identityLoadErrorMessage(error: unknown): string {
+  if (error instanceof DecryptionAuthError) {
+    return "Failed to decrypt identity: wrong password or tampered data.";
+  }
+  if (error instanceof StorageFormatError) {
+    return `Failed to load identity: ${error.message}`;
+  }
+  return "Failed to load identity: unexpected identity file error.";
 }
 
 export async function loadIdentity(
@@ -364,8 +399,8 @@ export async function loadIdentity(
   let identity: Identity;
   try {
     identity = Identity.fromStorageFormat(storageData, pwd);
-  } catch {
-    console.error("Failed to decrypt identity. Wrong password?");
+  } catch (e) {
+    console.error(identityLoadErrorMessage(e));
     Deno.exit(1);
   }
 

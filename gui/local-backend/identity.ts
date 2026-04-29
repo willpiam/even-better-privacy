@@ -1,4 +1,5 @@
 import { Identity, type IdentityPublicData } from "../../core/Identity.ts";
+import { DecryptionAuthError, StorageFormatError } from "../../core/AES.ts";
 import { type CLIContext, ensurePrivateDir } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 
@@ -16,8 +17,14 @@ export async function loadIdentity(ctx: CLIContext, password: string): Promise<I
 	let identity: Identity;
 	try {
 		identity = Identity.fromStorageFormat(storageData, password);
-	} catch {
-		throw new HttpError(STATUS.Unauthorized, "failed to decrypt identity (wrong password?)");
+	} catch (e) {
+		if (e instanceof DecryptionAuthError) {
+			throw new HttpError(STATUS.Unauthorized, "failed to decrypt identity (wrong password or tampered data)");
+		}
+		if (e instanceof StorageFormatError) {
+			throw new HttpError(STATUS.BadRequest, `invalid identity file: ${e.message}`);
+		}
+		throw e;
 	}
 
 	// F-STORAGE-02: transparent KDF upgrade on successful unlock.

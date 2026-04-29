@@ -1,4 +1,4 @@
-import { AES } from "../core/AES.ts";
+import { AES, DecryptionAuthError, StorageFormatError } from "../core/AES.ts";
 import {
 	assertEquals,
 	assertNotEquals,
@@ -34,8 +34,20 @@ Deno.test("AES decrypt fails with wrong password", () => {
 
 	assertThrows(
 		() => AES.decrypt(wrongPassword, ciphertext),
-		Error,
-		"Decryption failed",
+		DecryptionAuthError,
+		"Wrong password or tampered ciphertext",
+	);
+});
+
+Deno.test("AES decrypt fails with auth error for tampered ciphertext", () => {
+	const ciphertext = AES.encrypt("password", "secret message");
+	const bytes = Uint8Array.from(atob(ciphertext), (c) => c.charCodeAt(0));
+	bytes[bytes.length - 1] ^= 0x01;
+	const tampered = btoa(String.fromCharCode(...bytes));
+
+	assertThrows(
+		() => AES.decrypt("password", tampered),
+		DecryptionAuthError,
 	);
 });
 
@@ -52,14 +64,14 @@ Deno.test("AES encryption is randomized (different ciphertexts)", () => {
 Deno.test("AES decrypt rejects invalid payload", () => {
 	assertThrows(
 		() => AES.decrypt("pw", "not-base64@@"),
-		Error,
+		StorageFormatError,
 	);
 
 	// Too short once base64-decoded (e.g. empty string)
 	const emptyEncoded = "";
 	assertThrows(
 		() => AES.decrypt("pw", emptyEncoded),
-		Error,
+		StorageFormatError,
 		"Invalid ciphertext",
 	);
 });

@@ -4,7 +4,7 @@ import { SphincsSigningKey } from "./Sphincs.ts";
 import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
-import { AES } from "./AES.ts";
+import { AES, DecryptionAuthError, StorageFormatError } from "./AES.ts";
 import { hexToBytes, hexToString, stringToHex, toHex } from "./Hex.ts";
 import {
   FILE_FORMAT_VERSIONS,
@@ -1084,19 +1084,34 @@ export class Identity extends Key {
    * If password is omitted, returns an identity that can only verify/encrypt (public ops).
    */
   static fromStorageFormat(storageData: string, password?: string): Identity {
-    const parsed = JSON.parse(storageData);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(storageData);
+    } catch {
+      throw new StorageFormatError("Identity file is not valid JSON");
+    }
+    if (!parsed || typeof parsed !== "object") {
+      throw new StorageFormatError("Identity storage must be a JSON object");
+    }
+    const storage = parsed as Partial<IdentityStorageFormat>;
 
     // Handle new v2 format
-    if (parsed.version === FILE_FORMAT_VERSIONS.identityStorage) {
-      const pub = parsed.public as IdentityPublicData;
+    if (storage.version === FILE_FORMAT_VERSIONS.identityStorage) {
+      const pub = storage.public as IdentityPublicData | undefined;
+      if (!pub || typeof pub !== "object") {
+        throw new StorageFormatError("Missing public identity data");
+      }
+      if (typeof storage.encrypted !== "string" && password) {
+        throw new StorageFormatError("Missing encrypted private identity data");
+      }
 
       // Check protocol version compatibility
-      const fileProtocolVersion = parsed.protocolVersion ?? pub.protocolVersion;
+      const fileProtocolVersion = storage.protocolVersion ?? pub.protocolVersion;
       if (!fileProtocolVersion) {
-        throw new Error("Missing protocol version in identity storage format.");
+        throw new StorageFormatError("Missing protocol version in identity storage format.");
       }
       if (!isProtocolVersionSupported(fileProtocolVersion)) {
-        throw new Error(
+        throw new StorageFormatError(
           `Unsupported protocol version: ${fileProtocolVersion}. This implementation supports ${PROTOCOL_VERSION} and compatible versions.`,
         );
       }
@@ -1119,28 +1134,59 @@ export class Identity extends Key {
 
       if (password) {
         // Decrypt private keys for full access
-        const privateJson = AES.decrypt(password, parsed.encrypted);
-        const privateData = JSON.parse(privateJson);
-
-        switch (pub.signingKeyType) {
-          case "dilithium":
-            identity.signingKey = DilithiumSigningKey.fromJSON(
-              privateData.signingKey,
-            );
-            break;
-          case "sphincs":
-            identity.signingKey = SphincsSigningKey.fromJSON(
-              privateData.signingKey,
-            );
-            break;
+        let privateJson: string;
+        try {
+          privateJson = AES.decrypt(password, storage.encrypted!);
+        } catch (e) {
+          if (e instanceof DecryptionAuthError) throw e;
+          if (e instanceof StorageFormatError) throw e;
+          throw new StorageFormatError("Encrypted private identity data is invalid");
+        }
+        let privateData: { signingKey: string; encryptionKey: string };
+        try {
+          const parsedPrivate = JSON.parse(privateJson);
+          if (
+            !parsedPrivate ||
+            typeof parsedPrivate !== "object" ||
+            typeof parsedPrivate.signingKey !== "string" ||
+            typeof parsedPrivate.encryptionKey !== "string"
+          ) {
+            throw new StorageFormatError("Decrypted private identity data is missing keys");
+          }
+          privateData = parsedPrivate;
+        } catch (e) {
+          if (e instanceof StorageFormatError) throw e;
+          throw new StorageFormatError("Decrypted private identity data is not valid JSON");
         }
 
-        switch (pub.encryptionKeyType) {
-          case "kyber":
-            identity.encryptionKey = KyberEncryptionKey.fromJSON(
-              privateData.encryptionKey,
-            );
-            break;
+        try {
+          switch (pub.signingKeyType) {
+            case "dilithium":
+              identity.signingKey = DilithiumSigningKey.fromJSON(
+                privateData.signingKey,
+              );
+              break;
+            case "sphincs":
+              identity.signingKey = SphincsSigningKey.fromJSON(
+                privateData.signingKey,
+              );
+              break;
+            default:
+              throw new StorageFormatError(`Unsupported signing key type: ${pub.signingKeyType}`);
+          }
+
+          switch (pub.encryptionKeyType) {
+            case "kyber":
+              identity.encryptionKey = KyberEncryptionKey.fromJSON(
+                privateData.encryptionKey,
+              );
+              break;
+            default:
+              throw new StorageFormatError(`Unsupported encryption key type: ${pub.encryptionKeyType}`);
+          }
+        } catch (e) {
+          if (e instanceof StorageFormatError) throw e;
+          throw new StorageFormatError("Private identity keys are corrupted or unsupported");
         }
       } else {
         // Public-only mode - create keys from public data only
@@ -1174,6 +1220,6 @@ export class Identity extends Key {
     }
 
     // Unknown format
-    throw new Error("Unknown identity storage format");
+    throw new StorageFormatError("Unknown identity storage format");
   }
 }

@@ -24,11 +24,25 @@ const ARGON2_MEMORY_KIB = 64 * 1024; // 64 MiB
 const ARGON2_ITERATIONS = 3;
 const ARGON2_PARALLELISM = 1;
 
+export class DecryptionAuthError extends Error {
+	constructor(message = "Wrong password or tampered ciphertext") {
+		super(message);
+		this.name = "DecryptionAuthError";
+	}
+}
+
+export class StorageFormatError extends Error {
+	constructor(message = "Invalid storage format") {
+		super(message);
+		this.name = "StorageFormatError";
+	}
+}
+
 function iterationsForVersion(version: number): number {
 	if (version === 1) return PBKDF2_ITERATIONS_V1;
 	if (version === 2) return PBKDF2_ITERATIONS_V2;
 	if (version === 3) return PBKDF2_ITERATIONS_V2;
-	throw new Error(`Unsupported ciphertext version: ${version}`);
+	throw new StorageFormatError(`Unsupported ciphertext version: ${version}`);
 }
 
 export class AES {
@@ -52,9 +66,14 @@ export class AES {
 	}
 
 	static decrypt(password: string, encoded: string): string {
-		const data = base64ToBytes(encoded);
+		let data: Uint8Array;
+		try {
+			data = base64ToBytes(encoded);
+		} catch {
+			throw new StorageFormatError("Invalid ciphertext encoding");
+		}
 		if (data.length < 1 + SALT_LENGTH + IV_LENGTH) {
-			throw new Error("Invalid ciphertext");
+			throw new StorageFormatError("Invalid ciphertext");
 		}
 
 		const version = data[0];
@@ -75,7 +94,7 @@ export class AES {
 		try {
 			plaintextBytes = decipher.decrypt(ciphertext);
 		} catch {
-			throw new Error("Decryption failed");
+			throw new DecryptionAuthError();
 		}
 
 		return decoder.decode(plaintextBytes);

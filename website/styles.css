@@ -100,6 +100,11 @@ h1 {
   max-width: 16ch;
 }
 
+.page-title {
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  max-width: none;
+}
+
 .lead {
   color: var(--ink-soft);
   font-size: 1.04rem;

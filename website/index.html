@@ -3,6 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self'; form-action 'self'; base-uri 'none'">
+  <meta http-equiv="X-Content-Type-Options" content="nosniff">
+  <meta http-equiv="Referrer-Policy" content="no-referrer">
   <title>EBP — Even Better Privacy</title>
   <meta
     name="description"
@@ -122,8 +126,8 @@
           <pre><code>deno task cli --help</code></pre>
         </article>
         <article class="card">
-          <h3>Built-In Email</h3>
-          <p>Sign, encrypt, decrypt, and verify messages directly in the EBP GUI email experience.</p>
+          <h3>Email</h3>
+          <p>Sign, encrypt, decrypt, and verify messages directly in the EBP GUI</p>
         </article>
       </div>
     </section>
