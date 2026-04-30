@@ -1,4 +1,7 @@
-FROM denoland/deno:2.6.6
+# F-DOCKER-01: pin both the human-readable Deno tag and immutable manifest-list
+# digest. Refresh with:
+#   docker buildx imagetools inspect denoland/deno:<version>
+FROM denoland/deno:2.6.6@sha256:08941c4fcc2f0448d34ca2452edeb5bca009bed29313079cfad0e5e2fa37710f
 
 WORKDIR /app
 

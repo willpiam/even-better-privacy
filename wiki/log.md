@@ -1,5 +1,35 @@
 # Wiki Log
 
+## [2026-04-30] ingest | Long-lived digital integrity using short-lived hash functions
+
+- Ingested `Long-lived-digital-integrity-using-short-lived-hash-functions.pdf` → [[source-long-lived-digital-integrity-using-short-lived-hash-functions]].
+- Updated: [[integrity-renewal]], [[key-management]], [[index.md]].
+- Contradictions noted: none; this source extends long-term verification guidance and explicitly reinforces that renewal applies to signatures.
+
+## [2026-04-30] remediation | all remaining audit findings
+
+- Remediated the remaining open findings in [[security-audit-2026-04/findings]], spanning core/storage, GUI local backend, Docker/build, Tauri desktop, and supply-chain/release process work.
+- Added storage authentication/AAD/key-type binding, stricter hex parsing and hierarchy signing tests, GUI path redaction/OAuth allowlisting/static traversal hardening, Docker/build/release lints, JSR dependency aliases, bundled sidecar resolution, and runtime mail OAuth client ID provisioning.
+- Added [[release-process]] and regenerated the remaining findings plot after the register was closed out.
+
+## [2026-04-30] remediation | above-foo grouped findings batch
+
+- Remediated the current findings above `foo(x)=8`: F-GUI-02, F-GUI-08, F-GUI-10, F-CRYPTO-04, F-CRYPTO-06, F-WEB-04, and F-TAURI-05.
+- Added bounded GUI JSON body parsing, OAuth start rate/pending caps, exclusive save-file writes, constructor-backed identity storage loading, decoded-byte fingerprint leaf hashing, safer verifier JSON object validation, and `0600` sidecar log permissions.
+- Regenerated the remaining findings plot after updating [[security-audit-2026-04/findings]].
+
+## [2026-04-30] update | audit findings planning skill documentation
+
+- Added [[analysis-address-recent-audit-findings-by-group-skill]] documenting the project skill that plans remediation for unresolved findings above `foo`, grouped by component/remediation type.
+- Captured the Plan Mode hard-gate behavior and the required final workflow step to remove solved-item handling where applicable and rerun `python plot_remaining_findings.py`.
+- Updated [[index.md]] under Analyses.
+
+## [2026-04-29] remediation | at-or-above-foo findings batch
+
+- Remediated the findings that plotted at or above `foo(x)=8`: F-WEB-03, F-SERVER-08, F-GUI-03, F-STORAGE-09, F-SERVER-13, F-CLI-04, F-CLI-06, F-STORAGE-11, and F-CRYPTO-11.
+- Added targeted coverage for filename length capping, protocol-version patch parsing, AES/auth vs storage-format error classification, static-site CSP coverage, password policy validation, identity registration replay behavior, and documented-password test fixtures.
+- Narrowed GUI Deno permissions and regenerated the remaining findings plot after pruning obsolete scoring patterns from `plot_remaining_findings.py`.
+
 ## [2026-04-28] remediation | above-foo findings batch
 
 - Remediated the findings that plotted above `foo(x)=8` in `remaining-findings-plot.png`: F-SERVER-06/07/10/11, F-CLI-02/03/05, F-WEB-02, F-GUI-12, F-CRYPTO-09/10.

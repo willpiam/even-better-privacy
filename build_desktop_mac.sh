@@ -36,7 +36,7 @@ else
 fi
 
 cd "${DESKTOP_DIR}"
-npm install
+npm ci
 
 # A previously mounted EBP volume can cause DMG bundling to fail.
 if [ -d "/Volumes/EBP" ]; then

@@ -2,9 +2,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import { base64ToBytes } from "./Base64.ts";
 import type { EncryptionKeyOptions, SigningKeyOptions } from "./Keys.ts";
 import { bech32 } from "bech32";
-import { toHex, concatBytes } from "./Hex.ts";
-
-const textEncoder = new TextEncoder();
+import { concatBytes, hexToBytes, toHex } from "./Hex.ts";
 
 export type IdentityFingerprintInput = {
   signingKeyType: SigningKeyOptions;
@@ -16,7 +14,10 @@ export type IdentityFingerprintInput = {
 export const FINGERPRINT_BYTE_LENGTH = 32;
 export const FINGERPRINT_HRPS = ["ebpdk", "ebpsk"] as const;
 
-function getFingerprintHrp(signingKeyType: SigningKeyOptions, encryptionKeyType: EncryptionKeyOptions): string {
+function getFingerprintHrp(
+  signingKeyType: SigningKeyOptions,
+  encryptionKeyType: EncryptionKeyOptions,
+): string {
   if (encryptionKeyType !== "kyber") {
     throw new Error(`Unsupported encryption key type: ${encryptionKeyType}`);
   }
@@ -41,22 +42,33 @@ export function computeEncryptionLeafRaw(
   _type: EncryptionKeyOptions,
   encryptionPublicKey: string,
 ): Uint8Array {
-  // Keep compatibility with current Kyber fingerprint behavior: hash the
-  // hex-string bytes rather than decoding hex to raw bytes.
-  return sha256(textEncoder.encode(encryptionPublicKey));
+  return sha256(hexToBytes(encryptionPublicKey));
 }
 
-export function computeIdentityMerkleRootRaw(input: IdentityFingerprintInput): Uint8Array {
-  const leftLeaf = computeSigningLeafRaw(input.signingKeyType, input.signingKey);
-  const rightLeaf = computeEncryptionLeafRaw(input.encryptionKeyType, input.encryptionKey);
+export function computeIdentityMerkleRootRaw(
+  input: IdentityFingerprintInput,
+): Uint8Array {
+  const leftLeaf = computeSigningLeafRaw(
+    input.signingKeyType,
+    input.signingKey,
+  );
+  const rightLeaf = computeEncryptionLeafRaw(
+    input.encryptionKeyType,
+    input.encryptionKey,
+  );
   return sha256(concatBytes(leftLeaf, rightLeaf));
 }
 
-export function computeIdentityFingerprintHex(input: IdentityFingerprintInput): string {
+export function computeIdentityFingerprintHex(
+  input: IdentityFingerprintInput,
+): string {
   return toHex(computeIdentityMerkleRootRaw(input));
 }
 
-export function encodeFingerprintBech32(rawFingerprint: Uint8Array, hrp: string): string {
+export function encodeFingerprintBech32(
+  rawFingerprint: Uint8Array,
+  hrp: string,
+): string {
   if (rawFingerprint.length !== FINGERPRINT_BYTE_LENGTH) {
     throw new Error(`Fingerprint must be ${FINGERPRINT_BYTE_LENGTH} bytes`);
   }
@@ -72,7 +84,9 @@ export function decodeFingerprintBech32(
   const decoded = bech32.decode(fingerprint);
   const bytes = Uint8Array.from(bech32.fromWords(decoded.words));
   if (bytes.length !== FINGERPRINT_BYTE_LENGTH) {
-    throw new Error(`Fingerprint payload must be ${FINGERPRINT_BYTE_LENGTH} bytes`);
+    throw new Error(
+      `Fingerprint payload must be ${FINGERPRINT_BYTE_LENGTH} bytes`,
+    );
   }
   return { hrp: decoded.prefix, bytes };
 }
@@ -80,15 +94,18 @@ export function decodeFingerprintBech32(
 export function isValidFingerprintBech32(fingerprint: string): boolean {
   try {
     const decoded = decodeFingerprintBech32(fingerprint);
-    return FINGERPRINT_HRPS.includes(decoded.hrp as (typeof FINGERPRINT_HRPS)[number]);
+    return FINGERPRINT_HRPS.includes(
+      decoded.hrp as (typeof FINGERPRINT_HRPS)[number],
+    );
   } catch {
     return false;
   }
 }
 
-export function computeIdentityFingerprint(input: IdentityFingerprintInput): string {
+export function computeIdentityFingerprint(
+  input: IdentityFingerprintInput,
+): string {
   const root = computeIdentityMerkleRootRaw(input);
   const hrp = getFingerprintHrp(input.signingKeyType, input.encryptionKeyType);
   return encodeFingerprintBech32(root, hrp);
 }
-

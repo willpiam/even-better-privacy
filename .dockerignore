@@ -1,0 +1,17 @@
+# F-DOCKER-02: default-deny the Docker build context and only include files
+# explicitly copied by Dockerfile.
+*
+!deno.json
+!deno.lock
+!app-version.ts
+!core/
+!core/**
+!server/
+!server/**
+
+# Keep local/runtime data out even if future allowlist entries broaden context.
+**/.env
+**/*.env
+**/*.log
+**/*.sqlite
+test_identities/

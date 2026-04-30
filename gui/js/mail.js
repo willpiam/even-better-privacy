@@ -825,7 +825,7 @@ function renderMailReaderAttachments() {
                 base64Content: decrypted.fileDataBase64,
               }),
             });
-            setStatus(`Saved to ${out.path}`, "success");
+            setStatus(`Saved to ~/Downloads/${out.filename}`, "success");
           } catch (err) {
             setStatus(err.message, "error");
           }

@@ -4,9 +4,15 @@ import {
   createRevocationCertificate,
   createSignedProof,
 } from "./helpers.ts";
-import { buildMessageHashEnvelopeFromHash, sha256Hex } from "../../core/MessageHash.ts";
+import {
+  buildMessageHashEnvelopeFromHash,
+  sha256Hex,
+} from "../../core/MessageHash.ts";
 
-function signHashedMessageForTest(message: string, sign: (message: string) => string): { messageHash: string; salt: string; signature: string } {
+function signHashedMessageForTest(
+  message: string,
+  sign: (message: string) => string,
+): { messageHash: string; salt: string; signature: string } {
   const messageHash = sha256Hex(message);
   const salt = "";
   const envelope = buildMessageHashEnvelopeFromHash(messageHash, salt);
@@ -60,7 +66,11 @@ async function registerIdentity(mod: MainModule) {
 async function postDetail(
   mod: MainModule,
   fingerprint: string,
-  signingKey: { sign: (msg: string) => string; variant: string; publicKey: string },
+  signingKey: {
+    sign: (msg: string) => string;
+    variant: string;
+    publicKey: string;
+  },
   path: string,
   detail: string,
   nonce = 0,
@@ -110,16 +120,57 @@ Deno.test("POST /identity then GET /identity returns stored record", async () =>
   });
 });
 
+Deno.test("POST /identity replay returns byte-identical response", async () => {
+  await withServer(async (mod) => {
+    const { payload } = createIdentityPayload();
+    const req = () =>
+      new Request("http://localhost/api/v1/identity", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+    const first = await mod.handleRequest(req());
+    const second = await mod.handleRequest(req());
+    assertEquals(first.status, 200);
+    assertEquals(second.status, 200);
+    assertEquals(await first.text(), await second.text());
+  });
+});
+
+Deno.test("POST /detail for unknown identity returns generic bad request", async () => {
+  await withServer(async (mod) => {
+    const { fingerprint, signingKey } = createIdentityPayload();
+    const res = await postDetail(mod, fingerprint, signingKey, "name", "Alice");
+    assertEquals(res.status, 400);
+    const body = await res.json();
+    assertEquals(body.error, "unknown subject");
+  });
+});
+
 Deno.test("POST /detail stores detail and rejects duplicate path", async () => {
   await withServer(async (mod) => {
     const { fingerprint, signingKey } = await registerIdentity(mod);
 
-    const first = await postDetail(mod, fingerprint, signingKey, "name", "Alice");
+    const first = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "name",
+      "Alice",
+    );
     assertEquals(first.status, 200);
     const firstBody = await first.json();
     assertEquals(firstBody.ok, true);
 
-    const duplicate = await postDetail(mod, fingerprint, signingKey, "name", "Alice", 1);
+    const duplicate = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "name",
+      "Alice",
+      1,
+    );
     assertEquals(duplicate.status, 409);
 
     const identityRes = await mod.handleRequest(
@@ -211,11 +262,20 @@ Deno.test("Revoked detail rejects old proof but accepts new proof", async () => 
 Deno.test("Email detail is unverified until verification endpoint is called", async () => {
   await withServer(async (mod, _dbPath) => {
     const { fingerprint, signingKey } = await registerIdentity(mod);
-    const detailRes = await postDetail(mod, fingerprint, signingKey, "email", "user@example.com", 0);
+    const detailRes = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "email",
+      "user@example.com",
+      0,
+    );
     assertEquals(detailRes.status, 200);
 
     const db = await mod.getDbForTests();
-    const rows = await db.query<[number | string | bigint | null, string | null]>(
+    const rows = await db.query<
+      [number | string | bigint | null, string | null]
+    >(
       "SELECT verified_at, verification_token FROM details WHERE identity_fingerprint = ? AND path = ?",
       [fingerprint, "email"],
     );
@@ -227,7 +287,10 @@ Deno.test("Email detail is unverified until verification endpoint is called", as
     const verifyRes = await mod.handleRequest(
       new Request("http://localhost/api/v1/verify-email", {
         method: "POST",
-        headers: { "content-type": "application/json", "accept": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+        },
         body: JSON.stringify({ token: verificationToken }),
       }),
     );
@@ -235,7 +298,9 @@ Deno.test("Email detail is unverified until verification endpoint is called", as
     const verifyBody = await verifyRes.json();
     assertEquals(verifyBody.ok, true);
 
-    const refreshedRows = await db.query<[number | string | bigint | null, string | null]>(
+    const refreshedRows = await db.query<
+      [number | string | bigint | null, string | null]
+    >(
       "SELECT verified_at, verification_token FROM details WHERE identity_fingerprint = ? AND path = ?",
       [fingerprint, "email"],
     );
@@ -251,7 +316,14 @@ Deno.test("Revocation endpoints revoke details and identities and reflect in lis
     const { fingerprint, signingKey } = await registerIdentity(mod);
 
     // Add a detail with nonce 0
-    const detailRes = await postDetail(mod, fingerprint, signingKey, "email", "user@example.com", 0);
+    const detailRes = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "email",
+      "user@example.com",
+      0,
+    );
     assertEquals(detailRes.status, 200);
 
     // Revoke the detail with nonce 1
@@ -312,7 +384,10 @@ Deno.test("Revocation endpoints revoke details and identities and reflect in lis
     assertEquals(identity.revokedDetails, ["email"]);
     // The single identity endpoint still returns the detail data (unlike list endpoints)
     assert(identity.details.email, "detail is still present in response");
-    assert(identity.revocationCertificate, "revocation certificate is returned");
+    assert(
+      identity.revocationCertificate,
+      "revocation certificate is returned",
+    );
 
     // Revocation listing should include both entries
     const revocationsRes = await mod.handleRequest(
@@ -341,10 +416,12 @@ Deno.test("Revocation endpoints revoke details and identities and reflect in lis
 
 Deno.test("Search endpoint filters revoked identities unless explicitly included", async () => {
   await withServer(async (mod) => {
-    const { fingerprint: activeFp, signingKey: activeKey } = await registerIdentity(mod);
+    const { fingerprint: activeFp, signingKey: activeKey } =
+      await registerIdentity(mod);
     await postDetail(mod, activeFp, activeKey, "name", "Active User", 0);
 
-    const { fingerprint: revokedFp, signingKey: revokedKey } = await registerIdentity(mod);
+    const { fingerprint: revokedFp, signingKey: revokedKey } =
+      await registerIdentity(mod);
     await postDetail(mod, revokedFp, revokedKey, "name", "Revoked User", 0);
     const revocationCert = createRevocationCertificate(revokedKey, {
       type: "identity",
@@ -374,7 +451,9 @@ Deno.test("Search endpoint filters revoked identities unless explicitly included
     assertEquals(searchActiveOnlyBody.identities[0].fingerprint, activeFp);
 
     const searchAll = await mod.handleRequest(
-      new Request("http://localhost/api/v1/identities/search?query=user&includeRevoked=true"),
+      new Request(
+        "http://localhost/api/v1/identities/search?query=user&includeRevoked=true",
+      ),
     );
     const searchAllBody = await searchAll.json();
     assertEquals(searchAllBody.identities.length, 2);
@@ -393,11 +472,21 @@ Deno.test("POST /verify-signature verifies signed payload with provided public i
     );
     assertEquals(registerRes.status, 200);
 
-    const detailRes = await postDetail(mod, fingerprint, signingKey, "name", "Alice", 0);
+    const detailRes = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "name",
+      "Alice",
+      0,
+    );
     assertEquals(detailRes.status, 200);
 
     const message = "hello from test";
-    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
+    const signed = signHashedMessageForTest(
+      message,
+      (value) => signingKey.sign(value),
+    );
     const verifyRes = await postVerifySignature(mod, {
       payload: {
         type: "ebp-signed-message",
@@ -438,7 +527,10 @@ Deno.test("POST /verify-signature verifies detached signature via published iden
     assertEquals(registerRes.status, 200);
 
     const message = "detached payload message";
-    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
+    const signed = signHashedMessageForTest(
+      message,
+      (value) => signingKey.sign(value),
+    );
     const verifyRes = await postVerifySignature(mod, {
       payload: {
         type: "ebp-signature",
@@ -507,7 +599,10 @@ Deno.test("POST /verify-signature accepts embedded identity alias and reports va
   await withServer(async (mod) => {
     const { payload, fingerprint, signingKey } = createIdentityPayload();
     const message = "this is a test ";
-    const signed = signHashedMessageForTest(message, (value) => signingKey.sign(value));
+    const signed = signHashedMessageForTest(
+      message,
+      (value) => signingKey.sign(value),
+    );
 
     // Do not publish identity to server. Verify should still pass with provided keys.
     const verifyRes = await postVerifySignature(mod, {

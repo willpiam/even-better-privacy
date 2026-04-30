@@ -298,7 +298,7 @@ GUI backend tests
 
 E2E GUI tests (Playwright)
 
-    npm install
+    npm ci
     npx playwright install --with-deps
 
 In your `.env` file set 

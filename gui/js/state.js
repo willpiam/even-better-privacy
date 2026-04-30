@@ -20,7 +20,7 @@ export const state = {
   hierarchyRelationships: [],
   serverIdentitiesPagination: { page: 1, totalPages: 1, total: 0 },
   serverIdentitiesSearch: "",
-  identityDir: "",
+  identityDirLabel: "",
   isRevoked: false,
   revokedDetails: [],
   mailAccount: null,

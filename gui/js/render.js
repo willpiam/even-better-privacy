@@ -227,7 +227,7 @@ export function renderContext() {
   ctxCurrent.textContent = state.currentIdentity ?? "-";
   ctxServer.textContent = state.server ?? "(not set)";
   if (ctxIdir) {
-    ctxIdir.textContent = state.identityDir ?? "-";
+    ctxIdir.textContent = state.identityDirLabel ?? "-";
   }
   const ctxProtocol = document.getElementById("ctx-protocol");
   if (ctxProtocol) {
@@ -831,7 +831,7 @@ export async function loadAll() {
         startupError = null;
         state.currentIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
         state.server = ctx?.server ?? null;
-        state.identityDir = ctx?.identityDir ?? "";
+        state.identityDirLabel = ctx?.identityDirLabel ?? "";
         state.protocolVersion = ctx?.protocolVersion ?? null;
         state.identities = ids?.identities ?? [];
         state.contacts = contacts?.contacts ?? [];

@@ -32,6 +32,7 @@ import {
   parseEmailAttachmentCleartextEnvelope,
   parseEncryptedEmailAttachmentPayload,
 } from "../../core/EmailAttachmentPayload.ts";
+import { validatePassword } from "../../core/PasswordPolicy.ts";
 import {
   apiUrl,
   buildStateFromExternal,
@@ -59,6 +60,7 @@ import {
   safeFileName,
   STATUS,
   tryServeStatic,
+  writeFileExclusive,
 } from "./http.ts";
 import {
   applyCorsHeaders,
@@ -113,9 +115,11 @@ import {
   exchangeOAuthCode,
   getMailOAuthRedirectUri,
   getOAuthProviderConfig,
+  isAllowedMailOAuthBrowserUrl,
   mailOauthCompleted,
   mailOauthStarts,
   pruneExpiredOAuthState,
+  registerMailOAuthStart,
 } from "./mail-oauth.ts";
 import {
   addPendingHierarchyLocal,
@@ -248,6 +252,12 @@ function durationMs(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
 }
 
+function clientRateLimitKey(req: Request): string {
+  const origin = req.headers.get("origin");
+  const host = req.headers.get("host");
+  return `${origin ?? "no-origin"}|${host ?? "no-host"}`;
+}
+
 export async function handleRequest(req: Request): Promise<Response> {
   const rejected = validateSecurity(req);
   if (rejected) return applyCorsHeaders(req, rejected);
@@ -281,8 +291,8 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const ctx = await getContext(home ?? undefined);
       const state = await readState(ctx.identityDir);
       return json({
-        identityDir: ctx.identityDir,
-        contactsDir: ctx.contactsDir,
+        identityDirLabel: "~/.ebp",
+        contactsDirLabel: "~/.ebp/contacts",
         currentIdentity: ctx.currentIdentity,
         server: state?.server ?? null,
         protocolVersion: PROTOCOL_VERSION,
@@ -304,13 +314,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const ctx = await getContext(home ?? undefined);
       const serverUrl = resolveServer(ctx);
       const conf = getOAuthProviderConfig(provider);
-      pruneExpiredOAuthState();
       const oauthState = randomHex(24);
-      mailOauthStarts.set(oauthState, {
-        provider,
-        createdAt: Date.now(),
-        serverUrl,
-      });
+      registerMailOAuthStart(
+        oauthState,
+        { provider, createdAt: Date.now(), serverUrl },
+        clientRateLimitKey(req),
+      );
       const authUrl = new URL(conf.authUrl);
       authUrl.searchParams.set("client_id", conf.clientId);
       authUrl.searchParams.set("response_type", "code");
@@ -449,14 +458,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const body = await readJson<{ url?: unknown }>(req);
       const targetUrl = typeof body.url === "string" ? body.url.trim() : "";
       if (!targetUrl) throw new HttpError(STATUS.BadRequest, "url is required");
-      // Only allow opening https:// and http://127.0.0.1 URLs for safety.
-      if (
-        !targetUrl.startsWith("https://") &&
-        !targetUrl.startsWith("http://127.0.0.1")
-      ) {
+      if (!isAllowedMailOAuthBrowserUrl(targetUrl)) {
         throw new HttpError(
           STATUS.BadRequest,
-          "url must be https or http://127.0.0.1",
+          "url must target a configured mail OAuth provider",
         );
       }
       const os = Deno.build.os;
@@ -1684,10 +1689,21 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
       const ctx = await getContext(home, name);
 
-      if (!password || password.length < 8) {
+      if (!password) {
         throw new HttpError(
           STATUS.BadRequest,
-          "password required and must be at least 8 characters",
+          "password is required",
+        );
+      }
+      const passwordCheck = validatePassword(password);
+      if (!passwordCheck.ok) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          passwordCheck.reason,
+          {
+            suggestions: passwordCheck.suggestions,
+            strength: passwordCheck.strength,
+          },
         );
       }
 
@@ -4750,16 +4766,19 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           atob(body.base64Content),
           (c) => c.charCodeAt(0),
         );
-        await Deno.writeFile(filePath, binary);
+        await writeFileExclusive(filePath, binary);
       } else if (typeof body.content === "string") {
-        await Deno.writeTextFile(filePath, body.content);
+        await writeFileExclusive(
+          filePath,
+          new TextEncoder().encode(body.content),
+        );
       } else {
         throw new HttpError(
           STATUS.BadRequest,
           "content or base64Content is required",
         );
       }
-      return json({ path: filePath });
+      return json({ ok: true, filename, downloadsRelative: filename });
     }
 
     return json({ error: "not found" }, STATUS.NotFound);

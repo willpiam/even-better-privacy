@@ -1,11 +1,14 @@
 import { assertEquals } from "jsr:@std/assert";
 import { Identity } from "../core/Identity.ts";
 import {
+  computeEncryptionLeafRaw,
   computeIdentityFingerprint,
   decodeFingerprintBech32,
   encodeFingerprintBech32,
   isValidFingerprintBech32,
 } from "../core/Fingerprint.ts";
+import { hexToBytes } from "../core/Hex.ts";
+import { sha256 } from "@noble/hashes/sha2";
 
 Deno.test("Fingerprint: uses dilithium+kyber prefix", () => {
   const identity = new Identity("dilithium", "kyber");
@@ -40,6 +43,16 @@ Deno.test("Fingerprint: rejects invalid checksum", () => {
 
 Deno.test("Fingerprint: rejects mixed-case bech32", () => {
   const identity = new Identity("dilithium", "kyber");
-  assertEquals(isValidFingerprintBech32(identity.toFingerprint().toUpperCase()), false);
+  assertEquals(
+    isValidFingerprintBech32(identity.toFingerprint().toUpperCase()),
+    false,
+  );
 });
 
+Deno.test("Fingerprint: encryption leaf hashes decoded hex bytes", () => {
+  const encryptionPublicKey = "0001020a0b0c";
+  assertEquals(
+    computeEncryptionLeafRaw("kyber", encryptionPublicKey),
+    sha256(hexToBytes(encryptionPublicKey)),
+  );
+});

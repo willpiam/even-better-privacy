@@ -778,12 +778,61 @@ if (verifyPublicKeysToggle) {
   });
 }
 
+function resolveRecipientBinding(recipient) {
+  const query = recipient.trim().toLowerCase();
+  if (!query) return null;
+  const contact = state.contacts.find((c) => {
+    const names = [
+      c.name,
+      c.fingerprint,
+      c.localAlias,
+      c.localEmail,
+    ].filter(Boolean).map((v) => String(v).toLowerCase());
+    return names.includes(query);
+  });
+  if (contact) {
+    return {
+      label: contact.name || contact.localAlias || "contact",
+      fingerprint: contact.fingerprint,
+    };
+  }
+  return { label: "direct fingerprint", fingerprint: recipient.trim() };
+}
+
+function updateRecipientBindingPreview(inputId, outputId, signId) {
+  const output = document.getElementById(outputId);
+  if (!output) return;
+  const signed = document.getElementById(signId)?.checked;
+  const recipient = document.getElementById(inputId)?.value?.trim() || "";
+  if (!signed || !recipient) {
+    output.textContent = "";
+    return;
+  }
+  const binding = resolveRecipientBinding(recipient);
+  output.textContent = binding
+    ? `Signed payload will bind recipient ${binding.label}: ${binding.fingerprint}`
+    : "";
+}
+
+for (const [inputId, outputId, signId] of [
+  ["enc-recipient", "enc-recipient-binding", "enc-sign"],
+  ["enc-file-recipient", "enc-file-recipient-binding", "enc-file-sign"],
+]) {
+  document.getElementById(inputId)?.addEventListener("input", () =>
+    updateRecipientBindingPreview(inputId, outputId, signId)
+  );
+  document.getElementById(signId)?.addEventListener("change", () =>
+    updateRecipientBindingPreview(inputId, outputId, signId)
+  );
+}
+
 document.getElementById("encrypt-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
   const message = document.getElementById("enc-message").value;
   const recipient = document.getElementById("enc-recipient").value.trim();
   const sign = document.getElementById("enc-sign").checked;
+  updateRecipientBindingPreview("enc-recipient", "enc-recipient-binding", "enc-sign");
   await withLoading(btn, async () => {
     try {
       const body = { message, recipient, sign };
@@ -842,6 +891,11 @@ document.getElementById("encrypt-file-form").addEventListener("submit", async (e
   const recipient = document.getElementById("enc-file-recipient").value.trim();
   const sign = document.getElementById("enc-file-sign").checked;
   const file = fileInput?.files?.[0];
+  updateRecipientBindingPreview(
+    "enc-file-recipient",
+    "enc-file-recipient-binding",
+    "enc-file-sign",
+  );
   await withLoading(btn, async () => {
     try {
       if (!file) throw new Error("Please select a file to encrypt");

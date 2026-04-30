@@ -95,7 +95,7 @@ export async function downloadJsonFromTextarea(textareaId, fallbackName) {
       method: "POST",
       body: JSON.stringify({ content: pretty, filename }),
     });
-    setStatus(`Saved to ${res.path}`, "success");
+    setStatus(`Saved to ~/Downloads/${res.filename}`, "success");
   } catch (err) {
     setStatus(err.message || "Failed to save file", "error");
   }

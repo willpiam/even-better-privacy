@@ -1,6 +1,6 @@
 # Wiki Index
 
-Last updated: 2026-04-27
+Last updated: 2026-04-30
 
 ## Overview
 
@@ -24,6 +24,8 @@ Last updated: 2026-04-27
 - [[cryptographic-module-validation]] - Distinguishes FIPS-standardized algorithms from FIPS 140-3 validated modules.
 - [[decentralized-identifiers]] - W3C DID v1.1 identity architecture compared with EBP fingerprinted identities.
 - [[key-management]] - NIST SP 800-57 key lifecycle concepts mapped to EBP identity and revocation surfaces.
+- [[integrity-renewal]] - Long-term renewal of timestamp/signature evidence across hash-function and algorithm transitions.
+- [[release-process]] - Reproducible release checklist, build lints, and checksum manifest process.
 - [[openpgp-pqc]] - Adjacent OpenPGP post-quantum standards context and differences from EBP payloads.
 - [[random-bit-generation]] - NIST SP 800-90 randomness vocabulary and EBP's platform-CSPRNG boundary.
 - [[uri-syntax]] - RFC 3986 URI parsing, normalization, percent-encoding, and URL-secret handling context.
@@ -45,6 +47,7 @@ Last updated: 2026-04-27
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
 - [[analysis-linux-build]] - Linux install and local AppImage build flow, including sidecar redirect architecture.
 - [[analysis-top-open-security-issues]] - Ranked top remaining open findings from the April 2026 security audit (post-2026-04-22 remediation pass).
+- [[analysis-address-recent-audit-findings-by-group-skill]] - Documents the planning skill for grouping unresolved findings above `foo`, enforcing Plan Mode, and closing the loop by rerunning the findings plot workflow.
 
 ## Security Audits
 
@@ -59,6 +62,7 @@ Last updated: 2026-04-27
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).
 - [[source-fips-204]] - NIST FIPS 204: ML-DSA standard (parameter sets, security levels, EBP usage).
 - [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).
+- [[source-long-lived-digital-integrity-using-short-lived-hash-functions]] - Renewal strategy for preserving long-term timestamp and signature verifiability despite hash deprecation.
 - [[source-rfc-3986]] - RFC 3986: generic URI syntax, percent-encoding, reference resolution, normalization, and URI security notes.
 - [[source-rfc-5321]] - RFC 5321: SMTP transport, envelope/header separation, MX routing, and end-to-end mail-security boundary.
 - [[source-rfc-5280]] - RFC 5280: X.509 PKIX certificate and CRL profile, path validation, and revocation context.

@@ -72,11 +72,40 @@ export type IdentityStorageFormat = {
   encrypted: string; // AES-encrypted private keys
 };
 
+export type PrivateIdentity = Identity & { readonly isPrivateLoaded: true };
+export type PublicIdentity =
+  & Omit<
+    Identity,
+    | "signMessage"
+    | "signAndEncryptMessage"
+    | "signAndEncryptFor"
+    | "signAndEncryptForMany"
+    | "attachDetail"
+    | "revokeDetail"
+    | "revokeIdentity"
+    | "generateEmergencyRevocationCertificate"
+  >
+  & { readonly isPrivateLoaded: false };
+
+type IdentityPrivateStorageData = {
+  signingKey: string;
+  encryptionKey: string;
+  signingKeyType?: SigningKeyOptions;
+  encryptionKeyType?: EncryptionKeyOptions;
+};
+
+const identitiesNeedingPrivateKeyTypeUpgrade = new WeakSet<Identity>();
+
+function identityStorageAad(): string {
+  return `ebp:identity-storage:v${FILE_FORMAT_VERSIONS.identityStorage}`;
+}
+
 export class Identity extends Key {
   signingKey: SigningKey;
   encryptionKey: AsymmetricEncryptionKey;
   signingKeyType: SigningKeyOptions;
   encryptionKeyType: EncryptionKeyOptions;
+  isPrivateLoaded: boolean;
 
   details: Map<string, [string, string]>;
   detailsNonce: number;
@@ -188,6 +217,7 @@ export class Identity extends Key {
     super();
     this.detailsNonce = 0;
     this.revocationNonce = 0;
+    this.isPrivateLoaded = true;
     this.signingKeyType = signingKeyType;
     this.encryptionKeyType = encryptionKeyType;
     switch (signingKeyType) {
@@ -1028,11 +1058,17 @@ export class Identity extends Key {
 
   /** Convert to new storage format with encrypted private keys */
   toStorageFormat(password: string): string {
-    const privateData = {
+    const privateData: IdentityPrivateStorageData = {
       signingKey: this.signingKey.toJSON(),
       encryptionKey: this.encryptionKey.toJSON(),
+      signingKeyType: this.signingKeyType,
+      encryptionKeyType: this.encryptionKeyType,
     };
-    const encrypted = AES.encrypt(password, JSON.stringify(privateData));
+    const encrypted = AES.encrypt(
+      password,
+      JSON.stringify(privateData),
+      identityStorageAad(),
+    );
 
     const storage: IdentityStorageFormat = {
       version: FILE_FORMAT_VERSIONS.identityStorage,
@@ -1063,6 +1099,10 @@ export class Identity extends Key {
     return false;
   }
 
+  static needsPrivateKeyTypeStorageUpgrade(identity: Identity): boolean {
+    return identitiesNeedingPrivateKeyTypeUpgrade.has(identity);
+  }
+
   /** Read just the public data from storage (no password needed). */
   static readPublicData(storageData: string): IdentityPublicData | null {
     try {
@@ -1083,7 +1123,15 @@ export class Identity extends Key {
    * If password is provided, decrypts private keys for full access.
    * If password is omitted, returns an identity that can only verify/encrypt (public ops).
    */
-  static fromStorageFormat(storageData: string, password?: string): Identity {
+  static fromStorageFormat(
+    storageData: string,
+    password: string,
+  ): PrivateIdentity;
+  static fromStorageFormat(storageData: string): PublicIdentity;
+  static fromStorageFormat(
+    storageData: string,
+    password?: string,
+  ): PrivateIdentity | PublicIdentity {
     let parsed: unknown;
     try {
       parsed = JSON.parse(storageData);
@@ -1106,9 +1154,12 @@ export class Identity extends Key {
       }
 
       // Check protocol version compatibility
-      const fileProtocolVersion = storage.protocolVersion ?? pub.protocolVersion;
+      const fileProtocolVersion = storage.protocolVersion ??
+        pub.protocolVersion;
       if (!fileProtocolVersion) {
-        throw new StorageFormatError("Missing protocol version in identity storage format.");
+        throw new StorageFormatError(
+          "Missing protocol version in identity storage format.",
+        );
       }
       if (!isProtocolVersionSupported(fileProtocolVersion)) {
         throw new StorageFormatError(
@@ -1116,10 +1167,22 @@ export class Identity extends Key {
         );
       }
 
-      // Create identity shell with correct types
-      const identity = Object.create(Identity.prototype) as Identity;
-      identity.signingKeyType = pub.signingKeyType;
-      identity.encryptionKeyType = pub.encryptionKeyType;
+      if (
+        pub.signingKeyType !== "dilithium" && pub.signingKeyType !== "sphincs"
+      ) {
+        throw new StorageFormatError(
+          `Unsupported signing key type: ${pub.signingKeyType}`,
+        );
+      }
+      if (pub.encryptionKeyType !== "kyber") {
+        throw new StorageFormatError(
+          `Unsupported encryption key type: ${pub.encryptionKeyType}`,
+        );
+      }
+
+      // Go through the constructor so Identity invariants stay initialized;
+      // the generated keys are replaced below by the stored key material.
+      const identity = new Identity(pub.signingKeyType, pub.encryptionKeyType);
       identity.details = new Map(
         Object.entries(pub.details ?? {}) as [string, [string, string]][],
       );
@@ -1133,16 +1196,23 @@ export class Identity extends Key {
       identity.revocationNonce = pub.revocationNonce ?? 0;
 
       if (password) {
+        identity.isPrivateLoaded = true;
         // Decrypt private keys for full access
         let privateJson: string;
         try {
-          privateJson = AES.decrypt(password, storage.encrypted!);
+          privateJson = AES.decrypt(
+            password,
+            storage.encrypted!,
+            identityStorageAad(),
+          );
         } catch (e) {
           if (e instanceof DecryptionAuthError) throw e;
           if (e instanceof StorageFormatError) throw e;
-          throw new StorageFormatError("Encrypted private identity data is invalid");
+          throw new StorageFormatError(
+            "Encrypted private identity data is invalid",
+          );
         }
-        let privateData: { signingKey: string; encryptionKey: string };
+        let privateData: IdentityPrivateStorageData;
         try {
           const parsedPrivate = JSON.parse(privateJson);
           if (
@@ -1151,12 +1221,38 @@ export class Identity extends Key {
             typeof parsedPrivate.signingKey !== "string" ||
             typeof parsedPrivate.encryptionKey !== "string"
           ) {
-            throw new StorageFormatError("Decrypted private identity data is missing keys");
+            throw new StorageFormatError(
+              "Decrypted private identity data is missing keys",
+            );
           }
           privateData = parsedPrivate;
+          if (
+            privateData.signingKeyType !== undefined &&
+            privateData.signingKeyType !== pub.signingKeyType
+          ) {
+            throw new StorageFormatError(
+              "Private identity signing key type does not match public metadata",
+            );
+          }
+          if (
+            privateData.encryptionKeyType !== undefined &&
+            privateData.encryptionKeyType !== pub.encryptionKeyType
+          ) {
+            throw new StorageFormatError(
+              "Private identity encryption key type does not match public metadata",
+            );
+          }
+          if (
+            privateData.signingKeyType === undefined ||
+            privateData.encryptionKeyType === undefined
+          ) {
+            identitiesNeedingPrivateKeyTypeUpgrade.add(identity);
+          }
         } catch (e) {
           if (e instanceof StorageFormatError) throw e;
-          throw new StorageFormatError("Decrypted private identity data is not valid JSON");
+          throw new StorageFormatError(
+            "Decrypted private identity data is not valid JSON",
+          );
         }
 
         try {
@@ -1172,7 +1268,9 @@ export class Identity extends Key {
               );
               break;
             default:
-              throw new StorageFormatError(`Unsupported signing key type: ${pub.signingKeyType}`);
+              throw new StorageFormatError(
+                `Unsupported signing key type: ${pub.signingKeyType}`,
+              );
           }
 
           switch (pub.encryptionKeyType) {
@@ -1182,13 +1280,18 @@ export class Identity extends Key {
               );
               break;
             default:
-              throw new StorageFormatError(`Unsupported encryption key type: ${pub.encryptionKeyType}`);
+              throw new StorageFormatError(
+                `Unsupported encryption key type: ${pub.encryptionKeyType}`,
+              );
           }
         } catch (e) {
           if (e instanceof StorageFormatError) throw e;
-          throw new StorageFormatError("Private identity keys are corrupted or unsupported");
+          throw new StorageFormatError(
+            "Private identity keys are corrupted or unsupported",
+          );
         }
       } else {
+        identity.isPrivateLoaded = false;
         // Public-only mode - create keys from public data only
         // These can verify signatures and encrypt, but not sign or decrypt
         switch (pub.signingKeyType) {
@@ -1216,7 +1319,7 @@ export class Identity extends Key {
         }
       }
 
-      return identity;
+      return identity as PrivateIdentity | PublicIdentity;
     }
 
     // Unknown format

@@ -1,6 +1,5 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run
 
-import { serve } from "std/http/server";
 import { loadSync } from "std/dotenv";
 import { handleRequest } from "./routes.ts";
 import { initSecurity, getTokenPersistPath } from "./security.ts";
@@ -49,5 +48,5 @@ if (ebpHome) {
 	await fixLegacyPerms(`${ebpHome}/.ebp`);
 }
 
-serve(handleRequest, { port: PORT, hostname: HOST });
+Deno.serve({ port: PORT, hostname: HOST }, handleRequest);
 console.log(`EBP GUI local backend listening on http://${HOST}:${PORT}`);

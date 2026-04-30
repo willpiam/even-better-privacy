@@ -7,6 +7,7 @@ import {
 } from "./Revocation.ts";
 import { MultiRecipientCipher } from "./MultiRecipientCipher.ts";
 import { KyberEncryptionKey } from "./Kyber.ts";
+import { AES, StorageFormatError } from "./AES.ts";
 
 Deno.test("Identity multi-recipient: sign once, decrypt and verify", () => {
   const sender = new Identity("dilithium", "kyber");
@@ -58,6 +59,79 @@ Deno.test("Identity encrypted-signed inner payloads include explicit type tags",
   assertEquals(parsed.type, "ebp-encrypted-signed-inner");
   assertEquals(parsed.envelopeVersion, 2);
   assertEquals(parsed.message, "hello");
+});
+
+Deno.test("Identity.fromStorageFormat initializes constructor-backed state", () => {
+  const original = new Identity("dilithium", "kyber");
+  original.attachDetail("email", "alice@example.com");
+  const storage = original.toStorageFormat("correct horse battery staple");
+
+  const loaded = Identity.fromStorageFormat(storage);
+
+  assert(loaded instanceof Identity);
+  assertEquals(loaded.isPrivateLoaded, false);
+  assertEquals(loaded.signingKeyType, "dilithium");
+  assertEquals(loaded.encryptionKeyType, "kyber");
+  assertEquals(loaded.toFingerprint(), original.toFingerprint());
+  assertEquals(loaded.detailsNonce, original.detailsNonce);
+  assertEquals(loaded.revocationNonce, original.revocationNonce);
+  assertEquals(loaded.revokedDetails.size, 0);
+  assertEquals(loaded.revocationCertificate, null);
+});
+
+Deno.test("F-STORAGE-07: password-loaded identities are private-loaded", () => {
+  const original = new Identity("dilithium", "kyber");
+  const password = "correct horse battery staple";
+  const loaded = Identity.fromStorageFormat(
+    original.toStorageFormat(password),
+    password,
+  );
+
+  assertEquals(loaded.isPrivateLoaded, true);
+  assertEquals(typeof loaded.signMessage, "function");
+});
+
+Deno.test("Identity storage private payload binds key types to public metadata", () => {
+  const original = new Identity("dilithium", "kyber");
+  const storage = JSON.parse(
+    original.toStorageFormat("correct horse battery staple"),
+  );
+  storage.public.signingKeyType = "sphincs";
+
+  let error: unknown;
+  try {
+    Identity.fromStorageFormat(
+      JSON.stringify(storage),
+      "correct horse battery staple",
+    );
+  } catch (e) {
+    error = e;
+  }
+
+  assert(error instanceof StorageFormatError);
+  assert(
+    error.message.includes("signing key type does not match"),
+  );
+});
+
+Deno.test("Identity storage legacy private payload loads and requests upgrade", () => {
+  const original = new Identity("dilithium", "kyber");
+  const password = "correct horse battery staple";
+  const storage = JSON.parse(original.toStorageFormat(password));
+  const legacyPrivateData = {
+    signingKey: original.signingKey.toJSON(),
+    encryptionKey: original.encryptionKey.toJSON(),
+  };
+  storage.encrypted = AES.encrypt(
+    password,
+    JSON.stringify(legacyPrivateData),
+    "ebp:identity-storage:v2",
+  );
+
+  const loaded = Identity.fromStorageFormat(JSON.stringify(storage), password);
+
+  assertEquals(loaded.toFingerprint(), original.toFingerprint());
+  assertEquals(Identity.needsPrivateKeyTypeStorageUpgrade(loaded), true);
 });
 
 Deno.test("Identity multi-recipient inner payload includes explicit type tag", () => {

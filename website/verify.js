@@ -1,7 +1,7 @@
 import {
-  verifySignature,
   computeIdentityFingerprint,
   isValidFingerprintBech32,
+  verifySignature,
 } from "./crypto.js";
 
 const serverUrlInput = document.getElementById("server-url");
@@ -11,7 +11,9 @@ const publicFileInput = document.getElementById("public-file");
 const payloadJsonInput = document.getElementById("payload-json");
 const publicJsonInput = document.getElementById("public-json");
 const messageInput = document.getElementById("message");
-const fileReconstructedMessageInput = document.getElementById("file-reconstructed-message");
+const fileReconstructedMessageInput = document.getElementById(
+  "file-reconstructed-message",
+);
 const reconstructedLabel = document.getElementById("reconstructed-label");
 const verifyButton = document.getElementById("verify-btn");
 const clearButton = document.getElementById("clear-btn");
@@ -22,17 +24,45 @@ const signerDetails = document.getElementById("signer-details");
 
 async function readFileAsJson(file) {
   const text = await file.text();
-  return JSON.parse(text);
+  return parseSafeJsonObject(text, "uploaded JSON file");
 }
 
-function tryParseJson(text) {
+function parseSafeJsonObject(text, label) {
   const trimmed = text.trim();
   if (!trimmed) return null;
-  return JSON.parse(trimmed);
+  let parsed;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(`${label} is not valid JSON.`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${label} must be a JSON object.`);
+  }
+  assertSafeJsonKeys(parsed, label);
+  return parsed;
+}
+
+function assertSafeJsonKeys(value, path) {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((entry, index) =>
+      assertSafeJsonKeys(entry, `${path}[${index}]`)
+    );
+    return;
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === "__proto__" || key === "constructor" || key === "prototype") {
+      throw new Error(`${path} contains unsupported property "${key}".`);
+    }
+    assertSafeJsonKeys(child, `${path}.${key}`);
+  }
 }
 
 function bytesToHex(bytes) {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 async function hashFileSha256Hex(file) {
@@ -53,7 +83,8 @@ function buildFileSignMessage(fileHash, salt, contextMessage) {
 
 function isLoopbackHost(hostname) {
   const normalized = String(hostname || "").toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]";
+  return normalized === "localhost" || normalized === "127.0.0.1" ||
+    normalized === "::1" || normalized === "[::1]";
 }
 
 function validateServerBase(rawValue) {
@@ -67,11 +98,16 @@ function validateServerBase(rawValue) {
     throw new Error("Server URL must be an absolute URL.");
   }
 
-  if (parsed.protocol === "https:" || (parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))) {
+  if (
+    parsed.protocol === "https:" ||
+    (parsed.protocol === "http:" && isLoopbackHost(parsed.hostname))
+  ) {
     return serverBase;
   }
 
-  throw new Error("Server URL must use HTTPS unless it targets localhost/127.0.0.1.");
+  throw new Error(
+    "Server URL must use HTTPS unless it targets localhost/127.0.0.1.",
+  );
 }
 
 // Mirror of the GUI verify-file flow: confirm that `publicIdentity`'s
@@ -97,7 +133,8 @@ function deriveAndCheckFingerprint(publicIdentity, expectedFingerprint) {
     return {
       ok: false,
       computedFingerprint,
-      error: `Public keys do not match the expected fingerprint. Expected ${expectedFingerprint}, computed ${computedFingerprint}.`,
+      error:
+        `Public keys do not match the expected fingerprint. Expected ${expectedFingerprint}, computed ${computedFingerprint}.`,
     };
   }
   return { ok: true, computedFingerprint };
@@ -115,7 +152,9 @@ function renderSignerDetails(signer) {
   const detailHtml = details.length
     ? details.map(([path, value]) => {
       const detailValue = Array.isArray(value) ? value[0] : String(value ?? "");
-      return `<li><strong>${escapeHtml(path)}:</strong> ${escapeHtml(detailValue)}</li>`;
+      return `<li><strong>${escapeHtml(path)}:</strong> ${
+        escapeHtml(detailValue)
+      }</li>`;
     }).join("")
     : "<li>(no signer details)</li>";
 
@@ -184,35 +223,56 @@ verifyButton.addEventListener("click", async () => {
   try {
     const serverBase = validateServerBase(serverUrlInput.value);
 
-    const payload = tryParseJson(payloadJsonInput.value);
+    const payload = parseSafeJsonObject(
+      payloadJsonInput.value,
+      "Signature payload JSON",
+    );
     if (!payload || typeof payload !== "object") {
       throw new Error("Signature payload JSON is required.");
     }
 
-    const publicIdentity = tryParseJson(publicJsonInput.value);
+    const publicIdentity = parseSafeJsonObject(
+      publicJsonInput.value,
+      "Public identity JSON",
+    );
 
     // Mirror of `core/handlers/verify.ts`: reject obviously malformed
     // fingerprints early so we never even ask the server about them.
-    if (typeof payload.fingerprint === "string" && payload.fingerprint.length > 0
-      && !isValidFingerprintBech32(payload.fingerprint)) {
-      throw new Error("Signature payload fingerprint is not a valid EBP bech32 fingerprint.");
+    if (
+      typeof payload.fingerprint === "string" &&
+      payload.fingerprint.length > 0 &&
+      !isValidFingerprintBech32(payload.fingerprint)
+    ) {
+      throw new Error(
+        "Signature payload fingerprint is not a valid EBP bech32 fingerprint.",
+      );
     }
-    if (publicIdentity && typeof publicIdentity === "object"
-      && typeof publicIdentity.fingerprint === "string" && publicIdentity.fingerprint.length > 0
-      && !isValidFingerprintBech32(publicIdentity.fingerprint)) {
-      throw new Error("Pasted public identity fingerprint is not a valid EBP bech32 fingerprint.");
+    if (
+      publicIdentity && typeof publicIdentity === "object" &&
+      typeof publicIdentity.fingerprint === "string" &&
+      publicIdentity.fingerprint.length > 0 &&
+      !isValidFingerprintBech32(publicIdentity.fingerprint)
+    ) {
+      throw new Error(
+        "Pasted public identity fingerprint is not a valid EBP bech32 fingerprint.",
+      );
     }
 
     // Mirror of GUI verify-file flow: when both the payload and the
     // embedded identity carry a fingerprint, they must agree.
     const embeddedIdentityCandidate = publicIdentity ?? (
-      payload.identity && typeof payload.identity === "object" ? payload.identity : null
+      payload.identity && typeof payload.identity === "object"
+        ? payload.identity
+        : null
     );
-    if (embeddedIdentityCandidate
-      && typeof payload.fingerprint === "string" && payload.fingerprint.length > 0
-      && typeof embeddedIdentityCandidate.fingerprint === "string"
-      && embeddedIdentityCandidate.fingerprint.length > 0
-      && payload.fingerprint !== embeddedIdentityCandidate.fingerprint) {
+    if (
+      embeddedIdentityCandidate &&
+      typeof payload.fingerprint === "string" &&
+      payload.fingerprint.length > 0 &&
+      typeof embeddedIdentityCandidate.fingerprint === "string" &&
+      embeddedIdentityCandidate.fingerprint.length > 0 &&
+      payload.fingerprint !== embeddedIdentityCandidate.fingerprint
+    ) {
       throw new Error(
         `Fingerprint mismatch between payload (${payload.fingerprint}) and embedded public identity (${embeddedIdentityCandidate.fingerprint}).`,
       );
@@ -222,16 +282,26 @@ verifyButton.addEventListener("click", async () => {
     if (payload.type === "ebp-signed-file") {
       const file = verifyFileInput?.files?.[0];
       if (!file) {
-        throw new Error("File upload is required for ebp-signed-file verification.");
+        throw new Error(
+          "File upload is required for ebp-signed-file verification.",
+        );
       }
-      const expectedFileHash = typeof payload.fileHash === "string" ? payload.fileHash : "";
+      const expectedFileHash = typeof payload.fileHash === "string"
+        ? payload.fileHash
+        : "";
       if (!expectedFileHash) {
         throw new Error("ebp-signed-file payload is missing fileHash.");
       }
       const computedFileHash = await hashFileSha256Hex(file);
       const salt = typeof payload.salt === "string" ? payload.salt : "";
-      const contextMessage = typeof payload.contextMessage === "string" ? payload.contextMessage : "";
-      const reconstructedMessage = buildFileSignMessage(computedFileHash, salt, contextMessage);
+      const contextMessage = typeof payload.contextMessage === "string"
+        ? payload.contextMessage
+        : "";
+      const reconstructedMessage = buildFileSignMessage(
+        computedFileHash,
+        salt,
+        contextMessage,
+      );
       const detachedPayload = {
         type: "ebp-signature",
         messageHash: await hashTextSha256Hex(reconstructedMessage),
@@ -244,7 +314,9 @@ verifyButton.addEventListener("click", async () => {
       requestBody.message = reconstructedMessage;
       if (fileReconstructedMessageInput) {
         fileReconstructedMessageInput.value = reconstructedMessage;
-        if (reconstructedLabel) reconstructedLabel.classList.remove("is-hidden");
+        if (reconstructedLabel) {
+          reconstructedLabel.classList.remove("is-hidden");
+        }
       }
 
       if (computedFileHash !== expectedFileHash) {
@@ -254,7 +326,8 @@ verifyButton.addEventListener("click", async () => {
           expectedFileHash,
           computedFileHash,
           reconstructedMessage,
-          message: "File hash mismatch. Uploaded file does not match the signed file hash.",
+          message:
+            "File hash mismatch. Uploaded file does not match the signed file hash.",
         };
         resultJson.textContent = JSON.stringify(failBody, null, 2);
         resultSummary.textContent = failBody.message;
@@ -274,16 +347,26 @@ verifyButton.addEventListener("click", async () => {
     const effectivePayload = requestBody.payload;
     const effectiveMessage = typeof requestBody.message === "string"
       ? requestBody.message
-      : (typeof effectivePayload.message === "string" ? effectivePayload.message : "");
-    const embeddedIdentity = publicIdentity ?? effectivePayload.identity ?? null;
+      : (typeof effectivePayload.message === "string"
+        ? effectivePayload.message
+        : "");
+    const embeddedIdentity = publicIdentity ?? effectivePayload.identity ??
+      null;
 
     let signerIdentity = embeddedIdentity;
     let fetchedFromServer = false;
-    let signerSource = publicIdentity ? "pasted" : (signerIdentity ? "payload" : "");
-    if (!signerIdentity && typeof effectivePayload.fingerprint === "string" && effectivePayload.fingerprint.length > 0) {
+    let signerSource = publicIdentity
+      ? "pasted"
+      : (signerIdentity ? "payload" : "");
+    if (
+      !signerIdentity && typeof effectivePayload.fingerprint === "string" &&
+      effectivePayload.fingerprint.length > 0
+    ) {
       try {
         const lookup = await fetch(
-          `${serverBase}/api/v1/identity/${encodeURIComponent(effectivePayload.fingerprint)}`,
+          `${serverBase}/api/v1/identity/${
+            encodeURIComponent(effectivePayload.fingerprint)
+          }`,
           { method: "GET" },
         );
         if (lookup.ok) {
@@ -297,7 +380,9 @@ verifyButton.addEventListener("click", async () => {
     }
 
     if (!signerIdentity) {
-      throw new Error("Could not obtain the signer's public identity. Paste a public identity JSON or ensure the signer is published on the configured server.");
+      throw new Error(
+        "Could not obtain the signer's public identity. Paste a public identity JSON or ensure the signer is published on the configured server.",
+      );
     }
 
     // Mirror of `gui/app.js` verify-file flow: re-derive the fingerprint
@@ -306,15 +391,25 @@ verifyButton.addEventListener("click", async () => {
     // This closes the gap where a hostile server (or hostile pasted JSON)
     // could pair a real fingerprint with a different `signingKey`, making
     // verification "succeed" against the wrong key.
-    const expectedSignerFingerprint = (typeof signerIdentity.fingerprint === "string" && signerIdentity.fingerprint.length > 0)
-      ? signerIdentity.fingerprint
-      : (typeof effectivePayload.fingerprint === "string" ? effectivePayload.fingerprint : "");
-    const fingerprintCheck = deriveAndCheckFingerprint(signerIdentity, expectedSignerFingerprint);
+    const expectedSignerFingerprint =
+      (typeof signerIdentity.fingerprint === "string" &&
+          signerIdentity.fingerprint.length > 0)
+        ? signerIdentity.fingerprint
+        : (typeof effectivePayload.fingerprint === "string"
+          ? effectivePayload.fingerprint
+          : "");
+    const fingerprintCheck = deriveAndCheckFingerprint(
+      signerIdentity,
+      expectedSignerFingerprint,
+    );
     if (!fingerprintCheck.ok) {
       throw new Error(fingerprintCheck.error);
     }
-    if (typeof effectivePayload.fingerprint === "string" && effectivePayload.fingerprint.length > 0
-      && fingerprintCheck.computedFingerprint !== effectivePayload.fingerprint) {
+    if (
+      typeof effectivePayload.fingerprint === "string" &&
+      effectivePayload.fingerprint.length > 0 &&
+      fingerprintCheck.computedFingerprint !== effectivePayload.fingerprint
+    ) {
       throw new Error(
         `Signer fingerprint mismatch: payload claims ${effectivePayload.fingerprint} but the supplied public keys hash to ${fingerprintCheck.computedFingerprint}.`,
       );
@@ -324,12 +419,22 @@ verifyButton.addEventListener("click", async () => {
     try {
       clientVerified = verifySignature(signerIdentity, {
         message: effectiveMessage,
-        messageHash: typeof effectivePayload.messageHash === "string" ? effectivePayload.messageHash : undefined,
-        salt: typeof effectivePayload.salt === "string" ? effectivePayload.salt : "",
-        signature: typeof effectivePayload.signature === "string" ? effectivePayload.signature : "",
+        messageHash: typeof effectivePayload.messageHash === "string"
+          ? effectivePayload.messageHash
+          : undefined,
+        salt: typeof effectivePayload.salt === "string"
+          ? effectivePayload.salt
+          : "",
+        signature: typeof effectivePayload.signature === "string"
+          ? effectivePayload.signature
+          : "",
       });
     } catch (err) {
-      throw new Error(`Client-side verification failed: ${err instanceof Error ? err.message : err}`);
+      throw new Error(
+        `Client-side verification failed: ${
+          err instanceof Error ? err.message : err
+        }`,
+      );
     }
 
     // Optionally cross-check against the server's advisory "verified"
@@ -354,22 +459,34 @@ verifyButton.addEventListener("click", async () => {
       verified: clientVerified,
       verifiedBy: "client",
       serverAdvisory,
-      serverConsistent: serverAdvisory === null ? null : serverAdvisory === clientVerified,
-      signerFingerprint: fingerprintCheck.computedFingerprint || (signerIdentity?.fingerprint ?? null),
+      serverConsistent: serverAdvisory === null
+        ? null
+        : serverAdvisory === clientVerified,
+      signerFingerprint: fingerprintCheck.computedFingerprint ||
+        (signerIdentity?.fingerprint ?? null),
       signerFingerprintConfirmedFromKeys: true,
-      signerSource: signerSource || (fetchedFromServer ? "server" : (publicIdentity ? "pasted" : "payload")),
+      signerSource: signerSource ||
+        (fetchedFromServer
+          ? "server"
+          : (publicIdentity ? "pasted" : "payload")),
     };
     resultJson.textContent = JSON.stringify(report, null, 2);
 
     if (clientVerified) {
-      if (payload.type === "ebp-signed-file" && fileReconstructedMessageInput?.value) {
-        resultSummary.textContent = "Signature is valid and file hash matches (verified client-side).";
+      if (
+        payload.type === "ebp-signed-file" &&
+        fileReconstructedMessageInput?.value
+      ) {
+        resultSummary.textContent =
+          "Signature is valid and file hash matches (verified client-side).";
       } else {
-        resultSummary.textContent = "Signature is valid (verified client-side).";
+        resultSummary.textContent =
+          "Signature is valid (verified client-side).";
       }
       renderSignerDetails(signerIdentity);
     } else {
-      resultSummary.textContent = "Signature is INVALID (verified client-side).";
+      resultSummary.textContent =
+        "Signature is INVALID (verified client-side).";
     }
   } catch (err) {
     resultJson.textContent = JSON.stringify(
@@ -377,7 +494,9 @@ verifyButton.addEventListener("click", async () => {
       null,
       2,
     );
-    resultSummary.textContent = err instanceof Error ? err.message : "Verification failed.";
+    resultSummary.textContent = err instanceof Error
+      ? err.message
+      : "Verification failed.";
   } finally {
     verifyButton.disabled = false;
     verifyButton.textContent = "Verify";

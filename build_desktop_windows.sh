@@ -38,7 +38,7 @@ else
 fi
 
 cd "${DESKTOP_DIR}"
-npm install
+npm ci
 
 # Ensure the Tauri distDir (desktop/dist) exists with the bootstrap page.
 # This directory is git-ignored by the top-level dist/ rule, so it may be

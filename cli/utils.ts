@@ -21,14 +21,88 @@ export interface CLIState {
   server?: string;
 }
 
+type AuthenticatedCLIState = {
+  version: 2;
+  state: CLIState;
+  mac: string;
+};
+
 export type { IdentityState };
+
+const STATE_AUTH_KEY_FILE = "state.key";
+
+function isAuthenticatedState(value: unknown): value is AuthenticatedCLIState {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as { version?: unknown }).version === 2 &&
+      typeof (value as { mac?: unknown }).mac === "string" &&
+      typeof (value as { state?: unknown }).state === "object",
+  );
+}
+
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function hexToBytesStrict(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hex)) {
+    throw new Error("invalid hex");
+  }
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    out[i / 2] = Number.parseInt(hex.slice(i, i + 2), 16);
+  }
+  return out;
+}
+
+async function readOrCreateStateAuthKey(
+  identityDir: string,
+): Promise<Uint8Array> {
+  const path = `${identityDir}/${STATE_AUTH_KEY_FILE}`;
+  try {
+    return hexToBytesStrict((await Deno.readTextFile(path)).trim());
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) throw e;
+  }
+  await ensurePrivateDir(identityDir);
+  const key = new Uint8Array(32);
+  crypto.getRandomValues(key);
+  await Deno.writeTextFile(path, bytesToHex(key), { mode: 0o600 });
+  return key;
+}
+
+async function stateMac(identityDir: string, state: CLIState): Promise<string> {
+  const keyBytes = await readOrCreateStateAuthKey(identityDir);
+  const keyData = new Uint8Array(keyBytes).buffer as ArrayBuffer;
+  const key = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const payload = stableStringify(state);
+  const sig = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(payload),
+  );
+  return bytesToHex(new Uint8Array(sig));
+}
 
 export async function readState(
   identityDir: string,
 ): Promise<CLIState | undefined> {
   try {
     const json = await Deno.readTextFile(`${identityDir}/state.json`);
-    return JSON.parse(json) as CLIState;
+    const parsed = JSON.parse(json);
+    if (!isAuthenticatedState(parsed)) return parsed as CLIState;
+    const expected = await stateMac(identityDir, parsed.state);
+    if (parsed.mac !== expected) {
+      throw new StorageFormatError("state.json authentication failed");
+    }
+    return parsed.state;
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) return undefined;
     throw e;
@@ -40,9 +114,14 @@ export async function writeState(
   state: CLIState,
 ): Promise<void> {
   await ensurePrivateDir(identityDir);
+  const envelope: AuthenticatedCLIState = {
+    version: 2,
+    state,
+    mac: await stateMac(identityDir, state),
+  };
   await Deno.writeTextFile(
     `${identityDir}/state.json`,
-    JSON.stringify(state, null, 2),
+    JSON.stringify(envelope, null, 2),
     { mode: 0o600 },
   );
 }
@@ -341,10 +420,11 @@ export function baseName(path: string): string {
 const MAX_SAFE_FILE_NAME_BYTES = 200;
 
 export function safeFileName(fileName: string): string {
-  const cleaned = baseName(fileName).replace(/[\u0000-\u001F\u007F]/g, "").replace(
-    /\.\./g,
-    "_",
-  );
+  const cleaned = baseName(fileName).replace(/[\u0000-\u001F\u007F]/g, "")
+    .replace(
+      /\.\./g,
+      "_",
+    );
   return truncateUtf8FileName(cleaned, MAX_SAFE_FILE_NAME_BYTES);
 }
 
@@ -353,7 +433,9 @@ function truncateUtf8FileName(fileName: string, maxBytes: number): string {
   if (encoder.encode(fileName).length <= maxBytes) return fileName;
 
   const dot = fileName.lastIndexOf(".");
-  const extension = dot > 0 && dot < fileName.length - 1 ? fileName.slice(dot) : "";
+  const extension = dot > 0 && dot < fileName.length - 1
+    ? fileName.slice(dot)
+    : "";
   const extensionBytes = encoder.encode(extension).length;
   const stemBudget = Math.max(1, maxBytes - extensionBytes);
   const stem = extension ? fileName.slice(0, dot) : fileName;
@@ -379,6 +461,25 @@ export function identityLoadErrorMessage(error: unknown): string {
   return "Failed to load identity: unexpected identity file error.";
 }
 
+let warnedAboutTestIdentity = false;
+
+export function isTestIdentityPath(path: string): boolean {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.split("/").includes("test_identities") &&
+    normalized.endsWith(".identity.json");
+}
+
+export function shouldBlockTestIdentityPath(path: string): boolean {
+  if (!isTestIdentityPath(path)) return false;
+  return Deno.env.get("EBP_PROD") === "1" ||
+    (Deno.env.get("NODE_ENV") ?? "").toLowerCase() === "production";
+}
+
+export function testIdentityWarning(path: string): string | null {
+  if (!isTestIdentityPath(path)) return null;
+  return `[ebp] warning: ${path} is a documented-password test fixture; do not use it outside local tests.`;
+}
+
 export async function loadIdentity(
   ctx: CLIContext,
   password?: string,
@@ -394,6 +495,18 @@ export async function loadIdentity(
     throw e;
   }
 
+  if (shouldBlockTestIdentityPath(ctx.identityPath)) {
+    console.error(
+      "Refusing to load documented-password test identity in production mode.",
+    );
+    Deno.exit(1);
+  }
+  const fixtureWarning = testIdentityWarning(ctx.identityPath);
+  if (fixtureWarning && !warnedAboutTestIdentity) {
+    console.error(fixtureWarning);
+    warnedAboutTestIdentity = true;
+  }
+
   const pwd = password ?? await readPassword("Enter password: ");
 
   let identity: Identity;
@@ -407,14 +520,17 @@ export async function loadIdentity(
   // F-STORAGE-02: transparent re-encrypt when a legacy-KDF blob is
   // successfully unlocked. We rewrite at the stronger parameters before
   // handing the identity back to the caller.
-  if (Identity.isStorageEncryptedWithLegacyKDF(storageData)) {
+  if (
+    Identity.isStorageEncryptedWithLegacyKDF(storageData) ||
+    Identity.needsPrivateKeyTypeStorageUpgrade(identity)
+  ) {
     try {
       await saveIdentity(ctx, pwd, identity);
       console.error(
-        "[ebp] upgraded identity file KDF to the current strength.",
+        "[ebp] upgraded identity file storage format.",
       );
     } catch (e) {
-      console.error("[ebp] warning: failed to upgrade identity KDF:", e);
+      console.error("[ebp] warning: failed to upgrade identity storage:", e);
     }
   }
 

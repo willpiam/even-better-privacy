@@ -2,8 +2,8 @@
 title: "Key Management Context"
 type: concept
 status: active
-last_updated: 2026-04-25
-source_count: 3
+last_updated: 2026-04-30
+source_count: 4
 tags:
   - key-management
   - lifecycle
@@ -29,6 +29,7 @@ EBP's [[identity-model]] and [[revocation-system]] are the main project-specific
 - Revocation certificates handle detail and whole-identity invalidation.
 - Emergency revocation certificates are a recovery mechanism for loss or compromise scenarios.
 - Future identity expiry, rotation, and hierarchy features should be documented with explicit key-state and cryptoperiod assumptions.
+- Long-lived signature evidence should incorporate [[integrity-renewal]] practices so signatures remain verifiable across hash/algorithm transitions.
 
 ## Boundary
 
@@ -42,9 +43,11 @@ The NIST sources provide vocabulary and risk-management structure. They do not m
 - [[identity-model]]
 - [[revocation-system]]
 - [[cryptographic-algorithm-transitions]]
+- [[integrity-renewal]]
 
 ## Sources
 
 - `wiki/raw/NIST.SP.800-57pt1r5.pdf` → [[source-sp-800-57-part-1-r5]]
 - `wiki/raw/NIST.SP.800-57pt2r1.pdf` → [[source-sp-800-57-part-2-r1]]
 - `wiki/raw/NIST.SP.800-57Pt3r1.pdf` → [[source-sp-800-57-part-3-r1]]
+- `wiki/raw/Long-lived-digital-integrity-using-short-lived-hash-functions.pdf` → [[source-long-lived-digital-integrity-using-short-lived-hash-functions]]

@@ -39,6 +39,10 @@ import {
   sendVerificationEmail,
 } from "../verify-email.ts";
 
+function invalidIdentitySubmission(): Response {
+  return json({ error: "invalid identity submission" }, 400);
+}
+
 export async function handlePostIdentity(
   req: Request,
   db: DatabaseAdapter,
@@ -53,10 +57,10 @@ export async function handlePostIdentity(
   const encryptionKeyType = payload.encryptionKeyType;
 
   if (signingKeyType !== "dilithium" && signingKeyType !== "sphincs") {
-    return json({ error: "unsupported signingKeyType" }, 400);
+    return invalidIdentitySubmission();
   }
   if (encryptionKeyType !== "kyber") {
-    return json({ error: "unsupported encryptionKeyType" }, 400);
+    return invalidIdentitySubmission();
   }
 
   const signingKeyCheck = validateStringLength(
@@ -64,7 +68,7 @@ export async function handlePostIdentity(
     "signingKey",
     LIMITS.signingKey,
   );
-  if (!signingKeyCheck.ok) return json({ error: signingKeyCheck.error }, 400);
+  if (!signingKeyCheck.ok) return invalidIdentitySubmission();
   const signingKey = signingKeyCheck.value;
 
   const encryptionKeyCheck = validateStringLength(
@@ -73,7 +77,7 @@ export async function handlePostIdentity(
     LIMITS.encryptionKey,
   );
   if (!encryptionKeyCheck.ok) {
-    return json({ error: encryptionKeyCheck.error }, 400);
+    return invalidIdentitySubmission();
   }
   const encryptionKey = encryptionKeyCheck.value;
 
@@ -82,7 +86,7 @@ export async function handlePostIdentity(
     "toState",
     LIMITS.stateHash,
   );
-  if (!toStateCheck.ok) return json({ error: toStateCheck.error }, 400);
+  if (!toStateCheck.ok) return invalidIdentitySubmission();
   const toState = toStateCheck.value;
 
   const stateSignatureCheck = validateStringLength(
@@ -91,7 +95,7 @@ export async function handlePostIdentity(
     LIMITS.stateSignature,
   );
   if (!stateSignatureCheck.ok) {
-    return json({ error: stateSignatureCheck.error }, 400);
+    return invalidIdentitySubmission();
   }
   const stateSignature = stateSignatureCheck.value;
 
@@ -101,7 +105,7 @@ export async function handlePostIdentity(
     LIMITS.stateHash,
     false,
   );
-  if (!fromStateCheck.ok) return json({ error: fromStateCheck.error }, 400);
+  if (!fromStateCheck.ok) return invalidIdentitySubmission();
   const fromState = fromStateCheck.value || null;
 
   const fingerprintCheck = validateStringLength(
@@ -110,10 +114,10 @@ export async function handlePostIdentity(
     LIMITS.fingerprint,
     false,
   );
-  if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
+  if (!fingerprintCheck.ok) return invalidIdentitySubmission();
   const providedFingerprint = fingerprintCheck.value || undefined;
   if (providedFingerprint && !isValidFingerprintBech32(providedFingerprint)) {
-    return json({ error: "fingerprint must be valid bech32" }, 400);
+    return invalidIdentitySubmission();
   }
 
   const signingKeyDetails = payload.signingKeyDetails as
@@ -124,7 +128,7 @@ export async function handlePostIdentity(
     | undefined;
 
   if (!validatePostQuantumSigningKey(signingKeyType, signingKey)) {
-    return json({ error: "invalid signingKey" }, 400);
+    return invalidIdentitySubmission();
   }
 
   let fingerprint: string;
@@ -136,11 +140,11 @@ export async function handlePostIdentity(
       encryptionKey,
     });
   } catch {
-    return json({ error: "failed to compute fingerprint" }, 400);
+    return invalidIdentitySubmission();
   }
 
   if (providedFingerprint && providedFingerprint !== fingerprint) {
-    return json({ error: "fingerprint mismatch" }, 400);
+    return invalidIdentitySubmission();
   }
 
   const existing = await getIdentity(db, fingerprint);
@@ -156,8 +160,9 @@ export async function handlePostIdentity(
       existing.signing_key !== signingKey ||
       existing.encryption_key !== encryptionKey
     ) {
-      return json({ error: "identity keys differ from existing record" }, 400);
+      return invalidIdentitySubmission();
     }
+    return json({ fingerprint });
   }
 
   const targetState = buildState({
@@ -168,26 +173,24 @@ export async function handlePostIdentity(
     encryption_key: encryptionKey,
     signing_key_details: signingKeyDetails ?? null,
     encryption_key_details: encryptionKeyDetails ?? null,
-    created_at: existing?.created_at ?? Date.now(),
+    created_at: Date.now(),
   }, existing ? currentDetails : {});
 
   const expectedToState = computeStateHash(targetState);
   if (toState !== expectedToState) {
-    return json({ error: "toState mismatch" }, 400);
+    return invalidIdentitySubmission();
   }
 
   const expectedFromState = currentState
     ? computeStateHash(currentState)
     : null;
   if (expectedFromState !== fromState) {
-    return json({ error: "fromState mismatch" }, 400);
+    return invalidIdentitySubmission();
   }
 
-  const variant =
-    (existing?.signing_key_details as { variant?: string } | null)?.variant ??
-      signingKeyDetails?.variant;
+  const variant = signingKeyDetails?.variant;
   if (!variant || typeof variant !== "string") {
-    return json({ error: "missing signing variant" }, 400);
+    return invalidIdentitySubmission();
   }
 
   const transitionMessage = stableStringify({ fromState, toState });
@@ -213,14 +216,10 @@ export async function handlePostIdentity(
       );
     }
   } catch {
-    return json({ error: "failed to verify stateSignature" }, 400);
+    return invalidIdentitySubmission();
   }
   if (!verified) {
-    return json({ error: "invalid stateSignature" }, 400);
-  }
-
-  if (existing) {
-    return json({ fingerprint });
+    return invalidIdentitySubmission();
   }
 
   await insertIdentity(db, {
@@ -250,7 +249,7 @@ export async function handleGetIdentity(
 
   const identity = await getIdentity(db, fingerprint);
   if (!identity) {
-    return json({ error: "identity not found" }, 404);
+    return json({ error: "unknown subject" }, 400);
   }
 
   const details = await getDetailsMap(db, fingerprint);
@@ -321,7 +320,7 @@ export async function handlePostDetail(
 
   const identity = await getIdentity(db, fingerprint);
   if (!identity) {
-    return json({ error: "identity not found" }, 404);
+    return json({ error: "unknown subject" }, 400);
   }
 
   const existingDetail = await getDetailRecord(db, fingerprint, path);

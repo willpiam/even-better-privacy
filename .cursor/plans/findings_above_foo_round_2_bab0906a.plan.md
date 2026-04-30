@@ -22,16 +22,16 @@ todos:
     status: completed
   - id: p7-storage-09
     content: "Phase 7: F-STORAGE-09 — new `core/PasswordPolicy.ts` (12-char floor, complexity, common-password list); wire into CLI generate + GUI route."
-    status: in_progress
+    status: completed
   - id: p8-server-08
     content: "Phase 8: F-SERVER-08 — uniform POST-register response, generic 400 for handlePostDetail unknown subject, auth/rate-limit on GET identity."
-    status: pending
+    status: completed
   - id: p9-storage-11
     content: "Phase 9: F-STORAGE-11 — add `test_identities/README.md`, gate `scripts/generate_test_identities.ts`, runtime warning when loading from `test_identities/`."
-    status: pending
+    status: completed
   - id: p10-script-prune
     content: "Phase 10: flip 9 register rows; remove `\\benumeration\\b`, `\\bcsp\\b` (×2), `\\bpolicy\\b` from `plot_remaining_findings.py`; rerun the script and confirm no findings remain at-or-above foo."
-    status: pending
+    status: completed
 isProject: false
 ---
 

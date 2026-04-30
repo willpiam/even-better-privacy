@@ -1,0 +1,11 @@
+title = "EBP gitleaks configuration"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Documented local-only test identities are public fixtures, not secrets"
+paths = [
+  '''test_identities/.*''',
+  '''test_identities/README\.md''',
+]

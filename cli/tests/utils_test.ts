@@ -8,11 +8,14 @@ import {
   ensureServer,
   getContext,
   identityLoadErrorMessage,
+  isTestIdentityPath,
   listIdentityNames,
   normalizeServerUrl,
   readState,
   safeFileName,
+  shouldBlockTestIdentityPath,
   stableStringify,
+  testIdentityWarning,
   updateState,
   writeState,
 } from "../utils.ts";
@@ -39,6 +42,32 @@ Deno.test({
     assertEquals(await readState(dir), updated);
 
     await Deno.remove(root, { recursive: true });
+  },
+});
+
+Deno.test({
+  name: "F-STORAGE-10: readState rejects authenticated state tampering",
+  permissions: { read: true, write: true },
+  fn: async () => {
+    const root = await Deno.makeTempDir();
+    try {
+      const dir = `${root}/.ebp`;
+      await writeState(dir, { currentIdentity: "identity-1" });
+      const envelope = JSON.parse(await Deno.readTextFile(`${dir}/state.json`));
+      envelope.state.server = "https://attacker.example";
+      await Deno.writeTextFile(`${dir}/state.json`, JSON.stringify(envelope));
+
+      let error: unknown;
+      try {
+        await readState(dir);
+      } catch (e) {
+        error = e;
+      }
+      assert(error instanceof StorageFormatError);
+      assertEquals(error.message, "state.json authentication failed");
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
   },
 });
 
@@ -210,9 +239,28 @@ Deno.test("identityLoadErrorMessage distinguishes auth and storage failures", ()
     "Failed to decrypt identity: wrong password or tampered data.",
   );
   assertEquals(
-    identityLoadErrorMessage(new StorageFormatError("Identity file is not valid JSON")),
+    identityLoadErrorMessage(
+      new StorageFormatError("Identity file is not valid JSON"),
+    ),
     "Failed to load identity: Identity file is not valid JSON",
   );
+});
+
+Deno.test({
+  name: "test identity helpers warn and block in production",
+  permissions: { env: true },
+  fn: () => {
+    const path = "/repo/test_identities/alice.identity.json";
+    assert(isTestIdentityPath(path));
+    assert(testIdentityWarning(path)?.includes("documented-password"));
+
+    Deno.env.set("EBP_PROD", "1");
+    try {
+      assert(shouldBlockTestIdentityPath(path));
+    } finally {
+      Deno.env.delete("EBP_PROD");
+    }
+  },
 });
 
 Deno.test("normalizeServerUrl requires HTTPS except loopback HTTP", () => {
