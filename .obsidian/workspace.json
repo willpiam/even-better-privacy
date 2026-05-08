@@ -11,10 +11,10 @@
             "id": "b3b8f0b4c9f99bbf",
             "type": "leaf",
             "state": {
-              "type": "empty",
+              "type": "graph",
               "state": {},
-              "icon": "lucide-file",
-              "title": "New tab"
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
         ]
@@ -182,6 +182,16 @@
   },
   "active": "b3b8f0b4c9f99bbf",
   "lastOpenFiles": [
+    "wiki/analysis-weakest-defined-architecture-concepts.md",
+    "wiki/security-audit-2026-04/README.md",
+    "node_modules/imapflow/CHANGELOG.md",
+    "wiki/key-management.md",
+    "wiki/security-audit-2026-04/report.md",
+    "wiki/index.md",
+    "wiki/log.md",
+    "wiki/overview.md",
+    "wiki/analysis-reimplementation-building-blocks.md",
+    "wiki/analysis-noble-library-usage.md",
     "6e656e2.md",
     "llm-wiki.md",
     "PRIVACY.md",
@@ -189,7 +199,6 @@
     "README_ja.md",
     "mobile/node_modules/query-string/readme.md",
     "wiki/identity-model.md",
-    "wiki/log.md",
     "mobile/node_modules/eslint-plugin-jest/README.md",
     "core/EmailAttachmentPayload.ts",
     "wiki/decentralized-identifiers.md",
@@ -217,12 +226,6 @@
     "wiki/raw/rfc3986.txt",
     "2026-04-27.md",
     "Untitled 6.base",
-    "wiki/overview.md",
-    "Untitled 5.base",
-    "mobile/node_modules/@noble/curves/README.md",
-    "mobile/node_modules/eslint-plugin-react/README.md",
-    "wiki/component-server.md",
-    "wiki/key-management.md",
-    "wiki/index.md"
+    "Untitled 5.base"
   ]
 }

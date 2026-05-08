@@ -2,8 +2,8 @@
 title: "EBP Email Chrome Extension"
 type: component
 status: active
-last_updated: 2026-04-27
-source_count: 4
+last_updated: 2026-05-07
+source_count: 5
 tags:
   - component
   - email
@@ -38,6 +38,8 @@ The extension works with EBP armored JSON payloads, not OpenPGP messages or S/MI
 
 Because the extension operates inside webmail clients, it usually sees already-rendered compose and message content rather than acting as an SMTP or IMAP client itself. The same [[email-transport]] boundary still applies: provider mail transport and mailbox access carry the message, while EBP verification is based on the armored payload and cryptographic identity.
 
+When users connect **Google** accounts, the OAuth client registered in Google Cloud is subject to Google's **verified vs. unverified** app rules (extra warnings, consent-screen behavior, and user caps until verification completes for sensitive/restricted scopes). That policy is orthogonal to EBP's own cryptography but affects whether Gmail flows work smoothly at scale; see [[source-google-cloud-unverified-apps]].
+
 ## Installation
 
 ### From Source
@@ -64,6 +66,7 @@ The extension can be built into a `.crx` or `.zip` using `build_chrome_extension
 - [[openpgp-pqc]]
 - [[x509-pki]]
 - [[overview]]
+- [[source-google-cloud-unverified-apps]]
 
 ## Sources
 
@@ -71,3 +74,4 @@ The extension can be built into a `.crx` or `.zip` using `build_chrome_extension
 - `email/chrome-extension/`
 - `wiki/raw/NIST.SP.800-57Pt3r1.pdf` → [[source-sp-800-57-part-3-r1]]
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
+- `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]

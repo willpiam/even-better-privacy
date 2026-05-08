@@ -1,7 +1,7 @@
 ---
 title: "Phase 8 — Dynamic testing, fuzzing, and exploit PoCs"
 type: analysis
-status: completed
+status: active
 last_updated: 2026-04-18
 source_count: 0
 tags:

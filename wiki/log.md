@@ -1,5 +1,46 @@
 # Wiki Log
 
+## [2026-05-07] ingest | Unverified apps — Google Cloud Platform Console Help
+
+- Ingested `Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]].
+- Updated: [[component-server]], [[component-gui]], [[component-email-extension]], [[index.md]].
+
+## [2026-05-06] update | component-desktop source provenance
+
+- Promoted [[component-desktop]] from `seed` to `active` after confirming mature architecture coverage and adding direct desktop implementation/build sources.
+- Added direct source anchors to desktop paths and packaging scripts (`build_desktop_linux.sh`, `build_desktop_mac.sh`, `build_desktop_windows.sh`) and refreshed metadata (`last_updated`, `source_count`).
+- Verified and tightened architecture statements against direct implementation sources, including sidecar spawn/termination behavior (`desktop/src-tauri/src/main.rs`) and sidecar compile pipeline (`scripts/build_desktop_backend_sidecar.ts`).
+
+## [2026-05-06] query | weakest-defined architecture concepts
+
+- Answered: ranked architecture concepts with the weakest current definition, with strongest gaps in FN-DSA integration details, mobile parity definition, and roadmap-only concepts lacking canonical pages.
+- Filed: [[analysis-weakest-defined-architecture-concepts]].
+
+## [2026-05-06] query | reimplementation building blocks checklist
+
+- Answered: documented the crypto/encoding/runtime primitive inventory and deterministic mapping requirements needed to reimplement EBP in another language with compatible input/output behavior.
+- Filed: [[analysis-reimplementation-building-blocks]].
+
+## [2026-05-06] query | noble library usage map
+
+- Answered: consolidated where EBP uses `@noble/post-quantum`, `@noble/hashes`, and `@noble/ciphers` across scheme docs, website verifier docs, and audit notes.
+- Filed: [[analysis-noble-library-usage]].
+
+## [2026-05-01] lint | wiki-health-check
+
+- Orphans: 0 (fixed: 0)
+- Broken wikilinks: 2 (fixed: 2)
+- Stale pages: 2
+- Missing pages created as seeds: 1
+- Contradictions: 1 (resolved: 0)
+- Frontmatter issues: 9 (fixed: 9)
+- Notes: Added [[component-desktop]] for repeated desktop/Tauri coverage, expanded [[index.md]] to catalog required operations files and audit subpages, fixed malformed/root-sensitive wikilinks, refreshed [[security-audit-2026-04/findings]] metadata, and marked [[analysis-top-open-security-issues]] `needs-review` because its detailed prose still contains stale open-issue wording after the findings register closed all items.
+
+## [2026-04-30] query | ways the application is more complicated than it needs to be (excluding mobile/email)
+
+- Answered: identified ten complexity hotspots, grounded in both the wiki and code, including the 4,795-line `gui/local-backend/routes.ts`, the desktop sidecar's HTTP-loopback architecture, the connection-shaped DB layer, the 1,328-line `core/Identity.ts` god class, and parallel verifier implementations.
+- Filed: [[analysis-application-complexity-debt]].
+
 ## [2026-04-30] ingest | Long-lived digital integrity using short-lived hash functions
 
 - Ingested `Long-lived-digital-integrity-using-short-lived-hash-functions.pdf` → [[source-long-lived-digital-integrity-using-short-lived-hash-functions]].

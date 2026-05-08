@@ -2,7 +2,7 @@
 title: "EBP Security Audit — April 2026 — Final Report"
 type: analysis
 status: active
-last_updated: 2026-04-18
+last_updated: 2026-05-01
 source_count: 0
 tags:
   - security-audit
@@ -226,4 +226,4 @@ This audit was conducted in a single pass by a single reviewer over the source t
 - [[README]]
 - [[threat-model]]
 - [[findings]]
-- [[index]]
+- [[index.md|Wiki Index]]

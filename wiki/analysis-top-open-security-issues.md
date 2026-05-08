@@ -1,8 +1,8 @@
 ---
 title: "Analysis: Top Remaining Open Security Issues (post-2026-04-22 remediation)"
 type: analysis
-status: active
-last_updated: 2026-04-28
+status: needs-review
+last_updated: 2026-05-01
 source_count: 0
 tags:
   - security-audit
@@ -14,6 +14,8 @@ tags:
 # Top Remaining Open Security Issues
 
 A curated, ranked list of the most important **unresolved** findings from the April 2026 security audit ([[security-audit-2026-04/README|Security Audit — April 2026]]), synthesised from the [[security-audit-2026-04/findings|findings register]] and the Appendix-A roadmap in the [[security-audit-2026-04/report|final report]].
+
+> Lint note 2026-05-01: the findings register now records all listed items as fixed by 2026-04-30. This page is retained as a historical closure ledger, but detailed remediation prose below may still use stale "open" wording and needs a focused refresh before being used as current prioritisation.
 
 Remediation cutoff reflected here: **2026-04-22** (the first remediation pass, which closed the Critical F-GUI-01 and most High-severity findings).
 

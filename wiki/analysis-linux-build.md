@@ -2,7 +2,7 @@
 title: "Analysis: Linux Build Process"
 type: analysis
 status: active
-last_updated: 2026-04-06
+last_updated: 2026-05-01
 source_count: 4
 tags:
   - build
@@ -77,6 +77,7 @@ This means:
 
 ## Related Pages
 
+- [[component-desktop]]
 - [[component-gui]]
 - [[overview]]
 

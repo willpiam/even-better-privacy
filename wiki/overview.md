@@ -2,7 +2,7 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-04-28
+last_updated: 2026-05-01
 source_count: 20
 tags:
   - ebp
@@ -50,6 +50,7 @@ IETF and W3C infrastructure sources document the non-cryptographic layers EBP ri
 
 - [[component-cli]]: command-line interface for identity lifecycle and message/file operations.
 - [[component-gui]]: browser-based GUI with local backend, plus native email integration.
+- [[component-desktop]]: Tauri desktop shell and sidecar packaging for the GUI.
 - [[component-server]]: key/discovery server and API for publish/fetch/revocation data.
 - [[component-email-extension]]: Chrome extension for webmail encryption/signing workflows.
 - [[component-mobile]]: React Native mobile app (under development, targeting GUI feature parity).
@@ -78,7 +79,7 @@ The repository is organized as a multi-surface implementation:
 - `server/` — public key server
 - `mobile/` — React Native mobile app
 - `email/chrome-extension/` — browser extension for webmail
-- `desktop/` — Tauri shell for desktop packaging
+- `desktop/` — [[component-desktop|Tauri shell for desktop packaging]]
 
 ## Versioning Notes
 

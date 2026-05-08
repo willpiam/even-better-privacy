@@ -2,10 +2,10 @@
 title: "Message Payload Formats"
 type: concept
 status: active
-last_updated: 2026-04-28
+last_updated: 2026-05-01
 source_count: 8
 contradiction_log:
-  - 2026-04-28: Earlier revisions of this page described `signature` and signing-key fields as "hex-encoded". They are base64-encoded per `core/Dilithium.ts::sign`/`verify` and `core/Sphincs.ts::sign`/`verify`. The website verifier was silently failing because of this; see [[log#2026-04-28] fix | website verifier signature decoding]].
+  - 2026-04-28: Earlier revisions of this page described `signature` and signing-key fields as "hex-encoded". They are base64-encoded per `core/Dilithium.ts::sign`/`verify` and `core/Sphincs.ts::sign`/`verify`. The website verifier was silently failing because of this; see [[log]] entry "2026-04-28 fix | website verifier signature decoding".
 tags:
   - payload
   - email

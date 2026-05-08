@@ -1,7 +1,7 @@
 ---
 title: "Phase 5 — CLI, website verifier, Tauri shell"
 type: analysis
-status: completed
+status: active
 last_updated: 2026-04-18
 source_count: 0
 tags:

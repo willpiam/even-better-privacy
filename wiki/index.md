@@ -1,6 +1,22 @@
+---
+title: "Wiki Index"
+type: overview
+status: active
+last_updated: 2026-05-07
+source_count: 0
+tags:
+  - wiki
+  - index
+---
+
 # Wiki Index
 
-Last updated: 2026-04-30
+Last updated: 2026-05-07 (ingest: Google OAuth unverified apps policy)
+
+## Wiki Operations
+
+- [[index.md|Wiki Index]] - Master catalog grouped by category.
+- [[log|Wiki Log]] - Append-only chronological operations log.
 
 ## Overview
 
@@ -36,6 +52,7 @@ Last updated: 2026-04-30
 
 - [[component-cli]] - CLI for identity lifecycle, crypto operations, and server interaction.
 - [[component-gui]] - Graphical interface with local backend, native email, and Tauri desktop packaging.
+- [[component-desktop]] - Tauri desktop shell and sidecar packaging for the GUI.
 - [[component-server]] - Publish/discovery API with identity, detail, revocation, hierarchy, and OAuth endpoints.
 - [[component-email-extension]] - Chrome extension for sign/encrypt in Gmail, Outlook, Proton Mail webmail.
 - [[component-mobile]] - React Native mobile app (under development).
@@ -43,20 +60,34 @@ Last updated: 2026-04-30
 
 ## Analyses
 
+- [[analysis-weakest-defined-architecture-concepts]] - Ranks the least-defined architecture concepts by page maturity, source depth, and implementation specificity; highlights FN-DSA, mobile parity, and roadmap-only concepts as the primary definition gaps.
 - [[analysis-mail-message-load-hang]] - Bug analysis: selected email messages can appear to hang because full MIME fetch/parse work is unbounded and stale requests are not cancelled.
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
 - [[analysis-linux-build]] - Linux install and local AppImage build flow, including sidecar redirect architecture.
-- [[analysis-top-open-security-issues]] - Ranked top remaining open findings from the April 2026 security audit (post-2026-04-22 remediation pass).
+- [[analysis-top-open-security-issues]] - Historical closure ledger for once-open April 2026 audit findings; needs review before use as current prioritisation.
 - [[analysis-address-recent-audit-findings-by-group-skill]] - Documents the planning skill for grouping unresolved findings above `foo`, enforcing Plan Mode, and closing the loop by rerunning the findings plot workflow.
+- [[analysis-application-complexity-debt]] - Code- and wiki-grounded review of where EBP is more complicated than it needs to be (excluding `mobile/` and `email/`), grouped by hotspot with suggested decompositions.
+- [[analysis-noble-library-usage]] - Central inventory of where EBP uses `@noble/post-quantum`, `@noble/hashes`, and `@noble/ciphers` across core, website verifier, and audit-documented surfaces.
+- [[analysis-reimplementation-building-blocks]] - Reimplementation checklist of required crypto primitives, runtime operations, encodings, and deterministic mappings needed for cross-language compatibility.
 
 ## Security Audits
 
 - [[security-audit-2026-04/README|Security Audit — April 2026]] - Phased security audit covering crypto core, server, GUI, CLI, website, supply chain, storage, and dynamic testing. **Completed 2026-04-18** with 75 findings; see [[security-audit-2026-04/report|final report]] and [[security-audit-2026-04/findings|findings register]].
+- [[security-audit-2026-04/threat-model|April 2026 Threat Model]] - Assets, adversaries, trust boundaries, and STRIDE analysis for the audit.
+- [[security-audit-2026-04/phase-01-scaffolding|Phase 1 — Scaffolding & Threat Model]] - Audit setup, scope, naming conventions, and initial threat model links.
+- [[security-audit-2026-04/phase-02-crypto-core|Phase 2 — Crypto Core]] - Manual review notes for `core/`.
+- [[security-audit-2026-04/phase-03-server|Phase 3 — Server]] - Public API and server implementation review notes.
+- [[security-audit-2026-04/phase-04-gui|Phase 4 — GUI]] - GUI local backend and frontend review notes.
+- [[security-audit-2026-04/phase-05-cli-website-tauri|Phase 5 — CLI, Website, Tauri]] - CLI, website verifier, and desktop shell review notes.
+- [[security-audit-2026-04/phase-06-supply-chain|Phase 6 — Supply Chain]] - Dependency, build, Docker, and release-chain review notes.
+- [[security-audit-2026-04/phase-07-storage|Phase 7 — Storage]] - Identity storage, permissions, password, and key-management review notes.
+- [[security-audit-2026-04/phase-08-dynamic|Phase 8 — Dynamic Testing]] - Runtime testing and proof-of-concept notes.
 
 ## Source Summaries
 
 - [[source-did-1-1]] - W3C DID v1.1: URI-based decentralized identifiers, DID documents, methods, verification methods, and services.
 - [[source-draft-ietf-openpgp-pqc-17]] - IETF OpenPGP PQC draft covering composite ML-KEM/ML-DSA and SLH-DSA algorithm profiles.
+- [[source-google-cloud-unverified-apps]] - Google Cloud Help: OAuth “unverified” apps, warnings, 100-user cap, and verification requirements for sensitive/restricted scopes.
 - [[source-fips-140-3]] - NIST FIPS 140-3 cryptographic module security requirements and CMVP validation context.
 - [[source-fips-197]] - NIST FIPS 197 Advanced Encryption Standard (AES) block cipher specification.
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).

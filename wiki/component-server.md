@@ -2,8 +2,8 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-04-27
-source_count: 4
+last_updated: 2026-05-07
+source_count: 5
 tags:
   - component
   - server
@@ -67,6 +67,8 @@ The server (`server/main.ts`) is the publish/discovery layer for public identiti
 | `POST` | `/api/v1/mail/oauth/exchange` | Exchange OAuth code for tokens (Gmail, Outlook) |
 | `POST` | `/api/v1/mail/oauth/refresh` | Refresh an OAuth access token |
 
+Google Cloud OAuth clients that request **sensitive or restricted** Gmail (or other Google) scopes without completed [OAuth app verification](https://support.google.com/cloud/answer/9110914) are treated as **unverified**: users may see an extra “unverified app” step, Security Checkup warnings, or stricter sign-in behavior, and Google applies a **100 new-user cap** (after the unverified screen appears) until verification succeeds. Requested scopes must match the OAuth consent screen configuration. See [[source-google-cloud-unverified-apps]] for a clipped summary of Google's documentation.
+
 ### Health
 
 | Method | Path | Description |
@@ -107,6 +109,7 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - [[revocation-system]]
 - [[identity-model]]
 - [[overview]]
+- [[source-google-cloud-unverified-apps]]
 
 ## Sources
 
@@ -114,3 +117,4 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - `server/main.ts`, `server/handlers/`, `server/db/`
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
+- `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]

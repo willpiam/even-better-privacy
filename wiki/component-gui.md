@@ -2,8 +2,8 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-04-28
-source_count: 5
+last_updated: 2026-05-07
+source_count: 6
 tags:
   - component
   - gui
@@ -34,14 +34,14 @@ The desktop app bundles two binaries inside a Tauri shell:
 1. **Tauri shell** (`ebp`): a Rust binary creating a WebKit webview. Embeds a lightweight loader page from `desktop/dist/`.
 2. **Sidecar** (`ebp-gui-backend`): the Deno-compiled local backend. Serves the full frontend and all API endpoints.
 
-The loader page polls the sidecar health endpoint and redirects to `http://127.0.0.1:8787/` once ready. This avoids stale-frontend issues with Cargo caching. See [[analysis-linux-build]] for details.
+The loader page polls the sidecar health endpoint and redirects to `http://127.0.0.1:8787/` once ready. This avoids stale-frontend issues with Cargo caching. See [[component-desktop]] and [[analysis-linux-build]] for details.
 
 ## Native Email
 
 The GUI includes a built-in email interface:
 
 - Connects directly over SMTP and IMAP protocols. [[source-rfc-5321]] anchors SMTP as the mail transport layer, while [[source-rfc-9051]] anchors IMAP4rev2 as the mailbox access layer.
-- Supports OAuth with Gmail (and partially Outlook).
+- Supports OAuth with Gmail (and partially Outlook). Until the Google Cloud OAuth client completes [app verification](https://support.google.com/cloud/answer/9110914) for the scopes in use, Google may label the client **unverified**, show additional consent warnings, and cap **new** users (100 total after the unverified screen); see [[source-google-cloud-unverified-apps]].
 - Proton Mail users need Proton Mail Bridge running.
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
 
@@ -76,6 +76,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 ## Related Pages
 
 - [[component-cli]]
+- [[component-desktop]]
 - [[component-email-extension]]
 - [[component-server]]
 - [[analysis-linux-build]]
@@ -83,6 +84,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[identity-model]]
 - [[message-payload-formats]]
 - [[overview]]
+- [[source-google-cloud-unverified-apps]]
 
 ## Sources
 
@@ -91,3 +93,4 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - `gui/index.html`, `gui/app.js`, `gui/js/`
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
+- `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]
