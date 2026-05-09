@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-07
+last_updated: 2026-05-09
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-07 (ingest: Google OAuth unverified apps policy)
+Last updated: 2026-05-09 (ingest: Bitcoin BIP HD wallet standards bundle)
 
 ## Wiki Operations
 
@@ -39,7 +39,7 @@ Last updated: 2026-05-07 (ingest: Google OAuth unverified apps policy)
 - [[cryptographic-algorithm-transitions]] - NIST transition vocabulary for algorithm/key-size lifetimes and legacy use.
 - [[cryptographic-module-validation]] - Distinguishes FIPS-standardized algorithms from FIPS 140-3 validated modules.
 - [[decentralized-identifiers]] - W3C DID v1.1 identity architecture compared with EBP fingerprinted identities.
-- [[key-management]] - NIST SP 800-57 key lifecycle concepts mapped to EBP identity and revocation surfaces.
+- [[key-management]] - NIST SP 800-57 key lifecycle concepts mapped to EBP identity and revocation surfaces; includes non-EBP BIP32/39/43/44 comparison notes ([[source-bip-hd-wallet-standards]]).
 - [[integrity-renewal]] - Long-term renewal of timestamp/signature evidence across hash-function and algorithm transitions.
 - [[release-process]] - Reproducible release checklist, build lints, and checksum manifest process.
 - [[openpgp-pqc]] - Adjacent OpenPGP post-quantum standards context and differences from EBP payloads.
@@ -85,6 +85,7 @@ Last updated: 2026-05-07 (ingest: Google OAuth unverified apps policy)
 
 ## Source Summaries
 
+- [[source-bip-hd-wallet-standards]] - Bitcoin BIPs 32/39/43/44: HD wallets, mnemonics, purpose namespaces, and multi-account paths; comparison-only for EBP (PQ identities, not secp256k1).
 - [[source-did-1-1]] - W3C DID v1.1: URI-based decentralized identifiers, DID documents, methods, verification methods, and services.
 - [[source-draft-ietf-openpgp-pqc-17]] - IETF OpenPGP PQC draft covering composite ML-KEM/ML-DSA and SLH-DSA algorithm profiles.
 - [[source-google-cloud-unverified-apps]] - Google Cloud Help: OAuth “unverified” apps, warnings, 100-user cap, and verification requirements for sensitive/restricted scopes.

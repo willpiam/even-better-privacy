@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-05-09] ingest | Bitcoin BIP HD wallet standards (32, 39, 43, 44)
+
+- Ingested `bip-0032.mediawiki`, `bip-0039.mediawiki`, `bip-0043.mediawiki`, `bip-0044.mediawiki` → [[source-bip-hd-wallet-standards]].
+- Updated: [[key-management]], [[overview]], [[index.md]].
+
 ## [2026-05-07] ingest | Unverified apps — Google Cloud Platform Console Help
 
 - Ingested `Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]].
