@@ -49,6 +49,28 @@
     </section>
 
     <section class="card verifier-card">
+      <h2>Google User Data Accessed</h2>
+      <p>If you connect a Google account for Gmail in the EBP mail feature, EBP requests and processes the following Google user data:</p>
+      <ul class="steps">
+        <li>Google account email address (from OpenID user info, using <code>openid</code> and <code>email</code> scopes)</li>
+        <li>Gmail mailbox access via IMAP/SMTP OAuth scope <code>https://mail.google.com/</code>, which can include message content, headers, and attachments needed to send and receive your mail</li>
+        <li>OAuth credentials (access token, refresh token, and expiry) required to keep your Gmail connection active</li>
+      </ul>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>How Google User Data Is Used</h2>
+      <p>Google user data is used only to provide user-requested email functionality inside EBP:</p>
+      <ul class="steps">
+        <li>Authenticate your Google account connection</li>
+        <li>Send and receive email through your chosen mailbox</li>
+        <li>Apply EBP cryptographic signing, verification, encryption, and decryption features to your email workflow</li>
+        <li>Refresh OAuth access tokens so your mail connection continues to work</li>
+      </ul>
+      <p>EBP does not use Google user data for advertising, profiling, or sale to data brokers.</p>
+    </section>
+
+    <section class="card verifier-card">
       <h2>What We Do Not Store</h2>
       <p>We do not store private keys, private message content, or plaintext of encrypted communications. All encryption and decryption happens client-side.</p>
     </section>
@@ -64,6 +86,18 @@
     </section>
 
     <section class="card verifier-card">
+      <h2>Data Sharing</h2>
+      <p>EBP does not sell Google user data.</p>
+      <p>Google user data may be shared only in these limited cases:</p>
+      <ul class="steps">
+        <li>With Google services, when required to authenticate and access Gmail on your behalf</li>
+        <li>With your configured EBP server only as needed to exchange or refresh OAuth tokens for Gmail connectivity</li>
+        <li>With email recipients and mail providers as part of normal email delivery that you initiate</li>
+        <li>When required by applicable law, regulation, or valid legal process</li>
+      </ul>
+    </section>
+
+    <section class="card verifier-card">
       <h2>Your Control</h2>
       <p>
         You choose what to publish. If you do not publish information, we do not store it. Published data can be revoked using EBP's built-in revocation system.
@@ -76,11 +110,27 @@
     </section>
 
     <section class="card verifier-card">
+      <h2>Data Storage and Protection</h2>
+      <ul class="steps">
+        <li>OAuth credentials used for mail are stored on the user's device in encrypted form (AES-GCM with PBKDF2-derived key) when persisted</li>
+        <li>Private application files are written with restricted file permissions where supported</li>
+        <li>Network traffic between clients and servers uses HTTPS/TLS where applicable</li>
+        <li>EBP is designed so cryptographic operations are performed client-side whenever possible</li>
+      </ul>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Data Retention and Deletion Requests</h2>
+      <p>Google account data connected for mail remains available until you remove the connected account from EBP or revoke app access from your Google account settings.</p>
+      <p>To request deletion of server-side data that you published through EBP, use EBP's revocation features or contact us through the project's <a href="https://github.com/willpiam/even-better-privacy/issues" target="_blank" rel="noreferrer">GitHub issues page</a>. Please include the relevant fingerprint or account details needed to process your request.</p>
+    </section>
+
+    <section class="card verifier-card">
       <h2>Updates</h2>
       <p>
         This Privacy Policy may be updated. Material changes will be reflected in the effective date below. Users are encouraged to review this document periodically.
       </p>
-      <p><strong>Effective date:</strong> April 9, 2026</p>
+      <p><strong>Effective date:</strong> May 8, 2026</p>
     </section>
 
     <section class="card verifier-card">
