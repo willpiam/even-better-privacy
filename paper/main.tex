@@ -1,0 +1,61 @@
+\documentclass[11pt,a4paper]{article}
+
+\title{%
+  {\Huge Even Better Privacy}\\[1ex]%
+  {\large Post-quantum identity and secure messaging}%
+}
+\author{William Doyle}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Even Better Privacy (EBP) is a post-quantum identity and secure communications protocol.
+Each \emph{identity} pairs signing with a separate encryption and key-encapsulation role.
+Confidentiality uses ML-KEM (FIPS~203); authentication and integrity use ML-DSA or SLH-DSA (FIPS~204 and FIPS~205); bulk data are protected with AES-GCM after encapsulation.
+These choices follow NIST-approved post-quantum standards for the asymmetric layer.
+This document defines the protocol and its components.
+\end{abstract}
+
+\section{Identity}
+
+EBP defines an identity as a pair of public keys: one for signing and the other for encryption.
+
+\subsection{Signing Key}
+
+Options for the signing key are:
+\begin{itemize}
+  \item ML-DSA (Dilithium)
+  \item SLH-DSA (SPHINCS+)
+\end{itemize}
+
+Both of these options are great for seperate purposes. Later in this paper we discuss how to use them together in a hierarchical relationship to benefit from the strengths of both.
+
+\subsection{Encryption Key}
+
+The encryption key is always ML-KEM (Kyber) because that is the only NIST approved post-quantum KEM. We will consider adding other KEMs upon approval form NIST. 
+
+\subsection{Fingerprint}
+
+The fingerprint is a bech32-encoded merkle root of the two public keys:
+\begin{itemize}
+  \item \textbf{Left leaf:} SHA-256(base64-decoded signing public key bytes)
+  \item \textbf{Right leaf:} SHA-256 of the encryption public key decoded from its lowercase hexadecimal string (not the UTF-8 bytes of the hex digits)
+\end{itemize}
+
+The merkle tree design means the fingerprint can be verified without both keys present. This is useful in bandwidth-constrained scenarios.
+
+\subsection{Details}
+
+Each identity has a key value map for details. These can be used to store arbitrary data about an identity.
+
+\subsection{Opaque details}
+
+Keys prefixed with opaque:: are hashed before being commited to. This allows the identity to commit to the detail without publishing the detail directly.
+
+\section{Standard operating procedure}
+
+
+\end{document}

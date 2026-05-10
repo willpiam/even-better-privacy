@@ -1,5 +1,5 @@
 ---
-title: "Message Payload Formats"
+title: Message Payload Formats
 type: concept
 status: active
 last_updated: 2026-05-01
@@ -12,6 +12,7 @@ tags:
   - encryption
   - signing
   - wire-format
+imjp:
 ---
 
 # Message Payload Formats

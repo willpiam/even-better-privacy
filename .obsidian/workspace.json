@@ -11,10 +11,14 @@
             "id": "b3b8f0b4c9f99bbf",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "wiki/message-payload-formats.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "message-payload-formats"
             }
           }
         ]
@@ -49,7 +53,7 @@
             "state": {
               "type": "search",
               "state": {
-                "query": "email",
+                "query": "message-payload",
                 "matchingCase": false,
                 "explainSearch": false,
                 "collapseAll": false,
@@ -70,7 +74,8 @@
               "title": "Bookmarks"
             }
           }
-        ]
+        ],
+        "currentTab": 1
       }
     ],
     "direction": "horizontal",
@@ -182,6 +187,7 @@
   },
   "active": "b3b8f0b4c9f99bbf",
   "lastOpenFiles": [
+    "wiki/email-transport.md",
     "wiki/analysis-weakest-defined-architecture-concepts.md",
     "wiki/security-audit-2026-04/README.md",
     "node_modules/imapflow/CHANGELOG.md",
@@ -203,7 +209,6 @@
     "core/EmailAttachmentPayload.ts",
     "wiki/decentralized-identifiers.md",
     "wiki/source-did-1-1.md",
-    "wiki/email-transport.md",
     "wiki/uri-syntax.md",
     "wiki/source-rfc-9051.md",
     "wiki/source-rfc-5321.md",
