@@ -55,7 +55,23 @@ Each identity has a key value map for details. These can be used to store arbitr
 
 Keys prefixed with opaque:: are hashed before being commited to. This allows the identity to commit to the detail without publishing the detail directly.
 
-\section{Standard operating procedure}
+\section{Communication procedures}
+
+EBP defines a varity of procedures suited for various models of communication. 
+
+\subsection{Signed Only}
+
+In this model the sender signs the message but does not encrypt it. 
+
+\subsection{Encrypted Only}
+
+In this model the sender encrypts the message for the recipient but does not sign it. The recipient cannot verify who sent the message. 
+
+\subsection{Signed and Encrypted}
+
+Perhaps the most important communications model, in this model the message remains confidential and the sender is authenticated.
+
+
 
 
 \end{document}
