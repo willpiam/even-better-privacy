@@ -2,8 +2,8 @@
 title: "Email Transport and Access"
 type: concept
 status: active
-last_updated: 2026-04-27
-source_count: 2
+last_updated: 2026-05-11
+source_count: 3
 tags:
   - email
   - smtp
@@ -21,6 +21,8 @@ EBP can ride over ordinary email systems while keeping its cryptographic semanti
 SMTP transports mail between clients, submission servers, relays, and delivery systems. It uses an envelope (`MAIL FROM`, `RCPT TO`) that is separate from the RFC 5322 message header and body.
 
 For EBP, SMTP is only the send/carriage layer. It does not authenticate the EBP sender fingerprint, verify an EBP signature, or encrypt the message body. RFC 5321 explicitly frames robust mail security as an end-to-end property of the message body rather than a property of SMTP transport.
+
+A different historical anti-abuse idea is **hashcash**-style **CPU proof-of-work** stamps on mail (summarized in [[hashcash-cost-functions]] from [[source-hashcash-adam-back-2002]]). That model throttles senders by computational cost at the transport or header layer; EBP instead places post-quantum signatures and encryption in the message payload and does not rely on hashcash.
 
 ## IMAP Receive Layer
 
@@ -42,9 +44,11 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 - [[component-email-extension]]
 - [[message-payload-formats]]
 - [[openpgp-pqc]]
+- [[hashcash-cost-functions]]
 - [[overview]]
 
 ## Sources
 
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
+- `wiki/raw/hashcash.pdf` → [[source-hashcash-adam-back-2002]]

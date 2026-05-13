@@ -2,8 +2,8 @@
 title: "SLH-DSA (SPHINCS+) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-25
-source_count: 7
+last_updated: 2026-05-11
+source_count: 8
 tags:
   - crypto
   - signatures
@@ -59,7 +59,7 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 ## Implementation Details
 
 - Supported variants: all `slh_dsa_*` variants exposed by the noble library (SHA-2 and SHAKE, "s" and "f" forms).
-- Public keys are stored as base64-encoded strings.
+- Public keys are stored as base64-encoded strings (RFC 4648 Table 1 alphabet; see [[source-rfc-4648]]).
 - Public-key-only instances can be created via `SphincsSigningKey.fromPublicKey()` — these can verify but not sign.
 
 ## Related Pages
@@ -86,3 +86,4 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - `wiki/raw/NIST.SP.800-208.pdf` → [[source-sp-800-208]]
 - `wiki/raw/NIST.FIPS.140-3.pdf` → [[source-fips-140-3]]
 - `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
+- `wiki/raw/rfc4648.txt` → [[source-rfc-4648]]

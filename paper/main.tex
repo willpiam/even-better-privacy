@@ -14,7 +14,7 @@
 \begin{abstract}
 Even Better Privacy (EBP) is a post-quantum identity and secure communications protocol.
 Each \emph{identity} pairs signing with a separate encryption and key-encapsulation role.
-Confidentiality uses ML-KEM (FIPS~203); authentication and integrity use ML-DSA or SLH-DSA (FIPS~204 and FIPS~205); bulk data are protected with AES-GCM after encapsulation.
+Confidentiality uses ML-KEM~\cite{fips203}; authentication and integrity use ML-DSA or SLH-DSA~\cite{fips204,fips205}; bulk data are protected with AES-GCM after encapsulation.
 These choices follow NIST-approved post-quantum standards for the asymmetric layer.
 This document defines the protocol and its components.
 \end{abstract}
@@ -27,15 +27,15 @@ EBP defines an identity as a pair of public keys: one for signing and the other 
 
 Options for the signing key are:
 \begin{itemize}
-  \item ML-DSA (Dilithium)
-  \item SLH-DSA (SPHINCS+)
+  \item ML-DSA (Dilithium)~\cite{fips204}
+  \item SLH-DSA (SPHINCS+)~\cite{fips205}
 \end{itemize}
 
 Both of these options are great for seperate purposes. Later in this paper we discuss how to use them together in a hierarchical relationship to benefit from the strengths of both.
 
 \subsection{Encryption Key}
 
-The encryption key is always ML-KEM (Kyber) because that is the only NIST approved post-quantum KEM. We will consider adding other KEMs upon approval form NIST. 
+The encryption key is always ML-KEM (Kyber)~\cite{fips203} because that is the only NIST approved post-quantum KEM. We will consider adding other KEMs upon approval form NIST. 
 
 \subsection{Fingerprint}
 
@@ -67,11 +67,44 @@ In this model the sender signs the message but does not encrypt it.
 
 In this model the sender encrypts the message for the recipient but does not sign it. The recipient cannot verify who sent the message. 
 
-\subsection{Signed and Encrypted}
+\subsection{Signed and Encrypted Communication Procedures}
 
-Perhaps the most important communications model, in this model the message remains confidential and the sender is authenticated.
+Perhaps the most important communications models, in this model the message remains confidential and the sender is authenticated. 
 
+Whenever an EBP message is signed and encrypted it is always signed first and then encrypted, with the signature being included in the encrypted payload. 
 
+\subsubsection{Single Recipient}
 
+The sender performs a single ML-KEM encapsulation against the recipient's encryption public key, 
+producing a KEM ciphertext and a fresh 32-byte shared secret. The shared secret is used directly 
+as the key for AES-256-GCM, so no separate symmetric key needs to be generated or transported. Separately, 
+the sender signs a recipient-bound hash envelope that commits to the recipient's fingerprint, a digest of
+ the plaintext, and a random salt. The plaintext and the signature are packed together into a small JSON inner payload, which is then encrypted under the KEM-derived AES-256-GCM key using a fresh 12-byte random nonce. The transmitted ciphertext is the concatenation of the KEM ciphertext, the AES-GCM nonce, and the authenticated symmetric ciphertext.
+
+\subsubsection{Multiple Recipients}
+
+When more than one recipient is involved, encrypting the entire body once per recipient would be wasteful, since both the message body and any attachments would grow linearly in the number of recipients. EBP avoids this cost with a two-layer construction. The sender first generates a fresh random 32-byte AES-256 content key $K$ and encrypts the message body, together with any attachments, exactly once under $K$ using AES-256-GCM. To deliver $K$ to each recipient, the sender then runs an independent ML-KEM encapsulation against each recipient's encryption public key; the shared secret produced by each encapsulation is used to AES-GCM-wrap $K$, yielding a small per-recipient record consisting of the recipient fingerprint, the KEM ciphertext, a wrap nonce, and the wrapped content key. The body ciphertext therefore has constant size regardless of recipient count, and each additional recipient contributes only the fixed overhead of one KEM ciphertext plus one wrapped-key record.
+
+This wrapping step is necessary because ML-KEM is a key-encapsulation mechanism rather than a key-transport scheme: encapsulation produces a random shared secret determined by the sender's fresh randomness and the recipient's public key, so it cannot be used to directly deliver a chosen content key. Wrapping $K$ under each KEM-derived shared secret is the bridge that lets every recipient recover the same $K$ while preserving recipient-specific KEM confidentiality.
+
+Authentication is performed once, not per recipient. The sender signs a canonical envelope that binds the message content, the sorted set of recipient fingerprints, and the sorted attachment manifest together with their content hashes. Including the recipient set in the signed envelope preserves the anti-surreptitious-forwarding property of the single-recipient mode: a recipient cannot drop or substitute another recipient, nor replay the signed payload to a different audience, without invalidating the signature. The signature, the recipient list, and the attachment manifest are packed alongside the plaintext into the inner JSON before symmetric encryption, so the signature itself remains confidential to the recipient set and is additionally protected by the AES-GCM authentication tag in transit.
+
+\section{References}
+\begin{thebibliography}{9}
+\bibitem{fips203}
+National Institute of Standards and Technology,
+\emph{Module-Lattice-Based Key-Encapsulation Mechanism Standard (FIPS 203)},
+U.S. Department of Commerce, 2024.
+
+\bibitem{fips204}
+National Institute of Standards and Technology,
+\emph{Module-Lattice-Based Digital Signature Standard (FIPS 204)},
+U.S. Department of Commerce, 2024.
+
+\bibitem{fips205}
+National Institute of Standards and Technology,
+\emph{Stateless Hash-Based Digital Signature Standard (FIPS 205)},
+U.S. Department of Commerce, 2024.
+\end{thebibliography}
 
 \end{document}

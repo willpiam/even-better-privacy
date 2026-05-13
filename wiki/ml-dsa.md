@@ -2,8 +2,8 @@
 title: "ML-DSA (Dilithium) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-25
-source_count: 4
+last_updated: 2026-05-11
+source_count: 5
 tags:
   - crypto
   - signatures
@@ -60,7 +60,7 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 ## Implementation Details
 
 - Supported variants: `ml_dsa44`, `ml_dsa65`, `ml_dsa87` (only 87 used by default).
-- Public keys are stored as base64-encoded strings.
+- Public keys are stored as base64-encoded strings (RFC 4648 Table 1 alphabet; see [[source-rfc-4648]]).
 - Public-key-only instances can be created via `DilithiumSigningKey.fromPublicKey()` — these can verify but not sign.
 
 ## Related Pages
@@ -81,3 +81,4 @@ The signing public key forms the **left leaf** of the identity merkle tree. It i
 - `core/Dilithium.ts`
 - `wiki/raw/nist.fips.204.pdf` → [[source-fips-204]]
 - `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
+- `wiki/raw/rfc4648.txt` → [[source-rfc-4648]]

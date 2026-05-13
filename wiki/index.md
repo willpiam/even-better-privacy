@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-09
+last_updated: 2026-05-11
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-09 (ingest: Bitcoin BIP HD wallet standards bundle)
+Last updated: 2026-05-13 (query: shared key concept)
 
 ## Wiki Operations
 
@@ -46,6 +46,7 @@ Last updated: 2026-05-09 (ingest: Bitcoin BIP HD wallet standards bundle)
 - [[random-bit-generation]] - NIST SP 800-90 randomness vocabulary and EBP's platform-CSPRNG boundary.
 - [[uri-syntax]] - RFC 3986 URI parsing, normalization, percent-encoding, and URL-secret handling context.
 - [[email-transport]] - SMTP transport and IMAP mailbox-access boundaries for EBP email payloads.
+- [[hashcash-cost-functions]] - Hashcash and CPU cost-functions (Back 2002): proof-of-work email/DoS context; **not** part of EBP’s PQ payload model.
 - [[x509-pki]] - X.509/PKIX certificate and CRL context contrasted with EBP identities and revocations.
 
 ## Components
@@ -60,6 +61,7 @@ Last updated: 2026-05-09 (ingest: Bitcoin BIP HD wallet standards bundle)
 
 ## Analyses
 
+- [[analysis-shared-key-concept]] - Design note for introducing short-lived pairwise AES shared keys, bech32 shared-key fingerprints, signed certificates, expiry, and safe rollout phases.
 - [[analysis-weakest-defined-architecture-concepts]] - Ranks the least-defined architecture concepts by page maturity, source depth, and implementation specificity; highlights FN-DSA, mobile parity, and roadmap-only concepts as the primary definition gaps.
 - [[analysis-mail-message-load-hang]] - Bug analysis: selected email messages can appear to hang because full MIME fetch/parse work is unbounded and stale requests are not cancelled.
 - [[analysis-sync-revoked-details-bug]] - Bug: Sync From Server did not strip revoked details before saving contacts.
@@ -95,7 +97,9 @@ Last updated: 2026-05-09 (ingest: Bitcoin BIP HD wallet standards bundle)
 - [[source-fips-204]] - NIST FIPS 204: ML-DSA standard (parameter sets, security levels, EBP usage).
 - [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).
 - [[source-long-lived-digital-integrity-using-short-lived-hash-functions]] - Renewal strategy for preserving long-term timestamp and signature verifiability despite hash deprecation.
+- [[source-hashcash-adam-back-2002]] - Back (2002): hashcash proof-of-work, cost-function taxonomy, interactive/hashcash-cookies, and contrast with client puzzles / time-lock cost-functions.
 - [[source-rfc-3986]] - RFC 3986: generic URI syntax, percent-encoding, reference resolution, normalization, and URI security notes.
+- [[source-rfc-4648]] - RFC 4648: Base16/32/64 encodings, padding, base64 vs base64url, and strict-vs-liberal decoding expectations for JSON byte fields.
 - [[source-rfc-5321]] - RFC 5321: SMTP transport, envelope/header separation, MX routing, and end-to-end mail-security boundary.
 - [[source-rfc-5280]] - RFC 5280: X.509 PKIX certificate and CRL profile, path validation, and revocation context.
 - [[source-rfc-8391]] - RFC 8391: XMSS stateful hash-based signature scheme (WOTS+, Merkle trees, parameter sets).

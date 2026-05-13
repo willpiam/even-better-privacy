@@ -2,8 +2,8 @@
 title: "EBP Identity Model"
 type: concept
 status: active
-last_updated: 2026-04-27
-source_count: 7
+last_updated: 2026-05-11
+source_count: 8
 tags:
   - identity
   - fingerprint
@@ -31,7 +31,7 @@ See [[ml-dsa]], [[slh-dsa]], and [[ml-kem]] for scheme details.
 
 The fingerprint is a bech32-encoded merkle root of the two public keys:
 
-1. **Left leaf:** `SHA-256(base64-decoded signing public key bytes)` — computed by `computeSigningLeafRaw()`.
+1. **Left leaf:** `SHA-256(base64-decoded signing public key bytes)` — computed by `computeSigningLeafRaw()`. The on-disk/on-wire form is standard RFC 4648 Base64 (Table 1), not base64url, unless documented otherwise; see [[source-rfc-4648]].
 2. **Right leaf:** `SHA-256(hex-encoded encryption public key string bytes)` — computed by `computeEncryptionLeafRaw()`.
 3. **Root:** `SHA-256(leftLeaf || rightLeaf)` — a two-leaf merkle tree.
 4. **Encoding:** bech32 with scheme-specific HRP: `ebpdk` for Dilithium+Kyber, `ebpsk` for SPHINCS++Kyber.
@@ -109,3 +109,4 @@ NIST SP 800-57 Part 1's key lifecycle vocabulary is useful for future identity e
 - `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
 - `wiki/raw/rfc5280.txt` → [[source-rfc-5280]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
+- `wiki/raw/rfc4648.txt` → [[source-rfc-4648]]

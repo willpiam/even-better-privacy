@@ -2,8 +2,8 @@
 title: "Analysis: Reimplementation Building Blocks"
 type: analysis
 status: active
-last_updated: 2026-05-06
-source_count: 13
+last_updated: 2026-05-11
+source_count: 14
 tags:
   - analysis
   - interoperability
@@ -81,9 +81,9 @@ Fingerprint must be reproduced exactly:
 
 ### 4) Message payload binary/text encoding expectations
 
-- Hex encoding: lowercase two-char-per-byte (`toHex` / `hexToBytes`).
+- Hex encoding: lowercase two-char-per-byte (`toHex` / `hexToBytes`) — Base16 in [[source-rfc-4648]] terms.
 - Hex parsing rejects odd length and non-hex chars.
-- Base64 encoding for signing keys/signatures in signed payload contexts.
+- Base64 encoding for signing keys/signatures in signed payload contexts: RFC 4648 Table 1 alphabet with padding ([[source-rfc-4648]]); do not substitute base64url unless a specific field documents it.
 - UTF-8 encoding (`TextEncoder`) before hash/sign-envelope construction.
 
 ### 5) Canonical JSON for signed structures
@@ -135,3 +135,4 @@ A target language/toolset is "ready" if it can provide all of:
 - `website/verify.js`
 - `wiki/analysis-noble-library-usage.md`
 - `wiki/message-payload-formats.md`
+- `wiki/raw/rfc4648.txt` → [[source-rfc-4648]]

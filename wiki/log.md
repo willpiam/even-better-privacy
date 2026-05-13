@@ -1,5 +1,24 @@
 # Wiki Log
 
+## [2026-05-13] update | shared key retirement and tooling follow-up
+
+- Updated: [[analysis-shared-key-concept]] with pairwise retirement certificates, recipient acceptance semantics, and current code surface notes for single-recipient KEM shared secrets vs multi-recipient content keys.
+
+## [2026-05-13] query | shared key concept
+
+- Answered: refined shared keys as short-lived pairwise content-encryption roots with bech32 fingerprints, signed certificates, expiry, directionality, and a phased rollout path.
+- Filed: [[analysis-shared-key-concept]].
+
+## [2026-05-11] ingest | Hashcash — A Denial of Service Counter-Measure (Back, 2002)
+
+- Ingested `hashcash.pdf` → [[source-hashcash-adam-back-2002]].
+- Updated: [[hashcash-cost-functions]] (new), [[email-transport]], [[overview]], [[index.md]].
+
+## [2026-05-11] ingest | RFC 4648 — Base-N encodings (Base16/32/64)
+
+- Ingested `rfc4648.txt` → [[source-rfc-4648]].
+- Updated: [[message-payload-formats]], [[analysis-reimplementation-building-blocks]], [[identity-model]], [[ml-dsa]], [[slh-dsa]], [[overview]], [[index.md]].
+
 ## [2026-05-09] ingest | Bitcoin BIP HD wallet standards (32, 39, 43, 44)
 
 - Ingested `bip-0032.mediawiki`, `bip-0039.mediawiki`, `bip-0043.mediawiki`, `bip-0044.mediawiki` → [[source-bip-hd-wallet-standards]].

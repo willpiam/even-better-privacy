@@ -74,8 +74,7 @@
               "title": "Bookmarks"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "horizontal",
@@ -187,6 +186,9 @@
   },
   "active": "b3b8f0b4c9f99bbf",
   "lastOpenFiles": [
+    "Clippings/Post by @karpathy on X.md",
+    "wiki/message-payload-formats.md",
+    "Clippings",
     "wiki/email-transport.md",
     "wiki/analysis-weakest-defined-architecture-concepts.md",
     "wiki/security-audit-2026-04/README.md",
@@ -212,7 +214,6 @@
     "wiki/uri-syntax.md",
     "wiki/source-rfc-9051.md",
     "wiki/source-rfc-5321.md",
-    "wiki/source-rfc-3986.md",
     "wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf",
     "wiki/raw/Decentralized Identifiers (DIDs) v1.1.html",
     "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/parts-of-a-did.svg",
@@ -229,8 +230,6 @@
     "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files/W3C",
     "wiki/raw/Decentralized Identifiers (DIDs) v1.1_files",
     "wiki/raw/rfc3986.txt",
-    "2026-04-27.md",
-    "Untitled 6.base",
-    "Untitled 5.base"
+    "Untitled 6.base"
   ]
 }

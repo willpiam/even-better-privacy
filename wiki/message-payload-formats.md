@@ -2,8 +2,8 @@
 title: Message Payload Formats
 type: concept
 status: active
-last_updated: 2026-05-01
-source_count: 8
+last_updated: 2026-05-11
+source_count: 9
 contradiction_log:
   - 2026-04-28: Earlier revisions of this page described `signature` and signing-key fields as "hex-encoded". They are base64-encoded per `core/Dilithium.ts::sign`/`verify` and `core/Sphincs.ts::sign`/`verify`. The website verifier was silently failing because of this; see [[log]] entry "2026-04-28 fix | website verifier signature decoding".
 tags:
@@ -35,6 +35,10 @@ All payloads are transmitted as JSON wrapped in PEM-style armor markers:
 In the GUI's native email system, the armored block is placed directly in the plain-text body of the email (sent via SMTP as `text/plain`). SMTP is the transport layer described by [[source-rfc-5321]]; it carries the message but does not authenticate the EBP sender or encrypt the body. The recipient's mail client displays the block as-is; the EBP GUI can fetch the message through IMAP4rev2 concepts described by [[source-rfc-9051]], then extracts and parses the block on receipt.
 
 Implementation: `armorPayload()` and `extractArmoredPayload()` in `core/Payloads.ts`.
+
+## Hex and Base64 in JSON fields
+
+Several payload fields carry raw bytes as JSON strings. **Hex** digests use lowercase hexadecimal (Base16 in the sense of [[source-rfc-4648]]). **Base64** fields use the standard Base 64 alphabet from RFC 4648 Table 1 (`A–Z`, `a–z`, `0–9`, `+`, `/`) with `=` padding unless a future EBP specification explicitly waives padding for a given field. RFC 4648 defines a separate **base64url** (URL/filename-safe alphabet); it is not interchangeable with unqualified “base64” here—decoders must not assume URL-safe alphabets for these payloads.
 
 ## Payload Types
 
@@ -272,3 +276,4 @@ Email standards provide carriage and access, not EBP semantics. [[email-transpor
 - `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
+- `wiki/raw/rfc4648.txt` → [[source-rfc-4648]]

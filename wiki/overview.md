@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-05-09
-source_count: 21
+last_updated: 2026-05-11
+source_count: 23
 tags:
   - ebp
   - overview
@@ -40,11 +40,13 @@ EBP also uses AES-256-GCM for symmetric encryption after ML-KEM encapsulation. A
 
 ## Standards Boundaries
 
-Some ingested standards are useful comparison material rather than EBP protocol definitions. [[openpgp-pqc]] covers the IETF OpenPGP PQC draft, which uses OpenPGP packets and composite algorithms instead of EBP's JSON payload format. [[x509-pki]] covers the X.509/PKIX model from [[source-rfc-5280]], which differs from EBP's self-contained fingerprinted identity model.
+Some ingested standards are useful comparison material rather than EBP protocol definitions. [[openpgp-pqc]] covers the IETF OpenPGP PQC draft, which uses OpenPGP packets and composite algorithms instead of EBP's JSON payload format. [[x509-pki]] covers the X.509/PKIX model from [[source-rfc-5280]], which differs from EBP's self-contained fingerprinted identity model. [[hashcash-cost-functions]] summarizes Adam Back's hashcash proof-of-work proposal ([[source-hashcash-adam-back-2002]]) as historical email/DoS abuse throttling; EBP does not use hashcash stamps—see [[email-transport]] for how SMTP/IMAP carry PQ-signed payloads instead.
 
 Other NIST sources provide policy and assurance vocabulary: [[key-management]] summarizes SP 800-57 lifecycle guidance, [[random-bit-generation]] summarizes SP 800-90 randomness guidance, [[cryptographic-algorithm-transitions]] summarizes SP 800-131A transition language, and [[cryptographic-module-validation]] distinguishes FIPS-standardized algorithms from FIPS 140-3 validated modules. [[source-bip-hd-wallet-standards]] captures Bitcoin BIP32/39/43/44 as **non-protocol** comparison material for backup UX, derivation-tree namespaces, and partial-key-sharing cautions (EBP is not a blockchain wallet; see [[key-management]]).
 
 IETF and W3C infrastructure sources document the non-cryptographic layers EBP rides on or compares against: [[uri-syntax]] summarizes RFC 3986 URI parsing and normalization, [[email-transport]] summarizes SMTP transport ([[source-rfc-5321]]) and IMAP4rev2 mailbox access ([[source-rfc-9051]]), and [[decentralized-identifiers]] compares EBP identities with W3C DID v1.1 ([[source-did-1-1]]). These standards provide carriage, addressing, identity-system, and access semantics; EBP's end-to-end security remains in its own identities and payloads.
+
+Binary fields embedded in JSON (for example PQ signing keys, signatures, and attachment `fileDataBase64`) use IETF **Base64** as defined in [[source-rfc-4648]] (Table 1 alphabet with `=` padding). That RFC also names **base64url**, a different alphabet; EBP wire formats use standard Base64 unless a field explicitly documents otherwise—see [[message-payload-formats]].
 
 ## Main System Components
 
@@ -111,4 +113,5 @@ EBP documentation follows [[semantic-versioning]] conventions when describing re
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
+- `wiki/raw/hashcash.pdf` → [[source-hashcash-adam-back-2002]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
