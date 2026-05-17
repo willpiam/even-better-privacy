@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-05-11
-source_count: 23
+last_updated: 2026-05-17
+source_count: 25
 tags:
   - ebp
   - overview
@@ -47,6 +47,8 @@ Other NIST sources provide policy and assurance vocabulary: [[key-management]] s
 IETF and W3C infrastructure sources document the non-cryptographic layers EBP rides on or compares against: [[uri-syntax]] summarizes RFC 3986 URI parsing and normalization, [[email-transport]] summarizes SMTP transport ([[source-rfc-5321]]) and IMAP4rev2 mailbox access ([[source-rfc-9051]]), and [[decentralized-identifiers]] compares EBP identities with W3C DID v1.1 ([[source-did-1-1]]). These standards provide carriage, addressing, identity-system, and access semantics; EBP's end-to-end security remains in its own identities and payloads.
 
 Binary fields embedded in JSON (for example PQ signing keys, signatures, and attachment `fileDataBase64`) use IETF **Base64** as defined in [[source-rfc-4648]] (Table 1 alphabet with `=` padding). That RFC also names **base64url**, a different alphabet; EBP wire formats use standard Base64 unless a field explicitly documents otherwise—see [[message-payload-formats]].
+
+Gmail and Outlook mail in [[component-gui]] rely on provider **OAuth 2.0** (authorization code, refresh tokens, redirect-uri registration) documented in [[source-google-oauth2-web-server]], plus Google's **unverified-app** policy in [[source-google-cloud-unverified-apps]]. Google recommends **Cross-Account Protection (RISC)** security-event webhooks for Google-linked accounts ([[source-google-cross-account-protection-risc]]); EBP does not implement RISC yet.
 
 ## Main System Components
 

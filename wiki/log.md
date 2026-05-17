@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-05-17] ingest | Google OAuth 2.0 web server + Cross-Account Protection (RISC)
+
+- Ingested `Using OAuth 2.0 for Web Server Applications  _  Authorization.md` → [[source-google-oauth2-web-server]].
+- Ingested `Protect user accounts with Cross-Account Protection  _  Cross-Account Protection (RISC).md` → [[source-google-cross-account-protection-risc]].
+- Updated: [[component-server]], [[component-gui]], [[component-email-extension]], [[overview]], [[index.md]].
+
 ## [2026-05-13] update | shared key retirement and tooling follow-up
 
 - Updated: [[analysis-shared-key-concept]] with pairwise retirement certificates, recipient acceptance semantics, and current code surface notes for single-recipient KEM shared secrets vs multi-recipient content keys.

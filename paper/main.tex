@@ -13,7 +13,7 @@
 
 \begin{abstract}
 Even Better Privacy (EBP) is a post-quantum identity and secure communications protocol.
-Each \emph{identity} pairs signing with a separate encryption and key-encapsulation role.
+Each \emph{identity} is defined as a set of two public keys: one for signing and the other for encryption (via KEM).
 Confidentiality uses ML-KEM~\cite{fips203}; authentication and integrity use ML-DSA or SLH-DSA~\cite{fips204,fips205}; bulk data are protected with AES-GCM after encapsulation.
 These choices follow NIST-approved post-quantum standards for the asymmetric layer.
 This document defines the protocol and its components.
@@ -76,10 +76,10 @@ Whenever an EBP message is signed and encrypted it is always signed first and th
 \subsubsection{Single Recipient}
 
 The sender performs a single ML-KEM encapsulation against the recipient's encryption public key, 
-producing a KEM ciphertext and a fresh 32-byte shared secret. The shared secret is used directly 
-as the key for AES-256-GCM, so no separate symmetric key needs to be generated or transported. Separately, 
+producing a KEM ciphertext and a fresh 32-byte shared secret.  Separately, 
 the sender signs a recipient-bound hash envelope that commits to the recipient's fingerprint, a digest of
- the plaintext, and a random salt. The plaintext and the signature are packed together into a small JSON inner payload, which is then encrypted under the KEM-derived AES-256-GCM key using a fresh 12-byte random nonce. The transmitted ciphertext is the concatenation of the KEM ciphertext, the AES-GCM nonce, and the authenticated symmetric ciphertext.
+ the plaintext, and a random salt. The plaintext and the signature are packed together into a small JSON inner payload, which is then encrypted under the KEM-derived AES-256-GCM key using a fresh 12-byte random nonce. 
+ The transmitted ciphertext is the concatenation of the KEM ciphertext, the AES-GCM nonce, and the authenticated symmetric ciphertext.
 
 \subsubsection{Multiple Recipients}
 

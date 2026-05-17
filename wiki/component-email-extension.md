@@ -2,8 +2,8 @@
 title: "EBP Email Chrome Extension"
 type: component
 status: active
-last_updated: 2026-05-07
-source_count: 5
+last_updated: 2026-05-17
+source_count: 7
 tags:
   - component
   - email
@@ -38,7 +38,7 @@ The extension works with EBP armored JSON payloads, not OpenPGP messages or S/MI
 
 Because the extension operates inside webmail clients, it usually sees already-rendered compose and message content rather than acting as an SMTP or IMAP client itself. The same [[email-transport]] boundary still applies: provider mail transport and mailbox access carry the message, while EBP verification is based on the armored payload and cryptographic identity.
 
-When users connect **Google** accounts, the OAuth client registered in Google Cloud is subject to Google's **verified vs. unverified** app rules (extra warnings, consent-screen behavior, and user caps until verification completes for sensitive/restricted scopes). That policy is orthogonal to EBP's own cryptography but affects whether Gmail flows work smoothly at scale; see [[source-google-cloud-unverified-apps]].
+When users connect **Google** accounts, the OAuth client registered in Google Cloud follows Google's **web server** authorization-code flow (see [[source-google-oauth2-web-server]]) and is subject to **verified vs. unverified** app rules (extra warnings, consent-screen behavior, and user caps until verification completes for sensitive/restricted scopes). That policy is orthogonal to EBP's own cryptography but affects whether Gmail flows work smoothly at scale; see [[source-google-cloud-unverified-apps]]. Production Google Sign-In integrations should also consider [[source-google-cross-account-protection-risc]] for session and token lifecycle events.
 
 ## Installation
 
@@ -67,6 +67,8 @@ The extension can be built into a `.crx` or `.zip` using `build_chrome_extension
 - [[x509-pki]]
 - [[overview]]
 - [[source-google-cloud-unverified-apps]]
+- [[source-google-oauth2-web-server]]
+- [[source-google-cross-account-protection-risc]]
 
 ## Sources
 
@@ -75,3 +77,5 @@ The extension can be built into a `.crx` or `.zip` using `build_chrome_extension
 - `wiki/raw/NIST.SP.800-57Pt3r1.pdf` → [[source-sp-800-57-part-3-r1]]
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]
+- `wiki/raw/Using OAuth 2.0 for Web Server Applications  _  Authorization.md` → [[source-google-oauth2-web-server]]
+- `wiki/raw/Protect user accounts with Cross-Account Protection  _  Cross-Account Protection (RISC).md` → [[source-google-cross-account-protection-risc]]

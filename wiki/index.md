@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-11
+last_updated: 2026-05-17
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-13 (query: shared key concept)
+Last updated: 2026-05-17 (ingest: Google OAuth 2.0 web server + RISC)
 
 ## Wiki Operations
 
@@ -91,6 +91,8 @@ Last updated: 2026-05-13 (query: shared key concept)
 - [[source-did-1-1]] - W3C DID v1.1: URI-based decentralized identifiers, DID documents, methods, verification methods, and services.
 - [[source-draft-ietf-openpgp-pqc-17]] - IETF OpenPGP PQC draft covering composite ML-KEM/ML-DSA and SLH-DSA algorithm profiles.
 - [[source-google-cloud-unverified-apps]] - Google Cloud Help: OAuth “unverified” apps, warnings, 100-user cap, and verification requirements for sensitive/restricted scopes.
+- [[source-google-oauth2-web-server]] - Google Identity: OAuth 2.0 authorization-code flow for web server apps (redirect URIs, offline refresh, revocation).
+- [[source-google-cross-account-protection-risc]] - Google Cross-Account Protection (RISC): signed security-event JWTs for Google Sign-In account and token lifecycle changes.
 - [[source-fips-140-3]] - NIST FIPS 140-3 cryptographic module security requirements and CMVP validation context.
 - [[source-fips-197]] - NIST FIPS 197 Advanced Encryption Standard (AES) block cipher specification.
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).

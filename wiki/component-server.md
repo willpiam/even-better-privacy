@@ -2,8 +2,8 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-05-07
-source_count: 5
+last_updated: 2026-05-17
+source_count: 7
 tags:
   - component
   - server
@@ -67,7 +67,11 @@ The server (`server/main.ts`) is the publish/discovery layer for public identiti
 | `POST` | `/api/v1/mail/oauth/exchange` | Exchange OAuth code for tokens (Gmail, Outlook) |
 | `POST` | `/api/v1/mail/oauth/refresh` | Refresh an OAuth access token |
 
+Gmail uses Google's **web server** authorization-code flow: the GUI completes the browser redirect; this server exchanges the code at `https://oauth2.googleapis.com/token` with the registered `redirect_uri` and keeps the **client secret** in `MAIL_OAUTH_GMAIL_*` env vars (`server/mail-oauth.ts`). See [[source-google-oauth2-web-server]] for Google's flow, redirect-uri rules, offline refresh tokens, and revocation endpoints.
+
 Google Cloud OAuth clients that request **sensitive or restricted** Gmail (or other Google) scopes without completed [OAuth app verification](https://support.google.com/cloud/answer/9110914) are treated as **unverified**: users may see an extra “unverified app” step, Security Checkup warnings, or stricter sign-in behavior, and Google applies a **100 new-user cap** (after the unverified screen appears) until verification succeeds. Requested scopes must match the OAuth consent screen configuration. See [[source-google-cloud-unverified-apps]] for a clipped summary of Google's documentation.
+
+**Cross-Account Protection (RISC):** Google recommends subscribing to signed security-event JWTs when users sign in with Google (session/token revocation, account disabled, etc.). EBP does not document a RISC receiver today; see [[source-google-cross-account-protection-risc]] for setup and event-response guidance.
 
 ### Health
 
@@ -110,11 +114,16 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - [[identity-model]]
 - [[overview]]
 - [[source-google-cloud-unverified-apps]]
+- [[source-google-oauth2-web-server]]
+- [[source-google-cross-account-protection-risc]]
 
 ## Sources
 
 - `ReadMe.md`
 - `server/main.ts`, `server/handlers/`, `server/db/`
+- `server/mail-oauth.ts`
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]
+- `wiki/raw/Using OAuth 2.0 for Web Server Applications  _  Authorization.md` → [[source-google-oauth2-web-server]]
+- `wiki/raw/Protect user accounts with Cross-Account Protection  _  Cross-Account Protection (RISC).md` → [[source-google-cross-account-protection-risc]]

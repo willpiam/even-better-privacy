@@ -2,8 +2,8 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-05-07
-source_count: 6
+last_updated: 2026-05-17
+source_count: 8
 tags:
   - component
   - gui
@@ -41,7 +41,7 @@ The loader page polls the sidecar health endpoint and redirects to `http://127.0
 The GUI includes a built-in email interface:
 
 - Connects directly over SMTP and IMAP protocols. [[source-rfc-5321]] anchors SMTP as the mail transport layer, while [[source-rfc-9051]] anchors IMAP4rev2 as the mailbox access layer.
-- Supports OAuth with Gmail (and partially Outlook). Until the Google Cloud OAuth client completes [app verification](https://support.google.com/cloud/answer/9110914) for the scopes in use, Google may label the client **unverified**, show additional consent warnings, and cap **new** users (100 total after the unverified screen); see [[source-google-cloud-unverified-apps]].
+- Supports OAuth with Gmail (and partially Outlook) via the local backend's authorization-code flow (`gui/local-backend/mail-oauth.ts`): browser redirect to Google, callback on `127.0.0.1`, code exchange through [[component-server]] so secrets stay server-side. Google's web-server flow, `state` CSRF parameter, offline refresh tokens, and redirect-uri registration rules are summarized in [[source-google-oauth2-web-server]]. Until the Google Cloud OAuth client completes [app verification](https://support.google.com/cloud/answer/9110914) for the scopes in use, Google may label the client **unverified**, show additional consent warnings, and cap **new** users (100 total after the unverified screen); see [[source-google-cloud-unverified-apps]]. For reacting to Google Account compromise or token revocation at scale, see [[source-google-cross-account-protection-risc]] (not yet implemented in EBP).
 - Proton Mail users need Proton Mail Bridge running.
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
 
@@ -85,12 +85,16 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[message-payload-formats]]
 - [[overview]]
 - [[source-google-cloud-unverified-apps]]
+- [[source-google-oauth2-web-server]]
+- [[source-google-cross-account-protection-risc]]
 
 ## Sources
 
 - `ReadMe.md`
-- `gui/local-backend/main.ts`, `gui/local-backend/routes.ts`
+- `gui/local-backend/main.ts`, `gui/local-backend/routes.ts`, `gui/local-backend/mail-oauth.ts`
 - `gui/index.html`, `gui/app.js`, `gui/js/`
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]
+- `wiki/raw/Using OAuth 2.0 for Web Server Applications  _  Authorization.md` → [[source-google-oauth2-web-server]]
+- `wiki/raw/Protect user accounts with Cross-Account Protection  _  Cross-Account Protection (RISC).md` → [[source-google-cross-account-protection-risc]]

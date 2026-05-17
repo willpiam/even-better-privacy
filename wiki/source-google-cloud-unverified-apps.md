@@ -42,6 +42,8 @@ EBP's [[component-gui]] Gmail integration and [[component-server]] mail OAuth pr
 
 ## Related
 
+- [[source-google-oauth2-web-server]]
+- [[source-google-cross-account-protection-risc]]
 - [[component-server]]
 - [[component-gui]]
 - [[component-email-extension]]
