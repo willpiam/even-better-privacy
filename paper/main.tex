@@ -41,8 +41,8 @@ The encryption key is always ML-KEM (Kyber)~\cite{fips203} because that is the o
 
 The fingerprint is a bech32-encoded merkle root of the two public keys:
 \begin{itemize}
-  \item \textbf{Left leaf:} SHA-256(base64-decoded signing public key bytes)
-  \item \textbf{Right leaf:} SHA-256 of the encryption public key decoded from its lowercase hexadecimal string (not the UTF-8 bytes of the hex digits)
+  \item \textbf{Left leaf:} SHA-256(raw signing public key bytes)
+  \item \textbf{Right leaf:} SHA-256(raw KEM public key bytes)
 \end{itemize}
 
 The merkle tree design means the fingerprint can be verified without both keys present. This is useful in bandwidth-constrained scenarios.
