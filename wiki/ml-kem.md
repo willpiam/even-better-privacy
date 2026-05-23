@@ -2,8 +2,8 @@
 title: "ML-KEM (Kyber) in EBP"
 type: entity
 status: active
-last_updated: 2026-04-28
-source_count: 7
+last_updated: 2026-05-20
+source_count: 8
 tags:
   - crypto
   - kem
@@ -54,6 +54,10 @@ For multi-recipient native email, EBP uses ML-KEM as a key-encryption layer over
 
 This keeps payload encryption cost constant while preserving recipient-specific KEM confidentiality.
 
+## NIST backup KEM (HQC)
+
+In March 2025 NIST selected **HQC** as a **backup** general-encryption KEM based on error-correcting codes, while reaffirming **ML-KEM as the primary recommended KEM** ([[source-nist-hqc-fifth-pq-encryption]]). EBP does not implement HQC; see [[hqc]] for standards timeline and diversification context.
+
 ## Standards Context
 
 EBP's symmetric layer uses AES-256-GCM after ML-KEM encapsulation. AES is specified by [[source-fips-197]], while GCM nonce, tag, and associated-data semantics are specified by [[source-sp-800-38d]] and summarized in [[aes-gcm]].
@@ -81,6 +85,8 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 - [[ml-dsa]]
 - [[slh-dsa]]
 - [[openpgp-pqc]]
+- [[hqc]]
+- [[source-nist-hqc-fifth-pq-encryption]]
 - [[component-cli]]
 - [[overview]]
 
@@ -93,3 +99,4 @@ The encryption (KEM) public key forms the **right leaf** of the identity merkle 
 - `wiki/raw/NIST.FIPS.197-upd1.pdf` → [[source-fips-197]]
 - `wiki/raw/nistspecialpublication800-38d.pdf` → [[source-sp-800-38d]]
 - `wiki/raw/draft-ietf-openpgp-pqc-17.txt` → [[source-draft-ietf-openpgp-pqc-17]]
+- `wiki/raw/NIST Selects HQC as Fifth Algorithm for Post-Quantum Encryption.md` → [[source-nist-hqc-fifth-pq-encryption]]

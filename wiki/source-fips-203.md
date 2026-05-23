@@ -2,8 +2,8 @@
 title: "Source Summary: NIST FIPS 203 — ML-KEM"
 type: source-summary
 status: active
-last_updated: 2026-04-08
-source_count: 1
+last_updated: 2026-05-20
+source_count: 2
 tags:
   - source
   - nist
@@ -42,9 +42,15 @@ EBP uses **ML-KEM-1024** (NIST Security Category 5) for all confidentiality work
 - **Deterministic decapsulation:** given the same ciphertext and secret key, decapsulation always produces the same shared secret.
 - **Fresh key per message:** EBP generates a fresh shared secret for every message via encapsulation, then uses it as an AES-256-GCM key.
 
+## NIST backup KEM
+
+NIST's March 2025 announcement selects **HQC** as a code-based **backup** KEM for general encryption while keeping **ML-KEM (this standard) as the primary recommendation**. A draft HQC FIPS is expected ~2026 with finalization targeted for 2027. See [[source-nist-hqc-fifth-pq-encryption]] and [[hqc]].
+
 ## Related Pages
 
 - [[ml-kem]]
+- [[hqc]]
+- [[source-nist-hqc-fifth-pq-encryption]]
 - [[identity-model]]
 - [[source-fips-204]]
 - [[source-fips-205]]
@@ -52,3 +58,4 @@ EBP uses **ML-KEM-1024** (NIST Security Category 5) for all confidentiality work
 ## Sources
 
 - `wiki/raw/NIST.FIPS.203.pdf`
+- `wiki/raw/NIST Selects HQC as Fifth Algorithm for Post-Quantum Encryption.md` → [[source-nist-hqc-fifth-pq-encryption]]

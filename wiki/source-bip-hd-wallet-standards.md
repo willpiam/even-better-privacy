@@ -2,7 +2,7 @@
 title: "Bitcoin BIPs 32/39/43/44 — HD wallets and mnemonics (source summary)"
 type: source-summary
 status: active
-last_updated: 2026-05-09
+last_updated: 2026-05-23
 source_count: 4
 tags:
   - bitcoin
@@ -62,6 +62,8 @@ This page summarizes four deployed Bitcoin Improvement Proposals (BIPs) kept und
 - **Human backup**: BIP39’s checksum, fixed wordlist properties, and explicit “not for brainwallets” guidance inform how to think about **paper backup** and **recovery phrase** UX without importing PBKDF2 parameters or wordlists into EBP protocols.
 - **Discovery and limits**: BIP44’s gap limit and account discovery illustrate how **client state** and **published identifier sequences** interact—useful when designing import, sync, or “how many unused slots do we scan?” behavior in non-blockchain clients.
 
+Full per-BIP application and advantage analysis for EBP: [[analysis-bip-patterns-for-ebp]].
+
 ## Boundaries and uncertainty
 
 - **Cryptography**: BIP32’s math and encodings are **secp256k1-specific**; EBP’s keys follow ML-KEM / ML-DSA / SLH-DSA (and planned FN-DSA) per project docs—do not assume algorithmic compatibility.
@@ -69,6 +71,7 @@ This page summarizes four deployed Bitcoin Improvement Proposals (BIPs) kept und
 
 ## Related wiki pages
 
+- [[analysis-bip-patterns-for-ebp]] — per-BIP application to PQ identities, advantages, and open design questions.
 - [[key-management]] — where these lessons are tied to EBP’s lifecycle framing.
 - [[identity-model]] — project-specific identity structure (not HD paths).
 - [[random-bit-generation]] — entropy and CSPRNG context adjacent to mnemonic generation discussions.

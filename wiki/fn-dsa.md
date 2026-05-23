@@ -2,8 +2,8 @@
 title: "FN-DSA (Falcon) — Planned"
 type: entity
 status: seed
-last_updated: 2026-04-08
-source_count: 1
+last_updated: 2026-05-20
+source_count: 2
 tags:
   - crypto
   - signatures
@@ -27,7 +27,7 @@ FN-DSA would provide a third signing option alongside [[ml-dsa]] and [[slh-dsa]]
 - **NTRU-based:** uses a different lattice structure (NTRU) than ML-DSA (MLWE/MSIS), providing further cryptographic diversity.
 - **Complex implementation:** Falcon requires careful floating-point handling or specialized integer arithmetic, which has historically made it harder to implement securely.
 
-NIST has not yet finalized FN-DSA as a FIPS standard (it was selected for standardization but the final spec was still in draft as of early 2025).
+NIST announced in March 2025 that a **draft FIPS 206** built around the FALCON algorithm would be released shortly ([[source-nist-hqc-fifth-pq-encryption]]). FN-DSA is not yet finalized in EBP's codebase.
 
 ## Expected Integration
 
@@ -43,7 +43,9 @@ When implemented, FN-DSA would follow the same pattern as existing signing schem
 - [[slh-dsa]]
 - [[identity-model]]
 - [[overview]]
+- [[source-nist-hqc-fifth-pq-encryption]]
 
 ## Sources
 
 - `ReadMe.md`
+- `wiki/raw/NIST Selects HQC as Fifth Algorithm for Post-Quantum Encryption.md` → [[source-nist-hqc-fifth-pq-encryption]]

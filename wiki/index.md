@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-17
+last_updated: 2026-05-23
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-17 (ingest: Google OAuth 2.0 web server + RISC)
+Last updated: 2026-05-23 (query: BIP HD patterns for EBP)
 
 ## Wiki Operations
 
@@ -25,6 +25,7 @@ Last updated: 2026-05-17 (ingest: Google OAuth 2.0 web server + RISC)
 ## Cryptographic Schemes
 
 - [[ml-kem]] - ML-KEM-1024 (Kyber) usage: KEM + AES-256-GCM confidentiality workflow.
+- [[hqc]] - NIST-selected backup KEM (code-based); not implemented in EBP; draft standard ~2026, final ~2027.
 - [[slh-dsa]] - SLH-DSA-SHA2-256s (SPHINCS+) hash-based signing; compact keys, large signatures.
 - [[ml-dsa]] - ML-DSA-87 (Dilithium) lattice-based signing; compact signatures, larger keys.
 - [[fn-dsa]] - FN-DSA (Falcon) planned future signing scheme; not yet implemented.
@@ -61,6 +62,7 @@ Last updated: 2026-05-17 (ingest: Google OAuth 2.0 web server + RISC)
 
 ## Analyses
 
+- [[analysis-bip-patterns-for-ebp]] - How BIP32/39/43/44 structural patterns (HD tree, mnemonics, purpose namespace, multi-account paths) could apply to PQ dual-key identities and what each would buy EBP.
 - [[analysis-shared-key-concept]] - Design note for introducing short-lived pairwise AES shared keys, bech32 shared-key fingerprints, signed certificates, expiry, and safe rollout phases.
 - [[analysis-weakest-defined-architecture-concepts]] - Ranks the least-defined architecture concepts by page maturity, source depth, and implementation specificity; highlights FN-DSA, mobile parity, and roadmap-only concepts as the primary definition gaps.
 - [[analysis-mail-message-load-hang]] - Bug analysis: selected email messages can appear to hang because full MIME fetch/parse work is unbounded and stale requests are not cancelled.
@@ -96,6 +98,7 @@ Last updated: 2026-05-17 (ingest: Google OAuth 2.0 web server + RISC)
 - [[source-fips-140-3]] - NIST FIPS 140-3 cryptographic module security requirements and CMVP validation context.
 - [[source-fips-197]] - NIST FIPS 197 Advanced Encryption Standard (AES) block cipher specification.
 - [[source-fips-203]] - NIST FIPS 203: ML-KEM standard (parameter sets, security levels, EBP usage).
+- [[source-nist-hqc-fifth-pq-encryption]] - NIST news (2025-03): HQC selected as backup general-encryption KEM; ML-KEM remains primary.
 - [[source-fips-204]] - NIST FIPS 204: ML-DSA standard (parameter sets, security levels, EBP usage).
 - [[source-fips-205]] - NIST FIPS 205: SLH-DSA standard (parameter sets, hash-only security, EBP usage).
 - [[source-long-lived-digital-integrity-using-short-lived-hash-functions]] - Renewal strategy for preserving long-term timestamp and signature verifiability despite hash deprecation.

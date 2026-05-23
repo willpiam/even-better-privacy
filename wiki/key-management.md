@@ -2,7 +2,7 @@
 title: "Key Management Context"
 type: concept
 status: active
-last_updated: 2026-05-09
+last_updated: 2026-05-23
 source_count: 5
 tags:
   - key-management
@@ -43,7 +43,7 @@ Bitcoin’s widely deployed HD wallet BIPs ([[source-bip-hd-wallet-standards]]) 
 - **Interop requires explicit structure**: A “deterministic hierarchy” without a documented top-level **purpose** or namespace invites incompatible implementations (BIP43’s motivation).
 - **Recovery UX**: Checksummed human-readable backups, explicit warnings against “brainwallet” semantics, and **scan limits** (gap limits) for rediscovering used slots are UX patterns for any system that sequences published identifiers—analogous concerns can appear in import/sync flows even without addresses or chains.
 
-For consolidated citations to the raw BIP files, see [[source-bip-hd-wallet-standards]].
+For consolidated citations to the raw BIP files, see [[source-bip-hd-wallet-standards]]. For a per-BIP analysis of how these patterns could apply to EBP (PQ leaves, backup, namespace, multi-account UX), see [[analysis-bip-patterns-for-ebp]].
 
 ## Related Pages
 
@@ -55,6 +55,7 @@ For consolidated citations to the raw BIP files, see [[source-bip-hd-wallet-stan
 - [[cryptographic-algorithm-transitions]]
 - [[integrity-renewal]]
 - [[source-bip-hd-wallet-standards]]
+- [[analysis-bip-patterns-for-ebp]]
 
 ## Sources
 

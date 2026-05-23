@@ -2,8 +2,8 @@
 title: "Even Better Privacy (EBP) Overview"
 type: overview
 status: active
-last_updated: 2026-05-17
-source_count: 25
+last_updated: 2026-05-23
+source_count: 26
 tags:
   - ebp
   - overview
@@ -30,11 +30,12 @@ EBP uses NIST FIPS post-quantum standards:
 | Scheme | Standard | Role | Variant Used |
 |---|---|---|---|
 | ML-KEM (Kyber) | FIPS 203 | KEM / Confidentiality | ML-KEM-1024 |
+| HQC | (draft FIPS ~2026, final ~2027) | Backup KEM (not in EBP) | — |
 | ML-DSA (Dilithium) | FIPS 204 | Signing / Auth | ML-DSA-87 |
 | SLH-DSA (SPHINCS+) | FIPS 205 | Signing / Auth | SLH-DSA-SHA2-256s |
-| FN-DSA (Falcon) | (planned) | Signing / Auth | TBD |
+| FN-DSA (Falcon) | FIPS 206 (draft) | Signing / Auth | TBD |
 
-All currently used parameter sets target NIST Security Category 5. See [[source-fips-203]], [[source-fips-204]], [[source-fips-205]] for standard summaries. For background on the stateful hash-based predecessors (XMSS, LMS) that motivated SLH-DSA's stateless design, see [[source-rfc-8391]] and [[source-sp-800-208]].
+All currently **implemented** EBP parameter sets target NIST Security Category 5. NIST selected [[hqc]] in March 2025 as a **backup** general-encryption KEM (code-based) alongside ML-KEM; EBP continues to use ML-KEM only ([[source-nist-hqc-fifth-pq-encryption]]). See [[source-fips-203]], [[source-fips-204]], [[source-fips-205]] for standard summaries. For background on the stateful hash-based predecessors (XMSS, LMS) that motivated SLH-DSA's stateless design, see [[source-rfc-8391]] and [[source-sp-800-208]].
 
 EBP also uses AES-256-GCM for symmetric encryption after ML-KEM encapsulation. AES is specified by [[source-fips-197]] and GCM by [[source-sp-800-38d]]; see [[aes-gcm]] for how this applies to EBP payloads.
 
@@ -93,7 +94,7 @@ EBP documentation follows [[semantic-versioning]] conventions when describing re
 
 - FN-DSA (Falcon) support
 - ENS integration for fingerprint lookup
-- Identity hierarchy (master → cold → hot key chains)
+- Identity hierarchy (master → cold → hot key chains); see [[analysis-bip-patterns-for-ebp]] for HD-wallet (BIP32/39/43/44) patterns as one implementation approach
 - Advanced email features (search, drafts, rich rendering, scheduled send)
 - Hashed/opaque detail endorsement
 - Identity expiry dates

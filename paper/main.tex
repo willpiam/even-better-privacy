@@ -33,9 +33,21 @@ Options for the signing key are:
 
 Both of these options are great for seperate purposes. Later in this paper we discuss how to use them together in a hierarchical relationship to benefit from the strengths of both.
 
+
 \subsection{Encryption Key}
 
 The encryption key is always ML-KEM (Kyber)~\cite{fips203} because that is the only NIST approved post-quantum KEM. We will consider adding other KEMs upon approval form NIST. 
+
+\subsection{Supported Parameter Sets}
+
+EBP supports only the highest security parameter sets for each scheme. We choose to limit the parameter sets in this way to reduce protocol complexity.
+
+\begin{itemize}
+  \item ML-DSA (Dilithium): ML-DSA-87
+  \item SLH-DSA (SPHINCS+): SLH-DSA-SHA2-256s
+  \item ML-KEM (Kyber): ML-KEM-1024
+\end{itemize}
+
 
 \subsection{Fingerprint}
 
@@ -46,6 +58,22 @@ The fingerprint is a bech32-encoded merkle root of the two public keys:
 \end{itemize}
 
 The merkle tree design means the fingerprint can be verified without both keys present. This is useful in bandwidth-constrained scenarios.
+
+The bech32 prefix indicates what kind of keys are used. The prefix always begins with "ebp" and ends with the first occurence of "1". The remaining characters are always of even length and represent the key type. The first half of the characters represent the signing key type and the second half represent the KEM key type. The supported patterns include:
+
+\begin{center}
+\begin{tabular}{|l|l|l|l|}
+  \hline
+  Signing key & KEM key & Type codes & Bech32 prefix \\
+  \hline
+  ML-DSA (Dilithium) & ML-KEM (Kyber) & \texttt{d} + \texttt{k} & \texttt{ebpdk1} \\
+  SLH-DSA (SPHINCS+) & ML-KEM (Kyber) & \texttt{s} + \texttt{k} & \texttt{ebpsk1} \\
+  \hline
+\end{tabular}
+\end{center}
+
+\noindent
+The fingerprint is designed to be human readable, informative, and useful. 
 
 \subsection{Details}
 

@@ -1,5 +1,15 @@
 # Wiki Log
 
+## [2026-05-23] query | BIP HD patterns applied to EBP
+
+- Answered: per-BIP (32/39/43/44) application to PQ dual-key identities, advantages, composition with hierarchy certificates, and open design questions.
+- Filed: [[analysis-bip-patterns-for-ebp]].
+
+## [2026-05-20] ingest | NIST Selects HQC as Fifth Algorithm for Post-Quantum Encryption
+
+- Ingested `NIST Selects HQC as Fifth Algorithm for Post-Quantum Encryption.md` → [[source-nist-hqc-fifth-pq-encryption]].
+- Updated: [[hqc]] (new), [[ml-kem]], [[source-fips-203]], [[overview]], [[fn-dsa]], [[cryptographic-algorithm-transitions]], [[index.md]].
+
 ## [2026-05-17] ingest | Google OAuth 2.0 web server + Cross-Account Protection (RISC)
 
 - Ingested `Using OAuth 2.0 for Web Server Applications  _  Authorization.md` → [[source-google-oauth2-web-server]].
