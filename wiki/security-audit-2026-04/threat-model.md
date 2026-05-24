@@ -33,7 +33,7 @@ diagram for the April 2026 [[README|EBP Security Audit]].
 | A12 | GUI backend localhost socket (`127.0.0.1:8787`)                    | Ambient authority on the user's machine; any local origin can call it.                                                               |
 | A13 | Distribution binaries (AppImage, DMG, MSI, Deno-compiled sidecar)  | Trust root for end-users.                                                                                                            |
 | A14 | Source tree + lockfiles                                            | Supply-chain integrity.                                                                                                              |
-| A15 | EBP-HD mnemonic + optional passphrase                              | Recovery root for every derived identity in an HD tree; compromise enables regeneration of all derived signing and KEM private keys. |
+| A15 | EBP-HD BIP39-English mnemonic + optional passphrase                | Recovery root for every derived identity in an HD tree; compromise enables regeneration of all derived signing and KEM private keys. |
 | A16 | EBP-HD derivation path metadata (`hdProvenance`)                   | Not secret by itself, but can reveal account/profile structure and aid correlation if over-shared.                                   |
 
 ## Adversary capability matrix

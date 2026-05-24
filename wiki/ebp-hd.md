@@ -3,7 +3,7 @@ title: "EBP-HD Deterministic Hierarchical Identities"
 type: concept
 status: active
 last_updated: 2026-05-24
-source_count: 9
+source_count: 11
 tags:
   - hd
   - key-derivation
@@ -24,10 +24,12 @@ the HD tree.
 
 ## Model
 
-- Mnemonics use the EBP-owned `ebp-mnemonic-v1` word index (`ebp000` through
-  `ebp7ff`) with BIP39-style checksum and 11-bit grouping.
+- Mnemonics use the canonical BIP39 English 2048-word list with BIP39 checksum
+  and 11-bit grouping.
 - `mnemonicToSeed()` uses PBKDF2-HMAC-SHA512 with the domain salt prefix
-  `ebp-mnemonic-v1:`.
+  `ebp-mnemonic-v2:`. This deliberately differs from BIP39's Bitcoin-wallet
+  seed salt, so the same words and passphrase do not produce the same seed in
+  EBP and Bitcoin tooling.
 - HD paths use `m/ebp'/profile'/account'/change/index`, where profile is
   `dilithium` or `sphincs`.
 - Leaf expansion derives one signing seed and one ML-KEM seed; the resulting
@@ -66,10 +68,12 @@ server.
 
 - `docs/ebp-hd-spec.md`
 - `core/Mnemonic.ts`
+- `core/bip39-english.ts`
 - `core/Hd.ts`
 - `core/HdPath.ts`
 - `core/Identity.ts`
 - `cli/commands/hd.ts`
 - `gui/local-backend/routes.ts`
 - `gui/app.js`
+- `wiki/raw/bip-0039.mediawiki`
 - [[analysis-bip-patterns-for-ebp]]

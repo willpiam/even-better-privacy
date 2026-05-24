@@ -419,25 +419,27 @@ messages with contacts, and encrypt/decrypt full file payloads.
   `ebp publish`, `ebp fetch <fingerprint>`)
 - push attached details to the server when adding them
   (`ebp detail <path> <value> --push`)
-- create deterministic HD identities from an EBP mnemonic
+- create deterministic HD identities from a BIP39-English EBP mnemonic
   (`ebp hd generate-mnemonic`, `ebp hd new-identity <name>`, `ebp hd discover`)
 
 ### EBP-HD deterministic identities
 
 EBP-HD is an opt-in deterministic identity system inspired by the structure of
-BIP32/39/43/44. A mnemonic produces a master seed; paths like
-`m/ebp'/dilithium'/0'/0/0` derive normal EBP identities with the same signing,
-encryption, fingerprint, storage, and revocation behavior as randomly generated
-identities. Existing non-HD identities remain unchanged.
+BIP32/39/43/44. It uses BIP39 English words for the mnemonic, but EBP's own
+PBKDF2 salt means the same phrase does not produce a Bitcoin-wallet seed. A
+mnemonic produces a master seed; paths like `m/ebp'/dilithium'/0'/0/0` derive
+normal EBP identities with the same signing, encryption, fingerprint, storage,
+and revocation behavior as randomly generated identities. Existing non-HD
+identities remain unchanged.
 
 Useful commands:
 
 ```sh
 deno task cli hd generate-mnemonic
-deno task cli hd verify-mnemonic --mnemonic "ebp..."
-deno task cli hd new-identity work --account 0 --profile dilithium --mnemonic "ebp..."
-deno task cli hd derive --path "m/ebp'/sphincs'/0'/0/0" --out recovery --mnemonic "ebp..."
-deno task cli hd discover --account 0 --profile dilithium --mnemonic "ebp..."
+deno task cli hd verify-mnemonic --mnemonic "<24 BIP39 English words>"
+deno task cli hd new-identity work --account 0 --profile dilithium --mnemonic "<24 BIP39 English words>"
+deno task cli hd derive --path "m/ebp'/sphincs'/0'/0/0" --out recovery --mnemonic "<24 BIP39 English words>"
+deno task cli hd discover --account 0 --profile dilithium --mnemonic "<24 BIP39 English words>"
 ```
 
 Keep the mnemonic offline and private. The GUI also exposes HD onboarding from

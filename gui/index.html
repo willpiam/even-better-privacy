@@ -2243,13 +2243,13 @@
 
       <section>
         <h3>Create HD Identity</h3>
-        <p class="small muted">Deterministically derive a new identity from an EBP-HD mnemonic. Write the mnemonic down before deriving identities; the GUI does not store the seed.</p>
+        <p class="small muted">Deterministically derive a new identity from an EBP-HD mnemonic using BIP39 English words. EBP uses its own seed salt, so this phrase is not interchangeable with a Bitcoin wallet seed. Write the mnemonic down before deriving identities; the GUI does not store the seed.</p>
         <form id="hd-form" class="stack">
           <div>
             <button type="button" id="hd-generate-mnemonic" class="secondary">Generate Mnemonic</button>
           </div>
           <label>Mnemonic
-            <textarea id="hd-mnemonic" placeholder="Generated or pasted EBP-HD mnemonic"></textarea>
+            <textarea id="hd-mnemonic" placeholder="Generated or pasted 24-word EBP-HD mnemonic"></textarea>
           </label>
           <label>Confirm Mnemonic
             <textarea id="hd-confirm-mnemonic" placeholder="Retype the mnemonic before deriving"></textarea>

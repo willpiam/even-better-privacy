@@ -541,7 +541,7 @@ if (hdGenerateMnemonic) {
         document.getElementById("hd-mnemonic").value = res.mnemonic;
         document.getElementById("hd-confirm-mnemonic").value = "";
         setStatus(
-          "HD mnemonic generated. Write it down and retype it to confirm.",
+          "HD mnemonic generated with BIP39 English words. Write it down and retype it to confirm.",
           "success",
         );
       } catch (err) {

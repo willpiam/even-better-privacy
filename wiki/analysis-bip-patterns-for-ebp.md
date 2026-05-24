@@ -144,8 +144,9 @@ redesigned.
 
 - Mnemonics recover a **seed**, not PQ private key blobs (keys are too large for
   word encoding).
-- English wordlist vs EBP-specific list is a product choice; deployed wallet
-  ecosystem is English-centric per BIP39.
+- EBP-HD adopted the BIP39 English wordlist for mnemonic UX while retaining an
+  EBP-specific seed salt (`ebp-mnemonic-v2:`) so phrases are not
+  seed-compatible with Bitcoin wallets.
 
 ---
 
@@ -235,8 +236,8 @@ to scan which derived identities were actually published on [[component-server]]
 
 ## Open design questions
 
-- Should EBP reuse BIP39 wordlists and PBKDF2 parameters for the master seed, or
-  define `ebp-mnemonic-v1` with PQ-appropriate iteration counts?
+- Should a future EBP-HD revision add public-only derivation, or keep v1's
+  private-root-only model?
 - Per-message vs per-identity: should [[analysis-shared-key-concept]] roots live
   on a separate BIP43 purpose branch from identity leaves?
 - How do HD-derived identities interact with [[revocation-system]] emergency

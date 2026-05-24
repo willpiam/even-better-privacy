@@ -20,30 +20,39 @@ EBP's existing PQ key generators.
 
 ## Mnemonic Layer
 
-Version: `ebp-mnemonic-v1`
+Version: `ebp-mnemonic-v2`
 
-The mnemonic layer uses BIP39-style mechanics:
+The mnemonic layer uses BIP39 English-wordlist mechanics:
 
 1. Generate 128, 160, 192, 224, or 256 bits of CSPRNG entropy.
 2. Append `ENT / 32` checksum bits from `SHA-256(entropy)`.
 3. Split into 11-bit indices.
-4. Encode using the fixed EBP v1 2048-word index set (`ebp000` through
-   `ebp7ff`).
+4. Encode using the canonical BIP39 English 2048-word list from
+   `bip-0039/english.txt`.
 
-The EBP wordlist is deliberately project-owned in v1 so EBP does not imply
-byte-for-byte BIP39 compatibility. A future revision may adopt the BIP39 English
-list if product and interoperability needs justify that choice.
+The wordlist is the BIP39 English list for paper-backup interoperability and
+familiar recovery UX. The mnemonic remains an EBP mnemonic because seed
+extraction uses an EBP-domain-separated salt.
 
 Seed extraction:
 
 ```text
 seed = PBKDF2-HMAC-SHA512(
-  password = normalized_mnemonic,
-  salt = "ebp-mnemonic-v1:" || NFKD(passphrase),
+  password = normalized_mnemonic_NFKD,
+  salt = "ebp-mnemonic-v2:" || NFKD(passphrase),
   iterations = 2048,
   dkLen = 64
 )
 ```
+
+Compatibility:
+
+- EBP-HD uses the BIP39 English wordlist and checksum rules.
+- EBP-HD does **not** use BIP39's seed salt (`"mnemonic" || passphrase`).
+  The same words and passphrase therefore produce a different 64-byte seed in
+  EBP than in a Bitcoin wallet.
+- EBP-HD does not use BIP32 secp256k1 child-key derivation; the seed enters the
+  EBP-HD HKDF tree below.
 
 The mnemonic encodes computer-generated entropy. It must not be treated as a
 brainwallet phrase.

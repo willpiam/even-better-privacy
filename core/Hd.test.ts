@@ -8,27 +8,28 @@ import {
 } from "./Mnemonic.ts";
 import { parseHdPath } from "./HdPath.ts";
 import { toHex } from "./Hex.ts";
+import { BIP39_ENGLISH_WORDLIST } from "./bip39-english.ts";
 
 const VECTOR = {
   entropyHex:
     "0000000000000000000000000000000000000000000000000000000000000001",
   mnemonic:
-    "ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp1ec",
+    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon diesel",
   passphrase: "test-passphrase",
   seedHex:
-    "53ccb9d74511e46b644f47f464a2ef8fa9dd9d4d526dd226401cebc6f92aeefd54422127fc1e0e7cfe428b3b281aa2ccf056c84e0f8490ad759ebbfe4700a99e",
+    "97418d54aa7d70325702f110b4652a323374ac961d831910355858950f64ad44d72895e40aaf842ab52c9caa658fec63120d5c957deaf175fe23e40d8798ebbf",
   cases: [
     {
       profile: "dilithium" as const,
       path: "m/ebp'/dilithium'/0'/0/0",
       fingerprint:
-        "ebpdk1ngdumuv4gle2r0vcrmu23fny0g2p3j8xg34aysllwahqwrzwgyyqvetht6",
+        "ebpdk1ckdp9e7sqncvq7wlpd0ateqvrh3t3sfptnqxssdsxnce50dj084s8nxkda",
     },
     {
       profile: "sphincs" as const,
       path: "m/ebp'/sphincs'/0'/0/0",
       fingerprint:
-        "ebpsk1tj69utzntz836dz3e0y7v22tfftna5y59ptkeypg76gmjqakjwjs0lt880",
+        "ebpsk1lttgmk4gfkgu47dd8uh6r4p4pm2upshzwy7w5fgnljup669xxstq4v4dz5",
     },
   ],
 };
@@ -45,6 +46,9 @@ Deno.test("EBP mnemonic encodes entropy with checksum and derives test-vector se
   const entropy = hexToBytes(VECTOR.entropyHex);
   const mnemonic = entropyToMnemonic(entropy);
   assertEquals(mnemonic, VECTOR.mnemonic);
+  assert(
+    mnemonic.split(" ").every((word) => BIP39_ENGLISH_WORDLIST.includes(word)),
+  );
   assert(validateMnemonic(mnemonic));
   assertEquals(toHex(mnemonicToEntropy(mnemonic)), VECTOR.entropyHex);
   assertEquals(

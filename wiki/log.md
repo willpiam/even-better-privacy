@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-05-24] change | EBP-HD BIP39 English mnemonic
+
+- Updated: [[ebp-hd]] now documents BIP39 English mnemonic words with the
+  `ebp-mnemonic-v2:` seed salt.
+- Updated: [[analysis-bip-patterns-for-ebp]], [[index.md]], and the April 2026
+  threat model to reflect the hard replacement of the earlier indexed EBP
+  mnemonic test format.
+
 ## [2026-05-24] update | EBP-HD implementation
 
 - Added: [[ebp-hd]] as the active concept page for deterministic hierarchical

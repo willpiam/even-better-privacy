@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-24 (implementation: EBP-HD deterministic identities)
+Last updated: 2026-05-24 (mnemonics: BIP39-English EBP-HD v2)
 
 ## Wiki Operations
 
@@ -57,8 +57,8 @@ Last updated: 2026-05-24 (implementation: EBP-HD deterministic identities)
 - [[key-management]] - NIST SP 800-57 key lifecycle concepts mapped to EBP
   identity and revocation surfaces; includes non-EBP BIP32/39/43/44 comparison
   notes ([[source-bip-hd-wallet-standards]]).
-- [[ebp-hd]] - Opt-in deterministic hierarchical identity layer: EBP mnemonic,
-  HD paths, PQ leaf derivation, CLI/GUI onboarding, and discovery.
+- [[ebp-hd]] - Opt-in deterministic hierarchical identity layer: BIP39-English
+  EBP mnemonic, HD paths, PQ leaf derivation, CLI/GUI onboarding, and discovery.
 - [[integrity-renewal]] - Long-term renewal of timestamp/signature evidence
   across hash-function and algorithm transitions.
 - [[release-process]] - Reproducible release checklist, build lints, and

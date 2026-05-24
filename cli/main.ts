@@ -129,9 +129,9 @@ COMMANDS:
   use <name>            Switch to an existing identity
   details               Show fingerprint, key types, and attached details
 
-  hd generate-mnemonic  Generate an EBP-HD mnemonic
+  hd generate-mnemonic  Generate a BIP39-English EBP-HD mnemonic
     --strength <bits>   Entropy bits: 128, 160, 192, 224, or 256
-  hd verify-mnemonic    Validate an EBP-HD mnemonic from --mnemonic or stdin
+  hd verify-mnemonic    Validate a BIP39-English EBP-HD mnemonic from --mnemonic or stdin
   hd derive             Derive an identity from a specific HD path
     --path <path>       Example: "m/ebp'/dilithium'/0'/0/0"
     --out <name>        Identity name to write under ~/.ebp/

@@ -1,23 +1,16 @@
 import { pbkdf2 } from "@noble/hashes/pbkdf2";
 import { sha256, sha512 } from "@noble/hashes/sha2";
 import { randomBytes } from "@noble/hashes/utils";
+import { BIP39_ENGLISH_WORDLIST } from "./bip39-english.ts";
 
 const encoder = new TextEncoder();
 
-export const EBP_MNEMONIC_VERSION = "ebp-mnemonic-v1";
+export const EBP_MNEMONIC_VERSION = "ebp-mnemonic-v2";
 export const EBP_MNEMONIC_WORD_COUNT = 2048;
 export const EBP_MNEMONIC_PBKDF2_ITERATIONS = 2048;
 export const EBP_MNEMONIC_SEED_LENGTH = 64;
 
-// EBP v1 intentionally uses a project-owned fixed 2048-entry list instead of
-// pretending Bitcoin's English list is protocol-bound to EBP. The index space
-// and checksum mechanics match BIP39's 11-bit grouping.
-export const EBP_MNEMONIC_WORDLIST = Object.freeze(
-  Array.from(
-    { length: EBP_MNEMONIC_WORD_COUNT },
-    (_, i) => `ebp${i.toString(16).padStart(3, "0")}`,
-  ),
-);
+export const EBP_MNEMONIC_WORDLIST = BIP39_ENGLISH_WORDLIST;
 
 const WORD_TO_INDEX = new Map(
   EBP_MNEMONIC_WORDLIST.map((word, index) => [word, index]),
@@ -41,7 +34,13 @@ function bitsToBytes(bits: string): Uint8Array {
 }
 
 function normalizeMnemonic(mnemonic: string): string[] {
-  return mnemonic.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  return mnemonic.normalize("NFKD").trim().toLowerCase().split(/\s+/).filter(
+    Boolean,
+  );
+}
+
+function normalizeMnemonicPassword(mnemonic: string): string {
+  return normalizeMnemonic(mnemonic).join(" ");
 }
 
 function assertValidStrength(strength: number): void {
@@ -113,9 +112,7 @@ export function validateMnemonic(mnemonic: string): boolean {
 
 export function mnemonicToSeed(mnemonic: string, passphrase = ""): Uint8Array {
   mnemonicToEntropy(mnemonic);
-  const password = encoder.encode(
-    mnemonic.trim().toLowerCase().replace(/\s+/g, " "),
-  );
+  const password = encoder.encode(normalizeMnemonicPassword(mnemonic));
   const salt = encoder.encode(
     `${EBP_MNEMONIC_VERSION}:${passphrase.normalize("NFKD")}`,
   );
