@@ -36,14 +36,14 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
     return toHex(this.key.publicKey);
   }
 
-  constructor(variant: string = "ml_kem1024") {
+  constructor(variant: string = "ml_kem1024", options?: { seed?: Uint8Array }) {
     super();
     // assert that the variant is valid
     if (!KyberEncryptionKey.listVariants().includes(variant)) {
       throw new Error(`Invalid Kyber KEM variant: ${variant}`);
     }
     this.variant = variant;
-    this.seed = randomBytes(64);
+    this.seed = options?.seed ?? randomBytes(64);
     this.key =
       ((kyber as unknown) as Record<string, KyberVariant>)[this.variant]
         ?.keygen(this.seed);

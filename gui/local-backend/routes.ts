@@ -34,6 +34,12 @@ import {
 } from "../../core/EmailAttachmentPayload.ts";
 import { validatePassword } from "../../core/PasswordPolicy.ts";
 import {
+  generateMnemonic,
+  mnemonicToSeed,
+  validateMnemonic,
+} from "../../core/Mnemonic.ts";
+import { type HdChange, type HdProfile } from "../../core/HdPath.ts";
+import {
   apiUrl,
   buildStateFromExternal,
   type CLIContext,
@@ -256,6 +262,62 @@ function clientRateLimitKey(req: Request): string {
   const origin = req.headers.get("origin");
   const host = req.headers.get("host");
   return `${origin ?? "no-origin"}|${host ?? "no-host"}`;
+}
+
+function parseHdProfile(value: unknown): HdProfile {
+  if (value === "dilithium" || value === "sphincs") return value;
+  return "dilithium";
+}
+
+function parseHdChange(value: unknown): HdChange {
+  if (value === "internal") return "internal";
+  return "external";
+}
+
+function parseNonNegativeInteger(value: unknown, fallback: number): number {
+  const parsed = typeof value === "number"
+    ? value
+    : typeof value === "string"
+    ? Number.parseInt(value, 10)
+    : fallback;
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
+}
+
+async function nextHdIdentityIndex(
+  ctx: CLIContext,
+  seed: Uint8Array,
+  profile: HdProfile,
+  account: number,
+  change: HdChange,
+): Promise<number> {
+  const existing = new Set<string>();
+  for (const name of await listIdentityNames(ctx.identityDir)) {
+    const identityCtx = await getContext(undefined, name);
+    try {
+      const publicData = await loadIdentityPublic({
+        ...identityCtx,
+        identityDir: ctx.identityDir,
+        contactsDir: ctx.contactsDir,
+        identityPath: `${ctx.identityDir}/${name}.identity.json`,
+      });
+      if (publicData?.fingerprint) existing.add(publicData.fingerprint);
+    } catch {
+      // Ignore unreadable identity records during HD slot discovery.
+    }
+  }
+  for (let index = 0; index < 100_000; index++) {
+    const identity = Identity.fromAccount(seed, {
+      profile,
+      account,
+      change,
+      index,
+    });
+    if (!existing.has(identity.toFingerprint())) return index;
+  }
+  throw new HttpError(
+    STATUS.BadRequest,
+    "unable to find unused HD identity slot",
+  );
 }
 
 export async function handleRequest(req: Request): Promise<Response> {
@@ -1660,6 +1722,169 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         revoked: !!publicData.revocationCertificate,
         revokedDetails: revokedDetailPaths,
       });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/hd/mnemonic") {
+      const body = await readJson<{ strength?: unknown }>(req);
+      const strength = parseNonNegativeInteger(body.strength, 256);
+      return json({ mnemonic: generateMnemonic(strength) }, STATUS.Created);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/hd/verify") {
+      const body = await readJson<{ mnemonic?: unknown }>(req);
+      const mnemonic = typeof body.mnemonic === "string" ? body.mnemonic : "";
+      return json({ valid: validateMnemonic(mnemonic) });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/hd/identity") {
+      const body = await readJson<{
+        name?: unknown;
+        mnemonic?: unknown;
+        passphrase?: unknown;
+        password?: unknown;
+        profile?: unknown;
+        account?: unknown;
+        change?: unknown;
+        index?: unknown;
+        force?: unknown;
+        home?: unknown;
+      }>(req);
+      const name = typeof body.name === "string" && body.name.length > 0
+        ? body.name
+        : undefined;
+      const mnemonic = typeof body.mnemonic === "string" ? body.mnemonic : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      const home = typeof body.home === "string" ? body.home : undefined;
+      if (!name) throw new HttpError(STATUS.BadRequest, "name is required");
+      if (!validateMnemonic(mnemonic)) {
+        throw new HttpError(STATUS.BadRequest, "valid mnemonic is required");
+      }
+      if (!password) {
+        throw new HttpError(STATUS.BadRequest, "password is required");
+      }
+      const passwordCheck = validatePassword(password);
+      if (!passwordCheck.ok) {
+        throw new HttpError(STATUS.BadRequest, passwordCheck.reason, {
+          suggestions: passwordCheck.suggestions,
+          strength: passwordCheck.strength,
+        });
+      }
+
+      const ctx = await getContext(home, name);
+      try {
+        await Deno.stat(ctx.identityPath);
+        if (!body.force) {
+          throw new HttpError(
+            STATUS.Conflict,
+            "identity already exists; pass force to overwrite",
+          );
+        }
+      } catch (e) {
+        if (!(e instanceof Deno.errors.NotFound)) throw e;
+      }
+
+      const seed = mnemonicToSeed(
+        mnemonic,
+        typeof body.passphrase === "string" ? body.passphrase : "",
+      );
+      const profile = parseHdProfile(body.profile);
+      const account = parseNonNegativeInteger(body.account, 0);
+      const change = parseHdChange(body.change);
+      const index = body.index === undefined
+        ? await nextHdIdentityIndex(ctx, seed, profile, account, change)
+        : parseNonNegativeInteger(body.index, 0);
+      const identity = Identity.fromAccount(seed, {
+        profile,
+        account,
+        change,
+        index,
+      });
+
+      await ensurePrivateDir(ctx.identityDir);
+      await ensurePrivateDir(ctx.contactsDir);
+      await saveIdentity(ctx, password, identity);
+      await updateState(ctx.identityDir, {
+        currentIdentity: ctx.currentIdentity,
+      });
+
+      return json({
+        ok: true,
+        identity: {
+          name: ctx.currentIdentity,
+          fingerprint: identity.toFingerprint(),
+          signingKeyType: identity.signingKeyType,
+          encryptionKeyType: identity.encryptionKeyType,
+          hdProvenance: identity.hdProvenance,
+          identityPath: ctx.identityPath,
+        },
+      }, STATUS.Created);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/hd/discover") {
+      const body = await readJson<{
+        mnemonic?: unknown;
+        passphrase?: unknown;
+        profile?: unknown;
+        account?: unknown;
+        gapLimit?: unknown;
+        server?: unknown;
+        home?: unknown;
+      }>(req);
+      const mnemonic = typeof body.mnemonic === "string" ? body.mnemonic : "";
+      if (!validateMnemonic(mnemonic)) {
+        throw new HttpError(STATUS.BadRequest, "valid mnemonic is required");
+      }
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const ctx = await getContext(home);
+      const seed = mnemonicToSeed(
+        mnemonic,
+        typeof body.passphrase === "string" ? body.passphrase : "",
+      );
+      const profile = parseHdProfile(body.profile);
+      const account = parseNonNegativeInteger(body.account, 0);
+      const gapLimit = parseNonNegativeInteger(body.gapLimit, 20);
+      const server = typeof body.server === "string"
+        ? body.server
+        : (await readState(ctx.identityDir))?.server;
+      const localFingerprints = new Map<string, string>();
+      for (const identityName of await listIdentityNames(ctx.identityDir)) {
+        const identityCtx = await getContext(home, identityName);
+        const publicData = await loadIdentityPublic(identityCtx);
+        if (publicData?.fingerprint) {
+          localFingerprints.set(publicData.fingerprint, identityName);
+        }
+      }
+
+      const matches: unknown[] = [];
+      let gap = 0;
+      for (let index = 0; gap < gapLimit; index++) {
+        const identity = Identity.fromAccount(seed, {
+          profile,
+          account,
+          change: "external",
+          index,
+        });
+        const fingerprint = identity.toFingerprint();
+        const localName = localFingerprints.get(fingerprint);
+        let publishedToServer = false;
+        if (server) {
+          try {
+            const res = await fetch(
+              apiUrl(server, `/api/v1/identity/${fingerprint}`),
+            );
+            publishedToServer = res.ok;
+          } catch {
+            // Server unreachable, keep local discovery result.
+          }
+        }
+        if (localName || publishedToServer) {
+          gap = 0;
+          matches.push({ index, fingerprint, localName, publishedToServer });
+        } else {
+          gap++;
+        }
+      }
+      return json({ matches, gapLimit });
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/identity/generate") {

@@ -29,6 +29,14 @@ import {
   type RecipientEncapsulation,
 } from "./MultiRecipientCipher.ts";
 import {
+  deriveAccountNode,
+  deriveIdentitySeeds,
+  type HdNode,
+  type HdProvenance,
+  provenanceFromPath,
+} from "./Hd.ts";
+import type { HdChange, HdProfile } from "./HdPath.ts";
+import {
   createRevocationCertificate,
   decodeRevocationCertificate,
   EMERGENCY_NONCE_BASE,
@@ -62,6 +70,8 @@ export type IdentityPublicData = {
   revocationCertificate?: string;
   /** Nonce for revocations (separate from details nonce) */
   revocationNonce?: number;
+  /** Present only for opt-in HD-derived identities. */
+  hdProvenance?: HdProvenance;
 };
 
 /** New storage format: public data unencrypted, private keys encrypted */
@@ -116,6 +126,7 @@ export class Identity extends Key {
   revocationCertificate: string | null;
   /** Nonce counter for revocations */
   revocationNonce: number;
+  hdProvenance?: HdProvenance;
 
   static EncryptFor(recipient: ExternalIdentity, message: string): string {
     switch (recipient.encryptionKeyType) {
@@ -213,6 +224,11 @@ export class Identity extends Key {
   constructor(
     signingKeyType: SigningKeyOptions,
     encryptionKeyType: EncryptionKeyOptions,
+    options?: {
+      signingSeed?: Uint8Array;
+      encryptionSeed?: Uint8Array;
+      hdProvenance?: HdProvenance;
+    },
   ) {
     super();
     this.detailsNonce = 0;
@@ -222,17 +238,23 @@ export class Identity extends Key {
     this.encryptionKeyType = encryptionKeyType;
     switch (signingKeyType) {
       case "dilithium":
-        this.signingKey = new DilithiumSigningKey();
+        this.signingKey = new DilithiumSigningKey("ml_dsa87", {
+          seed: options?.signingSeed,
+        });
         break;
       case "sphincs":
-        this.signingKey = new SphincsSigningKey();
+        this.signingKey = new SphincsSigningKey("slh_dsa_sha2_256s", {
+          seed: options?.signingSeed,
+        });
         break;
       default:
         throw new Error(`Unsupported signing key type: ${signingKeyType}`);
     }
     switch (encryptionKeyType) {
       case "kyber":
-        this.encryptionKey = new KyberEncryptionKey();
+        this.encryptionKey = new KyberEncryptionKey("ml_kem1024", {
+          seed: options?.encryptionSeed,
+        });
         break;
       default:
         throw new Error(
@@ -242,6 +264,26 @@ export class Identity extends Key {
     this.details = new Map();
     this.revokedDetails = new Map();
     this.revocationCertificate = null;
+    this.hdProvenance = options?.hdProvenance;
+  }
+
+  static fromHdNode(node: HdNode, profile: HdProfile, path: string): Identity {
+    const seeds = deriveIdentitySeeds(node, profile);
+    return new Identity(profile, "kyber", {
+      signingSeed: seeds.signingSeed,
+      encryptionSeed: seeds.encryptionSeed,
+      hdProvenance: provenanceFromPath(path),
+    });
+  }
+
+  static fromAccount(seed: Uint8Array, input: {
+    profile: HdProfile;
+    account: number;
+    change: HdChange;
+    index: number;
+  }): Identity {
+    const { node, path } = deriveAccountNode({ seed, ...input });
+    return Identity.fromHdNode(node, input.profile, path);
   }
 
   signMessage(
@@ -1023,6 +1065,7 @@ export class Identity extends Key {
     i.revocationNonce = typeof data.revocationNonce === "number"
       ? data.revocationNonce
       : 0;
+    i.hdProvenance = data.hdProvenance;
 
     return i;
   }
@@ -1053,6 +1096,7 @@ export class Identity extends Key {
       revokedDetails: Object.fromEntries(this.revokedDetails),
       revocationCertificate: this.revocationCertificate ?? undefined,
       revocationNonce: this.revocationNonce,
+      hdProvenance: this.hdProvenance,
     };
   }
 
@@ -1194,6 +1238,7 @@ export class Identity extends Key {
       );
       identity.revocationCertificate = pub.revocationCertificate ?? null;
       identity.revocationNonce = pub.revocationNonce ?? 0;
+      identity.hdProvenance = pub.hdProvenance;
 
       if (password) {
         identity.isPrivateLoaded = true;

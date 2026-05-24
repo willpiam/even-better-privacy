@@ -5,7 +5,7 @@ import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { toHex } from "./Hex.ts";
 
 type SphincsVariant = {
-	keygen: () => { publicKey: Uint8Array; secretKey: Uint8Array };
+	keygen: (seed?: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array };
 	sign: (message: Uint8Array, secretKey: Uint8Array) => Uint8Array;
 	verify: (signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array) => boolean;
 };
@@ -18,7 +18,7 @@ export class SphincsSigningKey extends SigningKey {
         return bytesToBase64(this.key.publicKey);
     }
 
-    constructor(variant: string = "slh_dsa_sha2_256s") {
+    constructor(variant: string = "slh_dsa_sha2_256s", options?: { seed?: Uint8Array }) {
         super();
         // assert that the variant is valid
         if (!SphincsSigningKey.listVariants().includes(variant)) {
@@ -29,7 +29,7 @@ export class SphincsSigningKey extends SigningKey {
         if (typeof keygen !== 'function') {
             throw new Error(`Unsupported or invalid SLH-DSA variant: ${this.variant}`);
         }
-        this.key = (keygen as () => { publicKey: Uint8Array; secretKey: Uint8Array })();
+        this.key = (keygen as (seed?: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array })(options?.seed);
     }
 
     static verify(variant: string, message: string, signature: string, publicKey: string): boolean {

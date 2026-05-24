@@ -5,7 +5,7 @@ import * as dilithium from "@noble/post-quantum/ml-dsa";
 import { toHex } from "./Hex.ts";
 
 type DilithiumVariant = {
-    keygen: () => { publicKey: Uint8Array; secretKey: Uint8Array };
+    keygen: (seed?: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array };
     sign: (message: Uint8Array, secretKey: Uint8Array) => Uint8Array;
     verify: (signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array) => boolean;
 };
@@ -21,7 +21,7 @@ export class DilithiumSigningKey  extends SigningKey {
         return bytesToBase64(this.key.publicKey);
     }
 
-    constructor(variant: string = "ml_dsa87") {
+    constructor(variant: string = "ml_dsa87", options?: { seed?: Uint8Array }) {
         super();
         if (!DilithiumSigningKey.listVariants().includes(variant)) {
             throw new Error(`Invalid Dilithium variant: ${variant}`);
@@ -31,7 +31,7 @@ export class DilithiumSigningKey  extends SigningKey {
         if (typeof keygen !== 'function') {
             throw new Error(`Unsupported or invalid Dilithium variant: ${this.variant}`);
         }
-        this.key = (keygen as () => { publicKey: Uint8Array; secretKey: Uint8Array })();
+        this.key = (keygen as (seed?: Uint8Array) => { publicKey: Uint8Array; secretKey: Uint8Array })(options?.seed);
     }
 
     toRawFingerprint(): Uint8Array {

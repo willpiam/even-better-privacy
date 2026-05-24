@@ -5,6 +5,7 @@
     "@noble/post-quantum/ml-kem": "jsr:@noble/post-quantum@^0.5.4/ml-kem.js",
     "@noble/post-quantum/slh-dsa": "jsr:@noble/post-quantum@^0.5.4/slh-dsa.js",
     "@noble/hashes": "jsr:@noble/hashes@^1.8.0",
+    "@noble/hashes/hkdf": "jsr:@noble/hashes@^1.8.0/hkdf",
     "@noble/hashes/sha2": "jsr:@noble/hashes@^1.8.0/sha2",
     "@noble/hashes/utils": "jsr:@noble/hashes@^1.8.0/utils",
     "@noble/hashes/pbkdf2": "jsr:@noble/hashes@^1.8.0/pbkdf2",

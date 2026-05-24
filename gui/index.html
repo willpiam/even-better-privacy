@@ -2242,6 +2242,50 @@
       </section>
 
       <section>
+        <h3>Create HD Identity</h3>
+        <p class="small muted">Deterministically derive a new identity from an EBP-HD mnemonic. Write the mnemonic down before deriving identities; the GUI does not store the seed.</p>
+        <form id="hd-form" class="stack">
+          <div>
+            <button type="button" id="hd-generate-mnemonic" class="secondary">Generate Mnemonic</button>
+          </div>
+          <label>Mnemonic
+            <textarea id="hd-mnemonic" placeholder="Generated or pasted EBP-HD mnemonic"></textarea>
+          </label>
+          <label>Confirm Mnemonic
+            <textarea id="hd-confirm-mnemonic" placeholder="Retype the mnemonic before deriving"></textarea>
+          </label>
+          <label>Optional Passphrase
+            <input id="hd-passphrase" type="password" autocomplete="off" />
+          </label>
+          <label>Name
+            <input id="hd-name" type="text" placeholder="work-hd" />
+          </label>
+          <label>Signing Profile
+            <select id="hd-profile">
+              <option value="dilithium">Dilithium</option>
+              <option value="sphincs">SPHINCS+</option>
+            </select>
+          </label>
+          <label>Account
+            <input id="hd-account" type="number" min="0" value="0" />
+          </label>
+          <label>Change
+            <select id="hd-change">
+              <option value="external">External / published</option>
+              <option value="internal">Internal / recovery</option>
+            </select>
+          </label>
+          <label>Index (optional)
+            <input id="hd-index" type="number" min="0" placeholder="next unused" />
+          </label>
+          <label class="inline"><input id="hd-force" type="checkbox" /> Overwrite if exists</label>
+          <div>
+            <button type="submit">Derive HD Identity</button>
+          </div>
+        </form>
+      </section>
+
+      <section>
         <h3>Export Public Identity</h3>
         <form id="export-form" class="stack">
           <div>

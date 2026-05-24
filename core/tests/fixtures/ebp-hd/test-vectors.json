@@ -1,0 +1,20 @@
+{
+  "version": "ebp-hd-v1",
+  "mnemonicVersion": "ebp-mnemonic-v1",
+  "entropyHex": "0000000000000000000000000000000000000000000000000000000000000001",
+  "mnemonic": "ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp000 ebp1ec",
+  "passphrase": "test-passphrase",
+  "seedHex": "53ccb9d74511e46b644f47f464a2ef8fa9dd9d4d526dd226401cebc6f92aeefd54422127fc1e0e7cfe428b3b281aa2ccf056c84e0f8490ad759ebbfe4700a99e",
+  "cases": [
+    {
+      "profile": "dilithium",
+      "path": "m/ebp'/dilithium'/0'/0/0",
+      "fingerprint": "ebpdk1ngdumuv4gle2r0vcrmu23fny0g2p3j8xg34aysllwahqwrzwgyyqvetht6"
+    },
+    {
+      "profile": "sphincs",
+      "path": "m/ebp'/sphincs'/0'/0/0",
+      "fingerprint": "ebpsk1tj69utzntz836dz3e0y7v22tfftna5y59ptkeypg76gmjqakjwjs0lt880"
+    }
+  ]
+}

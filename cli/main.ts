@@ -13,6 +13,7 @@ import {
   cmdShowDetails,
   cmdUseIdentity,
 } from "./commands/identity.ts";
+import { cmdHd } from "./commands/hd.ts";
 import { cmdImportContact, cmdListContacts } from "./commands/contacts.ts";
 import {
   cmdDecrypt,
@@ -54,6 +55,16 @@ const STRING_FLAGS = [
   "reason",
   "revocation-output",
   "search",
+  "strength",
+  "mnemonic",
+  "passphrase",
+  "path",
+  "out",
+  "account",
+  "profile",
+  "change",
+  "index",
+  "gap-limit",
 ];
 const BOOLEAN_FLAGS = [
   "help",
@@ -117,6 +128,22 @@ COMMANDS:
   identities            List available identities (marks current)
   use <name>            Switch to an existing identity
   details               Show fingerprint, key types, and attached details
+
+  hd generate-mnemonic  Generate an EBP-HD mnemonic
+    --strength <bits>   Entropy bits: 128, 160, 192, 224, or 256
+  hd verify-mnemonic    Validate an EBP-HD mnemonic from --mnemonic or stdin
+  hd derive             Derive an identity from a specific HD path
+    --path <path>       Example: "m/ebp'/dilithium'/0'/0/0"
+    --out <name>        Identity name to write under ~/.ebp/
+    --revocation-cert   Print an emergency revocation certificate
+    --revocation-output <file>  Save emergency certificate to file
+  hd new-identity <name>  Derive the next account identity
+    --account <n>       Account/persona number (default: 0)
+    --profile <type>    dilithium (default) or sphincs
+    --change <type>     external (default) or internal
+    --revocation-cert   Print an emergency revocation certificate
+    --revocation-output <file>  Save emergency certificate to file
+  hd discover           Scan derived external fingerprints with a gap limit
 
   publish               Publish current identity to configured server
     --server <url>      Override server for this command
@@ -297,6 +324,9 @@ async function main(): Promise<void> {
       break;
     case "details":
       await cmdShowDetails(args, ctx);
+      break;
+    case "hd":
+      await cmdHd(args, ctx);
       break;
     case "info":
       await cmdInfo(args, ctx);
