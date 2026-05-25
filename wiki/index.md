@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-24 (password policy page; mnemonics: BIP39-English EBP-HD v2)
+Last updated: 2026-05-25 (EBP-HD BIP compliance language)
 
 ## Wiki Operations
 
@@ -95,6 +95,9 @@ Last updated: 2026-05-24 (password policy page; mnemonics: BIP39-English EBP-HD 
 
 ## Analyses
 
+- [[analysis-ebp-hd-bip-compliance]] - Reviews whether EBP-HD can claim
+  BIP32/39/43/44 compliance; recommends BIP39-English mnemonic-format
+  compatibility plus BIP-inspired EBP-HD language.
 - [[analysis-bip-patterns-for-ebp]] - Design analysis that led to [[ebp-hd]],
   mapping BIP32/39/43/44 structural patterns to PQ dual-key identities.
 - [[analysis-shared-key-concept]] - Design note for introducing short-lived

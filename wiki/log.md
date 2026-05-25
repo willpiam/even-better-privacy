@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-05-25] query | EBP-HD BIP compliance language
+
+- Answered: EBP-HD should not claim broad BIP32/39/43/44 compliance; the safe
+  claim is BIP39-English mnemonic-format compatibility plus BIP-inspired
+  EBP-HD structure.
+- Filed: [[analysis-ebp-hd-bip-compliance]].
+
 ## [2026-05-24] update | password policy documentation and GUI opt-out
 
 - Added: [[password-policy]] (rules, enforcement surfaces, GUI opt-out, audit
