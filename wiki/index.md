@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-24 (mnemonics: BIP39-English EBP-HD v2)
+Last updated: 2026-05-24 (password policy page; mnemonics: BIP39-English EBP-HD v2)
 
 ## Wiki Operations
 
@@ -57,6 +57,8 @@ Last updated: 2026-05-24 (mnemonics: BIP39-English EBP-HD v2)
 - [[key-management]] - NIST SP 800-57 key lifecycle concepts mapped to EBP
   identity and revocation surfaces; includes non-EBP BIP32/39/43/44 comparison
   notes ([[source-bip-hd-wallet-standards]]).
+- [[password-policy]] - Identity encryption password rules (12+ chars, 3-of-4
+  classes, blocklist), CLI/GUI enforcement, and GUI opt-out setting.
 - [[ebp-hd]] - Opt-in deterministic hierarchical identity layer: BIP39-English
   EBP mnemonic, HD paths, PQ leaf derivation, CLI/GUI onboarding, and discovery.
 - [[integrity-renewal]] - Long-term renewal of timestamp/signature evidence

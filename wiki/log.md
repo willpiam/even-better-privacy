@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-05-24] update | password policy documentation and GUI opt-out
+
+- Added: [[password-policy]] (rules, enforcement surfaces, GUI opt-out, audit
+  history).
+- Updated: [[identity-model]], [[component-gui]], [[index.md]].
+- Code: GUI Settings toggle `ebp.identity.enforcePasswordPolicy`; API
+  `enforcePasswordPolicy: false` skips validation on identity create.
+
 ## [2026-05-24] change | EBP-HD BIP39 English mnemonic
 
 - Updated: [[ebp-hd]] now documents BIP39 English mnemonic words with the

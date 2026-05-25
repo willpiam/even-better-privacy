@@ -1,4 +1,9 @@
-import { loadUiPreferences, state } from "./js/state.js";
+import {
+  loadUiPreferences,
+  PASSWORD_POLICY_ENFORCE_PREF_KEY,
+  saveBooleanPreference,
+  state,
+} from "./js/state.js";
 import {
   api,
   escapeHtml,
@@ -516,6 +521,7 @@ document.getElementById("generate-form").addEventListener(
             encryptionType: "kyber",
             password,
             force,
+            enforcePasswordPolicy: state.enforcePasswordPolicy,
           }),
         });
         setStatus("Identity generated", "success");
@@ -583,6 +589,7 @@ if (hdForm) {
           account: Number(document.getElementById("hd-account").value || "0"),
           change: document.getElementById("hd-change").value,
           force: document.getElementById("hd-force").checked,
+          enforcePasswordPolicy: state.enforcePasswordPolicy,
         };
         if (indexValue) body.index = Number(indexValue);
         const res = await api("/hd/identity", {
@@ -1636,6 +1643,21 @@ document.getElementById("revoke-identity-form").addEventListener(
 // ─────────────────────────────────────────────────────────────────────────────
 
 loadUiPreferences();
+
+const enforcePasswordPolicyToggle = document.getElementById(
+  "settings-enforce-password-policy",
+);
+if (enforcePasswordPolicyToggle) {
+  enforcePasswordPolicyToggle.checked = Boolean(state.enforcePasswordPolicy);
+  enforcePasswordPolicyToggle.addEventListener("change", () => {
+    state.enforcePasswordPolicy = enforcePasswordPolicyToggle.checked;
+    saveBooleanPreference(
+      PASSWORD_POLICY_ENFORCE_PREF_KEY,
+      state.enforcePasswordPolicy,
+    );
+  });
+}
+
 onStatusChange(() => renderToastLogs());
 initNavigation();
 initCollapsibleSections();

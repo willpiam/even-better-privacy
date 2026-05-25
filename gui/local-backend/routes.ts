@@ -1747,6 +1747,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         change?: unknown;
         index?: unknown;
         force?: unknown;
+        enforcePasswordPolicy?: unknown;
         home?: unknown;
       }>(req);
       const name = typeof body.name === "string" && body.name.length > 0
@@ -1754,6 +1755,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         : undefined;
       const mnemonic = typeof body.mnemonic === "string" ? body.mnemonic : "";
       const password = typeof body.password === "string" ? body.password : "";
+      const enforcePasswordPolicy = body.enforcePasswordPolicy !== false;
       const home = typeof body.home === "string" ? body.home : undefined;
       if (!name) throw new HttpError(STATUS.BadRequest, "name is required");
       if (!validateMnemonic(mnemonic)) {
@@ -1762,7 +1764,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!password) {
         throw new HttpError(STATUS.BadRequest, "password is required");
       }
-      const passwordCheck = validatePassword(password);
+      const passwordCheck = validatePassword(password, { enforcePolicy: enforcePasswordPolicy });
       if (!passwordCheck.ok) {
         throw new HttpError(STATUS.BadRequest, passwordCheck.reason, {
           suggestions: passwordCheck.suggestions,
@@ -1894,6 +1896,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         encryptionType?: unknown;
         password?: unknown;
         force?: unknown;
+        enforcePasswordPolicy?: unknown;
         home?: unknown;
       }>(req);
 
@@ -1909,6 +1912,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const password = typeof body.password === "string"
         ? body.password
         : undefined;
+      const enforcePasswordPolicy = body.enforcePasswordPolicy !== false;
       const force = Boolean(body.force);
       const home = typeof body.home === "string" ? body.home : undefined;
 
@@ -1920,7 +1924,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           "password is required",
         );
       }
-      const passwordCheck = validatePassword(password);
+      const passwordCheck = validatePassword(password, {
+        enforcePolicy: enforcePasswordPolicy,
+      });
       if (!passwordCheck.ok) {
         throw new HttpError(
           STATUS.BadRequest,

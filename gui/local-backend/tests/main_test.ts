@@ -277,6 +277,27 @@ Deno.test({
 });
 
 Deno.test({
+  name: "POST /api/v1/identity/generate accepts weak password when policy disabled",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      const { status, body } = await makeRequest(
+        handler,
+        "/api/v1/identity/generate",
+        jsonPost({
+          name: "weakpass",
+          password: "short",
+          enforcePasswordPolicy: false,
+          home,
+        }),
+      );
+      assertEquals(status, STATUS.Created);
+      assertEquals((body as { ok: boolean }).ok, true);
+    });
+  },
+});
+
+Deno.test({
   name: "POST /api/v1/identity/generate rejects duplicate without force",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {

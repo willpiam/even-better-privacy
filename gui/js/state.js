@@ -2,6 +2,7 @@ export const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
 export const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
 export const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
 export const MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY = "ebp.mail.includePublicKeys";
+export const PASSWORD_POLICY_ENFORCE_PREF_KEY = "ebp.identity.enforcePasswordPolicy";
 export const STARTUP_RETRY_ATTEMPTS = 12;
 export const STARTUP_RETRY_DELAY_MS = 500;
 export const TOAST_LOG_LIMIT = 50;
@@ -38,6 +39,7 @@ export const state = {
   mailMessageLoadRequestId: 0,
   mailRenderHtml: false,
   mailIncludePublicKeys: true,
+  enforcePasswordPolicy: true,
   mailOAuthPendingState: "",
   mailOAuthProvider: "",
   mailOAuthEmail: "",
@@ -74,6 +76,7 @@ export function saveBooleanPreference(key, value) {
 export function loadUiPreferences() {
   state.mailRenderHtml = loadBooleanPreference(MAIL_RENDER_HTML_PREF_KEY, false);
   state.mailIncludePublicKeys = loadBooleanPreference(MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, true);
+  state.enforcePasswordPolicy = loadBooleanPreference(PASSWORD_POLICY_ENFORCE_PREF_KEY, true);
 }
 
 export function getDetailValue(details, path) {

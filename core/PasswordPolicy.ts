@@ -35,7 +35,27 @@ const COMMON_PASSWORDS = new Set([
   "1234567890",
 ]);
 
-export function validatePassword(password: string): PasswordValidationResult {
+export type PasswordPolicyOptions = {
+  /** When false, only require a non-empty password (GUI opt-out). Default true. */
+  enforcePolicy?: boolean;
+};
+
+export function validatePassword(
+  password: string,
+  options: PasswordPolicyOptions = {},
+): PasswordValidationResult {
+  if (options.enforcePolicy === false) {
+    if (!password) {
+      return {
+        ok: false,
+        reason: "Password is required.",
+        suggestions: [],
+        strength: 0,
+      };
+    }
+    return { ok: true, strength: scorePasswordStrength(password) };
+  }
+
   const suggestions: string[] = [];
   const normalized = password.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 

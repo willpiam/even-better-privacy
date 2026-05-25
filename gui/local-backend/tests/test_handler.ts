@@ -25,6 +25,7 @@ import {
   MAX_ENCRYPTED_FILE_BYTES,
   parseFileCleartextEnvelope,
 } from "../../../core/FilePayload.ts";
+import { validatePassword } from "../../../core/PasswordPolicy.ts";
 import {
   apiUrl,
   buildStateFromExternal,
@@ -392,6 +393,7 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
         encryptionType?: unknown;
         password?: unknown;
         force?: unknown;
+        enforcePasswordPolicy?: unknown;
         home?: unknown;
       }>(req);
 
@@ -407,16 +409,23 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
       const password = typeof body.password === "string"
         ? body.password
         : undefined;
+      const enforcePasswordPolicy = body.enforcePasswordPolicy !== false;
       const force = Boolean(body.force);
       const home = typeof body.home === "string" ? body.home : undefined;
 
       const ctx = await getContext(home, name);
 
-      if (!password || password.length < 8) {
-        throw new HttpError(
-          STATUS.BadRequest,
-          "password required and must be at least 8 characters",
-        );
+      if (!password) {
+        throw new HttpError(STATUS.BadRequest, "password is required");
+      }
+      const passwordCheck = validatePassword(password, {
+        enforcePolicy: enforcePasswordPolicy,
+      });
+      if (!passwordCheck.ok) {
+        throw new HttpError(STATUS.BadRequest, passwordCheck.reason, {
+          suggestions: passwordCheck.suggestions,
+          strength: passwordCheck.strength,
+        });
       }
 
       if (!["dilithium", "sphincs"].includes(signingType)) {

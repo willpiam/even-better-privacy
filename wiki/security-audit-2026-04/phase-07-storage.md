@@ -166,6 +166,8 @@ if (password.length < 8) {
 
 **Recommendation:** raise minimum to 12, enforce at least one of (uppercase, lowercase, digit, symbol), and add a `zxcvbn`-style strength meter in the CLI/GUI password prompts.
 
+**Remediation (2026-04-29):** implemented in `core/PasswordPolicy.ts`; documented in [[password-policy]]. The GUI can opt out via Settings (see [[component-gui]]); the CLI always enforces the policy.
+
 ### F-STORAGE-10 — `state.json` is unauthenticated (Informational)
 
 **File:** [`cli/utils.ts:25-38`](../../cli/utils.ts).

@@ -27,3 +27,14 @@ Deno.test("validatePassword requires at least three character classes", () => {
   assert(!result.ok);
   assert(result.suggestions.some((s) => s.includes("three of")));
 });
+
+Deno.test("validatePassword skips policy rules when enforcePolicy is false", () => {
+  const result = validatePassword("short", { enforcePolicy: false });
+  assert(result.ok);
+});
+
+Deno.test("validatePassword still requires non-empty password when policy disabled", () => {
+  const result = validatePassword("", { enforcePolicy: false });
+  assert(!result.ok);
+  assertEquals(result.reason, "Password is required.");
+});

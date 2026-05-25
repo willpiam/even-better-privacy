@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-05-17
+last_updated: 2026-05-24
 source_count: 8
 tags:
   - component
@@ -56,6 +56,9 @@ SMTP and IMAP do not provide EBP's end-to-end message security. The GUI uses the
 - File encryption and decryption.
 - Identity generation and switching.
 - Detail management (attach, revoke, push).
+- Settings page: server URL, mail preferences, stored mail credentials, and
+  [[password-policy]] enforcement toggle for new identities (`localStorage` key
+  `ebp.identity.enforcePasswordPolicy`, default on).
 
 ## Toast Notification System
 
@@ -82,6 +85,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[analysis-linux-build]]
 - [[email-transport]]
 - [[identity-model]]
+- [[password-policy]]
 - [[message-payload-formats]]
 - [[overview]]
 - [[source-google-cloud-unverified-apps]]

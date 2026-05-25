@@ -2,7 +2,7 @@
 title: "EBP Identity Model"
 type: concept
 status: active
-last_updated: 2026-05-11
+last_updated: 2026-05-24
 source_count: 8
 tags:
   - identity
@@ -45,7 +45,7 @@ Implementation: `core/Fingerprint.ts`
 Identities are stored in `~/.ebp/<name>.identity.json` using a v2 storage format:
 
 - **Public data** (unencrypted): fingerprint, key types, public keys, variants, details, revocation state.
-- **Private keys** (AES-encrypted): signing and encryption private keys, encrypted with a user password.
+- **Private keys** (AES-encrypted): signing and encryption private keys, encrypted with a user password. New identities must satisfy [[password-policy]] by default (CLI always; GUI can opt out in Settings).
 
 This split allows reading public data (for display, verification) without decrypting private keys. Implementation: `Identity.toStorageFormat()` / `Identity.fromStorageFormat()` in `core/Identity.ts`.
 
@@ -93,6 +93,7 @@ NIST SP 800-57 Part 1's key lifecycle vocabulary is useful for future identity e
 - [[message-payload-formats]]
 - [[revocation-system]]
 - [[key-management]]
+- [[password-policy]]
 - [[decentralized-identifiers]]
 - [[openpgp-pqc]]
 - [[x509-pki]]
