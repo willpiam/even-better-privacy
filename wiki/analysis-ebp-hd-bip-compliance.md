@@ -19,18 +19,20 @@ tags:
 ## Verdict
 
 EBP-HD should **not** be described as generally BIP32/39/43/44 compliant.
-The accurate claim is narrower:
+The conformance target is **`ebp-hd-v1`**, with BIP39-English mnemonic-format
+compatibility as one narrow imported surface. The accurate public claim is:
 
 > EBP-HD uses the canonical BIP39 English wordlist, BIP39 entropy/checksum
 > mnemonic mechanics, and BIP32/43/44-inspired HD structure, but it is an
 > EBP-specific deterministic identity scheme with EBP-specific seed extraction,
 > path namespace, and PQ leaf derivation.
 
-The strongest compatibility claim is **BIP39-English mnemonic format
-compatibility** for wordlist/checksum validation. EBP-HD is deliberately **not
-BIP39 seed-compatible** with Bitcoin wallets because `mnemonicToSeed()` uses the
-EBP-domain-separated salt `ebp-mnemonic-v2:` rather than BIP39's
-`"mnemonic" || passphrase` salt.
+The strongest BIP compatibility claim is **BIP39-English mnemonic format
+compatibility** for wordlist/checksum validation. All other conformance claims
+should point to `ebp-hd-v1`. EBP-HD is deliberately **not BIP39
+seed-compatible** with Bitcoin wallets because `mnemonicToSeed()` uses the
+EBP-domain-separated salt `ebp-mnemonic-v2:` rather than BIP39's `"mnemonic" ||
+passphrase` salt.
 
 ## Compliance Matrix
 
@@ -40,6 +42,34 @@ EBP-domain-separated salt `ebp-mnemonic-v2:` rather than BIP39's
 | BIP39 | Partially compatible at mnemonic encoding/validation layer only | Uses BIP39 English words and checksum; EBP-specific seed extraction | BIP39 seed-compatible, Bitcoin-wallet compatible |
 | BIP43 | Conceptually follows purpose-namespace discipline | BIP43-style EBP purpose namespace | BIP43 compliant unless the namespace is formally specified/registered as such |
 | BIP44 | Not compliant | BIP44-style account/change/index layout and gap-limit discovery | BIP44 compliant |
+
+## Permanent vs Addressable Gaps
+
+Some differences are structural non-goals and should not be closed:
+
+- **BIP32 secp256k1 CKD**: EBP-HD derives ML-DSA or SLH-DSA signing seeds plus
+  ML-KEM seeds. Reusing BIP32 `CKDpriv` / `CKDpub` would derive the wrong
+  cryptographic object for EBP.
+- **xpub/xprv compatibility**: EBP-HD v1 exposes no extended-public-key API.
+  Adding public-only derivation would be a new `ebp-hd-v2` design question, not
+  a compatibility patch.
+- **BIP39 seed compatibility**: EBP intentionally uses `ebp-mnemonic-v2:` as the
+  PBKDF2 salt prefix so EBP mnemonics cannot be silently imported into Bitcoin
+  wallets as the same seed.
+- **Literal BIP44 wallet semantics**: EBP has no `coin_type'`, addresses,
+  change outputs, or on-chain account discovery. The account/change/index shape
+  is a useful recovery and UX pattern, not a wallet namespace.
+
+Other gaps are worth tightening inside `ebp-hd-v1`:
+
+- Maintain canonical test vectors for mnemonic validation, seed extraction,
+  path parsing, leaf derivation, and resulting fingerprints.
+- Treat the `m/ebp'/profile'/account'/change/index` path grammar and `0x454250`
+  purpose constant as versioned `ebp-hd-v1` protocol surface.
+- Document discovery defaults, especially the gap limit, as EBP behavior rather
+  than BIP44 compliance.
+- Keep user-facing copy explicit: BIP39 English words and checksum, not a
+  Bitcoin wallet seed.
 
 ## Evidence
 

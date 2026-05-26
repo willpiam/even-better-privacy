@@ -55,9 +55,9 @@ Bitcoin’s widely deployed HD wallet BIPs ([[source-bip-hd-wallet-standards]])
 illustrate **user backup**, **derivation-tree namespaces**, and
 **partial-key-sharing** tradeoffs at ecosystem scale. EBP is not a blockchain
 client and does not implement Bitcoin's secp256k1 CKD or xpub wire formats. EBP
-does now implement those structural ideas as [[ebp-hd]]: mnemonic-backed
-deterministic PQ identities with an EBP-specific path namespace. Lessons that
-transfer at the design level include:
+conforms to its own [[ebp-hd]] `ebp-hd-v1` specification, which adapts those
+structural ideas into mnemonic-backed deterministic PQ identities with an
+EBP-specific path namespace. Lessons that transfer at the design level include:
 
 - **Least-privilege handles**: Extended public keys that can derive further
   public identifiers must be treated as higher-impact than a single public key

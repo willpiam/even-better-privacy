@@ -20,6 +20,10 @@ tags:
 
 This page summarizes four deployed Bitcoin Improvement Proposals (BIPs) kept under `wiki/raw/` as **comparison material**. EBP is not a cryptocurrency or blockchain system; it does not implement these BIPs. The value for EBP is in **key-management vocabulary**, **backup and recovery UX patterns**, **namespace/interoperability discipline**, and **cautions about partial key disclosure**—analogous problems appear in any system that manages long-lived asymmetric keys and human backup flows.
 
+EBP's authoritative deterministic-identity conformance target is [[ebp-hd]]
+(`ebp-hd-v1`), not these Bitcoin BIPs. This page remains source context for the
+BIP-derived design patterns and boundaries.
+
 ## Sources
 
 - `wiki/raw/bip-0032.mediawiki` — BIP 32: Hierarchical Deterministic Wallets (informational; secp256k1-specific derivation).

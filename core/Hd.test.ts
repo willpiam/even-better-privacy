@@ -9,30 +9,33 @@ import {
 import { parseHdPath } from "./HdPath.ts";
 import { toHex } from "./Hex.ts";
 import { BIP39_ENGLISH_WORDLIST } from "./bip39-english.ts";
-
-const VECTOR = {
-  entropyHex:
-    "0000000000000000000000000000000000000000000000000000000000000001",
-  mnemonic:
-    "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon diesel",
-  passphrase: "test-passphrase",
-  seedHex:
-    "97418d54aa7d70325702f110b4652a323374ac961d831910355858950f64ad44d72895e40aaf842ab52c9caa658fec63120d5c957deaf175fe23e40d8798ebbf",
-  cases: [
-    {
-      profile: "dilithium" as const,
-      path: "m/ebp'/dilithium'/0'/0/0",
-      fingerprint:
-        "ebpdk1ckdp9e7sqncvq7wlpd0ateqvrh3t3sfptnqxssdsxnce50dj084s8nxkda",
-    },
-    {
-      profile: "sphincs" as const,
-      path: "m/ebp'/sphincs'/0'/0/0",
-      fingerprint:
-        "ebpsk1lttgmk4gfkgu47dd8uh6r4p4pm2upshzwy7w5fgnljup669xxstq4v4dz5",
-    },
-  ],
+import testVectorsJson from "./tests/fixtures/ebp-hd/test-vectors.json" with {
+  type: "json",
 };
+
+type VectorCase = {
+  profile: "dilithium" | "sphincs";
+  path: string;
+  fingerprint: string;
+};
+
+type HdVector = {
+  name: string;
+  entropyHex: string;
+  mnemonic: string;
+  passphrase: string;
+  seedHex: string;
+  cases: VectorCase[];
+};
+
+type HdTestVectors = {
+  version: string;
+  mnemonicVersion: string;
+  vectors: HdVector[];
+};
+
+const TEST_VECTORS = testVectorsJson as HdTestVectors;
+const VECTOR = TEST_VECTORS.vectors[0];
 
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
@@ -42,33 +45,41 @@ function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
-Deno.test("EBP mnemonic encodes entropy with checksum and derives test-vector seed", () => {
-  const entropy = hexToBytes(VECTOR.entropyHex);
-  const mnemonic = entropyToMnemonic(entropy);
-  assertEquals(mnemonic, VECTOR.mnemonic);
-  assert(
-    mnemonic.split(" ").every((word) => BIP39_ENGLISH_WORDLIST.includes(word)),
-  );
-  assert(validateMnemonic(mnemonic));
-  assertEquals(toHex(mnemonicToEntropy(mnemonic)), VECTOR.entropyHex);
-  assertEquals(
-    toHex(mnemonicToSeed(mnemonic, VECTOR.passphrase)),
-    VECTOR.seedHex,
-  );
+Deno.test("EBP mnemonics encode entropy and derive canonical seeds", () => {
+  assertEquals(TEST_VECTORS.version, "ebp-hd-v1");
+  assertEquals(TEST_VECTORS.mnemonicVersion, "ebp-mnemonic-v2");
+  for (const vector of TEST_VECTORS.vectors) {
+    const entropy = hexToBytes(vector.entropyHex);
+    const mnemonic = entropyToMnemonic(entropy);
+    assertEquals(mnemonic, vector.mnemonic);
+    assert(
+      mnemonic.split(" ").every((word) =>
+        BIP39_ENGLISH_WORDLIST.includes(word)
+      ),
+    );
+    assert(validateMnemonic(mnemonic));
+    assertEquals(toHex(mnemonicToEntropy(mnemonic)), vector.entropyHex);
+    assertEquals(
+      toHex(mnemonicToSeed(mnemonic, vector.passphrase)),
+      vector.seedHex,
+    );
+  }
 });
 
-Deno.test("EBP-HD derives deterministic identity fingerprints for both signing profiles", () => {
-  const seed = mnemonicToSeed(VECTOR.mnemonic, VECTOR.passphrase);
-  for (const testCase of VECTOR.cases) {
-    const parsed = parseHdPath(testCase.path);
-    const identity = Identity.fromAccount(seed, {
-      profile: parsed.profile!,
-      account: parsed.account!,
-      change: parsed.change!,
-      index: parsed.index!,
-    });
-    assertEquals(identity.hdProvenance?.path, testCase.path);
-    assertEquals(identity.toFingerprint(), testCase.fingerprint);
+Deno.test("EBP-HD derives canonical identity fingerprints", () => {
+  for (const vector of TEST_VECTORS.vectors) {
+    const seed = mnemonicToSeed(vector.mnemonic, vector.passphrase);
+    for (const testCase of vector.cases) {
+      const parsed = parseHdPath(testCase.path);
+      const identity = Identity.fromAccount(seed, {
+        profile: parsed.profile!,
+        account: parsed.account!,
+        change: parsed.change!,
+        index: parsed.index!,
+      });
+      assertEquals(identity.hdProvenance?.path, testCase.path);
+      assertEquals(identity.toFingerprint(), testCase.fingerprint);
+    }
   }
 });
 

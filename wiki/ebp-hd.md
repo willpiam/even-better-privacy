@@ -2,7 +2,7 @@
 title: "EBP-HD Deterministic Hierarchical Identities"
 type: concept
 status: active
-last_updated: 2026-05-24
+last_updated: 2026-05-25
 source_count: 11
 tags:
   - hd
@@ -37,6 +37,15 @@ the HD tree.
   construction.
 - HD-derived identities include optional `hdProvenance` in public storage so
   clients can display and rediscover the derivation path.
+
+## Conformance
+
+EBP-HD conforms to `ebp-hd-v1`, specified in `docs/ebp-hd-spec.md` and pinned by
+canonical vectors in `core/tests/fixtures/ebp-hd/test-vectors.json`. Its only BIP
+compatibility claim is the mnemonic format surface: BIP39 English words,
+checksum, and 11-bit grouping. Seed extraction, path namespace, node derivation,
+and PQ leaf expansion are EBP-specific and should be described as
+BIP32/43/44-inspired rather than BIP-compliant.
 
 ## Implementation
 

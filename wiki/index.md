@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-24
+last_updated: 2026-05-25
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-25 (EBP-HD BIP compliance language)
+Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
 
 ## Wiki Operations
 

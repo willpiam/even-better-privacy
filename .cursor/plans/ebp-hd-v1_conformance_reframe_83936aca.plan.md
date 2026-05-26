@@ -7,7 +7,7 @@ todos:
     status: in_progress
   - id: spec-hardening
     content: Add Conformance, Non-goals, and Purpose-namespace versioning sections to docs/ebp-hd-spec.md.
-    status: pending
+    status: in_progress
   - id: user-copy
     content: Sync ReadMe.md, gui/index.html, gui/app.js, and cli/main.ts to the 'BIP39 English mnemonic format; ebp-hd-v1; not a Bitcoin wallet seed' wording.
     status: pending

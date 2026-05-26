@@ -1,5 +1,16 @@
 # Wiki Log
 
+## [2026-05-25] change | EBP-HD reframed as ebp-hd-v1 conformance
+
+- Updated: [[analysis-ebp-hd-bip-compliance]], [[ebp-hd]],
+  [[source-bip-hd-wallet-standards]], [[analysis-bip-patterns-for-ebp]], and
+  [[key-management]] to make `ebp-hd-v1` the conformance target and narrow BIP
+  compatibility to BIP39-English mnemonic format.
+- Updated: `docs/ebp-hd-spec.md`, `ReadMe.md`, `gui/index.html`,
+  `gui/app.js`, and `cli/main.ts` with conformance/non-goal language.
+- Expanded: `core/tests/fixtures/ebp-hd/test-vectors.json` and wired
+  `core/Hd.test.ts` / `core/Mnemonic.test.ts` to use the canonical vectors.
+
 ## [2026-05-25] query | EBP-HD BIP compliance language
 
 - Answered: EBP-HD should not claim broad BIP32/39/43/44 compliance; the safe

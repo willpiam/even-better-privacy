@@ -18,8 +18,24 @@ import {
   BIP39_ENGLISH_SHA256,
   BIP39_ENGLISH_WORDLIST,
 } from "./bip39-english.ts";
+import testVectorsJson from "./tests/fixtures/ebp-hd/test-vectors.json" with {
+  type: "json",
+};
 
 const encoder = new TextEncoder();
+
+type MnemonicVector = {
+  entropyHex: string;
+  mnemonic: string;
+  passphrase: string;
+  seedHex: string;
+};
+
+const TEST_VECTORS = testVectorsJson as {
+  version: string;
+  mnemonicVersion: string;
+  vectors: MnemonicVector[];
+};
 
 function hexToBytes(hex: string): Uint8Array {
   const out = new Uint8Array(hex.length / 2);
@@ -38,22 +54,24 @@ Deno.test("BIP39 English wordlist has canonical integrity", () => {
   assertBip39EnglishWordlistIntegrity();
 });
 
-Deno.test("mnemonic entropy round-trips for 128 and 256 bit strengths", () => {
-  for (
-    const entropyHex of [
-      "00000000000000000000000000000000",
-      "0000000000000000000000000000000000000000000000000000000000000001",
-    ]
-  ) {
-    const entropy = hexToBytes(entropyHex);
+Deno.test("mnemonic vectors round-trip entropy and derive canonical seeds", () => {
+  assertEquals(TEST_VECTORS.version, "ebp-hd-v1");
+  assertEquals(TEST_VECTORS.mnemonicVersion, "ebp-mnemonic-v2");
+  for (const vector of TEST_VECTORS.vectors) {
+    const entropy = hexToBytes(vector.entropyHex);
     const mnemonic = entropyToMnemonic(entropy);
+    assertEquals(mnemonic, vector.mnemonic);
     assert(
       mnemonic.split(" ").every((word) =>
         BIP39_ENGLISH_WORDLIST.includes(word)
       ),
     );
     assert(validateMnemonic(mnemonic));
-    assertEquals(toHex(mnemonicToEntropy(mnemonic)), entropyHex);
+    assertEquals(toHex(mnemonicToEntropy(mnemonic)), vector.entropyHex);
+    assertEquals(
+      toHex(mnemonicToSeed(mnemonic, vector.passphrase)),
+      vector.seedHex,
+    );
   }
 });
 

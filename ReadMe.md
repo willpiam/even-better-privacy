@@ -419,18 +419,19 @@ messages with contacts, and encrypt/decrypt full file payloads.
   `ebp publish`, `ebp fetch <fingerprint>`)
 - push attached details to the server when adding them
   (`ebp detail <path> <value> --push`)
-- create deterministic HD identities from a BIP39-English EBP mnemonic
-  (`ebp hd generate-mnemonic`, `ebp hd new-identity <name>`, `ebp hd discover`)
+- create deterministic HD identities from an `ebp-hd-v1` mnemonic using BIP39
+  English words (`ebp hd generate-mnemonic`, `ebp hd new-identity <name>`,
+  `ebp hd discover`)
 
 ### EBP-HD deterministic identities
 
-EBP-HD is an opt-in deterministic identity system inspired by the structure of
-BIP32/39/43/44. It uses BIP39 English words for the mnemonic, but EBP's own
-PBKDF2 salt means the same phrase does not produce a Bitcoin-wallet seed. A
-mnemonic produces a master seed; paths like `m/ebp'/dilithium'/0'/0/0` derive
-normal EBP identities with the same signing, encryption, fingerprint, storage,
-and revocation behavior as randomly generated identities. Existing non-HD
-identities remain unchanged.
+EBP-HD is an opt-in deterministic identity system that conforms to `ebp-hd-v1`.
+It uses the BIP39 English mnemonic format (wordlist, checksum, and 11-bit
+grouping), but EBP's own PBKDF2 salt means the same phrase does not produce a
+Bitcoin-wallet seed. A mnemonic produces a master seed; paths like
+`m/ebp'/dilithium'/0'/0/0` derive normal EBP identities with the same signing,
+encryption, fingerprint, storage, and revocation behavior as randomly generated
+identities. Existing non-HD identities remain unchanged.
 
 Useful commands:
 

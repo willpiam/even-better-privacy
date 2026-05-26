@@ -1,20 +1,59 @@
 {
   "version": "ebp-hd-v1",
   "mnemonicVersion": "ebp-mnemonic-v2",
-  "entropyHex": "0000000000000000000000000000000000000000000000000000000000000001",
-  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon diesel",
-  "passphrase": "test-passphrase",
-  "seedHex": "97418d54aa7d70325702f110b4652a323374ac961d831910355858950f64ad44d72895e40aaf842ab52c9caa658fec63120d5c957deaf175fe23e40d8798ebbf",
-  "cases": [
+  "vectors": [
     {
-      "profile": "dilithium",
-      "path": "m/ebp'/dilithium'/0'/0/0",
-      "fingerprint": "ebpdk1ckdp9e7sqncvq7wlpd0ateqvrh3t3sfptnqxssdsxnce50dj084s8nxkda"
+      "name": "primary-24-word-passphrase",
+      "entropyHex": "0000000000000000000000000000000000000000000000000000000000000001",
+      "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon diesel",
+      "passphrase": "test-passphrase",
+      "seedHex": "97418d54aa7d70325702f110b4652a323374ac961d831910355858950f64ad44d72895e40aaf842ab52c9caa658fec63120d5c957deaf175fe23e40d8798ebbf",
+      "cases": [
+        {
+          "profile": "dilithium",
+          "path": "m/ebp'/dilithium'/0'/0/0",
+          "fingerprint": "ebpdk1ckdp9e7sqncvq7wlpd0ateqvrh3t3sfptnqxssdsxnce50dj084s8nxkda"
+        },
+        {
+          "profile": "sphincs",
+          "path": "m/ebp'/sphincs'/0'/0/0",
+          "fingerprint": "ebpsk1lttgmk4gfkgu47dd8uh6r4p4pm2upshzwy7w5fgnljup669xxstq4v4dz5"
+        },
+        {
+          "profile": "dilithium",
+          "path": "m/ebp'/dilithium'/3'/0/0",
+          "fingerprint": "ebpdk1yuk3rmkqkqte5xgs3m3x4cu0v69h7fpewz5xka0wy2zzalgnmvus8a3m76"
+        },
+        {
+          "profile": "sphincs",
+          "path": "m/ebp'/sphincs'/0'/0/5",
+          "fingerprint": "ebpsk199ncnzyfp6ledr9ud7p8sqzegkgxd6f70rx0520tyhaaa09ftr2sz9mdxy"
+        },
+        {
+          "profile": "dilithium",
+          "path": "m/ebp'/dilithium'/0'/1/0",
+          "fingerprint": "ebpdk1kkhjmfpfjdwcsrw8qqmf0h7zdm6cqux3nenrw0pskenxmmjepx5shp7sus"
+        }
+      ]
     },
     {
-      "profile": "sphincs",
-      "path": "m/ebp'/sphincs'/0'/0/0",
-      "fingerprint": "ebpsk1lttgmk4gfkgu47dd8uh6r4p4pm2upshzwy7w5fgnljup669xxstq4v4dz5"
+      "name": "minimum-12-word-empty-passphrase",
+      "entropyHex": "00000000000000000000000000000000",
+      "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+      "passphrase": "",
+      "seedHex": "de3346757ecbed855468a3cb0c28566d351f6f8650a7cdc3b84b1182f7f7484f5a53632e14fb80f3e1f1db9e28b4e29362bc6bed3f99f2ca2ca83ce0c31f747d",
+      "cases": [
+        {
+          "profile": "dilithium",
+          "path": "m/ebp'/dilithium'/0'/0/0",
+          "fingerprint": "ebpdk10uduakjlh0adhpdfmydr7helmprfw05vwa3tvlp95e5vw29c8vuq5ap6fu"
+        },
+        {
+          "profile": "sphincs",
+          "path": "m/ebp'/sphincs'/0'/0/0",
+          "fingerprint": "ebpsk1xd6faw757ltuzkye7khraz0t95ya6nxrmjqk6f8yvaaslj0dva0swx7ncx"
+        }
+      ]
     }
   ]
 }

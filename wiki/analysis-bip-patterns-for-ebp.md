@@ -28,7 +28,8 @@ cryptography as dual post-quantum identities (signing + ML-KEM per
 
 See [[source-bip-hd-wallet-standards]] for raw BIP summaries, [[key-management]]
 for how they relate to EBP lifecycle framing, and [[ebp-hd]] for the active
-implementation page.
+implementation page. This analysis is design background; the conformance target
+for implementations is `ebp-hd-v1` as documented in [[ebp-hd]].
 
 ## Cross-cutting model
 
