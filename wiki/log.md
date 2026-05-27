@@ -1,5 +1,25 @@
 # Wiki Log
 
+## [2026-05-26] query | encrypted signature representation
+
+- Answered: sign-then-encrypt payloads encrypt an inner JSON string containing
+  a Base64 signature string, not raw signature bytes.
+- Updated: [[analysis-key-encoding-rationale]].
+
+## [2026-05-26] query | unifying key encodings
+
+- Answered: unifying key material encoding is primarily a compatibility and
+  migration problem across KEM serialization, fingerprints, identity storage,
+  server state hashes, public identity exports, and verifier/test surfaces.
+- Updated: [[analysis-key-encoding-rationale]].
+
+## [2026-05-26] query | signing vs KEM key encoding
+
+- Answered: signing public keys/signatures are RFC 4648 Base64 while ML-KEM
+  keys/ciphertexts are hex by EBP serialization convention, not cryptographic
+  necessity.
+- Filed: [[analysis-key-encoding-rationale]].
+
 ## [2026-05-25] change | EBP-HD reframed as ebp-hd-v1 conformance
 
 - Updated: [[analysis-ebp-hd-bip-compliance]], [[ebp-hd]],

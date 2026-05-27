@@ -95,6 +95,8 @@ Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
 
 ## Analyses
 
+- [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material
+  encoding origins and the migration work needed to unify key encodings.
 - [[analysis-ebp-hd-bip-compliance]] - Reviews whether EBP-HD can claim
   BIP32/39/43/44 compliance; recommends BIP39-English mnemonic-format
   compatibility plus BIP-inspired EBP-HD language.

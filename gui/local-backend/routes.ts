@@ -1764,7 +1764,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!password) {
         throw new HttpError(STATUS.BadRequest, "password is required");
       }
-      const passwordCheck = validatePassword(password, { enforcePolicy: enforcePasswordPolicy });
+      const passwordCheck = validatePassword(password, {
+        enforcePolicy: enforcePasswordPolicy,
+      });
       if (!passwordCheck.ok) {
         throw new HttpError(STATUS.BadRequest, passwordCheck.reason, {
           suggestions: passwordCheck.suggestions,
@@ -2038,7 +2040,14 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       req.method === "POST" && url.pathname === "/api/v1/identity/export-public"
     ) {
       const body = await readJson<
-        { password?: unknown; home?: unknown; identity?: unknown }
+        {
+          password?: unknown;
+          home?: unknown;
+          identity?: unknown;
+          includeSigningKey?: unknown;
+          includeEncryptionKey?: unknown;
+          includeDetails?: unknown;
+        }
       >(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const identityName = typeof body.identity === "string"
@@ -2050,10 +2059,23 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!password) {
         throw new HttpError(STATUS.BadRequest, "password is required");
       }
+      const includeSigningKey = body.includeSigningKey !== false;
+      const includeEncryptionKey = body.includeEncryptionKey !== false;
+      const includeDetails = body.includeDetails === true;
+      if (!includeSigningKey && !includeEncryptionKey) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "export must include at least one public key",
+        );
+      }
 
       const ctx = await getContext(home, identityName);
       const identity = await loadIdentity(ctx, password);
-      return json(identity.summary);
+      return json(identity.toPublicExport({
+        includeSigningKey,
+        includeEncryptionKey,
+        includeDetails,
+      }));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/contacts") {
@@ -3133,6 +3155,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         const encryptionKey = typeof candidate.encryptionKey === "string"
           ? candidate.encryptionKey
           : "";
+        const encryptionKeyHash =
+          typeof candidate.encryptionKeyHash === "string"
+            ? candidate.encryptionKeyHash
+            : "";
         const encryptionKeyType =
           typeof candidate.encryptionKeyType === "string"
             ? candidate.encryptionKeyType
@@ -3143,10 +3169,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
             "public identity missing signing key",
           );
         }
-        if (!encryptionKey || !encryptionKeyType) {
+        if ((!encryptionKey && !encryptionKeyHash) || !encryptionKeyType) {
           throw new HttpError(
             STATUS.BadRequest,
-            "public identity missing encryption key",
+            "public identity missing encryption key or hash",
           );
         }
         if (!["dilithium", "sphincs"].includes(signingKeyType)) {
@@ -3171,6 +3197,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
             .signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ??
             { variant: "ml_dsa87" },
           encryptionKey,
+          encryptionKeyHash: encryptionKeyHash || undefined,
           encryptionKeyType: "kyber",
           encryptionKeyDetails: (candidate
             .encryptionKeyDetails as ExternalIdentity[
@@ -3211,25 +3238,31 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const signingKey = typeof candidate.signingKey === "string"
         ? candidate.signingKey
         : "";
+      const signingKeyHash = typeof candidate.signingKeyHash === "string"
+        ? candidate.signingKeyHash
+        : "";
       const signingKeyType = typeof candidate.signingKeyType === "string"
         ? candidate.signingKeyType
         : "";
       const encryptionKey = typeof candidate.encryptionKey === "string"
         ? candidate.encryptionKey
         : "";
+      const encryptionKeyHash = typeof candidate.encryptionKeyHash === "string"
+        ? candidate.encryptionKeyHash
+        : "";
       const encryptionKeyType = typeof candidate.encryptionKeyType === "string"
         ? candidate.encryptionKeyType
         : "";
-      if (!signingKey || !signingKeyType) {
+      if ((!signingKey && !signingKeyHash) || !signingKeyType) {
         throw new HttpError(
           STATUS.BadRequest,
-          "public identity missing signing key",
+          "public identity missing signing key or hash",
         );
       }
-      if (!encryptionKey || !encryptionKeyType) {
+      if ((!encryptionKey && !encryptionKeyHash) || !encryptionKeyType) {
         throw new HttpError(
           STATUS.BadRequest,
-          "public identity missing encryption key",
+          "public identity missing encryption key or hash",
         );
       }
       if (!["dilithium", "sphincs"].includes(signingKeyType)) {
@@ -3249,11 +3282,13 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           ? candidate.fingerprint
           : "",
         signingKey,
+        signingKeyHash: signingKeyHash || undefined,
         signingKeyType: signingKeyType as ExternalIdentity["signingKeyType"],
         signingKeyDetails: (candidate
           .signingKeyDetails as ExternalIdentity["signingKeyDetails"]) ??
           { variant: "ml_dsa87" },
         encryptionKey,
+        encryptionKeyHash: encryptionKeyHash || undefined,
         encryptionKeyType: "kyber",
         encryptionKeyDetails: (candidate
           .encryptionKeyDetails as ExternalIdentity[

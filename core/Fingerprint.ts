@@ -7,12 +7,22 @@ import { concatBytes, hexToBytes, toHex } from "./Hex.ts";
 export type IdentityFingerprintInput = {
   signingKeyType: SigningKeyOptions;
   encryptionKeyType: EncryptionKeyOptions;
-  signingKey: string;
-  encryptionKey: string;
+  signingKey?: string;
+  signingKeyHash?: string;
+  encryptionKey?: string;
+  encryptionKeyHash?: string;
 };
 
 export const FINGERPRINT_BYTE_LENGTH = 32;
 export const FINGERPRINT_HRPS = ["ebpdk", "ebpsk"] as const;
+
+function parseLeafHashHex(hash: string, label: string): Uint8Array {
+  const bytes = hexToBytes(hash);
+  if (bytes.length !== FINGERPRINT_BYTE_LENGTH) {
+    throw new Error(`${label} must be ${FINGERPRINT_BYTE_LENGTH} bytes`);
+  }
+  return bytes;
+}
 
 function getFingerprintHrp(
   signingKeyType: SigningKeyOptions,
@@ -45,17 +55,41 @@ export function computeEncryptionLeafRaw(
   return sha256(hexToBytes(encryptionPublicKey));
 }
 
+function resolveSigningLeafRaw(input: IdentityFingerprintInput): Uint8Array {
+  const leaf = input.signingKey
+    ? computeSigningLeafRaw(input.signingKeyType, input.signingKey)
+    : null;
+  const hash = input.signingKeyHash
+    ? parseLeafHashHex(input.signingKeyHash, "signingKeyHash")
+    : null;
+  if (leaf && hash && toHex(leaf) !== toHex(hash)) {
+    throw new Error("signingKeyHash does not match signingKey");
+  }
+  if (leaf) return leaf;
+  if (hash) return hash;
+  throw new Error("signingKey or signingKeyHash is required");
+}
+
+function resolveEncryptionLeafRaw(input: IdentityFingerprintInput): Uint8Array {
+  const leaf = input.encryptionKey
+    ? computeEncryptionLeafRaw(input.encryptionKeyType, input.encryptionKey)
+    : null;
+  const hash = input.encryptionKeyHash
+    ? parseLeafHashHex(input.encryptionKeyHash, "encryptionKeyHash")
+    : null;
+  if (leaf && hash && toHex(leaf) !== toHex(hash)) {
+    throw new Error("encryptionKeyHash does not match encryptionKey");
+  }
+  if (leaf) return leaf;
+  if (hash) return hash;
+  throw new Error("encryptionKey or encryptionKeyHash is required");
+}
+
 export function computeIdentityMerkleRootRaw(
   input: IdentityFingerprintInput,
 ): Uint8Array {
-  const leftLeaf = computeSigningLeafRaw(
-    input.signingKeyType,
-    input.signingKey,
-  );
-  const rightLeaf = computeEncryptionLeafRaw(
-    input.encryptionKeyType,
-    input.encryptionKey,
-  );
+  const leftLeaf = resolveSigningLeafRaw(input);
+  const rightLeaf = resolveEncryptionLeafRaw(input);
   return sha256(concatBytes(leftLeaf, rightLeaf));
 }
 

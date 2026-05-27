@@ -3,11 +3,12 @@ import { Identity } from "../core/Identity.ts";
 import {
   computeEncryptionLeafRaw,
   computeIdentityFingerprint,
+  computeSigningLeafRaw,
   decodeFingerprintBech32,
   encodeFingerprintBech32,
   isValidFingerprintBech32,
 } from "../core/Fingerprint.ts";
-import { hexToBytes } from "../core/Hex.ts";
+import { hexToBytes, toHex } from "../core/Hex.ts";
 import { sha256 } from "@noble/hashes/sha2";
 
 Deno.test("Fingerprint: uses dilithium+kyber prefix", () => {
@@ -54,5 +55,37 @@ Deno.test("Fingerprint: encryption leaf hashes decoded hex bytes", () => {
   assertEquals(
     computeEncryptionLeafRaw("kyber", encryptionPublicKey),
     sha256(hexToBytes(encryptionPublicKey)),
+  );
+});
+
+Deno.test("Fingerprint: can compute identity from one omitted key hash", () => {
+  const identity = new Identity("dilithium", "kyber");
+  const expected = identity.toFingerprint();
+  const signingKeyHash = computeSigningLeafRaw(
+    identity.signingKeyType,
+    identity.signingKey.publicKey,
+  );
+  const encryptionKeyHash = computeEncryptionLeafRaw(
+    identity.encryptionKeyType,
+    identity.encryptionKey.publicKey,
+  );
+
+  assertEquals(
+    computeIdentityFingerprint({
+      signingKeyType: identity.signingKeyType,
+      encryptionKeyType: identity.encryptionKeyType,
+      signingKeyHash: toHex(signingKeyHash),
+      encryptionKey: identity.encryptionKey.publicKey,
+    }),
+    expected,
+  );
+  assertEquals(
+    computeIdentityFingerprint({
+      signingKeyType: identity.signingKeyType,
+      encryptionKeyType: identity.encryptionKeyType,
+      signingKey: identity.signingKey.publicKey,
+      encryptionKeyHash: toHex(encryptionKeyHash),
+    }),
+    expected,
   );
 });

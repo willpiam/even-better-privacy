@@ -11,6 +11,7 @@ import {
   PROTOCOL_VERSION,
 } from "../../../core/version.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
+import { computeIdentityFingerprint } from "../../../core/Fingerprint.ts";
 import { createEmailAttachmentCleartextEnvelope } from "../../../core/EmailAttachmentPayload.ts";
 
 // We import the handler dynamically to avoid starting the server
@@ -277,7 +278,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "POST /api/v1/identity/generate accepts weak password when policy disabled",
+  name:
+    "POST /api/v1/identity/generate accepts weak password when policy disabled",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (home, handler) => {
@@ -398,7 +400,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "POST /api/v1/identity/export-public returns public summary",
+  name:
+    "POST /api/v1/identity/export-public returns keys and omits details by default",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (home, handler) => {
@@ -415,6 +418,103 @@ Deno.test({
       assertEquals(b.fingerprint, identity.toFingerprint());
       assertExists(b.signingKey);
       assertExists(b.encryptionKey);
+      assertEquals((b as { details?: unknown }).details, undefined);
+
+      const included = await makeRequest(
+        handler,
+        "/api/v1/identity/export-public",
+        jsonPost({ password: "password123", home, includeDetails: true }),
+      );
+      assertEquals(included.status, STATUS.OK);
+      assertEquals((included.body as ExternalIdentity).details, {});
+    });
+  },
+});
+
+Deno.test({
+  name:
+    "POST /api/v1/identity/export-public can omit exactly one key with its hash",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      const identity = await createTestIdentity(home, "test", "password123");
+      await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+      const omittedSigning = await makeRequest(
+        handler,
+        "/api/v1/identity/export-public",
+        jsonPost({
+          password: "password123",
+          home,
+          includeSigningKey: false,
+          includeEncryptionKey: true,
+        }),
+      );
+      assertEquals(omittedSigning.status, STATUS.OK);
+      const signingBody = omittedSigning.body as ExternalIdentity;
+      assertEquals(signingBody.fingerprint, identity.toFingerprint());
+      assertEquals(signingBody.signingKey, undefined);
+      assertExists(signingBody.signingKeyHash);
+      assertExists(signingBody.encryptionKey);
+      assertEquals(
+        computeIdentityFingerprint({
+          signingKeyType: signingBody.signingKeyType,
+          encryptionKeyType: signingBody.encryptionKeyType,
+          signingKeyHash: signingBody.signingKeyHash,
+          encryptionKey: signingBody.encryptionKey,
+        }),
+        identity.toFingerprint(),
+      );
+
+      const omittedKem = await makeRequest(
+        handler,
+        "/api/v1/identity/export-public",
+        jsonPost({
+          password: "password123",
+          home,
+          includeSigningKey: true,
+          includeEncryptionKey: false,
+        }),
+      );
+      assertEquals(omittedKem.status, STATUS.OK);
+      const kemBody = omittedKem.body as ExternalIdentity;
+      assertEquals(kemBody.fingerprint, identity.toFingerprint());
+      assertExists(kemBody.signingKey);
+      assertEquals(kemBody.encryptionKey, undefined);
+      assertExists(kemBody.encryptionKeyHash);
+      assertEquals(
+        computeIdentityFingerprint({
+          signingKeyType: kemBody.signingKeyType,
+          encryptionKeyType: kemBody.encryptionKeyType,
+          signingKey: kemBody.signingKey,
+          encryptionKeyHash: kemBody.encryptionKeyHash,
+        }),
+        identity.toFingerprint(),
+      );
+    });
+  },
+});
+
+Deno.test({
+  name: "POST /api/v1/identity/export-public rejects omitting both keys",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      await createTestIdentity(home, "test", "password123");
+      await writeState(`${home}/.ebp`, { currentIdentity: "test" });
+
+      const { status, body } = await makeRequest(
+        handler,
+        "/api/v1/identity/export-public",
+        jsonPost({
+          password: "password123",
+          home,
+          includeSigningKey: false,
+          includeEncryptionKey: false,
+        }),
+      );
+      assertEquals(status, STATUS.BadRequest);
+      assertStringIncludes((body as { error: string }).error, "at least one");
     });
   },
 });

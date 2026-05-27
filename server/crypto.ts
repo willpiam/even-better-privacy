@@ -51,8 +51,10 @@ export function computeEncryptionRawFingerprint(
 export function computeIdentityFingerprint(input: {
   signingKeyType: "dilithium" | "sphincs";
   encryptionKeyType: "kyber";
-  signingKey: string;
-  encryptionKey: string;
+  signingKey?: string;
+  signingKeyHash?: string;
+  encryptionKey?: string;
+  encryptionKeyHash?: string;
 }): string {
   return computeIdentityFingerprintBech32(input);
 }
@@ -60,8 +62,10 @@ export function computeIdentityFingerprint(input: {
 export function computeIdentityMerkleRoot(input: {
   signingKeyType: "dilithium" | "sphincs";
   encryptionKeyType: "kyber";
-  signingKey: string;
-  encryptionKey: string;
+  signingKey?: string;
+  signingKeyHash?: string;
+  encryptionKey?: string;
+  encryptionKeyHash?: string;
 }): Uint8Array {
   return computeIdentityMerkleRootRaw(input);
 }

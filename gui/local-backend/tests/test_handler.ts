@@ -531,7 +531,14 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
       req.method === "POST" && url.pathname === "/api/v1/identity/export-public"
     ) {
       const body = await readJson<
-        { password?: unknown; home?: unknown; identity?: unknown }
+        {
+          password?: unknown;
+          home?: unknown;
+          identity?: unknown;
+          includeSigningKey?: unknown;
+          includeEncryptionKey?: unknown;
+          includeDetails?: unknown;
+        }
       >(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const identityName = typeof body.identity === "string"
@@ -543,10 +550,23 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
       if (!password) {
         throw new HttpError(STATUS.BadRequest, "password is required");
       }
+      const includeSigningKey = body.includeSigningKey !== false;
+      const includeEncryptionKey = body.includeEncryptionKey !== false;
+      const includeDetails = body.includeDetails === true;
+      if (!includeSigningKey && !includeEncryptionKey) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "export must include at least one public key",
+        );
+      }
 
       const ctx = await getContext(home, identityName);
       const identity = await loadIdentity(ctx, password);
-      return json(identity.summary);
+      return json(identity.toPublicExport({
+        includeSigningKey,
+        includeEncryptionKey,
+        includeDetails,
+      }));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/contacts") {

@@ -611,9 +611,42 @@ if (hdForm) {
   });
 }
 
+const exportIncludeSigningKey = document.getElementById(
+  "export-include-signing-key",
+);
+const exportIncludeKemKey = document.getElementById("export-include-kem-key");
+const exportIncludeDetails = document.getElementById("export-include-details");
+
+function enforceExportKeySelection(changed) {
+  if (!exportIncludeSigningKey || !exportIncludeKemKey) return;
+  if (exportIncludeSigningKey.checked || exportIncludeKemKey.checked) return;
+  if (changed === exportIncludeSigningKey) {
+    exportIncludeKemKey.checked = true;
+  } else {
+    exportIncludeSigningKey.checked = true;
+  }
+  setStatus("Export must include at least one public key", "error");
+}
+
+exportIncludeSigningKey?.addEventListener(
+  "change",
+  (e) => enforceExportKeySelection(e.currentTarget),
+);
+exportIncludeKemKey?.addEventListener(
+  "change",
+  (e) => enforceExportKeySelection(e.currentTarget),
+);
+
 document.getElementById("export-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const btn = e.target.querySelector('button[type="submit"]');
+  const includeSigningKey = exportIncludeSigningKey?.checked ?? true;
+  const includeEncryptionKey = exportIncludeKemKey?.checked ?? true;
+  const includeDetails = exportIncludeDetails?.checked === true;
+  if (!includeSigningKey && !includeEncryptionKey) {
+    setStatus("Export must include at least one public key", "error");
+    return;
+  }
   await withLoading(btn, async () => {
     try {
       const password = await requestPassword(
@@ -625,7 +658,12 @@ document.getElementById("export-form").addEventListener("submit", async (e) => {
       }
       const res = await api("/identity/export-public", {
         method: "POST",
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({
+          password,
+          includeSigningKey,
+          includeEncryptionKey,
+          includeDetails,
+        }),
       });
       document.getElementById("export-output").value = JSON.stringify(
         res,

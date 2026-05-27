@@ -12,8 +12,10 @@ import {
   PROTOCOL_VERSION,
 } from "./version.ts";
 import {
+  computeEncryptionLeafRaw,
   computeIdentityFingerprint,
   computeIdentityMerkleRootRaw,
+  computeSigningLeafRaw,
 } from "./Fingerprint.ts";
 import {
   buildLegacyMessageHashEnvelopeFromHash,
@@ -72,6 +74,25 @@ export type IdentityPublicData = {
   revocationNonce?: number;
   /** Present only for opt-in HD-derived identities. */
   hdProvenance?: HdProvenance;
+};
+
+export type IdentityPublicExport =
+  & Omit<
+    ExternalIdentity,
+    "details" | "signingKey" | "encryptionKey"
+  >
+  & {
+    details?: ExternalIdentity["details"];
+    signingKey?: string;
+    encryptionKey?: string;
+    signingKeyHash?: string;
+    encryptionKeyHash?: string;
+  };
+
+export type IdentityPublicExportOptions = {
+  includeSigningKey?: boolean;
+  includeEncryptionKey?: boolean;
+  includeDetails?: boolean;
 };
 
 /** New storage format: public data unencrypted, private keys encrypted */
@@ -962,14 +983,45 @@ export class Identity extends Key {
   }
 
   get summary(): ExternalIdentity {
-    const summary: Partial<ExternalIdentity> = {
+    return this.toPublicExport() as ExternalIdentity;
+  }
+
+  toPublicExport(
+    options: IdentityPublicExportOptions = {},
+  ): IdentityPublicExport {
+    const includeSigningKey = options.includeSigningKey ?? true;
+    const includeEncryptionKey = options.includeEncryptionKey ?? true;
+    const includeDetails = options.includeDetails ?? true;
+    if (!includeSigningKey && !includeEncryptionKey) {
+      throw new Error("Public export must include at least one public key");
+    }
+
+    const summary: Partial<IdentityPublicExport> = {
       version: FILE_FORMAT_VERSIONS.publicIdentity,
       fingerprint: this.toFingerprint(),
       signingKeyType: this.signingKeyType,
       encryptionKeyType: this.encryptionKeyType,
-      details: Object.fromEntries(this.details),
-      ...this.publicKeys,
     };
+    if (includeDetails) {
+      summary.details = Object.fromEntries(this.details);
+    }
+    if (includeSigningKey) {
+      summary.signingKey = this.signingKey.publicKey;
+    } else {
+      summary.signingKeyHash = toHex(
+        computeSigningLeafRaw(this.signingKeyType, this.signingKey.publicKey),
+      );
+    }
+    if (includeEncryptionKey) {
+      summary.encryptionKey = this.encryptionKey.publicKey;
+    } else {
+      summary.encryptionKeyHash = toHex(
+        computeEncryptionLeafRaw(
+          this.encryptionKeyType,
+          this.encryptionKey.publicKey,
+        ),
+      );
+    }
     switch (this.signingKeyType) {
       case "dilithium":
         summary.signingKeyDetails = {
@@ -995,7 +1047,7 @@ export class Identity extends Key {
           `Unsupported encryption key type: ${this.encryptionKeyType}`,
         );
     }
-    return summary as ExternalIdentity;
+    return summary as IdentityPublicExport;
   }
 
   static fromJSON(json: string): Identity {
