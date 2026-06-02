@@ -24,8 +24,13 @@ The mobile app exists in the repository with ~80+ source files and is under acti
 - Shares identity and contact data model with the CLI/GUI.
 - Contact normalization (`mobile/src/services/contacts.ts`) handles stripping revoked details from fetched server responses (fixed alongside the GUI in [[analysis-sync-revoked-details-bug]]).
 
+## Parity
+
+See [[analysis-gui-mobile-parity-deltas]] for a capability-by-capability comparison with the [[component-gui]] (missing features vs format drift).
+
 ## Related Pages
 
+- [[analysis-gui-mobile-parity-deltas]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

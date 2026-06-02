@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-06-02] query | GUI vs mobile parity deltas
+
+- Answered: grouped missing GUI features (native email, EBP-HD, password policy,
+  opaque details, multi-recipient, shared `~/.ebp/`) vs format drift
+  (`senderIdentity`, payload `version`, salt RNG, armor, decrypt without contact).
+- Filed: [[analysis-gui-mobile-parity-deltas]].
+
 ## [2026-05-26] query | encrypted signature representation
 
 - Answered: sign-then-encrypt payloads encrypt an inner JSON string containing
