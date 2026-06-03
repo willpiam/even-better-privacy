@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {
   Button,
   SafeAreaView,
@@ -7,9 +7,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigator';
 import type {SigningType} from '../types';
+import {getEnforcePasswordPolicy} from '../services/settings';
 import {createIdentity} from '../services/storage';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'CreateIdentity'>;
@@ -20,6 +22,15 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
   const [signingType, setSigningType] = useState<SigningType>('dilithium');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [enforcePasswordPolicy, setEnforcePasswordPolicy] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      void (async () => {
+        setEnforcePasswordPolicy(await getEnforcePasswordPolicy());
+      })();
+    }, []),
+  );
 
   const onCreate = async () => {
     setLoading(true);
@@ -45,7 +56,11 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
         style={styles.input}
         autoCapitalize="none"
       />
-      <Text style={styles.label}>Password (min 8 chars)</Text>
+      <Text style={styles.label}>
+        {enforcePasswordPolicy
+          ? 'Password (12+ chars, 3 of 4: upper, lower, digit, symbol)'
+          : 'Password (required; policy disabled in Settings)'}
+      </Text>
       <TextInput
         value={password}
         onChangeText={setPassword}

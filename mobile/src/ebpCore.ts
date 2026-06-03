@@ -15,10 +15,21 @@ export {
   armorPayload,
 } from '../../core/Payloads';
 export {
+  buildEncryptedFilePayload,
+  buildEncryptedSignedFilePayload,
   createFileCleartextEnvelope,
   parseFileCleartextEnvelope,
   MAX_ENCRYPTED_FILE_BYTES,
 } from '../../core/FilePayload';
+export {parseEbpPayloadInput, parseMultiRecipientEntries} from '../../core/PayloadInput';
+export {randomHex, buildFileSignMessage} from '../../core/CryptoUtils';
+export {validatePassword} from '../../core/PasswordPolicy';
+export {
+  resolveSenderIdentity,
+  tryResolveSenderIdentity,
+  externalIdentityFromEmbeddedRecord,
+} from '../../core/SenderResolution';
+export {computeExternalFingerprint} from '../../core/Fingerprint';
 export {
   createHierarchyCertificate,
   decodeHierarchyCertificate,

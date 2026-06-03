@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-06-02] update | mobile interop drift remediation
+
+- Implemented shared `core/` modules (PayloadInput, SenderResolution, CryptoUtils,
+  FilePayload builders) and wired mobile + GUI decrypt paths.
+- Updated: [[analysis-gui-mobile-parity-deltas]], [[component-mobile]].
+
 ## [2026-06-02] query | GUI vs mobile parity deltas
 
 - Answered: grouped missing GUI features (native email, EBP-HD, password policy,

@@ -4,28 +4,28 @@ overview: Eliminate GUI/mobile wire-format and crypto-path drift by centralizing
 todos:
   - id: core-payload-input
     content: Add core/PayloadInput.ts (parseEbpPayloadInput) + Deno tests
-    status: pending
+    status: completed
   - id: core-sender-resolution
     content: Add core/SenderResolution.ts; move computeExternalFingerprint to core; Deno tests
-    status: pending
+    status: completed
   - id: core-file-builders-crypto
     content: Add FilePayload builders, randomHex, buildFileSignMessage in core + tests
-    status: pending
+    status: completed
   - id: mobile-services
     content: Wire encryptDecrypt.ts, signVerify.ts, storage.ts to shared core; multi-recipient decrypt; senderIdentity on signed encrypt
-    status: pending
+    status: completed
   - id: mobile-screens
     content: Use parseEbpPayloadInput on decrypt/verify paste fields; update password hint
-    status: pending
+    status: completed
   - id: gui-refactor-decrypt
     content: Refactor routes.ts decrypt + decrypt-file to resolveSenderIdentity; use core builders/randomHex
-    status: pending
+    status: completed
   - id: fixtures-smoke
     content: Add interop JSON/armor fixtures; Jest + manual GUI↔mobile smoke checklist
-    status: pending
+    status: completed
   - id: wiki-update
     content: Update analysis-gui-mobile-parity-deltas.md and component-mobile.md
-    status: pending
+    status: completed
 isProject: false
 ---
 

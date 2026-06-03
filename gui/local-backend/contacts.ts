@@ -1,5 +1,7 @@
 import type { ExternalIdentity } from "../../core/Identity.ts";
-import { computeIdentityFingerprint } from "../../core/Fingerprint.ts";
+import { computeExternalFingerprint } from "../../core/Fingerprint.ts";
+
+export { computeExternalFingerprint };
 import type { CLIContext } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 
@@ -131,26 +133,3 @@ export async function deleteContact(
   throw new HttpError(STATUS.NotFound, "contact not found");
 }
 
-export function computeExternalFingerprint(
-  identity:
-    & Pick<ExternalIdentity, "signingKeyType" | "encryptionKeyType">
-    & Partial<
-      Pick<
-        ExternalIdentity,
-        "signingKey" | "signingKeyHash" | "encryptionKey" | "encryptionKeyHash"
-      >
-    >,
-): string | null {
-  try {
-    return computeIdentityFingerprint({
-      signingKeyType: identity.signingKeyType,
-      encryptionKeyType: identity.encryptionKeyType,
-      signingKey: identity.signingKey,
-      signingKeyHash: identity.signingKeyHash,
-      encryptionKey: identity.encryptionKey,
-      encryptionKeyHash: identity.encryptionKeyHash,
-    });
-  } catch {
-    return null;
-  }
-}

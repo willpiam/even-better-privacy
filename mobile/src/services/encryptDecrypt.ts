@@ -3,16 +3,33 @@ import {
   Identity,
   base64ToBytes,
   bytesToBase64,
+  buildEncryptedFilePayload,
+  buildEncryptedSignedFilePayload,
   createFileCleartextEnvelope,
   parseFileCleartextEnvelope,
   buildEncryptedMessagePayload,
   buildEncryptedSignedMessagePayload,
+  parseMultiRecipientEntries,
 } from '../ebpCore';
 import {loadContact} from './contacts';
 import {loadIdentity} from './storage';
+import {resolveSenderForDecrypt} from './senderContext';
 
 function normalizeFileUri(uri: string): string {
   return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
+}
+
+function publicIdentityBlock(identity: Identity): Record<string, unknown> {
+  const summary = identity.summary;
+  return {
+    fingerprint: summary.fingerprint,
+    signingKeyType: summary.signingKeyType,
+    encryptionKeyType: summary.encryptionKeyType,
+    signingKey: summary.signingKey,
+    encryptionKey: summary.encryptionKey,
+    signingKeyDetails: summary.signingKeyDetails,
+    encryptionKeyDetails: summary.encryptionKeyDetails,
+  };
 }
 
 export async function encryptMessage(params: {
@@ -39,6 +56,7 @@ export async function encryptMessage(params: {
       recipientFingerprint: contact.fingerprint,
       senderFingerprint: identity.toFingerprint(),
       ciphertext,
+      senderIdentity: publicIdentityBlock(identity),
     }) as Record<string, unknown>;
   }
   const ciphertext = Identity.EncryptFor(contact, params.message);
@@ -71,17 +89,52 @@ export async function decryptMessage(params: {
       verifyStatus: 'unsigned',
     };
   }
-  if (type === 'ebp-encrypted-signed-message') {
-    const senderHint =
-      params.sender ??
-      (typeof params.payload.senderFingerprint === 'string'
-        ? params.payload.senderFingerprint.slice(0, 16)
-        : '');
-    if (!senderHint) {
-      throw new Error('Sender is required for signed messages');
+  if (type === 'ebp-encrypted-signed-message-multi') {
+    const contentNonce = String(params.payload.contentNonce ?? '');
+    const recipients = parseMultiRecipientEntries(params.payload.recipients);
+    if (!contentNonce || recipients.length === 0) {
+      throw new Error('Invalid multi-recipient payload');
     }
-    const sender = await loadContact(senderHint);
-    const result = identity.decryptAndVerify(ciphertext, sender);
+    const senderFp =
+      typeof params.payload.senderFingerprint === 'string'
+        ? params.payload.senderFingerprint
+        : undefined;
+    const embedded =
+      params.payload.senderIdentity &&
+      typeof params.payload.senderIdentity === 'object'
+        ? (params.payload.senderIdentity as Record<string, unknown>)
+        : undefined;
+    const {contact} = await resolveSenderForDecrypt({
+      senderHint: params.sender,
+      senderFingerprint: senderFp,
+      embeddedIdentity: embedded,
+    });
+    const result = identity.decryptAndVerifyMulti(
+      {recipients, contentNonce, ciphertext},
+      contact,
+    );
+    return {
+      message: result.message,
+      verified: result.verified,
+      verifyStatus: result.verified ? 'valid' : 'invalid',
+    };
+  }
+  if (type === 'ebp-encrypted-signed-message') {
+    const senderFp =
+      typeof params.payload.senderFingerprint === 'string'
+        ? params.payload.senderFingerprint
+        : undefined;
+    const embedded =
+      params.payload.senderIdentity &&
+      typeof params.payload.senderIdentity === 'object'
+        ? (params.payload.senderIdentity as Record<string, unknown>)
+        : undefined;
+    const {contact} = await resolveSenderForDecrypt({
+      senderHint: params.sender,
+      senderFingerprint: senderFp,
+      embeddedIdentity: embedded,
+    });
+    const result = identity.decryptAndVerify(ciphertext, contact);
     return {
       message: result.message,
       verified: result.verified,
@@ -116,25 +169,23 @@ export async function encryptFile(params: {
     }
     const identity = await loadIdentity(params.identityName, params.password);
     const ciphertext = identity.signAndEncryptFor(cleartext, recipient);
-    return {
-      type: 'ebp-encrypted-signed-file',
+    return buildEncryptedSignedFilePayload({
       recipientFingerprint: recipient.fingerprint,
       senderFingerprint: identity.toFingerprint(),
       fileName: envelope.fileName,
       mimeType: envelope.mimeType,
       fileSize: envelope.fileSize,
       ciphertext,
-    };
+    }) as Record<string, unknown>;
   }
   const ciphertext = Identity.EncryptFor(recipient, cleartext);
-  return {
-    type: 'ebp-encrypted-file',
+  return buildEncryptedFilePayload({
     recipientFingerprint: recipient.fingerprint,
     fileName: envelope.fileName,
     mimeType: envelope.mimeType,
     fileSize: envelope.fileSize,
     ciphertext,
-  };
+  }) as Record<string, unknown>;
 }
 
 export async function decryptFile(params: {
@@ -162,16 +213,21 @@ export async function decryptFile(params: {
   if (type === 'ebp-encrypted-file') {
     cleartext = identity.encryptionKey.decrypt(ciphertext);
   } else if (type === 'ebp-encrypted-signed-file') {
-    const senderHint =
-      params.sender ??
-      (typeof params.payload.senderFingerprint === 'string'
-        ? params.payload.senderFingerprint.slice(0, 16)
-        : '');
-    if (!senderHint) {
-      throw new Error('Sender is required for signed file payloads');
-    }
-    const sender = await loadContact(senderHint);
-    const result = identity.decryptAndVerify(ciphertext, sender);
+    const senderFp =
+      typeof params.payload.senderFingerprint === 'string'
+        ? params.payload.senderFingerprint
+        : undefined;
+    const embedded =
+      params.payload.senderIdentity &&
+      typeof params.payload.senderIdentity === 'object'
+        ? (params.payload.senderIdentity as Record<string, unknown>)
+        : undefined;
+    const {contact} = await resolveSenderForDecrypt({
+      senderHint: params.sender,
+      senderFingerprint: senderFp,
+      embeddedIdentity: embedded,
+    });
+    const result = identity.decryptAndVerify(ciphertext, contact);
     cleartext = result.message;
     verified = result.verified;
     verifyStatus = result.verified ? 'valid' : 'invalid';

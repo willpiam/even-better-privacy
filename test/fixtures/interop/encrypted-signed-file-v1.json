@@ -1,0 +1,10 @@
+{
+  "type": "ebp-encrypted-signed-file",
+  "version": 1,
+  "recipientFingerprint": "ebpdk1recipient000000000000000000",
+  "senderFingerprint": "ebpdk1sender00000000000000000000",
+  "fileName": "doc.pdf",
+  "mimeType": "application/pdf",
+  "fileSize": 4,
+  "ciphertext": "00"
+}

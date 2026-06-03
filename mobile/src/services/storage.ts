@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
-import {Identity} from '../ebpCore';
+import {Identity, validatePassword} from '../ebpCore';
+import {getEnforcePasswordPolicy} from './settings';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
 
@@ -84,8 +85,15 @@ export async function createIdentity(params: {
 }): Promise<StoredIdentityMeta> {
   const name = normalizeName(params.name);
   const password = params.password;
-  if (password.length < 8) {
-    throw new Error('Password must be at least 8 characters');
+  const enforcePasswordPolicy = await getEnforcePasswordPolicy();
+  const passwordCheck = validatePassword(password, {
+    enforcePolicy: enforcePasswordPolicy,
+  });
+  if (!passwordCheck.ok) {
+    const hint = passwordCheck.suggestions.length
+      ? ` ${passwordCheck.suggestions.join(' ')}`
+      : '';
+    throw new Error(`${passwordCheck.reason}.${hint}`);
   }
 
   await ensureBaseDir();

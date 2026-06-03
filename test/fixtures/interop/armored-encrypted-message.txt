@@ -1,0 +1,8 @@
+-----BEGIN EBP MESSAGE-----
+{
+  "type": "ebp-encrypted-message",
+  "version": 1,
+  "recipientFingerprint": "ebpdk1example000000000000000000000",
+  "ciphertext": "00"
+}
+-----END EBP MESSAGE-----

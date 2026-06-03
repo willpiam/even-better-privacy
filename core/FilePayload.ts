@@ -50,6 +50,44 @@ export function createFileCleartextEnvelope(
 	};
 }
 
+export function buildEncryptedFilePayload(input: {
+	recipientFingerprint: string;
+	fileName: string;
+	mimeType: string;
+	fileSize: number;
+	ciphertext: string;
+}): EncryptedFilePayload {
+	return {
+		type: "ebp-encrypted-file",
+		version: FILE_FORMAT_VERSIONS.encryptedFile,
+		recipientFingerprint: input.recipientFingerprint,
+		fileName: input.fileName,
+		mimeType: input.mimeType,
+		fileSize: input.fileSize,
+		ciphertext: input.ciphertext,
+	};
+}
+
+export function buildEncryptedSignedFilePayload(input: {
+	recipientFingerprint: string;
+	senderFingerprint: string;
+	fileName: string;
+	mimeType: string;
+	fileSize: number;
+	ciphertext: string;
+}): EncryptedSignedFilePayload {
+	return {
+		type: "ebp-encrypted-signed-file",
+		version: FILE_FORMAT_VERSIONS.encryptedSignedFile,
+		recipientFingerprint: input.recipientFingerprint,
+		senderFingerprint: input.senderFingerprint,
+		fileName: input.fileName,
+		mimeType: input.mimeType,
+		fileSize: input.fileSize,
+		ciphertext: input.ciphertext,
+	};
+}
+
 export function parseFileCleartextEnvelope(
 	input: string,
 ): { fileName: string; mimeType: string; fileSize: number; fileBytes: Uint8Array } {

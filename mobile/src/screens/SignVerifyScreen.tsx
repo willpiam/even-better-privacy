@@ -15,7 +15,9 @@ import {
   verifyFileSignature,
   verifyMessage,
 } from '../services/signVerify';
+import {parseEbpPayloadInput} from '../ebpCore';
 import {getCurrentIdentityRequired} from '../services/storage';
+import BusyOverlay from '../components/BusyOverlay';
 import CopyableOutput from '../components/CopyableOutput';
 import StatusBanner from '../components/StatusBanner';
 
@@ -31,14 +33,18 @@ export default function SignVerifyScreen(): JSX.Element {
   const [verifyOutput, setVerifyOutput] = useState('');
 
   const [fileUri, setFileUri] = useState('');
+  const [fileName, setFileName] = useState('');
   const [fileContext, setFileContext] = useState('');
   const [fileSignOutput, setFileSignOutput] = useState('');
   const [verifyFileUri, setVerifyFileUri] = useState('');
   const [verifyFilePayload, setVerifyFilePayload] = useState('');
   const [verifyFileOutput, setVerifyFileOutput] = useState('');
   const [status, setStatus] = useState('');
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const onSign = async () => {
+    setBusyMessage('Signing message...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const payload = await signMessage({
@@ -54,12 +60,16 @@ export default function SignVerifyScreen(): JSX.Element {
       setStatus('Message signed');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onVerify = async () => {
+    setBusyMessage('Verifying signature...');
+    setStatus('');
     try {
-      const payload = JSON.parse(verifyPayload) as Record<string, unknown>;
+      const payload = parseEbpPayloadInput(verifyPayload);
       const result = await verifyMessage({
         payload,
         message: verifyMessageText || undefined,
@@ -69,16 +79,21 @@ export default function SignVerifyScreen(): JSX.Element {
     } catch (error) {
       setVerifyOutput('');
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onSignFile = async () => {
+    setBusyMessage('Signing file...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const result = await signFile({
         identityName,
         password,
         fileUri,
+        fileName: fileName || undefined,
         contextMessage: fileContext || undefined,
         includeSalt: true,
       });
@@ -86,6 +101,8 @@ export default function SignVerifyScreen(): JSX.Element {
       setStatus('File signed');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
@@ -100,6 +117,7 @@ export default function SignVerifyScreen(): JSX.Element {
       });
       if (copyResult.status === 'success') {
         setFileUri(copyResult.localUri);
+        setFileName(file.name ?? 'picked-file');
       } else {
         throw new Error(copyResult.copyError);
       }
@@ -138,8 +156,10 @@ export default function SignVerifyScreen(): JSX.Element {
   };
 
   const onVerifyFile = async () => {
+    setBusyMessage('Verifying file signature...');
+    setStatus('');
     try {
-      const payload = JSON.parse(verifyFilePayload) as Record<string, unknown>;
+      const payload = parseEbpPayloadInput(verifyFilePayload);
       const result = await verifyFileSignature({
         fileUri: verifyFileUri,
         payload,
@@ -151,11 +171,16 @@ export default function SignVerifyScreen(): JSX.Element {
     } catch (error) {
       setVerifyFileOutput('');
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
+  const busy = busyMessage !== null;
+
   return (
     <SafeAreaView style={styles.container}>
+      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <ScrollView>
         <Text style={styles.header}>Sign / Verify</Text>
         <StatusBanner message={status} kind={status.toLowerCase().includes('failed') ? 'error' : 'info'} />
@@ -187,7 +212,11 @@ export default function SignVerifyScreen(): JSX.Element {
           onChangeText={setIncludeIdentity}
           placeholder="Include identity: true or false"
         />
-        <Button title="Sign Message" onPress={onSign} />
+        <Button
+          title={busy ? 'Signing...' : 'Sign Message'}
+          onPress={onSign}
+          disabled={busy}
+        />
         <Button title="Share Output" onPress={() => shareOutput(signOutput)} />
         <CopyableOutput value={signOutput} placeholder="Signed output..." />
 
@@ -206,7 +235,11 @@ export default function SignVerifyScreen(): JSX.Element {
           placeholder="Detached message (if needed)"
           multiline
         />
-        <Button title="Verify Message" onPress={onVerify} />
+        <Button
+          title={busy ? 'Verifying...' : 'Verify Message'}
+          onPress={onVerify}
+          disabled={busy}
+        />
         <Text style={styles.output}>{verifyOutput}</Text>
 
         <Text style={styles.section}>Sign File</Text>
@@ -223,7 +256,11 @@ export default function SignVerifyScreen(): JSX.Element {
           placeholder="Optional context message"
           multiline
         />
-        <Button title="Sign File" onPress={onSignFile} />
+        <Button
+          title={busy ? 'Signing...' : 'Sign File'}
+          onPress={onSignFile}
+          disabled={busy}
+        />
         <Button title="Pick File" onPress={pickSignFile} />
         <Button title="Share Output" onPress={() => shareOutput(fileSignOutput)} />
         <CopyableOutput value={fileSignOutput} placeholder="Signed file payload..." />
@@ -243,7 +280,11 @@ export default function SignVerifyScreen(): JSX.Element {
           placeholder="Signed file payload JSON"
           multiline
         />
-        <Button title="Verify File Signature" onPress={onVerifyFile} />
+        <Button
+          title={busy ? 'Verifying...' : 'Verify File Signature'}
+          onPress={onVerifyFile}
+          disabled={busy}
+        />
         <CopyableOutput value={verifyFileOutput} placeholder="File verification result..." />
       </ScrollView>
     </SafeAreaView>

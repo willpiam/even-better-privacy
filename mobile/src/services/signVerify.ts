@@ -6,6 +6,8 @@ import {
   base64ToBytes,
   buildDetachedSignaturePayload,
   buildSignedMessagePayload,
+  randomHex,
+  buildFileSignMessage,
   type ExternalIdentity,
 } from '../ebpCore';
 import {loadContact} from './contacts';
@@ -38,7 +40,7 @@ export async function signMessage(params: {
   const identity = await loadIdentity(params.identityName, params.password);
   const includeSalt = params.options?.includeSalt ?? true;
   const salt =
-    params.options?.salt ?? (includeSalt ? Math.random().toString(16).slice(2) : '');
+    params.options?.salt ?? (includeSalt ? randomHex(16) : '');
   const signature = identity.signMessage(params.message, salt);
   const messageHash = hashTextSha256Hex(params.message);
   const summary = identity.summary;
@@ -116,6 +118,7 @@ export async function signFile(params: {
   identityName: string;
   password: string;
   fileUri: string;
+  fileName?: string;
   contextMessage?: string;
   includeSalt?: boolean;
 }): Promise<{
@@ -129,18 +132,17 @@ export async function signFile(params: {
   const base64 = await RNFS.readFile(path, 'base64');
   const bytes = base64ToBytes(base64);
   const fileHash = toHex(sha256(bytes));
-  const salt =
-    params.includeSalt === false ? '' : Math.random().toString(16).slice(2);
-  const signedMessage = [
-    'ebp::filehash',
+  const salt = params.includeSalt === false ? '' : randomHex(16);
+  const signedMessage = buildFileSignMessage(
     fileHash,
     salt,
     params.contextMessage ?? '',
-  ].join('::');
+  );
   const signature = identity.signMessage(signedMessage);
   const payload = {
     type: 'ebp-signed-file',
     fingerprint: identity.toFingerprint(),
+    fileName: params.fileName ?? params.fileUri.split('/').pop() ?? 'file',
     fileHash,
     salt,
     contextMessage: params.contextMessage ?? '',
@@ -181,7 +183,7 @@ export async function verifyFileSignature(params: {
       signedMessage: '',
     };
   }
-  const signedMessage = ['ebp::filehash', computedHash, salt, contextMessage].join('::');
+  const signedMessage = buildFileSignMessage(computedHash, salt, contextMessage);
   const verified = Identity.VerifySignature(identity, signedMessage, signature, '');
   return {
     verified,

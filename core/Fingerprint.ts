@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2";
 import { base64ToBytes } from "./Base64.ts";
+import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import type { EncryptionKeyOptions, SigningKeyOptions } from "./Keys.ts";
 import { bech32 } from "bech32";
 import { concatBytes, hexToBytes, toHex } from "./Hex.ts";
@@ -142,4 +143,31 @@ export function computeIdentityFingerprint(
   const root = computeIdentityMerkleRootRaw(input);
   const hrp = getFingerprintHrp(input.signingKeyType, input.encryptionKeyType);
   return encodeFingerprintBech32(root, hrp);
+}
+
+/** Fingerprint for a public identity record (contact / embedded sender). */
+export function computeExternalFingerprint(
+  identity: Pick<ExternalIdentity, "signingKeyType" | "encryptionKeyType"> &
+    Partial<
+      Pick<
+        ExternalIdentity,
+        | "signingKey"
+        | "signingKeyHash"
+        | "encryptionKey"
+        | "encryptionKeyHash"
+      >
+    >,
+): string | null {
+  try {
+    return computeIdentityFingerprint({
+      signingKeyType: identity.signingKeyType,
+      encryptionKeyType: identity.encryptionKeyType,
+      signingKey: identity.signingKey,
+      signingKeyHash: identity.signingKeyHash,
+      encryptionKey: identity.encryptionKey,
+      encryptionKeyHash: identity.encryptionKeyHash,
+    });
+  } catch {
+    return null;
+  }
 }

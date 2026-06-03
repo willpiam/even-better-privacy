@@ -23,10 +23,13 @@ import {
   buildSignedMessagePayload,
 } from "../../core/Payloads.ts";
 import {
+  buildEncryptedFilePayload,
+  buildEncryptedSignedFilePayload,
   createFileCleartextEnvelope,
   MAX_ENCRYPTED_FILE_BYTES,
   parseFileCleartextEnvelope,
 } from "../../core/FilePayload.ts";
+import { parseMultiRecipientEntries } from "../../core/PayloadInput.ts";
 import {
   createEmailAttachmentCleartextEnvelope,
   parseEmailAttachmentCleartextEnvelope,
@@ -87,6 +90,7 @@ import {
   listContacts,
   loadContact,
 } from "./contacts.ts";
+import { tryResolveSenderForCtx } from "./sender-context.ts";
 import {
   buildSmtpAuth,
   DEFAULT_MAIL_ACCOUNT,
@@ -3441,30 +3445,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         const embeddedIdentity = payload.senderIdentity as
           | Record<string, unknown>
           | undefined;
-        const recipientsRaw = Array.isArray(payload.recipients)
-          ? payload.recipients
-          : [];
-        const recipients = recipientsRaw
-          .map((entry) => ({
-            fingerprint: typeof entry?.fingerprint === "string"
-              ? entry.fingerprint
-              : "",
-            kemCiphertext: typeof entry?.kemCiphertext === "string"
-              ? entry.kemCiphertext
-              : "",
-            keyWrapNonce: typeof entry?.keyWrapNonce === "string"
-              ? entry.keyWrapNonce
-              : "",
-            wrappedContentKey: typeof entry?.wrappedContentKey === "string"
-              ? entry.wrappedContentKey
-              : "",
-          }))
-          .filter((entry) => (
-            entry.fingerprint.length > 0 &&
-            entry.kemCiphertext.length > 0 &&
-            entry.keyWrapNonce.length > 0 &&
-            entry.wrappedContentKey.length > 0
-          ));
+        const recipients = parseMultiRecipientEntries(payload.recipients);
         if (!ciphertext || !contentNonce || recipients.length === 0) {
           throw new HttpError(
             STATUS.BadRequest,
@@ -3472,66 +3453,19 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           );
         }
 
-        let contact: ExternalIdentity | undefined;
-        let isKnownContact = false;
-        if (sender) {
-          contact = await loadContact(ctx, sender);
-          isKnownContact = true;
-        } else if (senderFp) {
-          try {
-            contact = await loadContact(ctx, senderFp.substring(0, 16));
-            isKnownContact = true;
-          } catch {
-            contact = undefined;
-          }
-        }
-        if (!contact && embeddedIdentity) {
-          const signingKey = typeof embeddedIdentity.signingKey === "string"
-            ? embeddedIdentity.signingKey
-            : undefined;
-          const encryptionKey =
-            typeof embeddedIdentity.encryptionKey === "string"
-              ? embeddedIdentity.encryptionKey
-              : undefined;
-          if (signingKey && encryptionKey) {
-            const signingKeyType = embeddedIdentity.signingKeyType === "sphincs"
-              ? "sphincs" as const
-              : "dilithium" as const;
-            const ext: ExternalIdentity = {
-              fingerprint: typeof embeddedIdentity.fingerprint === "string"
-                ? embeddedIdentity.fingerprint
-                : "",
-              signingKeyType,
-              encryptionKeyType: "kyber",
-              signingKey,
-              encryptionKey,
-              signingKeyDetails: (embeddedIdentity
-                .signingKeyDetails as ExternalIdentity[
-                  "signingKeyDetails"
-                ]) ?? {
-                variant: signingKeyType === "sphincs"
-                  ? "slh_dsa_sha2_256s"
-                  : "ml_dsa87",
-              },
-              encryptionKeyDetails: (embeddedIdentity
-                .encryptionKeyDetails as ExternalIdentity[
-                  "encryptionKeyDetails"
-                ]) ?? { variant: "ml_kem1024" },
-              details: {},
-            };
-            const computed = computeExternalFingerprint(ext);
-            if (computed && (!senderFp || computed === senderFp)) {
-              ext.fingerprint = computed;
-              contact = ext;
-            }
-          }
-        }
-        if (!contact) {
+        const resolvedMulti = await tryResolveSenderForCtx(ctx, {
+          senderHint: sender,
+          senderFingerprint: senderFp,
+          embeddedIdentity,
+        });
+        if (!resolvedMulti) {
           throw new HttpError(
             STATUS.BadRequest,
             "sender contact is required for multi-recipient signed payloads",
           );
         }
+        const contact = resolvedMulti.contact;
+        const isKnownContact = resolvedMulti.isKnownContact;
         const computedFingerprint = computeExternalFingerprint(contact);
         if (
           !computedFingerprint || computedFingerprint !== contact.fingerprint ||
@@ -3691,7 +3625,15 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           return ext;
         };
 
-        if (sender) {
+        const resolvedSigned = await tryResolveSenderForCtx(ctx, {
+          senderHint: sender,
+          senderFingerprint: senderFp,
+          embeddedIdentity,
+        });
+        if (resolvedSigned) {
+          contact = resolvedSigned.contact;
+          isKnownContact = resolvedSigned.isKnownContact;
+        } else if (sender) {
           try {
             contact = await loadContact(ctx, sender);
             isKnownContact = true;
@@ -4033,28 +3975,24 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         }
         const identity = await loadIdentity(ctx, password);
         const ciphertext = identity.signAndEncryptFor(cleartext, contact);
-        return json({
-          type: "ebp-encrypted-signed-file",
-          version: ENCRYPTED_SIGNED_FILE_FORMAT_VERSION,
+        return json(buildEncryptedSignedFilePayload({
           recipientFingerprint: contact.fingerprint,
           senderFingerprint: identity.toFingerprint(),
           fileName,
           mimeType,
           fileSize: fileBytes.length,
           ciphertext,
-        });
+        }));
       }
 
       const ciphertext = Identity.EncryptFor(contact, cleartext);
-      return json({
-        type: "ebp-encrypted-file",
-        version: ENCRYPTED_FILE_FORMAT_VERSION,
+      return json(buildEncryptedFilePayload({
         recipientFingerprint: contact.fingerprint,
         fileName,
         mimeType,
         fileSize: fileBytes.length,
         ciphertext,
-      });
+      }));
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/decrypt-file") {
@@ -4101,20 +4039,24 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           );
         }
       } else if (payload.type === "ebp-encrypted-signed-file") {
-        let contact: ExternalIdentity;
-        if (sender) {
-          contact = await loadContact(ctx, sender);
-        } else if (typeof payload.senderFingerprint === "string") {
-          contact = await loadContact(
-            ctx,
-            payload.senderFingerprint.substring(0, 16),
-          );
-        } else {
+        const senderFpFile = typeof payload.senderFingerprint === "string"
+          ? payload.senderFingerprint
+          : undefined;
+        const embeddedFile = payload.senderIdentity as
+          | Record<string, unknown>
+          | undefined;
+        const resolvedFile = await tryResolveSenderForCtx(ctx, {
+          senderHint: sender,
+          senderFingerprint: senderFpFile,
+          embeddedIdentity: embeddedFile,
+        });
+        if (!resolvedFile) {
           throw new HttpError(
             STATUS.BadRequest,
             "sender is required for signed file payloads",
           );
         }
+        const contact = resolvedFile.contact;
         let result: {
           message: string;
           verified: boolean;

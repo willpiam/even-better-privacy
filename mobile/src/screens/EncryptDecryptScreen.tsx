@@ -15,6 +15,7 @@ import {
   encryptFile,
   encryptMessage,
 } from '../services/encryptDecrypt';
+import {parseEbpPayloadInput} from '../ebpCore';
 import {getCurrentIdentityRequired} from '../services/storage';
 import ContactPicker from '../components/ContactPicker';
 import CopyableOutput from '../components/CopyableOutput';
@@ -63,7 +64,7 @@ export default function EncryptDecryptScreen(): JSX.Element {
   const onDecrypt = async () => {
     try {
       const identityName = await getCurrentIdentityRequired();
-      const payload = JSON.parse(decryptPayload) as Record<string, unknown>;
+      const payload = parseEbpPayloadInput(decryptPayload);
       const result = await decryptMessage({
         identityName,
         password,
@@ -102,7 +103,7 @@ export default function EncryptDecryptScreen(): JSX.Element {
   const onDecryptFile = async () => {
     try {
       const identityName = await getCurrentIdentityRequired();
-      const payload = JSON.parse(decryptFilePayload) as Record<string, unknown>;
+      const payload = parseEbpPayloadInput(decryptFilePayload);
       const result = await decryptFile({
         identityName,
         password,

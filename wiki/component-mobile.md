@@ -1,9 +1,9 @@
 ---
 title: "EBP Mobile Component"
 type: component
-status: seed
-last_updated: 2026-04-08
-source_count: 1
+status: active
+last_updated: 2026-06-02
+source_count: 4
 tags:
   - component
   - mobile
@@ -21,8 +21,9 @@ The mobile app exists in the repository with ~80+ source files and is under acti
 ## Architecture
 
 - **React Native** with TypeScript (`.tsx` / `.ts` files).
-- Shares identity and contact data model with the CLI/GUI.
-- Contact normalization (`mobile/src/services/contacts.ts`) handles stripping revoked details from fetched server responses (fixed alongside the GUI in [[analysis-sync-revoked-details-bug]]).
+- Imports shared crypto/wire helpers from `core/` via `mobile/src/ebpCore.ts` (payload parsing, sender resolution, file payload builders, password policy).
+- App-local storage under `DocumentDirectory/ebp/` (not `~/.ebp/`); see [[analysis-gui-mobile-parity-deltas]].
+- Contact normalization (`mobile/src/services/contacts.ts`) strips revoked details from server responses ([[analysis-sync-revoked-details-bug]]).
 
 ## Parity
 
