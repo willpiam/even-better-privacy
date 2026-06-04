@@ -9,7 +9,8 @@ import { argon2id } from "@noble/hashes/argon2";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const SALT_LENGTH = 16; // 128-bit salt
+export const AES_SALT_LENGTH = 16; // 128-bit salt
+const SALT_LENGTH = AES_SALT_LENGTH;
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
 const KEY_LENGTH = 32; // 256 bits
 
@@ -19,7 +20,7 @@ const KEY_LENGTH = 32; // 256 bits
 // ciphertexts decryptable while new writes use the stronger KDF/AAD support.
 const PBKDF2_ITERATIONS_V1 = 310_000;
 const PBKDF2_ITERATIONS_V2 = 600_000;
-const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 3
+const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 4
 
 const ARGON2_MEMORY_KIB = 64 * 1024; // 64 MiB
 const ARGON2_ITERATIONS = 3;
@@ -51,22 +52,45 @@ function encodeAad(aad?: string): Uint8Array | undefined {
   return aad === undefined ? undefined : encoder.encode(aad);
 }
 
+function parseCiphertextBytes(encoded: string): Uint8Array {
+  try {
+    const data = base64ToBytes(encoded);
+    if (data.length < 1 + SALT_LENGTH + IV_LENGTH) {
+      throw new StorageFormatError("Invalid ciphertext");
+    }
+    return data;
+  } catch (e) {
+    if (e instanceof StorageFormatError) throw e;
+    throw new StorageFormatError("Invalid ciphertext encoding");
+  }
+}
+
 export class AES {
   static encrypt(password: string, plaintext: string, aad?: string): string {
     const salt = randomBytes(SALT_LENGTH);
-    const iv = randomBytes(IV_LENGTH);
     const key = deriveKey(
       password,
       salt,
       iterationsForVersion(CURRENT_AES_VERSION),
       CURRENT_AES_VERSION,
     );
+    return AES.encryptWithKey(key, plaintext, salt, aad);
+  }
 
+  static encryptWithKey(
+    key: Uint8Array,
+    plaintext: string,
+    salt: Uint8Array,
+    aad?: string,
+  ): string {
+    if (salt.length !== SALT_LENGTH) {
+      throw new StorageFormatError("Invalid salt length");
+    }
+    const iv = randomBytes(IV_LENGTH);
     const data = encoder.encode(plaintext);
     const cipher = gcm(key, iv, encodeAad(aad));
     const ciphertext = cipher.encrypt(data);
 
-    // [version(1)] [salt] [iv] [ciphertext]
     const result = new Uint8Array(
       1 + salt.length + iv.length + ciphertext.length,
     );
@@ -79,28 +103,30 @@ export class AES {
   }
 
   static decrypt(password: string, encoded: string, aad?: string): string {
-    let data: Uint8Array;
-    try {
-      data = base64ToBytes(encoded);
-    } catch {
-      throw new StorageFormatError("Invalid ciphertext encoding");
-    }
-    if (data.length < 1 + SALT_LENGTH + IV_LENGTH) {
-      throw new StorageFormatError("Invalid ciphertext");
-    }
+    const { version, salt } = AES.readHeader(encoded);
+    const key = deriveKey(
+      password,
+      salt,
+      iterationsForVersion(version),
+      version,
+    );
+    return AES.decryptWithKey(key, encoded, aad);
+  }
 
+  static decryptWithKey(
+    key: Uint8Array,
+    encoded: string,
+    aad?: string,
+  ): string {
+    const data = parseCiphertextBytes(encoded);
     const version = data[0];
-    const iterations = iterationsForVersion(version);
 
     const saltStart = 1;
     const saltEnd = saltStart + SALT_LENGTH;
     const ivEnd = saltEnd + IV_LENGTH;
 
-    const salt = data.slice(saltStart, saltEnd);
     const iv = data.slice(saltEnd, ivEnd);
     const ciphertext = data.slice(ivEnd);
-
-    const key = deriveKey(password, salt, iterations, version);
 
     const decipher = gcm(
       key,
@@ -115,6 +141,13 @@ export class AES {
     }
 
     return decoder.decode(plaintextBytes);
+  }
+
+  static readHeader(encoded: string): { version: number; salt: Uint8Array } {
+    const data = parseCiphertextBytes(encoded);
+    const version = data[0];
+    const salt = data.slice(1, 1 + SALT_LENGTH);
+    return { version, salt };
   }
 
   // F-STORAGE-02: utility so callers (identity-unlock flow) can detect a
@@ -132,6 +165,15 @@ export class AES {
     } catch {
       return false;
     }
+  }
+
+  /** Derive a 32-byte AES key (noble). Used by tests and desktop paths. */
+  static deriveKeyForStorage(
+    password: string,
+    salt: Uint8Array,
+    version: number,
+  ): Uint8Array {
+    return deriveKey(password, salt, iterationsForVersion(version), version);
   }
 }
 

@@ -50,3 +50,5 @@ export {
 } from '../../core/MessageHash';
 export {toHex, stringToHex, hexToString} from '../../core/Hex';
 export {bytesToBase64, base64ToBytes} from '../../core/Base64';
+export {AES, AES_SALT_LENGTH} from '../../core/AES';
+export {randomBytes} from '@noble/hashes/utils';

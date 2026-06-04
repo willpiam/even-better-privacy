@@ -16,7 +16,8 @@ import {
   setEnforcePasswordPolicy,
   setServerUrl,
 } from '../services/settings';
-import {BASE_DIR} from '../services/storage';
+import {verifyArgon2NobleParity} from '../services/argon2';
+import {BASE_DIR, runCoreSelfTest} from '../services/storage';
 
 export default function SettingsScreen(): JSX.Element {
   const [serverUrl, setServerUrlValue] = useState('');
@@ -98,6 +99,44 @@ export default function SettingsScreen(): JSX.Element {
 
         <Text style={styles.systemLabel}>Identity Directory</Text>
         <Text style={styles.systemPath}>{BASE_DIR}</Text>
+
+        <Text style={styles.section}>Diagnostics</Text>
+        <Button
+          title={loading ? 'Running...' : 'Run core self-test'}
+          disabled={loading}
+          onPress={async () => {
+            setLoading(true);
+            setStatus('');
+            try {
+              setStatus(await runCoreSelfTest());
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : String(error));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+        <Button
+          title={loading ? 'Running...' : 'Verify Argon2 / noble parity'}
+          disabled={loading}
+          onPress={async () => {
+            setLoading(true);
+            setStatus('');
+            try {
+              const result = await verifyArgon2NobleParity();
+              setStatus(
+                result.ok
+                  ? 'Argon2 parity OK (native matches noble)'
+                  : `Argon2 parity FAILED\nexpected: ${result.expected}\nactual:   ${result.actual}`,
+              );
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : String(error));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+
         {status ? <Text style={styles.status}>{status}</Text> : null}
       </ScrollView>
     </SafeAreaView>

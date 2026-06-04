@@ -1,5 +1,11 @@
 import RNFS from 'react-native-fs';
-import {Identity, validatePassword} from '../ebpCore';
+import {
+  AES,
+  Identity,
+  randomBytes,
+  validatePassword,
+} from '../ebpCore';
+import {deriveIdentityKey} from './argon2';
 import {getEnforcePasswordPolicy} from './settings';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
@@ -10,8 +16,31 @@ const CONTACTS_DIR = `${BASE_DIR}/contacts`;
 const CERTIFICATES_DIR = `${BASE_DIR}/certificates`;
 const PENDING_CERTIFICATES_FILE = `${BASE_DIR}/pending-certificates.json`;
 
+/** Ciphertext versions >= 3 use Argon2id (native on mobile). */
+const ARGON2_AES_VERSION = 3;
+
 function identityPath(name: string): string {
   return `${BASE_DIR}/${name}.identity.json`;
+}
+
+function passwordBytes(password: string): Uint8Array {
+  return new TextEncoder().encode(password);
+}
+
+async function writeIdentityStorage(
+  path: string,
+  identity: Identity,
+  password: string,
+): Promise<string> {
+  const normalizedPassword = password.trim();
+  const salt = randomBytes(16);
+  const key = await deriveIdentityKey(
+    passwordBytes(normalizedPassword),
+    salt,
+  );
+  const storageData = identity.toStorageFormatWithKey(key, salt);
+  await RNFS.writeFile(path, storageData, 'utf8');
+  return storageData;
 }
 
 async function ensureBaseDir(): Promise<void> {
@@ -54,6 +83,14 @@ function publicDataToMeta(
     signingKeyType: publicData.signingKeyType as SigningType,
     encryptionKeyType: publicData.encryptionKeyType,
   };
+}
+
+function parseEncryptedField(raw: string): string {
+  const parsed = JSON.parse(raw) as {encrypted?: unknown};
+  if (typeof parsed.encrypted !== 'string') {
+    throw new Error('Missing encrypted private identity data');
+  }
+  return parsed.encrypted;
 }
 
 export async function listIdentities(): Promise<StoredIdentityMeta[]> {
@@ -104,8 +141,7 @@ export async function createIdentity(params: {
   }
 
   const identity = new Identity(params.signingType, 'kyber');
-  const storageData = identity.toStorageFormat(password);
-  await RNFS.writeFile(path, storageData, 'utf8');
+  const storageData = await writeIdentityStorage(path, identity, password);
 
   const publicData = Identity.readPublicData(storageData);
   if (!publicData) {
@@ -131,6 +167,18 @@ export async function loadIdentity(
     throw new Error('Identity not found');
   }
   const raw = await RNFS.readFile(path, 'utf8');
+  const encrypted = parseEncryptedField(raw);
+  const {version, salt} = AES.readHeader(encrypted);
+
+  if (version >= ARGON2_AES_VERSION) {
+    const key = await deriveIdentityKey(
+      passwordBytes(normalizedPassword),
+      salt,
+    );
+    return Identity.fromStorageFormatWithKey(raw, key);
+  }
+
+  // Legacy PBKDF2 (v1/v2): slow noble path; rare for mobile-created identities.
   return Identity.fromStorageFormat(raw, normalizedPassword);
 }
 
@@ -151,7 +199,7 @@ export async function saveIdentity(
 ): Promise<void> {
   await ensureAppDirs();
   const path = identityPath(normalizeName(name));
-  await RNFS.writeFile(path, identity.toStorageFormat(password), 'utf8');
+  await writeIdentityStorage(path, identity, password);
 }
 
 export async function getCurrentIdentityRequired(): Promise<string> {

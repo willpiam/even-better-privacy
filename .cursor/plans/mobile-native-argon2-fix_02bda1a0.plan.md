@@ -4,25 +4,25 @@ overview: Fix the mobile "Signing message..." hang by moving the Argon2id key-de
 todos:
   - id: core-aes
     content: Add key-based AES primitives to core/AES.ts (encryptWithKey, decryptWithKey, readHeader) and refactor encrypt/decrypt to use them; no behavior change.
-    status: pending
+    status: completed
   - id: core-identity
     content: Extract shared helpers in core/Identity.ts and add fromStorageFormatWithKey + toStorageFormatWithKey (additive).
-    status: pending
+    status: completed
   - id: core-tests
     content: Add Deno tests proving key-based path matches password-based path (noble parity at core level).
-    status: pending
+    status: completed
   - id: native-dep
     content: Add native libsodium JSI dependency (react-native-nacl-jsi, fallback react-native-libsodium); pod install / android autolink; verify RN 0.84 new-arch compatibility.
-    status: pending
+    status: completed
   - id: mobile-argon2
     content: Add mobile/src/services/argon2.ts with deriveIdentityKey mapping params (32B, t=3, memlimit=67108864 bytes) + offline-vector parity check helper.
-    status: pending
+    status: completed
   - id: mobile-storage
     content: Switch mobile storage.ts loadIdentity/createIdentity/saveIdentity to native async KDF + key-based core APIs, with legacy pbkdf2 fallback.
-    status: pending
+    status: completed
   - id: verify-device
     content: "On device: confirm native==noble parity vector, cross-device decrypt interop, and that signing resolves quickly."
-    status: pending
+    status: completed
 isProject: false
 ---
 
