@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-06-04] implement | mobile–GUI Parity v1
+
+- Implemented mobile parity phases 0–4 (wallet, HD, mail, tests, audit scope doc).
+- Added: [[analysis-mobile-parity-roadmap]]; updated [[analysis-gui-mobile-parity-deltas]] Parity v1 checklist.
+- Code: `mobile/src/services/*`, `mobile/src/screens/*`, `mobile/MAIL.md`, `test/mobile-parity_test.ts`.
+
 ## [2026-06-02] update | mobile interop drift remediation
 
 - Implemented shared `core/` modules (PayloadInput, SenderResolution, CryptoUtils,

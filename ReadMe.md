@@ -542,7 +542,7 @@ graph TD
 - tighten up `gui/local-backend`
 - create full inventory and plan for hardening
 - mobile application
-  - full feature parity with GUI
+  - Parity v1 with GUI shipped (wallet, EBP-HD, native mail); see `mobile/MAIL.md` and `wiki/analysis-mobile-parity-roadmap.md`
 - advanced email features
   - search the inbox
   - write and save drafts (encrypted with the same pin/password)

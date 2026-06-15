@@ -6,7 +6,12 @@ import {
   getHierarchySignaturePayload,
   hexToString,
   stringToHex,
+  type SignedHierarchyCertificate,
 } from '../ebpCore';
+import {
+  buildHierarchyTreeFromCertificates,
+  decodeCertsFromStored,
+} from './hierarchyTree';
 import {getServerUrl} from './settings';
 import {
   ensureAppDirs,
@@ -228,9 +233,36 @@ export async function acceptProposal(params: {
   await storeActiveCertificate(signed);
 }
 
-export async function rejectProposal(proposalId: number): Promise<void> {
+export async function rejectProposal(params: {
+  proposalId: number;
+  identityName?: string;
+  password?: string;
+  server?: string;
+}): Promise<void> {
   const pending = await readPendingLocal();
-  await writePendingLocal(pending.filter(p => p.id !== proposalId));
+  const proposal = pending.find(p => p.id === params.proposalId);
+  if (!proposal) {
+    throw new Error('Pending proposal not found');
+  }
+  await writePendingLocal(pending.filter(p => p.id !== params.proposalId));
+
+  if (params.identityName && params.password) {
+    const identity = await loadIdentity(params.identityName, params.password);
+    const server = params.server ?? (await getServerUrl());
+    try {
+      await fetch(apiUrl(server, '/api/v1/hierarchy/reject'), {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: JSON.stringify({
+          proposerFingerprint: proposal.proposerFingerprint,
+          certificate: proposal.certificate,
+          rejectorFingerprint: identity.toFingerprint(),
+        }),
+      });
+    } catch {
+      // Local reject still succeeds if server notify fails.
+    }
+  }
 }
 
 export async function publishCertificate(params: {
@@ -253,16 +285,60 @@ export async function publishCertificate(params: {
   await storeActiveCertificate(params.certificate);
 }
 
-export async function getHierarchyTree(fingerprint: string, server?: string): Promise<unknown> {
+async function fetchServerHierarchyCerts(
+  fingerprint: string,
+  server: string,
+): Promise<SignedHierarchyCertificate[]> {
   const url = new URL(
-    apiUrl(server ?? (await getServerUrl()), `/api/v1/hierarchy/${encodeURIComponent(fingerprint)}`),
+    apiUrl(server, `/api/v1/hierarchy/${encodeURIComponent(fingerprint)}`),
   );
   url.searchParams.set('source', 'server');
   const res = await fetch(url.toString());
-  const body = await res.json().catch(() => ({}));
+  const body = (await res.json().catch(() => ({}))) as {
+    relationships?: Array<{certificate?: string}>;
+  };
   if (!res.ok) {
     const reason = (body as {error?: string}).error ?? `HTTP ${res.status}`;
     throw new Error(`Failed to fetch hierarchy tree: ${reason}`);
   }
-  return body;
+  const certs: SignedHierarchyCertificate[] = [];
+  for (const rel of body.relationships ?? []) {
+    if (!rel.certificate) {
+      continue;
+    }
+    const decoded = decodeHierarchyCertificate(rel.certificate);
+    if (decoded) {
+      certs.push(decoded);
+    }
+  }
+  return certs;
+}
+
+export async function getMergedHierarchyTree(
+  fingerprint: string,
+  server?: string,
+): Promise<ReturnType<typeof buildHierarchyTreeFromCertificates>> {
+  const localStored = await listCertificates();
+  const localDecoded = decodeCertsFromStored(localStored);
+  let serverDecoded: SignedHierarchyCertificate[] = [];
+  try {
+    serverDecoded = await fetchServerHierarchyCerts(
+      fingerprint,
+      server ?? (await getServerUrl()),
+    );
+  } catch {
+    // Use local-only tree when server is unreachable.
+  }
+  const byEdge = new Map<string, SignedHierarchyCertificate>();
+  for (const cert of [...localDecoded, ...serverDecoded]) {
+    byEdge.set(`${cert.masterFingerprint}:${cert.childFingerprint}`, cert);
+  }
+  return buildHierarchyTreeFromCertificates(
+    fingerprint,
+    Array.from(byEdge.values()),
+  );
+}
+
+export async function getHierarchyTree(fingerprint: string, server?: string): Promise<unknown> {
+  return getMergedHierarchyTree(fingerprint, server);
 }

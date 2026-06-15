@@ -11,7 +11,7 @@ import {
 import {useFocusEffect} from '@react-navigation/native';
 import {
   acceptProposal,
-  getHierarchyTree,
+  getMergedHierarchyTree,
   listCertificates,
   listPending,
   proposeHierarchy,
@@ -122,7 +122,12 @@ export default function CertificatesScreen(): JSX.Element {
 
   const onReject = async (proposalId: number) => {
     try {
-      await rejectProposal(proposalId);
+      const identityName = await getCurrentIdentityRequired();
+      await rejectProposal({
+        proposalId,
+        identityName,
+        password,
+      });
       setStatus('Proposal rejected');
       await onReload();
     } catch (error) {
@@ -132,9 +137,11 @@ export default function CertificatesScreen(): JSX.Element {
 
   const onLoadTree = async () => {
     try {
-      const tree = await getHierarchyTree(treeFingerprint);
+      const tree = await getMergedHierarchyTree(treeFingerprint);
       setTreeOutput(JSON.stringify(tree, null, 2));
-      setStatus('Hierarchy tree loaded');
+      setStatus(
+        `Tree: root ${tree.root}, ${tree.relationships.length} relationship(s)`,
+      );
     } catch (error) {
       setTreeOutput('');
       setStatus(error instanceof Error ? error.message : String(error));

@@ -2,7 +2,7 @@
 title: "GUI vs Mobile Parity Deltas"
 type: analysis
 status: active
-last_updated: 2026-06-02
+last_updated: 2026-06-04
 source_count: 8
 tags:
   - analysis
@@ -14,7 +14,7 @@ tags:
 
 # GUI vs Mobile Parity Deltas
 
-Comparison of [[component-gui]] (Deno local backend + web/Tauri frontend) and [[component-mobile]] (React Native). **Interop drift** items below were remediated in June 2026 via shared `core/` modules; **feature gaps** remain for a separate plan.
+Comparison of [[component-gui]] (Deno local backend + web/Tauri frontend) and [[component-mobile]] (React Native). **Interop drift** was remediated in June 2026 via shared `core/` modules. **Parity v1** feature gaps were closed in June 2026 per [[analysis-mobile-parity-roadmap]].
 
 ## Interop drift — remediated (2026-06-02)
 
@@ -33,28 +33,44 @@ Shared modules: `core/PayloadInput.ts`, `core/SenderResolution.ts`, `core/Crypto
 
 **Still intentional (not interop bugs):** separate storage roots (`~/.ebp/` vs app sandbox) — use export/import to move wallets.
 
-## Missing features (GUI has; mobile lacks)
+## Parity v1 checklist (2026-06-04)
 
-| Area | GUI | Mobile |
-|------|-----|--------|
-| **Native email** | SMTP/IMAP, OAuth, compose/decrypt ([[email-transport]]) | No mail stack |
-| **Armor in compose** | Mail body armor wrap | Paste-only decrypt/verify (no compose armor) |
-| **EBP-HD** | `/api/v1/hd/*` ([[ebp-hd]]) | No HD flows |
-| **Desktop / extension** | Tauri, Chrome extension localhost API | N/A |
-| **Password policy opt-out** | Settings toggle ([[password-policy]]) | Settings → “Enforce password policy” (default on) |
-| **Settings breadth** | Mail prefs, credentials | Server URL only |
-| **Email detail verification** | `verify-email` API + UI | No |
-| **Opaque detail resolution** | `resolve-opaque` + UI | Re-import preservation only |
-| **Contact local notes** | `update-local-notes` | No |
-| **Sign confirmation** | GUI `/api/v1/sign` gate | In-process sign |
-| **Mail attachment crypto** | Dedicated attachment payload types | No |
-| **Identity import / delete** | Full lifecycle | Create + switch only |
-| **Shared data directory** | `~/.ebp/` with CLI | App sandbox |
-| **Hierarchy UX** | SVG tree, richer routes | Certificates screen |
-| **File save helper** | `save-file` for Tauri | Share / copy |
-| **April 2026 audit** | In scope | `mobile/` out of scope |
+| Item | Class | Mobile status |
+|------|-------|---------------|
+| Wire-format interop | must-have | done (2026-06-02) |
+| Native Argon2 unlock | must-have | done |
+| Identity import/export/delete | must-have | done |
+| Contact opaque resolve + local notes | must-have | done |
+| Verify-email on details | must-have | done |
+| Sign confirmation gate | must-have | done |
+| Settings (server, password policy, mail prefs, log) | must-have | done |
+| Hierarchy tree (local + server merge) | must-have | done |
+| EBP-HD mnemonic/derive/discover | must-have | done |
+| Native email IMAP/SMTP/OAuth | must-have | done |
+| Mail armor compose + attachments | must-have | done |
+| Fingerprint-from-public on verify | must-have | done |
+| Shared `~/.ebp/` on device | intentional gap | export/import |
+| Tauri / Chrome extension | desktop-only | N/A |
+| GUI `save-file` → Downloads | desktop-only | Share API |
+| April 2026 audit GUI scope | governance | mobile scope doc added |
 
-Mobile **does** cover: identity create, publish, details, revocation, contacts, sign/verify, encrypt/decrypt (message + file), hierarchy propose/accept, emergency certs.
+## Historical gaps (pre–Parity v1)
+
+These were open before the June 2026 parity implementation; see
+[[analysis-mobile-parity-roadmap]] for phase mapping.
+
+| Area | Was missing on mobile |
+|------|------------------------|
+| Native email | mail stack in `mobile/src/services/mail/` |
+| Armor in compose | `ebpMail.ts` + compose screen |
+| EBP-HD | `hd.ts`, `HdCreateScreen.tsx` |
+| Contact/detail UX | opaque, notes, verify-email |
+| Identity lifecycle | import/delete/export |
+| Hierarchy UX | merged tree in `CertificatesScreen` |
+
+Mobile **covers** (baseline + Parity v1): identity create/import/export/delete,
+publish, details, revocation, contacts, sign/verify (with confirm), encrypt/decrypt,
+hierarchy, emergency certs, EBP-HD, native mail.
 
 ## Aligned (unchanged)
 

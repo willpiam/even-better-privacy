@@ -3,6 +3,7 @@ import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import HomeScreen from '../screens/HomeScreen';
 import CreateIdentityScreen from '../screens/CreateIdentityScreen';
+import HdCreateScreen from '../screens/HdCreateScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ContactsScreen from '../screens/ContactsScreen';
@@ -11,10 +12,15 @@ import SignVerifyScreen from '../screens/SignVerifyScreen';
 import EncryptDecryptScreen from '../screens/EncryptDecryptScreen';
 import CertificatesScreen from '../screens/CertificatesScreen';
 import ProjectInfoScreen from '../screens/ProjectInfoScreen';
+import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
+import MailInboxScreen from '../screens/mail/MailInboxScreen';
+import MailMessageScreen from '../screens/mail/MailMessageScreen';
+import MailComposeScreen from '../screens/mail/MailComposeScreen';
 
 export type RootStackParamList = {
   Home: undefined;
   CreateIdentity: undefined;
+  HdCreate: undefined;
   IdentityDetail: {identityName: string};
   Settings: undefined;
   Contacts: undefined;
@@ -23,6 +29,10 @@ export type RootStackParamList = {
   EncryptDecrypt: undefined;
   Certificates: undefined;
   ProjectInfo: undefined;
+  MailAccounts: undefined;
+  MailInbox: undefined;
+  MailMessage: {uid: number};
+  MailCompose: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -56,6 +66,11 @@ export default function AppNavigator(): JSX.Element {
           name="CreateIdentity"
           component={CreateIdentityScreen}
           options={{title: 'Create Identity'}}
+        />
+        <Stack.Screen
+          name="HdCreate"
+          component={HdCreateScreen}
+          options={{title: 'EBP-HD'}}
         />
         <Stack.Screen
           name="IdentityDetail"
@@ -96,6 +111,26 @@ export default function AppNavigator(): JSX.Element {
           name="ProjectInfo"
           component={ProjectInfoScreen}
           options={{title: 'Project Info'}}
+        />
+        <Stack.Screen
+          name="MailAccounts"
+          component={MailAccountsScreen}
+          options={{title: 'Mail Accounts'}}
+        />
+        <Stack.Screen
+          name="MailInbox"
+          component={MailInboxScreen}
+          options={{title: 'Inbox'}}
+        />
+        <Stack.Screen
+          name="MailMessage"
+          component={MailMessageScreen}
+          options={{title: 'Message'}}
+        />
+        <Stack.Screen
+          name="MailCompose"
+          component={MailComposeScreen}
+          options={{title: 'Compose'}}
         />
       </Stack.Navigator>
     </NavigationContainer>

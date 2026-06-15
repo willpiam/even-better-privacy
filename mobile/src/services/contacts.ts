@@ -1,5 +1,6 @@
 import RNFS from 'react-native-fs';
 import type {ExternalIdentity} from '../ebpCore';
+import {sha256Hex} from '../../../core/MessageHash.ts';
 import {getServerUrl} from './settings';
 import {ensureAppDirs, getContactsDir} from './storage';
 
@@ -190,6 +191,108 @@ export async function fetchContactFromServer(params: {
   }
   const normalized = normalizeExternalIdentity(body, params.fingerprint);
   return importContact(normalized, params.name);
+}
+
+async function findContactByFingerprint(
+  fingerprint: string,
+): Promise<{name: string; contact: ExternalIdentity; path: string}> {
+  const contacts = await listContacts();
+  const target = contacts.find(c => c.contact.fingerprint === fingerprint);
+  if (!target) {
+    throw new Error('Contact not found');
+  }
+  return {name: target.name, contact: target.contact, path: contactPath(target.name)};
+}
+
+export async function resolveOpaqueDetail(params: {
+  fingerprint: string;
+  path: string;
+  value: string;
+}): Promise<{ok: boolean; path: string}> {
+  if (!params.path.startsWith('opaque::')) {
+    throw new Error('path must start with opaque::');
+  }
+  const found = await findContactByFingerprint(params.fingerprint);
+  const detailEntry = found.contact.details?.[params.path];
+  const expectedHash = Array.isArray(detailEntry) ? detailEntry[0] : detailEntry;
+  if (typeof expectedHash !== 'string' || !expectedHash.length) {
+    throw new Error('opaque detail not found');
+  }
+  const candidateHash = sha256Hex(params.value);
+  if (candidateHash !== expectedHash) {
+    throw new Error('value does not match opaque detail hash');
+  }
+  found.contact.resolvedOpaqueDetails = {
+    ...(found.contact.resolvedOpaqueDetails ?? {}),
+    [params.path]: params.value,
+  };
+  await RNFS.writeFile(
+    found.path,
+    JSON.stringify(found.contact, null, 2),
+    'utf8',
+  );
+  return {ok: true, path: params.path};
+}
+
+export async function updateContactLocalNotes(params: {
+  fingerprint: string;
+  localAlias?: string | null;
+  localDescription?: string | null;
+  localEmail?: string | null;
+}): Promise<void> {
+  const found = await findContactByFingerprint(params.fingerprint);
+  const raw = found.contact as ExternalIdentity & {
+    localAlias?: string;
+    localDescription?: string;
+    localEmail?: string;
+  };
+  if (params.localAlias !== undefined) {
+    if (params.localAlias === null || params.localAlias === '') {
+      delete raw.localAlias;
+    } else {
+      raw.localAlias = params.localAlias;
+    }
+  }
+  if (params.localDescription !== undefined) {
+    if (params.localDescription === null || params.localDescription === '') {
+      delete raw.localDescription;
+    } else {
+      raw.localDescription = params.localDescription;
+    }
+  }
+  if (params.localEmail !== undefined) {
+    if (params.localEmail === null || params.localEmail === '') {
+      delete raw.localEmail;
+    } else {
+      raw.localEmail = params.localEmail;
+    }
+  }
+  await RNFS.writeFile(found.path, JSON.stringify(raw, null, 2), 'utf8');
+}
+
+export async function requestVerifyEmail(params: {
+  fingerprint: string;
+  detail: string;
+  server?: string;
+}): Promise<unknown> {
+  const server = params.server ?? (await getServerUrl());
+  const res = await fetch(apiUrl(server, '/api/v1/verify-email/request'), {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify({
+      fingerprint: params.fingerprint,
+      detail: params.detail,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const reason =
+      typeof (body as {error?: string}).error === 'string'
+        ? (body as {error?: string}).error
+        : `HTTP ${res.status}`;
+    throw new Error(`Failed to send verification email: ${reason}`);
+  }
+  return body;
 }
 
 export async function browseServerIdentities(params?: {

@@ -4,28 +4,28 @@ overview: "Achieve full feature parity between the React Native mobile app and t
 todos:
   - id: phase-0-contract
     content: "Phase 0: Add Parity v1 checklist to wiki (analysis-gui-mobile-parity-deltas + new analysis-mobile-parity-roadmap, index, log)"
-    status: pending
+    status: completed
   - id: phase-1-wallet
     content: "Phase 1.1: Identity import/export/delete in storage.ts + IdentityDetail/Settings screens"
-    status: pending
+    status: completed
   - id: phase-1-contacts
     content: "Phase 1.2: resolve-opaque, local notes, verify-email in contacts.ts + ContactDetail/IdentityDetail screens"
-    status: pending
+    status: completed
   - id: phase-1-ux
     content: "Phase 1.3–1.4: Sign confirmation, expanded settings, hierarchy tree merge + improved Certificates UI"
-    status: pending
+    status: completed
   - id: phase-2-hd
     content: "Phase 2: hd.ts service + HdCreateScreen wired to core Mnemonic/Hd + ebp-hd vectors test"
-    status: pending
+    status: completed
   - id: phase-3-spike
     content: "Phase 3 spike: Select RN IMAP/SMTP/MIME libs + mobile OAuth redirect URI strategy (document in mobile/MAIL.md)"
-    status: pending
+    status: completed
   - id: phase-3-mail
     content: "Phase 3: Implement mail/ services (accountStore, oauth, imap, smtp, ebpMail) + 4 mail screens mirroring gui/js/mail.js"
-    status: pending
+    status: completed
   - id: phase-4-harden
     content: "Phase 4: Interop/mail tests, mobile security audit pass, wiki + ReadMe milestone update"
-    status: pending
+    status: completed
 isProject: false
 ---
 

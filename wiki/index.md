@@ -131,9 +131,10 @@ Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
 - [[analysis-reimplementation-building-blocks]] - Reimplementation checklist of
   required crypto primitives, runtime operations, encodings, and deterministic
   mappings needed for cross-language compatibility.
-- [[analysis-gui-mobile-parity-deltas]] - Missing GUI features vs mobile and
-  format/implementation drift (password policy, senderIdentity, multi-recipient,
-  armor, storage roots).
+- [[analysis-gui-mobile-parity-deltas]] - GUI vs mobile capability matrix and
+  Parity v1 checklist (interop drift + feature gaps).
+- [[analysis-mobile-parity-roadmap]] - Phased mobile–GUI parity implementation
+  roadmap (wallet, HD, mail, hardening).
 
 ## Security Audits
 

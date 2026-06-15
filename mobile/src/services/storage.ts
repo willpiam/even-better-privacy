@@ -115,6 +115,32 @@ export async function listIdentities(): Promise<StoredIdentityMeta[]> {
   return identities;
 }
 
+export async function persistIdentity(params: {
+  name: string;
+  password: string;
+  identity: Identity;
+  overwrite?: boolean;
+}): Promise<StoredIdentityMeta> {
+  const name = normalizeName(params.name);
+  await ensureBaseDir();
+  const path = identityPath(name);
+  const exists = await RNFS.exists(path);
+  if (exists && !params.overwrite) {
+    throw new Error('Identity already exists');
+  }
+  const storageData = await writeIdentityStorage(
+    path,
+    params.identity,
+    params.password,
+  );
+  const publicData = Identity.readPublicData(storageData);
+  if (!publicData) {
+    throw new Error('Failed to read identity public data');
+  }
+  await setCurrentIdentity(name);
+  return publicDataToMeta(name, publicData);
+}
+
 export async function createIdentity(params: {
   name: string;
   password: string;
@@ -180,6 +206,46 @@ export async function loadIdentity(
 
   // Legacy PBKDF2 (v1/v2): slow noble path; rare for mobile-created identities.
   return Identity.fromStorageFormat(raw, normalizedPassword);
+}
+
+export async function importIdentity(params: {
+  storageJson: string;
+  name?: string;
+  overwrite?: boolean;
+}): Promise<StoredIdentityMeta> {
+  const parsed = JSON.parse(params.storageJson) as {encrypted?: unknown};
+  if (typeof parsed.encrypted !== 'string') {
+    throw new Error('Invalid identity file: missing encrypted field');
+  }
+  const publicData = Identity.readPublicData(params.storageJson);
+  if (!publicData) {
+    throw new Error('Invalid identity file: missing public data');
+  }
+  const name = normalizeName(
+    params.name ?? publicData.fingerprint.slice(0, 16),
+  );
+  await ensureBaseDir();
+  const path = identityPath(name);
+  const exists = await RNFS.exists(path);
+  if (exists && !params.overwrite) {
+    throw new Error('Identity already exists; enable overwrite to replace');
+  }
+  await RNFS.writeFile(path, params.storageJson, 'utf8');
+  return publicDataToMeta(name, publicData);
+}
+
+export async function deleteIdentity(name: string): Promise<void> {
+  const normalized = normalizeName(name);
+  await ensureBaseDir();
+  const path = identityPath(normalized);
+  if (!(await RNFS.exists(path))) {
+    throw new Error('Identity not found');
+  }
+  await RNFS.unlink(path);
+  const current = await getCurrentIdentity();
+  if (current === normalized) {
+    await setCurrentIdentity(null);
+  }
 }
 
 export async function readIdentityRaw(name: string): Promise<string> {

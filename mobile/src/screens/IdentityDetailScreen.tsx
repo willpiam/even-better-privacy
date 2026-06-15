@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {
+  Alert,
   Button,
   SafeAreaView,
   ScrollView,
@@ -7,9 +8,19 @@ import {
   Text,
   TextInput,
 } from 'react-native';
+import {pick, keepLocalCopy} from '@react-native-documents/picker';
+import Share from 'react-native-share';
+import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../navigation/AppNavigator';
-import {listIdentities} from '../services/storage';
+import {
+  deleteIdentity,
+  importIdentity,
+  listIdentities,
+  readIdentityRaw,
+} from '../services/storage';
+import {requestVerifyEmail} from '../services/contacts';
+import {appendActivityLog} from '../services/activityLog';
 import {publishIdentity} from '../services/publish';
 import {getServerUrl} from '../services/settings';
 import {addDetail, listDetails} from '../services/details';
@@ -177,6 +188,83 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
     }
   };
 
+  const onImport = async () => {
+    try {
+      const [file] = await pick({mode: 'import'});
+      const [copy] = await keepLocalCopy({
+        destination: 'cachesDirectory',
+        files: [{uri: file.uri, fileName: file.name ?? 'identity.json'}],
+      });
+      const path = copy.uri.startsWith('file://')
+        ? copy.uri.replace('file://', '')
+        : copy.uri;
+      const raw = await RNFS.readFile(path, 'utf8');
+      const meta = await importIdentity({storageJson: raw, overwrite: false});
+      setStatus(`Imported ${meta.name}`);
+      await appendActivityLog(`Imported identity ${meta.name}`, 'success');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const onExportFile = async () => {
+    try {
+      if (!identity) {
+        throw new Error('Identity not found');
+      }
+      const raw = await readIdentityRaw(identity.name);
+      await Share.open({
+        title: 'Export identity',
+        message: raw,
+        filename: `${identity.name}.identity.json`,
+      });
+      setStatus('Identity exported');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const onDelete = () => {
+    if (!identity) {
+      return;
+    }
+    Alert.alert(
+      'Delete identity',
+      `Permanently delete "${identity.name}" from this device?`,
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteIdentity(identity.name);
+              setStatus('Identity deleted');
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : String(error));
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const onVerifyEmail = async (detail: string) => {
+    try {
+      if (!identity) {
+        throw new Error('Identity not found');
+      }
+      await requestVerifyEmail({
+        fingerprint: identity.fingerprint,
+        detail,
+        server: serverUrl,
+      });
+      setStatus(`Verification email requested for ${detail}`);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const onEmergencyCert = async () => {
     try {
       if (!identity) {
@@ -223,6 +311,11 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
           onPress={onPublish}
         />
 
+        <Text style={styles.section}>Import / Export</Text>
+        <Button title="Import identity file" onPress={onImport} />
+        <Button title="Export encrypted identity" onPress={onExportFile} />
+        <Button title="Delete identity" color="#d11a2a" onPress={onDelete} />
+
         <Text style={styles.section}>Export Public Identity</Text>
         <Button title="Export Public JSON" onPress={onExportPublic} />
         <TextInput
@@ -234,9 +327,17 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
 
         <Text style={styles.section}>Identity Details</Text>
         {details.map(item => (
-          <Text style={styles.detail} key={item.path}>
-            {item.path}: {item.detail}
-          </Text>
+          <View key={item.path} style={styles.detailRow}>
+            <Text style={styles.detail}>
+              {item.path}: {item.detail}
+            </Text>
+            {item.path.startsWith('email') || item.path.includes('email') ? (
+              <Button
+                title="Verify email"
+                onPress={() => onVerifyEmail(item.detail)}
+              />
+            ) : null}
+          </View>
         ))}
         <TextInput
           value={detailPath}
@@ -301,6 +402,7 @@ const styles = StyleSheet.create({
   line: {marginBottom: 8, color: '#111'},
   section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
   detail: {marginBottom: 4, color: '#222'},
+  detailRow: {marginBottom: 8},
   label: {marginTop: 12, marginBottom: 4, color: '#111'},
   input: {
     borderWidth: 1,

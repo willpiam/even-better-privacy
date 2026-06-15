@@ -52,3 +52,16 @@ export {toHex, stringToHex, hexToString} from '../../core/Hex';
 export {bytesToBase64, base64ToBytes} from '../../core/Base64';
 export {AES, AES_SALT_LENGTH} from '../../core/AES';
 export {randomBytes} from '@noble/hashes/utils';
+export {sha256Hex} from '../../core/MessageHash';
+export {
+  generateMnemonic,
+  validateMnemonic,
+  mnemonicToSeed,
+} from '../../core/Mnemonic';
+export {
+  formatHdPath,
+  parseHdPath,
+  type HdPath,
+  type HdProfile,
+  type HdChange,
+} from '../../core/HdPath';

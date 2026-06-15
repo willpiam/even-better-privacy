@@ -8,7 +8,7 @@ import type { DatabaseAdapter } from "./db/index.ts";
 import { isOriginAllowed, buildCorsHeaders, isHostAllowed } from "./cors.ts";
 import { checkRateLimit, getClientIp, RATE_LIMIT_DISABLED, RATE_LIMIT_CLEANUP } from "./rate-limit.ts";
 import { json, attachCors, logRequest, generateTraceId } from "./response.ts";
-import { handleOAuthExchange, handleOAuthRefresh } from "./mail-oauth.ts";
+import { handleOAuthConfig, handleOAuthExchange, handleOAuthRefresh } from "./mail-oauth.ts";
 import {
   handleRequestVerifyEmail,
   handleVerifyEmailPage,
@@ -147,6 +147,10 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
         protocolVersion: PROTOCOL_VERSION,
         componentVersion: COMPONENT_VERSIONS.server,
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/oauth/config") {
+      return respond(attachCors(handleOAuthConfig(), corsHeaders));
     }
 
     const db = await getDb();

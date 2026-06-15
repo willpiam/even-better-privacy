@@ -84,6 +84,7 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
         disabled={loading}
         onPress={onCreate}
       />
+      <Button title="Create from mnemonic (EBP-HD)" onPress={() => navigation.navigate('HdCreate')} />
       {status ? <Text style={styles.status}>{status}</Text> : null}
     </SafeAreaView>
   );

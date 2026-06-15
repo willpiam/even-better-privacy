@@ -13,25 +13,50 @@ export interface OAuthProviderServerConfig {
   tokenUrl: string;
 }
 
-const OAUTH_PROVIDER_SERVER_CONFIGS: Record<MailOauthProvider, OAuthProviderServerConfig> = {
-  gmail: {
-    clientId: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_ID") ?? "",
-    clientSecret: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_SECRET") ?? "",
-    tokenUrl: "https://oauth2.googleapis.com/token",
-  },
-  outlook: {
-    clientId: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_ID") ?? "",
-    clientSecret: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_SECRET") ?? "",
-    tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-  },
+function readOAuthProviderServerConfigs(): Record<MailOauthProvider, OAuthProviderServerConfig> {
+  return {
+    gmail: {
+      clientId: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_ID") ?? "",
+      clientSecret: Deno.env.get("MAIL_OAUTH_GMAIL_CLIENT_SECRET") ?? "",
+      tokenUrl: "https://oauth2.googleapis.com/token",
+    },
+    outlook: {
+      clientId: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_ID") ?? "",
+      clientSecret: Deno.env.get("MAIL_OAUTH_OUTLOOK_CLIENT_SECRET") ?? "",
+      tokenUrl: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+    },
+  };
+}
+
+export type OAuthPublicProviderConfig = {
+  clientId: string;
+  configured: boolean;
 };
+
+export function getOAuthPublicProviderConfig(): Record<MailOauthProvider, OAuthPublicProviderConfig> {
+  const configs = readOAuthProviderServerConfigs();
+  return {
+    gmail: {
+      clientId: configs.gmail.clientId,
+      configured: configs.gmail.clientId.length > 0,
+    },
+    outlook: {
+      clientId: configs.outlook.clientId,
+      configured: configs.outlook.clientId.length > 0,
+    },
+  };
+}
+
+export function handleOAuthConfig(): Response {
+  return json({ providers: getOAuthPublicProviderConfig() });
+}
 
 export function isMailOauthProvider(value: unknown): value is MailOauthProvider {
   return value === "gmail" || value === "outlook";
 }
 
 export function getOAuthServerConfig(provider: MailOauthProvider): OAuthProviderServerConfig {
-  const conf = OAUTH_PROVIDER_SERVER_CONFIGS[provider];
+  const conf = readOAuthProviderServerConfigs()[provider];
   if (!conf.clientId || !conf.clientSecret) {
     throw new Error(`oauth credentials for ${provider} are not configured on server`);
   }

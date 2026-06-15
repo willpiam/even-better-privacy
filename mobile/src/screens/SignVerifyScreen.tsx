@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {
+  Alert,
   Button,
   SafeAreaView,
   ScrollView,
@@ -16,6 +17,7 @@ import {
   verifyMessage,
 } from '../services/signVerify';
 import {parseEbpPayloadInput} from '../ebpCore';
+import {fingerprintFromPublicIdentity} from '../services/identityHelpers';
 import {getCurrentIdentityRequired} from '../services/storage';
 import BusyOverlay from '../components/BusyOverlay';
 import CopyableOutput from '../components/CopyableOutput';
@@ -31,6 +33,8 @@ export default function SignVerifyScreen(): JSX.Element {
   const [verifyPayload, setVerifyPayload] = useState('');
   const [verifyMessageText, setVerifyMessageText] = useState('');
   const [verifyOutput, setVerifyOutput] = useState('');
+  const [publicIdentityJson, setPublicIdentityJson] = useState('');
+  const [computedFingerprint, setComputedFingerprint] = useState('');
 
   const [fileUri, setFileUri] = useState('');
   const [fileName, setFileName] = useState('');
@@ -42,7 +46,7 @@ export default function SignVerifyScreen(): JSX.Element {
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
-  const onSign = async () => {
+  const runSign = async () => {
     setBusyMessage('Signing message...');
     setStatus('');
     try {
@@ -62,6 +66,25 @@ export default function SignVerifyScreen(): JSX.Element {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyMessage(null);
+    }
+  };
+
+  const onSign = () => {
+    Alert.alert('Confirm sign', 'Sign this message with the current identity?', [
+      {text: 'Cancel', style: 'cancel'},
+      {text: 'Sign', onPress: () => void runSign()},
+    ]);
+  };
+
+  const onFingerprintFromPublic = () => {
+    try {
+      const parsed = JSON.parse(publicIdentityJson) as Record<string, unknown>;
+      const fp = fingerprintFromPublicIdentity(parsed);
+      setComputedFingerprint(fp);
+      setStatus('Fingerprint computed');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+      setComputedFingerprint('');
     }
   };
 
@@ -219,6 +242,19 @@ export default function SignVerifyScreen(): JSX.Element {
         />
         <Button title="Share Output" onPress={() => shareOutput(signOutput)} />
         <CopyableOutput value={signOutput} placeholder="Signed output..." />
+
+        <Text style={styles.section}>Fingerprint from public identity</Text>
+        <TextInput
+          style={[styles.input, styles.multi]}
+          value={publicIdentityJson}
+          onChangeText={setPublicIdentityJson}
+          placeholder="Public identity JSON"
+          multiline
+        />
+        <Button title="Compute fingerprint" onPress={onFingerprintFromPublic} />
+        {computedFingerprint ? (
+          <Text style={styles.output}>{computedFingerprint}</Text>
+        ) : null}
 
         <Text style={styles.section}>Verify Message</Text>
         <TextInput

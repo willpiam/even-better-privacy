@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-06-02
+last_updated: 2026-06-04
 source_count: 4
 tags:
   - component
@@ -16,7 +16,7 @@ EBP includes a mobile application built with React Native (`mobile/`). The goal 
 
 ## Current Status
 
-The mobile app exists in the repository with ~80+ source files and is under active development. Full feature parity with the GUI is listed as an upcoming milestone in the README.
+The mobile app implements **Parity v1** with the GUI (wallet, HD, native mail, hierarchy). See [[analysis-mobile-parity-roadmap]] and [[analysis-gui-mobile-parity-deltas]].
 
 ## Architecture
 
@@ -27,11 +27,12 @@ The mobile app exists in the repository with ~80+ source files and is under acti
 
 ## Parity
 
-See [[analysis-gui-mobile-parity-deltas]] for a capability-by-capability comparison with the [[component-gui]] (missing features vs format drift).
+See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-parity-roadmap]] (phases). Mail stack documented in `mobile/MAIL.md`.
 
 ## Related Pages
 
 - [[analysis-gui-mobile-parity-deltas]]
+- [[analysis-mobile-parity-roadmap]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

@@ -78,6 +78,7 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
           title="Create Identity"
           onPress={() => navigation.navigate('CreateIdentity')}
         />
+        <Button title="EBP-HD" onPress={() => navigation.navigate('HdCreate')} />
         <Button
           title="Settings"
           onPress={() => navigation.navigate('Settings')}
@@ -99,6 +100,7 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
           title="Certificates"
           onPress={() => navigation.navigate('Certificates')}
         />
+        <Button title="Mail" onPress={() => navigation.navigate('MailAccounts')} />
       </View>
       <View style={styles.row}>
         <Button
