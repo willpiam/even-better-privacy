@@ -3,12 +3,11 @@ export {
   DatabaseAdapter,
   type DatabaseQueryParams,
 } from "./adapter.ts";
-export { SqliteDatabaseAdapter } from "./sqlite.ts";
+export type { SqliteDatabaseAdapter } from "./sqlite.ts";
 export { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 
 import { constantTimeStringEqual, hexToBytes } from "../crypto.ts";
 import { coerceNumber, DatabaseAdapter } from "./adapter.ts";
-import { SqliteDatabaseAdapter } from "./sqlite.ts";
 import { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 import type {
   AllDetailsMap,
@@ -36,6 +35,7 @@ export async function initDb(path: string): Promise<DatabaseAdapter> {
     await adapter.initializeSchema();
     return adapter;
   }
+  const { SqliteDatabaseAdapter } = await import("./sqlite.ts");
   return new SqliteDatabaseAdapter(path);
 }
 

@@ -21,4 +21,4 @@ USER deno
 
 EXPOSE 8080
 
-CMD ["run", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "./server/main.ts"]
+CMD ["run", "--allow-net", "--allow-read", "--allow-write", "--allow-env", "--allow-ffi", "./server/main.ts"]
