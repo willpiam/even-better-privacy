@@ -3,7 +3,7 @@ title: "Mobile IMAP/SMTP Inbox Empty and Send Failures"
 type: analysis
 status: active
 last_updated: 2026-07-17
-source_count: 8
+source_count: 9
 tags:
   - analysis
   - mobile
@@ -20,6 +20,26 @@ tags:
 On [[component-mobile]], an empty inbox list and failed sends over manual IMAP/SMTP usually share one of three causes: **mail secrets still locked after process restart**, **TLS mode mismatch** (mobile always opens implicit TLS and ignores `imapSecure`/`smtpSecure`), or **account/credential misconfiguration**. The inbox UI always shows “No messages loaded.” for both a true empty mailbox and a failed load; the status line under Refresh/Compose carries the real error.
 
 **Test IMAP + SMTP** should finish in a few seconds when hosts/ports/credentials match the client. It can hang **indefinitely** with no failure message because only the TCP connect step has a timeout (~30s); IMAP/SMTP `readLine` waits have none.
+
+## Field observation (2026-07-17) — hang at `imap.greeting.wait`
+
+Captured via Home → Mail trace stubs against **iPage** (`imap.ipage.com:993`, authType `password`):
+
+1. `test.start`
+2. `test.imap.start` — `imap.ipage.com:993`
+3. `tcp.connect.start` — `imap.ipage.com:993`
+4. `tcp.connect.ok` — `imap.ipage.com:993`
+5. **`imap.greeting.wait` — `password`** (stall; `password` here is `config.authType`, not the secret)
+
+Interpretation:
+
+- TLS/TCP to 993 **succeeded**. This is **not** a STARTTLS/port-587 mismatch, locked-secrets, or wrong-password failure (LOGIN never started).
+- The client is blocked in `imapAuthenticate` on the first `readLine()` waiting for `* OK…` ([[email-transport]] / IMAP greeting).
+- Most likely root cause in code: **greeting race in `tcpClient.ts`**. On `data`, `flushLines()` splits on `\r\n` and only delivers lines to registered waiters; if the server sends the greeting before `readLine()` pushes a waiter, the line is **discarded** and the next `readLine()` waits forever. That matches this stub sequence exactly (`connect.ok` → `greeting.wait`, never `greeting.ok`).
+- **Confirmed follow-up (2026-07-17):** After the pending-line fix, stubs still stalled at `imap.greeting.wait` with no `tcp.data`. Root cause was **`createConnection({ tls: true })` does not enable TLS on Android** — only `connectTLS` / `startTLS` populates `pendingTLS`. The app was speaking plain TCP to port 993; the server never sends a text IMAP greeting on that socket, so `readLine` timed out after 30s (same failure on SMTP send). Fixed by switching to `TcpSocket.connectTLS`.
+- Secondary possibilities (less likely given clean connect.ok): greeting uses bare `\n` (client only splits `\r\n`), or no application data ever arrives after TLS (provider/socket quirk).
+
+**Fixes applied:** pending-line queue + LF/CRLF + 30s `readLine` timeout; switch to `connectTLS` for real implicit TLS.
 
 ## Evidence
 
@@ -39,7 +59,7 @@ On [[component-mobile]], an empty inbox list and failed sends over manual IMAP/S
 | IMAP/SMTP auth / LOGIN / `535` failures | Wrong password, provider blocks basic auth, username ≠ full email | Use provider **app password**; set username to full address; run **Test IMAP + SMTP** before save |
 | `Loaded 0 messages` | Connection + auth succeeded; mailbox empty or SEARCH returned nothing | Verify mail arrives in INBOX on another client; not an unlock/TLS bug |
 | Hang / no progress / unlock forever | Native deps missing or Hermes PBKDF2 path | Rebuild after `react-native-tcp-socket` + `react-native-quick-crypto`; Diagnostics → Verify mail PBKDF2 parity |
-| Test button stuck on `Testing…`, status blank forever | Connect succeeded (or TLS half-open) then protocol `readLine` never returns; common with SMTP **587** + forced TLS | Prefer **993/465**; cancel by leaving screen / restart app until step timeouts exist |
+| Test stuck; last stub `imap.greeting.wait` after `tcp.connect.ok` | Greeting arrived before waiter registered and was dropped, or line ending / no data after TLS | Fix buffer race in `tcpClient` (don’t discard lines without waiters); add `readLine` timeout |
 
 ## Test IMAP + SMTP duration and hang
 
@@ -71,6 +91,7 @@ Related pattern on desktop: [[analysis-mail-message-load-hang]] (unbounded IMAP/
 3. **Distinguish empty vs error** in `ListEmptyComponent` (e.g. show the error, or “Inbox empty” only when `Loaded 0 messages`).
 4. **Bound every `readLine` / test step** (e.g. 15–30s) and an overall test deadline; on timeout destroy the socket and surface `IMAP timed out waiting for greeting` / `SMTP AUTH timed out` (or similar) into `status`.
 5. **Show step progress** during test (`Connecting IMAP…`, `Authenticating SMTP…`) so a hang is attributable without waiting for a missing catch.
+6. **Fix TCP line-buffer race:** in `flushLines`, if there is no waiter, leave the complete line in `buffer` (or queue completed lines) instead of discarding; optionally treat `\n` as a line end when `\r\n` is absent.
 
 ## Related Pages
 

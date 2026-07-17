@@ -84,6 +84,12 @@ before each blocking await.
 - Stubs store host/port and protocol step names only — never passwords or tokens.
 - **Test IMAP + SMTP** clears the trace at the start of each run.
 
+The TLS line client uses `react-native-tcp-socket` **`connectTLS`** (plain
+`createConnection({ tls: true })` does not enable TLS on Android). It buffers
+early server lines (so IMAP/SMTP greetings that arrive before `readLine` are
+not dropped) and accepts `\r\n` or `\n`. Each `readLine` times out after 30
+seconds (`tcp.readLine.timeout` in the stub log) instead of hanging forever.
+
 ## Unlock after restart
 
 After restarting the app, open **Mail Accounts** and **Unlock mail secrets** with

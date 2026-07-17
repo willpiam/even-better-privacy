@@ -1,5 +1,18 @@
 # Wiki Log
 
+## [2026-07-17] update | mobile mail connectTLS
+
+- Confirmed post-timeout stubs still at `imap.greeting.wait` with no `tcp.data`:
+  `createConnection({ tls: true })` was plain TCP on Android; switched to
+  `connectTLS`. Compose “TCP readLine timed out” was the new 30s read timeout.
+- Updated: [[analysis-mobile-imap-smtp-inbox-empty]], `mobile/src/services/mail/tcpClient.ts`.
+
+## [2026-07-17] query | mail stubs hang at imap.greeting.wait
+
+- Answered: iPage IMAP 993 TLS connect succeeds then stalls on greeting; likely
+  tcpClient flush race dropping early greeting lines (authType detail is not a secret).
+- Updated: [[analysis-mobile-imap-smtp-inbox-empty]].
+
 ## [2026-07-17] query | mobile Test IMAP+SMTP hang duration
 
 - Answered: healthy test is ~1–5s (connect timeout 30s); indefinite `Testing…`
