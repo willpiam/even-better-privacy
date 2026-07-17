@@ -7,6 +7,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  View,
 } from 'react-native';
 import {pick, keepLocalCopy} from '@react-native-documents/picker';
 import Share from 'react-native-share';

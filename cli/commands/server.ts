@@ -47,11 +47,18 @@ export async function cmdPublishIdentity(
           ]) ?? { variant: "ml_kem1024" },
         details: body.details ?? {},
       };
-    } else if (res.status !== 404) {
+    } else {
+      // Server returns 400 "unknown subject" (formerly 404) when the
+      // fingerprint is not registered yet — treat that as "not published".
       const body = await res.json().catch(() => ({}));
-      const reason = body?.error ?? `HTTP ${res.status}`;
-      console.error(`✗ Failed to query server identity: ${reason}`);
-      Deno.exit(1);
+      const unknown =
+        res.status === 404 ||
+        (res.status === 400 && body?.error === "unknown subject");
+      if (!unknown) {
+        const reason = body?.error ?? `HTTP ${res.status}`;
+        console.error(`✗ Failed to query server identity: ${reason}`);
+        Deno.exit(1);
+      }
     }
   } catch (e) {
     console.error(

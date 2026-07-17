@@ -133,6 +133,76 @@ export async function listContacts(): Promise<StoredContact[]> {
   return contacts;
 }
 
+/** Cleartext compare helper (trim + lowercase). */
+function emailsEqualIgnoreCase(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * Match a typed address against published `email` detail or `opaque::email`
+ * (resolved cleartext or SHA-256 hash of the trimmed typed value). Does not
+ * match local-only `localEmail` notes.
+ */
+function contactMatchesEmail(
+  contact: ExternalIdentity,
+  trimmedEmail: string,
+  normalizedEmail: string,
+): boolean {
+  const detailEmail = getDetailValue(contact.details, 'email');
+  if (detailEmail && emailsEqualIgnoreCase(detailEmail, normalizedEmail)) {
+    return true;
+  }
+  const resolved = contact.resolvedOpaqueDetails?.['opaque::email'];
+  if (resolved && emailsEqualIgnoreCase(resolved, normalizedEmail)) {
+    return true;
+  }
+  const opaqueHash = getDetailValue(contact.details, 'opaque::email');
+  if (opaqueHash && sha256Hex(trimmedEmail) === opaqueHash) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Find local contacts whose `email` detail or `opaque::email` matches.
+ * On opaque hash match, persists cleartext via resolveOpaqueDetail when needed.
+ */
+export async function findContactsByEmail(
+  email: string,
+): Promise<StoredContact[]> {
+  const trimmed = email.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const normalized = trimmed.toLowerCase();
+  const contacts = await listContacts();
+  const matches: StoredContact[] = [];
+  for (const item of contacts) {
+    if (!contactMatchesEmail(item.contact, trimmed, normalized)) {
+      continue;
+    }
+    matches.push(item);
+    const opaqueHash = getDetailValue(item.contact.details, 'opaque::email');
+    const resolved = item.contact.resolvedOpaqueDetails?.['opaque::email'];
+    if (
+      opaqueHash &&
+      sha256Hex(trimmed) === opaqueHash &&
+      !(resolved && emailsEqualIgnoreCase(resolved, normalized))
+    ) {
+      try {
+        await resolveOpaqueDetail({
+          fingerprint: item.contact.fingerprint,
+          path: 'opaque::email',
+          value: trimmed,
+        });
+      } catch {
+        // Lookup still succeeds even if persist fails.
+      }
+    }
+  }
+  return matches;
+}
+
 export async function importContact(
   payload: string | ExternalIdentity,
   name?: string,

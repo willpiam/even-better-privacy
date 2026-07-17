@@ -5,7 +5,7 @@ import {loadIdentity} from '../storage';
 import {getMailIncludePublicKeys} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
 import {fetchMessageDetail} from './imap';
-import {buildMultipartMimeMessage} from './mime';
+import {buildMultipartMimeMessage, buildSimpleMimeMessage} from './mime';
 import {sendMimeMessage} from './smtp';
 
 export async function sendEbpMail(params: {
@@ -22,7 +22,7 @@ export async function sendEbpMail(params: {
     throw new Error('No mail account configured');
   }
   const identity = await loadIdentity(params.identityName, params.password);
-  const contact = await loadContact(params.recipientContact);
+  await loadContact(params.recipientContact);
   const includePublicKeys = await getMailIncludePublicKeys();
   const encrypted = await encryptMessage({
     identityName: params.identityName,
@@ -43,6 +43,29 @@ export async function sendEbpMail(params: {
       ? 'This message is encrypted with Even Better Privacy. Open the EBP block below.'
       : 'Encrypted with Even Better Privacy.',
     ebpArmor: armor,
+  });
+  await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
+}
+
+/** Send a plaintext (non-EBP) MIME message via the selected mail account. */
+export async function sendPlainMail(params: {
+  identityName: string;
+  to: string;
+  subject: string;
+  message: string;
+}): Promise<void> {
+  const resolved = await resolveSelectedAccount(params.identityName);
+  if (!resolved) {
+    throw new Error('No mail account configured');
+  }
+  const fromEmail =
+    resolved.account.config.fromEmail || resolved.account.config.username;
+  const fromName = resolved.account.config.fromName || fromEmail;
+  const mime = buildSimpleMimeMessage({
+    from: `${fromName} <${fromEmail}>`,
+    to: params.to,
+    subject: params.subject,
+    body: params.message,
   });
   await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
 }

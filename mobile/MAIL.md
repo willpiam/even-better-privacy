@@ -90,6 +90,21 @@ early server lines (so IMAP/SMTP greetings that arrive before `readLine` are
 not dropped) and accepts `\r\n` or `\n`. Each `readLine` times out after 30
 seconds (`tcp.readLine.timeout` in the stub log) instead of hanging forever.
 
+## Compose recipient resolution
+
+On **Compose**, leaving the To field runs a local contact lookup for that
+address against published `email` details and `opaque::email` (resolved
+cleartext or SHA-256 hash of the trimmed typed value). `localEmail` notes are
+not matched.
+
+- **One match:** the EBP contact is selected automatically and the body is
+  encrypted for that identity.
+- **Zero or multiple matches:** a modal asks you to pick a contact from a
+  searchable list, or mark the address as not intended to be encrypted.
+- **Unencrypted:** a red banner warns that no EBP recipient identity was found
+  or specified; send uses plaintext MIME (`sendPlainMail`) instead of an EBP
+  armor payload.
+
 ## Unlock after restart
 
 After restarting the app, open **Mail Accounts** and **Unlock mail secrets** with

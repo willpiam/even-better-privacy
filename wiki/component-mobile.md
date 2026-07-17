@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-06-04
+last_updated: 2026-07-17
 source_count: 4
 tags:
   - component
@@ -24,6 +24,7 @@ The mobile app implements **Parity v1** with the GUI (wallet, HD, native mail, h
 - Imports shared crypto/wire helpers from `core/` via `mobile/src/ebpCore.ts` (payload parsing, sender resolution, file payload builders, password policy).
 - App-local storage under `DocumentDirectory/ebp/` (not `~/.ebp/`); see [[analysis-gui-mobile-parity-deltas]].
 - Contact normalization (`mobile/src/services/contacts.ts`) strips revoked details from server responses ([[analysis-sync-revoked-details-bug]]).
+- Compose resolves To addresses against contact `email` / `opaque::email` details ([[analysis-mobile-compose-recipient-resolve]]).
 
 ## Parity
 
@@ -34,6 +35,7 @@ See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-pari
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-parity-roadmap]]
 - [[analysis-mobile-imap-smtp-inbox-empty]]
+- [[analysis-mobile-compose-recipient-resolve]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

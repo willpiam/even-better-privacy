@@ -18,7 +18,10 @@ export default function StatusBanner({
         kind === 'success' ? styles.success : null,
         kind === 'error' ? styles.error : null,
       ]}>
-      <Text style={styles.text}>{message}</Text>
+      <Text
+        style={[styles.text, kind === 'error' ? styles.errorText : null]}>
+        {message}
+      </Text>
     </View>
   );
 }
@@ -42,5 +45,8 @@ const styles = StyleSheet.create({
   },
   text: {
     color: '#111',
+  },
+  errorText: {
+    color: '#b00020',
   },
 });

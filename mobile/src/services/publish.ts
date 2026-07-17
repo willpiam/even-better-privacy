@@ -41,10 +41,17 @@ export async function publishIdentity(params: {
       revoked: body.revoked ?? false,
       revokedDetails: body.revokedDetails ?? [],
     };
-  } else if (identityRes.status !== 404) {
+  } else {
+    // Server returns 400 "unknown subject" (formerly 404) when the
+    // fingerprint is not registered yet — treat that as "not published".
     const body = await identityRes.json().catch(() => ({}));
-    const reason = body?.error ?? `HTTP ${identityRes.status}`;
-    throw new Error(`Failed to query server identity: ${reason}`);
+    const unknown =
+      identityRes.status === 404 ||
+      (identityRes.status === 400 && body?.error === 'unknown subject');
+    if (!unknown) {
+      const reason = body?.error ?? `HTTP ${identityRes.status}`;
+      throw new Error(`Failed to query server identity: ${reason}`);
+    }
   }
 
   if (serverIdentity) {

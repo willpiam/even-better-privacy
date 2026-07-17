@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-05-25
+last_updated: 2026-07-17
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
+Last updated: 2026-07-17 (mobile compose recipient resolve)
 
 ## Wiki Operations
 
@@ -138,6 +138,8 @@ Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
 - [[analysis-mobile-imap-smtp-inbox-empty]] - Mobile manual IMAP/SMTP: empty inbox
   / failed send / Test button hang (locked secrets, implicit-TLS-only client,
   unbounded `readLine`, credentials) and fix checklist.
+- [[analysis-mobile-compose-recipient-resolve]] - Compose To-address lookup
+  against `email` / `opaque::email`, resolve modal, and unencrypted send warning.
 
 ## Security Audits
 

@@ -1,5 +1,14 @@
 # Wiki Log
 
+## [2026-07-17] query | mobile compose recipient resolve
+
+- Answered: compose should match To against contact `email` / `opaque::email`,
+  prompt when unresolved (pick contact or mark unencrypted), and show a red
+  warning when sending plaintext.
+- Filed: [[analysis-mobile-compose-recipient-resolve]].
+- Code: `findContactsByEmail`, `sendPlainMail`, `RecipientResolveModal`,
+  `MailComposeScreen`; note in `mobile/MAIL.md`.
+
 ## [2026-07-17] update | mobile mail connectTLS
 
 - Confirmed post-timeout stubs still at `imap.greeting.wait` with no `tcp.data`:
