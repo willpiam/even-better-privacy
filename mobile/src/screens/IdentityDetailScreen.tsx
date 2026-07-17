@@ -5,6 +5,7 @@ import {
   SafeAreaView,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -45,10 +46,10 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
   >([]);
   const [detailPath, setDetailPath] = useState('');
   const [detailValue, setDetailValue] = useState('');
-  const [detailPush, setDetailPush] = useState('false');
+  const [detailPush, setDetailPush] = useState(false);
   const [revokePath, setRevokePath] = useState('');
   const [revokeReason, setRevokeReason] = useState('');
-  const [revokePush, setRevokePush] = useState('false');
+  const [revokePush, setRevokePush] = useState(false);
   const [exportOutput, setExportOutput] = useState('');
   const [emergencyOutput, setEmergencyOutput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -113,7 +114,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         password,
         path: detailPath,
         detail: detailValue,
-        push: detailPush === 'true',
+        push: detailPush,
       });
       setStatus('Detail added');
       setDetailPath('');
@@ -154,7 +155,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         password,
         path: revokePath,
         reason: revokeReason || undefined,
-        push: revokePush === 'true',
+        push: revokePush,
       });
       setStatus('Detail revoked');
       setRevokePath('');
@@ -180,7 +181,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         identityName: identity.name,
         password,
         reason: revokeReason || undefined,
-        push: revokePush === 'true',
+        push: revokePush,
       });
       setStatus('Identity revoked');
     } catch (error) {
@@ -352,12 +353,10 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
           style={styles.input}
           placeholder="Detail value"
         />
-        <TextInput
-          value={detailPush}
-          onChangeText={setDetailPush}
-          style={styles.input}
-          placeholder="Push to server: true or false"
-        />
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Push to server</Text>
+          <Switch value={detailPush} onValueChange={setDetailPush} />
+        </View>
         <Button title="Add Detail" onPress={onAddDetail} />
 
         <Text style={styles.section}>Revocation</Text>
@@ -373,12 +372,10 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
           style={styles.input}
           placeholder="Revocation reason (optional)"
         />
-        <TextInput
-          value={revokePush}
-          onChangeText={setRevokePush}
-          style={styles.input}
-          placeholder="Push to server: true or false"
-        />
+        <View style={styles.switchRow}>
+          <Text style={styles.switchLabel}>Push to server</Text>
+          <Switch value={revokePush} onValueChange={setRevokePush} />
+        </View>
         <Button title="Revoke Detail" onPress={onRevokeDetail} />
         <Button title="Revoke Identity" color="#d11a2a" onPress={onRevokeIdentity} />
 
@@ -414,6 +411,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     color: '#111',
   },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  switchLabel: {flex: 1, marginRight: 12, color: '#111'},
   multi: {
     minHeight: 100,
     textAlignVertical: 'top',
