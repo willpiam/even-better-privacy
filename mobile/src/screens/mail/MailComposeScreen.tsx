@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '../../navigation/AppNavigator';
+import ContactPicker from '../../components/ContactPicker';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {sendEbpMail} from '../../services/mail/ebpMail';
 import {appendActivityLog} from '../../services/activityLog';
@@ -45,29 +46,63 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <TextInput style={styles.input} value={to} onChangeText={setTo} placeholder="To email" />
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <Text style={styles.note}>
+          Compose an email and encrypt the body for an EBP contact. Your configured mail
+          account delivers the message.
+        </Text>
+
+        <Text style={styles.section}>Message</Text>
+        <Text style={styles.fieldLabel}>To</Text>
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          style={styles.input}
+          value={to}
+          onChangeText={setTo}
+          placeholder="recipient@example.com"
+          accessibilityLabel="To email address"
+        />
+        <Text style={styles.fieldLabel}>Subject</Text>
         <TextInput
           style={styles.input}
-          value={recipientContact}
-          onChangeText={setRecipientContact}
-          placeholder="Recipient contact name"
+          value={subject}
+          onChangeText={setSubject}
+          placeholder="Subject"
+          accessibilityLabel="Subject"
         />
-        <TextInput style={styles.input} value={subject} onChangeText={setSubject} placeholder="Subject" />
+        <Text style={styles.fieldLabel}>Body</Text>
         <TextInput
           style={[styles.input, styles.multi]}
           value={message}
           onChangeText={setMessage}
-          placeholder="Message"
+          placeholder="Write your message..."
           multiline
+          accessibilityLabel="Message body"
         />
+
+        <Text style={styles.section}>EBP encryption</Text>
+        <Text style={styles.fieldLabel}>EBP contact</Text>
+        <ContactPicker
+          variant="dropdown"
+          value={recipientContact}
+          onChange={setRecipientContact}
+          placeholder="Select EBP contact"
+        />
+        <Text style={styles.hint}>
+          The message body is encrypted for the selected contact.
+        </Text>
+        <Text style={styles.fieldLabel}>Identity password</Text>
         <TextInput
           style={styles.input}
           value={password}
           onChangeText={setPassword}
-          placeholder="Identity password"
+          placeholder="Password for your current identity"
           secureTextEntry
+          accessibilityLabel="Identity password"
         />
+
         <Button title="Send EBP encrypted mail" onPress={onSend} />
         {status ? <Text style={styles.status}>{status}</Text> : null}
       </ScrollView>
@@ -76,15 +111,21 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
+  container: {flex: 1, backgroundColor: '#fff'},
+  scroll: {padding: 16},
+  note: {fontSize: 13, color: '#444', marginBottom: 12},
+  section: {marginTop: 8, marginBottom: 8, fontWeight: '700', fontSize: 16, color: '#111'},
+  fieldLabel: {fontSize: 13, color: '#333', marginBottom: 4},
+  hint: {fontSize: 12, color: '#666', marginTop: -8, marginBottom: 12},
   input: {
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 12,
     color: '#111',
   },
   multi: {minHeight: 120, textAlignVertical: 'top'},
-  status: {marginTop: 10, color: '#111'},
+  status: {marginTop: 12, color: '#111'},
 });

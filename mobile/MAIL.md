@@ -54,6 +54,61 @@ server when non-empty.
 Per current identity: `DocumentDirectory/ebp/<identity>/mail-account.json` and
 encrypted `mail-account.secrets.json` (PBKDF2 envelope, ported from GUI).
 
+## Manual IMAP/SMTP accounts
+
+From **Mail Accounts → Add manual account**, enter:
+
+- Account label (display name)
+- IMAP host, port, TLS
+- SMTP host, port, TLS
+- Username and separate IMAP / SMTP passwords (app passwords where required)
+- From email and optional from name
+
+**Persist passwords on this device** is on by default. When enabled, set an
+**email PIN** on first save; passwords are encrypted into
+`mail-account.secrets.json` (same envelope as the GUI).
+
+Use **Test IMAP + SMTP** before saving to verify credentials. Mail credentials
+are used only on-device over TLS; they are not sent to the EBP key server.
+
+## Mail connection trace stubs
+
+When **Test IMAP + SMTP**, inbox load, or send hangs, the mail stack records
+step stubs (e.g. `tcp.connect.start`, `imap.greeting.wait`, `smtp.auth.wait`)
+before each blocking await.
+
+- **In-app:** Home → **Mail trace stubs** (newest first). Use the stack back
+  gesture to leave a hung Test screen, then open the viewer — the last stub is
+  the stall point.
+- **Metro:** live lines tagged `[ebp-mail]` via `console.warn`.
+- Stubs store host/port and protocol step names only — never passwords or tokens.
+- **Test IMAP + SMTP** clears the trace at the start of each run.
+
+## Unlock after restart
+
+After restarting the app, open **Mail Accounts** and **Unlock mail secrets** with
+your email PIN before opening the inbox. Unlock uses native PBKDF2
+(`react-native-quick-crypto`); pure JS on Hermes is too slow for the 210k
+iteration envelope used by the GUI.
+
+## Native crypto (mail PIN)
+
+Mail secrets use PBKDF2-HMAC-SHA-256 with 210,000 iterations (same as GUI).
+After pulling changes that add `react-native-quick-crypto`, reinstall and rebuild:
+
+```bash
+cd mobile
+npm install
+cd ios && pod install && cd ..
+npm run android   # or npm run ios
+```
+
+In **Settings → Diagnostics**, run **Verify mail PBKDF2 parity** once after a
+native rebuild. Unlock should finish in a few seconds, not hang indefinitely.
+
+Accounts created in the desktop GUI under the same identity use the same storage
+files and can be unlocked on mobile with the same email PIN.
+
 ## Deep links
 
 - Android: `AndroidManifest.xml` intent-filter for `ebp` scheme

@@ -33,6 +33,7 @@ See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-pari
 
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-parity-roadmap]]
+- [[analysis-mobile-imap-smtp-inbox-empty]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

@@ -86,6 +86,10 @@ export default function HomeScreen({navigation}: Props): JSX.Element {
       </View>
       <View style={styles.row}>
         <Button title="Run Core Self-Test" onPress={runSelfTest} />
+        <Button
+          title="Mail trace stubs"
+          onPress={() => navigation.navigate('MailTrace')}
+        />
       </View>
       <View style={styles.row}>
         <Button title="Contacts" onPress={() => navigation.navigate('Contacts')} />

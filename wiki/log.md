@@ -1,5 +1,18 @@
 # Wiki Log
 
+## [2026-07-17] query | mobile Test IMAP+SMTP hang duration
+
+- Answered: healthy test is ~1–5s (connect timeout 30s); indefinite `Testing…`
+  with blank status is unbounded post-connect `readLine`, often TLS/port mismatch.
+- Updated: [[analysis-mobile-imap-smtp-inbox-empty]].
+
+## [2026-07-17] query | mobile inbox empty / IMAP SMTP send fail
+
+- Answered: empty inbox and failed sends on mobile manual IMAP/SMTP are usually
+  locked mail secrets, TLS mode mismatch (always implicit TLS; port 587 STARTTLS
+  unsupported), or credentials; status line is the real signal.
+- Filed: [[analysis-mobile-imap-smtp-inbox-empty]].
+
 ## [2026-06-04] implement | mobile–GUI Parity v1
 
 - Implemented mobile parity phases 0–4 (wallet, HD, mail, tests, audit scope doc).

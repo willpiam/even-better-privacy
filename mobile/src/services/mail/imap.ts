@@ -1,22 +1,30 @@
 import {Buffer} from 'buffer';
 import type {MailAccountConfig, MailAuthSecrets, MailMessageDetail, MailMessageSummary} from './types';
 import {connectTlsLineClient, readTaggedOk, type TcpLineClient} from './tcpClient';
+import {mailStub} from './mailTrace';
 
 function xoauth2String(user: string, accessToken: string): string {
   const raw = `user=${user}\x01auth=Bearer ${accessToken}\x01\x01`;
   return Buffer.from(raw, 'utf8').toString('base64');
 }
 
-async function imapAuthenticate(
+export async function imapAuthenticate(
   client: TcpLineClient,
   config: MailAccountConfig,
   secrets: MailAuthSecrets,
 ): Promise<void> {
+  await mailStub('imap.greeting.wait', config.authType);
   const greeting = await client.readLine();
   if (!greeting.startsWith('* OK')) {
+    await mailStub('imap.greeting.ok', `fail=${greeting.slice(0, 80)}`);
     throw new Error(`IMAP greeting failed: ${greeting}`);
   }
+  await mailStub('imap.greeting.ok');
   const tag = 'a1';
+  await mailStub(
+    'imap.login.wait',
+    config.authType === 'oauth' ? 'XOAUTH2' : 'LOGIN',
+  );
   if (config.authType === 'oauth' && secrets.accessToken) {
     const blob = xoauth2String(config.username || secrets.imapPassword, secrets.accessToken);
     client.writeLine(`${tag} AUTHENTICATE XOAUTH2 ${blob}`);
@@ -24,6 +32,7 @@ async function imapAuthenticate(
     client.writeLine(`${tag} LOGIN ${quoteImap(config.username)} ${quoteImap(secrets.imapPassword)}`);
   }
   await readTaggedOk(client, tag);
+  await mailStub('imap.login.ok');
 }
 
 function quoteImap(value: string): string {
@@ -38,14 +47,20 @@ export async function listInboxMessages(
   secrets: MailAuthSecrets,
   limit = 30,
 ): Promise<MailMessageSummary[]> {
+  await mailStub(
+    'inbox.list.start',
+    `${config.imapHost}:${config.imapPort}`,
+  );
   const client = await connectTlsLineClient({
     host: config.imapHost,
     port: config.imapPort,
   });
   try {
     await imapAuthenticate(client, config, secrets);
+    await mailStub('imap.select.wait', 'INBOX');
     client.writeLine('a2 SELECT INBOX');
     await readTaggedOk(client, 'a2');
+    await mailStub('imap.select.ok');
     const searchTag = 'a3';
     client.writeLine(`${searchTag} UID SEARCH ALL`);
     const searchLines = await readTaggedOk(client, searchTag);
@@ -78,6 +93,7 @@ export async function listInboxMessages(
         seen: /\FLAGS \([^)]*\\Seen/i.test(blob),
       });
     }
+    await mailStub('inbox.list.done', `count=${out.length}`);
     return out;
   } finally {
     client.close();
@@ -95,18 +111,22 @@ export async function fetchMessageDetail(
   secrets: MailAuthSecrets,
   uid: number,
 ): Promise<MailMessageDetail> {
+  await mailStub('inbox.fetch.start', `uid=${uid}`);
   const client = await connectTlsLineClient({
     host: config.imapHost,
     port: config.imapPort,
   });
   try {
     await imapAuthenticate(client, config, secrets);
+    await mailStub('imap.select.wait', 'INBOX');
     client.writeLine('b2 SELECT INBOX');
     await readTaggedOk(client, 'b2');
+    await mailStub('imap.select.ok');
     const fetchTag = 'b3';
     client.writeLine(`${fetchTag} UID FETCH ${uid} (BODY.PEEK[])`);
     const lines: string[] = [];
     let raw = '';
+    await mailStub('tcp.readLine.wait', `tag=${fetchTag} body`);
     while (true) {
       const line = await client.readLine();
       lines.push(line);
@@ -120,12 +140,14 @@ export async function fetchMessageDetail(
         raw += `${line}\n`;
       }
     }
+    await mailStub('tcp.readLine.ok', `tag=${fetchTag}`);
     const bodyMatch = raw.match(/BODY\[\] \{(\d+)\}/);
     const source = bodyMatch ? raw : lines.join('\n');
     const {text, html} = extractBodyFromFetch(source);
     const {extractTextFromMimeSource, extractEbpPayloadFromMime} = await import('./mime');
     const parsed = extractTextFromMimeSource(text || source);
     const ebpPayload = extractEbpPayloadFromMime(source);
+    await mailStub('inbox.fetch.done', `uid=${uid}`);
     return {
       uid,
       subject: parseHeaderField(source, 'Subject') || '',

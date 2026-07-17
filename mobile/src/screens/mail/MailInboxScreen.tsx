@@ -20,6 +20,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'MailInbox'>;
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
   const [status, setStatus] = useState('');
+  const [accountEmail, setAccountEmail] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -28,6 +29,9 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       if (!resolved) {
         throw new Error('Configure a mail account first');
       }
+      setAccountEmail(
+        resolved.account.config.fromEmail || resolved.account.config.username,
+      );
       const list = await listInboxMessages(
         resolved.account.config,
         resolved.secrets,
@@ -38,6 +42,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
       setMessages([]);
+      setAccountEmail('');
     }
   }, []);
 
@@ -49,6 +54,9 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
 
   return (
     <SafeAreaView style={styles.container}>
+      {accountEmail ? (
+        <Text style={styles.accountEmail}>{accountEmail}</Text>
+      ) : null}
       <Button title="Refresh inbox" onPress={load} />
       <Button title="Compose" onPress={() => navigation.navigate('MailCompose')} />
       {status ? <Text style={styles.status}>{status}</Text> : null}
@@ -72,6 +80,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
 
 const styles = StyleSheet.create({
   container: {flex: 1, padding: 16, backgroundColor: '#fff'},
+  accountEmail: {fontSize: 14, color: '#444', marginBottom: 8},
   status: {marginVertical: 8, color: '#111'},
   empty: {color: '#555', marginTop: 12},
   item: {

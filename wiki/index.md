@@ -135,6 +135,9 @@ Last updated: 2026-05-25 (EBP-HD reframed as ebp-hd-v1 conformance)
   Parity v1 checklist (interop drift + feature gaps).
 - [[analysis-mobile-parity-roadmap]] - Phased mobile–GUI parity implementation
   roadmap (wallet, HD, mail, hardening).
+- [[analysis-mobile-imap-smtp-inbox-empty]] - Mobile manual IMAP/SMTP: empty inbox
+  / failed send / Test button hang (locked secrets, implicit-TLS-only client,
+  unbounded `readLine`, credentials) and fix checklist.
 
 ## Security Audits
 

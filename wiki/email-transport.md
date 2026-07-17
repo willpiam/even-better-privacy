@@ -42,6 +42,8 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 
 - [[component-gui]]
 - [[component-email-extension]]
+- [[component-mobile]]
+- [[analysis-mobile-imap-smtp-inbox-empty]]
 - [[message-payload-formats]]
 - [[openpgp-pqc]]
 - [[hashcash-cost-functions]]

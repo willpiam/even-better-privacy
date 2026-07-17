@@ -13,9 +13,11 @@ import EncryptDecryptScreen from '../screens/EncryptDecryptScreen';
 import CertificatesScreen from '../screens/CertificatesScreen';
 import ProjectInfoScreen from '../screens/ProjectInfoScreen';
 import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
+import MailAccountSetupScreen from '../screens/mail/MailAccountSetupScreen';
 import MailInboxScreen from '../screens/mail/MailInboxScreen';
 import MailMessageScreen from '../screens/mail/MailMessageScreen';
 import MailComposeScreen from '../screens/mail/MailComposeScreen';
+import MailTraceScreen from '../screens/mail/MailTraceScreen';
 
 export type RootStackParamList = {
   Home: undefined;
@@ -30,9 +32,11 @@ export type RootStackParamList = {
   Certificates: undefined;
   ProjectInfo: undefined;
   MailAccounts: undefined;
+  MailAccountSetup: {accountId?: string};
   MailInbox: undefined;
   MailMessage: {uid: number};
   MailCompose: undefined;
+  MailTrace: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -118,6 +122,13 @@ export default function AppNavigator(): JSX.Element {
           options={{title: 'Mail Accounts'}}
         />
         <Stack.Screen
+          name="MailAccountSetup"
+          component={MailAccountSetupScreen}
+          options={({route}) => ({
+            title: route.params?.accountId ? 'Edit mail account' : 'Add mail account',
+          })}
+        />
+        <Stack.Screen
           name="MailInbox"
           component={MailInboxScreen}
           options={{title: 'Inbox'}}
@@ -131,6 +142,11 @@ export default function AppNavigator(): JSX.Element {
           name="MailCompose"
           component={MailComposeScreen}
           options={{title: 'Compose'}}
+        />
+        <Stack.Screen
+          name="MailTrace"
+          component={MailTraceScreen}
+          options={{title: 'Mail trace stubs'}}
         />
       </Stack.Navigator>
     </NavigationContainer>

@@ -27,6 +27,7 @@ import {
   setServerUrl,
 } from '../services/settings';
 import {verifyArgon2NobleParity} from '../services/argon2';
+import {verifyMailPbkdf2Parity} from '../services/mail/pbkdf2Native';
 import {BASE_DIR, importIdentity, runCoreSelfTest} from '../services/storage';
 import {
   appendActivityLog,
@@ -209,6 +210,26 @@ export default function SettingsScreen(): JSX.Element {
               const msg = result.ok
                 ? 'Argon2 parity OK'
                 : 'Argon2 parity FAILED';
+              await appendActivityLog(msg, result.ok ? 'success' : 'error');
+              setStatus(msg);
+              setLogs(await listActivityLog());
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : String(error));
+            } finally {
+              setLoading(false);
+            }
+          }}
+        />
+        <Button
+          title="Verify mail PBKDF2 parity"
+          disabled={loading}
+          onPress={async () => {
+            setLoading(true);
+            try {
+              const result = await verifyMailPbkdf2Parity();
+              const msg = result.ok
+                ? 'Mail PBKDF2 parity OK'
+                : 'Mail PBKDF2 parity FAILED';
               await appendActivityLog(msg, result.ok ? 'success' : 'error');
               setStatus(msg);
               setLogs(await listActivityLog());

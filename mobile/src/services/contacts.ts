@@ -15,7 +15,32 @@ export type ServerIdentitySummary = {
   encryptionKeyType: 'kyber';
   details: Record<string, [string, string]>;
   detailsMeta?: Record<string, {verified: boolean; verifiedAt: number | null}>;
+  createdAt?: number;
+  revoked?: boolean;
 };
+
+export type BrowseServerIdentitiesResult = {
+  identities: ServerIdentitySummary[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  hasNextPage: boolean;
+};
+
+export function getDetailValue(
+  details: Record<string, [string, string]> | undefined,
+  path: string,
+): string | null {
+  if (!details) {
+    return null;
+  }
+  const val = details[path];
+  if (Array.isArray(val)) {
+    return val[0] || null;
+  }
+  return typeof val === 'string' ? val : null;
+}
 
 function normalizeContactName(name: string): string {
   const value = name.trim();
@@ -299,13 +324,7 @@ export async function browseServerIdentities(params?: {
   query?: string;
   page?: number;
   server?: string;
-}): Promise<{
-  identities: ServerIdentitySummary[];
-  page: number;
-  pageSize: number;
-  total: number;
-  hasNextPage: boolean;
-}> {
+}): Promise<BrowseServerIdentitiesResult> {
   const server = params?.server ?? (await getServerUrl());
   const query = (params?.query ?? '').trim();
   const path = query ? '/api/v1/identities/search' : '/api/v1/identities';
@@ -325,11 +344,27 @@ export async function browseServerIdentities(params?: {
   const identities = Array.isArray(body.identities)
     ? (body.identities as ServerIdentitySummary[])
     : [];
+  const pagination =
+    body.pagination && typeof body.pagination === 'object'
+      ? (body.pagination as Record<string, unknown>)
+      : {};
+  const page = Number(pagination.page ?? body.page ?? 1);
+  const pageSize = Number(pagination.pageSize ?? body.pageSize ?? identities.length);
+  const total = Number(pagination.total ?? body.total ?? identities.length);
+  const totalPages = Number(
+    pagination.totalPages ??
+      body.totalPages ??
+      (total > 0 ? Math.ceil(total / Math.max(pageSize, 1)) : 1),
+  );
+  const hasMore = pagination.hasMore;
+  const hasNextPage =
+    typeof hasMore === 'boolean' ? hasMore : page < totalPages;
   return {
     identities,
-    page: Number(body.page ?? 1),
-    pageSize: Number(body.pageSize ?? identities.length),
-    total: Number(body.total ?? identities.length),
-    hasNextPage: Boolean(body.hasNextPage),
+    page,
+    pageSize,
+    total,
+    totalPages,
+    hasNextPage,
   };
 }
