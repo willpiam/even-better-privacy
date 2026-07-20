@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-07-20] query | mobile mail decrypt Invalid JSON payload
+
+- Answered: failure is pre-crypto payload parse on raw MIME; password unused;
+  mobile marker fallback + missing QP/base64 decode vs GUI mailparser.
+- Filed: [[analysis-mobile-mail-decrypt-invalid-json]].
+
 ## [2026-07-17] query | mobile compose recipient resolve
 
 - Answered: compose should match To against contact `email` / `opaque::email`,

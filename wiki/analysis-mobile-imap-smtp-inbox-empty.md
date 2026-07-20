@@ -100,6 +100,7 @@ Related pattern on desktop: [[analysis-mail-message-load-hang]] (unbounded IMAP/
 - [[analysis-mobile-parity-roadmap]]
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mail-message-load-hang]] (GUI selected-message hang; different bug)
+- [[analysis-mobile-mail-decrypt-invalid-json]] (decrypt fails with Invalid JSON; MIME decode gap)
 
 ## Sources
 

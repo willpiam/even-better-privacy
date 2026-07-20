@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-17
+last_updated: 2026-07-20
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-17 (mobile compose recipient resolve)
+Last updated: 2026-07-20 (mobile mail decrypt Invalid JSON)
 
 ## Wiki Operations
 
@@ -140,6 +140,9 @@ Last updated: 2026-07-17 (mobile compose recipient resolve)
   unbounded `readLine`, credentials) and fix checklist.
 - [[analysis-mobile-compose-recipient-resolve]] - Compose To-address lookup
   against `email` / `opaque::email`, resolve modal, and unencrypted send warning.
+- [[analysis-mobile-mail-decrypt-invalid-json]] - Mobile decrypt shows
+  `Invalid JSON payload` because MIME is not CTE-decoded before armor parse;
+  password is unused for this error.
 
 ## Security Audits
 
