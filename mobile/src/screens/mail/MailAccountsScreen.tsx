@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -30,13 +30,13 @@ import {
 } from '../../services/settings';
 import {appendActivityLog} from '../../services/activityLog';
 import Screen from '../../components/Screen';
-import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import Card from '../../components/Card';
 import ListRow from '../../components/ListRow';
 import SectionTitle from '../../components/SectionTitle';
 import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
+import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
 import {colors, radius, spacing, typography} from '../../theme/tokens';
 
@@ -48,6 +48,7 @@ const EMPTY_OAUTH_CONFIG: MailOauthServerConfig = {
 };
 
 export default function MailAccountsScreen({navigation}: Props): JSX.Element {
+  const {promptSecret, secretPrompt} = useSecretPrompt();
   const [identityName, setIdentityName] = useState('');
   const [accounts, setAccounts] = useState<
     Array<{id: string; name: string; fromEmail: string; authType: string}>
@@ -56,10 +57,10 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [oauthConfig, setOauthConfig] = useState<MailOauthServerConfig>(
     EMPTY_OAUTH_CONFIG,
   );
-  const [unlockPin, setUnlockPin] = useState('');
   const [secretsLocked, setSecretsLocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [status, setStatus] = useState('');
+  const promptedThisFocus = useRef(false);
 
   const loadOAuthConfig = useCallback(async () => {
     try {
@@ -90,12 +91,65 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     const secretStatus = await getMailSecretsStatus(name);
     setSecretsLocked(secretStatus.locked && !secretStatus.inMemory);
     await loadOAuthConfig();
+    return secretStatus.locked && !secretStatus.inMemory;
   }, [loadOAuthConfig]);
+
+  const unlockWithPin = useCallback(
+    async (pin: string) => {
+      setUnlocking(true);
+      try {
+        setStatus('');
+        const name = identityName || (await getCurrentIdentityRequired());
+        await unlockMailSecretsWithPin(name, pin);
+        await appendActivityLog('Mail secrets unlocked', 'success');
+        setStatus('Mail secrets unlocked');
+        await refresh();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setUnlocking(false);
+      }
+    },
+    [identityName, refresh],
+  );
+
+  const requestPinUnlock = useCallback(async () => {
+    const pin = await promptSecret({
+      title: 'Email PIN',
+      placeholder: 'Email PIN',
+      submitLabel: 'Unlock',
+    });
+    if (pin === null) {
+      return;
+    }
+    if (!pin.trim()) {
+      setStatus('Email PIN is required');
+      return;
+    }
+    await unlockWithPin(pin);
+  }, [promptSecret, unlockWithPin]);
+
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
+  const requestPinUnlockRef = useRef(requestPinUnlock);
+  requestPinUnlockRef.current = requestPinUnlock;
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      let cancelled = false;
+      promptedThisFocus.current = false;
+      void (async () => {
+        const locked = await refreshRef.current();
+        if (cancelled || !locked || promptedThisFocus.current) {
+          return;
+        }
+        promptedThisFocus.current = true;
+        await requestPinUnlockRef.current();
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, []),
   );
 
   useEffect(() => {
@@ -160,32 +214,26 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     }
   };
 
-  const onUnlock = async () => {
-    if (!unlockPin.trim()) {
-      setStatus('Email PIN is required');
-      return;
-    }
-    setUnlocking(true);
-    try {
-      setStatus('');
-      const name = identityName || (await getCurrentIdentityRequired());
-      await unlockMailSecretsWithPin(name, unlockPin);
-      setUnlockPin('');
-      await appendActivityLog('Mail secrets unlocked', 'success');
-      setStatus('Mail secrets unlocked');
-      await refresh();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setUnlocking(false);
-    }
-  };
-
   return (
     <Screen scroll>
+      {secretPrompt}
       <BusyOverlay visible={unlocking} message="Unlocking mail secrets…" />
       <Text style={styles.header}>Mail accounts ({identityName || '…'})</Text>
       <StatusBanner message={status} kind={statusKind(status)} />
+
+      {secretsLocked ? (
+        <View style={styles.lockedBanner}>
+          <Text style={styles.lockedText}>
+            Mail secrets are locked for this session.
+          </Text>
+          <AppButton
+            title="Unlock"
+            variant="secondary"
+            disabled={unlocking}
+            onPress={() => void requestPinUnlock()}
+          />
+        </View>
+      ) : null}
 
       {accounts.length > 0 ? (
         <View style={styles.accountList}>
@@ -225,28 +273,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       ) : (
         <Text style={styles.empty}>No mail accounts yet.</Text>
       )}
-
-      {secretsLocked ? (
-        <View style={styles.unlockSection}>
-          <SectionTitle>Unlock secrets</SectionTitle>
-          <Text style={styles.unlockHint}>
-            Unlock stored mail passwords with your email PIN
-          </Text>
-          <TextField
-            label="Email PIN"
-            value={unlockPin}
-            onChangeText={setUnlockPin}
-            placeholder="Email PIN"
-            secureTextEntry
-          />
-          <AppButton
-            title={unlocking ? 'Unlocking…' : 'Unlock mail secrets'}
-            disabled={unlocking}
-            loading={unlocking}
-            onPress={onUnlock}
-          />
-        </View>
-      ) : null}
 
       <SectionTitle>Add account</SectionTitle>
       <AppButton
@@ -289,7 +315,7 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: colors.border,
   },
-  unlockSection: {
+  lockedBanner: {
     borderWidth: 1,
     borderColor: '#f59e0b',
     borderRadius: radius.md,
@@ -297,7 +323,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fffbeb',
     gap: 10,
   },
-  unlockHint: {
+  lockedText: {
     color: colors.text,
     fontSize: typography.caption,
   },

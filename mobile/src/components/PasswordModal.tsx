@@ -1,27 +1,49 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {
-  Button,
   Modal,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import AppButton from './AppButton';
+import {colors, radius, spacing, typography} from '../theme/tokens';
 
 export default function PasswordModal({
   visible,
   title = 'Enter Password',
+  placeholder = 'Password',
+  submitLabel = 'Submit',
   onCancel,
   onSubmit,
 }: {
   visible: boolean;
   title?: string;
+  placeholder?: string;
+  submitLabel?: string;
   onCancel: () => void;
   onSubmit: (password: string) => void;
 }): JSX.Element {
   const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    if (visible) {
+      setPassword('');
+    }
+  }, [visible]);
+
+  const submit = () => {
+    onSubmit(password);
+    setPassword('');
+  };
+
+  const cancel = () => {
+    setPassword('');
+    onCancel();
+  };
+
   return (
-    <Modal visible={visible} transparent animationType="fade">
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={cancel}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <Text style={styles.title}>{title}</Text>
@@ -30,16 +52,24 @@ export default function PasswordModal({
             value={password}
             onChangeText={setPassword}
             secureTextEntry
-            placeholder="Password"
+            placeholder={placeholder}
+            placeholderTextColor="#aaa"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+            onSubmitEditing={submit}
           />
           <View style={styles.row}>
-            <Button title="Cancel" onPress={onCancel} />
-            <Button
-              title="Submit"
-              onPress={() => {
-                onSubmit(password);
-                setPassword('');
-              }}
+            <AppButton
+              title="Cancel"
+              variant="secondary"
+              onPress={cancel}
+              style={styles.flex}
+            />
+            <AppButton
+              title={submitLabel}
+              onPress={submit}
+              style={styles.flex}
             />
           </View>
         </View>
@@ -54,24 +84,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: spacing.lg,
   },
   modal: {
     width: '100%',
     maxWidth: 420,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
   },
-  title: {fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 8},
+  title: {
+    fontSize: typography.title,
+    fontWeight: '700',
+    color: colors.text,
+  },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: '#111',
-    marginBottom: 10,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: colors.text,
+    fontSize: typography.body,
+    backgroundColor: colors.surface,
   },
-  row: {flexDirection: 'row', justifyContent: 'space-between'},
+  row: {flexDirection: 'row', gap: 8},
+  flex: {flex: 1},
 });

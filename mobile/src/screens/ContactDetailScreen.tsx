@@ -1,5 +1,5 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Alert, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {ContactsStackParamList} from '../navigation/AppNavigator';
@@ -22,6 +22,38 @@ import {colors, typography} from '../theme/tokens';
 import {statusKind} from '../theme/statusKind';
 
 type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactDetail'>;
+
+function isOpaquePath(path: string): boolean {
+  return path.startsWith('opaque::');
+}
+
+function formatOpaqueHash(value: string): string {
+  if (value.length <= 24) {
+    return value;
+  }
+  return `${value.slice(0, 12)}…${value.slice(-8)}`;
+}
+
+function showDetailRawInfo(
+  path: string,
+  value: string,
+  proof: string,
+  resolved?: string,
+): void {
+  const lines: string[] = [];
+  if (resolved) {
+    lines.push(`Resolved: ${resolved}`);
+  }
+  if (isOpaquePath(path)) {
+    lines.push(`Hash: ${value}`);
+  } else {
+    lines.push(`Value: ${value}`);
+  }
+  if (proof) {
+    lines.push(`Proof: ${proof}`);
+  }
+  Alert.alert(path, lines.join('\n\n'));
+}
 
 export default function ContactDetailScreen({
   route,
@@ -180,16 +212,47 @@ export default function ContactDetailScreen({
       {Object.keys(contact.details).length === 0 ? (
         <Text style={styles.meta}>No published details.</Text>
       ) : (
-        Object.entries(contact.details).map(([path, [hash, label]]) => (
-          <Card key={path} padded style={styles.detailCard}>
-            <Text style={styles.detail}>
-              {path}: {label || hash}
-              {contact.resolvedOpaqueDetails?.[path]
-                ? ` (resolved: ${contact.resolvedOpaqueDetails[path]})`
-                : ''}
-            </Text>
-          </Card>
-        ))
+        Object.entries(contact.details).map(([path, entry]) => {
+          const value = Array.isArray(entry) ? entry[0] ?? '' : String(entry);
+          const proof = Array.isArray(entry) ? entry[1] ?? '' : '';
+          const opaque = isOpaquePath(path);
+          const resolved = contact.resolvedOpaqueDetails?.[path];
+          let displayValue = value;
+          let badge: string | null = null;
+          if (opaque && resolved) {
+            displayValue = resolved;
+            badge = 'resolved';
+          } else if (opaque) {
+            displayValue = formatOpaqueHash(value);
+            badge = 'hash';
+          }
+          return (
+            <Card key={path} padded style={styles.detailCard}>
+              <View style={styles.detailRow}>
+                <View style={styles.detailMain}>
+                  <Text style={styles.detailPath}>{path}</Text>
+                  <Text style={styles.detailValue} selectable>
+                    {displayValue}
+                  </Text>
+                  {badge ? <Text style={styles.detailBadge}>{badge}</Text> : null}
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Raw details for ${path}`}
+                  hitSlop={8}
+                  onPress={() =>
+                    showDetailRawInfo(path, value, proof, resolved)
+                  }
+                  style={({pressed}) => [
+                    styles.infoBtn,
+                    pressed && styles.infoBtnPressed,
+                  ]}>
+                  <Text style={styles.infoBtnLabel}>i</Text>
+                </Pressable>
+              </View>
+            </Card>
+          );
+        })
       )}
 
       <SectionTitle>Resolve opaque detail</SectionTitle>
@@ -273,11 +336,54 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.muted,
   },
-  detail: {
+  detailCard: {marginBottom: 0},
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  detailMain: {
+    flex: 1,
+    minWidth: 0,
+  },
+  detailPath: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  detailValue: {
     fontSize: typography.body,
     color: colors.text,
+    lineHeight: 20,
   },
-  detailCard: {marginBottom: 0},
+  detailBadge: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+  },
+  infoBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+  },
+  infoBtnPressed: {
+    backgroundColor: colors.accentSoft,
+  },
+  infoBtnLabel: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
+    fontStyle: 'italic',
+  },
   row: {flexDirection: 'row', gap: 8},
   flex: {flex: 1},
 });

@@ -1,7 +1,19 @@
 import {Buffer} from 'buffer';
 import type {MailAccountConfig, MailAuthSecrets, MailMessageDetail, MailMessageSummary} from './types';
 import {connectTlsLineClient, readTaggedOk, type TcpLineClient} from './tcpClient';
+import {
+  messageDetailFromRfc822,
+  parseHeaderField,
+  readFetchRfc822Source,
+} from './imapFetchBody';
 import {mailStub} from './mailTrace';
+
+export {
+  messageDetailFromRfc822,
+  parseHeaderField,
+  readFetchRfc822Source,
+  type FetchBodyClient,
+} from './imapFetchBody';
 
 function xoauth2String(user: string, accessToken: string): string {
   const raw = `user=${user}\x01auth=Bearer ${accessToken}\x01\x01`;
@@ -100,12 +112,6 @@ export async function listInboxMessages(
   }
 }
 
-function parseHeaderField(blob: string, name: string): string {
-  const re = new RegExp(`${name}:\\s*(.+)$`, 'im');
-  const m = blob.match(re);
-  return m ? m[1].trim() : '';
-}
-
 export async function fetchMessageDetail(
   config: MailAccountConfig,
   secrets: MailAuthSecrets,
@@ -124,50 +130,15 @@ export async function fetchMessageDetail(
     await mailStub('imap.select.ok');
     const fetchTag = 'b3';
     client.writeLine(`${fetchTag} UID FETCH ${uid} (BODY.PEEK[])`);
-    const lines: string[] = [];
-    let raw = '';
     await mailStub('tcp.readLine.wait', `tag=${fetchTag} body`);
-    while (true) {
-      const line = await client.readLine();
-      lines.push(line);
-      if (line.startsWith(`${fetchTag} `)) {
-        if (!line.includes(' OK')) {
-          throw new Error(line);
-        }
-        break;
-      }
-      if (line.startsWith('* ')) {
-        raw += `${line}\n`;
-      }
-    }
+    const source = await readFetchRfc822Source(client, fetchTag);
     await mailStub('tcp.readLine.ok', `tag=${fetchTag}`);
-    const bodyMatch = raw.match(/BODY\[\] \{(\d+)\}/);
-    const source = bodyMatch ? raw : lines.join('\n');
-    const {text, html} = extractBodyFromFetch(source);
     const {extractTextFromMimeSource, extractEbpPayloadFromMime} = await import('./mime');
-    const parsed = extractTextFromMimeSource(text || source);
+    const parsed = extractTextFromMimeSource(source);
     const ebpPayload = extractEbpPayloadFromMime(source);
     await mailStub('inbox.fetch.done', `uid=${uid}`);
-    return {
-      uid,
-      subject: parseHeaderField(source, 'Subject') || '',
-      from: parseHeaderField(source, 'From') || '',
-      to: parseHeaderField(source, 'To') || '',
-      date: parseHeaderField(source, 'Date') || '',
-      bodyText: parsed.text,
-      bodyHtml: parsed.html || html,
-      rawSource: source,
-      ebpPayload,
-    };
+    return messageDetailFromRfc822(uid, source, parsed, ebpPayload);
   } finally {
     client.close();
   }
-}
-
-function extractBodyFromFetch(raw: string): {text: string; html: string} {
-  const idx = raw.indexOf('\r\n\r\n');
-  if (idx < 0) {
-    return {text: raw, html: ''};
-  }
-  return {text: raw.slice(idx + 4), html: ''};
 }

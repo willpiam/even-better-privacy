@@ -1,5 +1,9 @@
 import TcpSocket from 'react-native-tcp-socket';
+import {Buffer} from 'buffer';
 import {mailStub} from './mailTrace';
+import {takeBytesFromBuffer, takeLineFromBuffer} from './tcpBuffer';
+
+export {takeBytesFromBuffer, takeLineFromBuffer} from './tcpBuffer';
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 const DEFAULT_READ_TIMEOUT_MS = 30_000;
@@ -7,34 +11,25 @@ const DEFAULT_READ_TIMEOUT_MS = 30_000;
 export type TcpLineClient = {
   writeLine: (line: string) => void;
   readLine: () => Promise<string>;
+  /** Consume exactly `n` octets from the stream (IMAP/SMTP literals). */
+  readBytes: (n: number) => Promise<string>;
   close: () => void;
 };
 
-type LineWaiter = {
-  resolve: (line: string) => void;
-  reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
-};
-
-/**
- * Extract one complete line from the front of `buffer`.
- * Accepts CRLF or bare LF; strips a trailing CR if present.
- * Returns null if no full line is available yet.
- */
-export function takeLineFromBuffer(buffer: string): {
-  line: string;
-  rest: string;
-} | null {
-  const lf = buffer.indexOf('\n');
-  if (lf < 0) {
-    return null;
-  }
-  let line = buffer.slice(0, lf);
-  if (line.endsWith('\r')) {
-    line = line.slice(0, -1);
-  }
-  return {line, rest: buffer.slice(lf + 1)};
-}
+type Waiter =
+  | {
+      kind: 'line';
+      resolve: (line: string) => void;
+      reject: (err: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  | {
+      kind: 'bytes';
+      n: number;
+      resolve: (chunk: string) => void;
+      reject: (err: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    };
 
 function dataPreview(text: string): string {
   const oneLine = text.replace(/\r/g, '\\r').replace(/\n/g, '\\n');
@@ -47,6 +42,9 @@ function dataPreview(text: string): string {
  * Must use `connectTLS` — `createConnection({ tls: true })` does **not** enable
  * TLS on Android (pendingTLS is only set via startTLS/connectTLS), so the
  * socket would be plain TCP against a TLS port and hang waiting for a text greeting.
+ *
+ * Reads are on-demand (no eager line splitting) so IMAP `{n}` literals can be
+ * consumed with {@link TcpLineClient.readBytes} without being torn into lines.
  */
 export function connectTlsLineClient(params: {
   host: string;
@@ -70,9 +68,8 @@ export function connectTlsLineClient(params: {
       reject(new Error('TCP connection timed out'));
     }, params.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
-    let buffer = '';
-    const pendingLines: string[] = [];
-    const waiters: LineWaiter[] = [];
+    let buffer = Buffer.alloc(0);
+    const waiters: Waiter[] = [];
     let closed = false;
     let settledConnect = false;
     let sawData = false;
@@ -87,24 +84,28 @@ export function connectTlsLineClient(params: {
       }
     };
 
-    const deliverOrQueue = (line: string) => {
-      const waiter = waiters.shift();
-      if (waiter) {
-        clearTimeout(waiter.timer);
-        waiter.resolve(line);
-      } else {
-        pendingLines.push(line);
-      }
-    };
-
-    const flushLines = () => {
-      while (true) {
-        const taken = takeLineFromBuffer(buffer);
-        if (!taken) {
-          break;
+    const tryDeliver = () => {
+      while (waiters.length > 0) {
+        const head = waiters[0];
+        if (head.kind === 'line') {
+          const taken = takeLineFromBuffer(buffer);
+          if (!taken) {
+            break;
+          }
+          buffer = taken.rest;
+          waiters.shift();
+          clearTimeout(head.timer);
+          head.resolve(taken.line);
+        } else {
+          const taken = takeBytesFromBuffer(buffer, head.n);
+          if (!taken) {
+            break;
+          }
+          buffer = taken.rest;
+          waiters.shift();
+          clearTimeout(head.timer);
+          head.resolve(taken.chunk);
         }
-        buffer = taken.rest;
-        deliverOrQueue(taken.line);
       }
     };
 
@@ -142,10 +143,6 @@ export function connectTlsLineClient(params: {
                 rej(new Error('TCP connection closed'));
                 return;
               }
-              if (pendingLines.length > 0) {
-                res(pendingLines.shift() as string);
-                return;
-              }
               const taken = takeLineFromBuffer(buffer);
               if (taken) {
                 buffer = taken.rest;
@@ -163,7 +160,42 @@ export function connectTlsLineClient(params: {
                 failWaiters(err);
                 rej(err);
               }, readTimeoutMs);
-              waiters.push({resolve: res, reject: rej, timer});
+              waiters.push({kind: 'line', resolve: res, reject: rej, timer});
+            }),
+          readBytes: (n: number) =>
+            new Promise<string>((res, rej) => {
+              if (closed) {
+                rej(new Error('TCP connection closed'));
+                return;
+              }
+              if (n < 0) {
+                rej(new Error('readBytes count must be non-negative'));
+                return;
+              }
+              const taken = takeBytesFromBuffer(buffer, n);
+              if (taken) {
+                buffer = taken.rest;
+                res(taken.chunk);
+                return;
+              }
+              const timer = setTimeout(() => {
+                const idx = waiters.findIndex(w => w.timer === timer);
+                if (idx >= 0) {
+                  waiters.splice(idx, 1);
+                }
+                void mailStub('tcp.readBytes.timeout', endpoint);
+                const err = new Error('TCP readBytes timed out');
+                destroySocket();
+                failWaiters(err);
+                rej(err);
+              }, readTimeoutMs);
+              waiters.push({
+                kind: 'bytes',
+                n,
+                resolve: res,
+                reject: rej,
+                timer,
+              });
             }),
           close: () => {
             destroySocket();
@@ -175,16 +207,16 @@ export function connectTlsLineClient(params: {
 
     socket.on('data', (data: string | Buffer) => {
       const chunk =
-        typeof data === 'string' ? data : data.toString('utf8');
+        typeof data === 'string' ? Buffer.from(data, 'binary') : Buffer.from(data);
       if (!sawData) {
         sawData = true;
         void mailStub(
           'tcp.data',
-          `bytes≈${chunk.length} preview=${dataPreview(chunk)}`,
+          `bytes≈${chunk.length} preview=${dataPreview(chunk.toString('binary'))}`,
         );
       }
-      buffer += chunk;
-      flushLines();
+      buffer = Buffer.concat([Buffer.from(buffer), Buffer.from(chunk)]);
+      tryDeliver();
     });
     socket.on('error', (err: Error) => {
       clearTimeout(connectTimer);

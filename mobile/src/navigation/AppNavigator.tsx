@@ -10,8 +10,16 @@ import HdCreateScreen from '../screens/HdCreateScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ContactDetailScreen from '../screens/ContactDetailScreen';
-import SignVerifyScreen from '../screens/SignVerifyScreen';
-import EncryptDecryptScreen from '../screens/EncryptDecryptScreen';
+import CryptoHubScreen from '../screens/CryptoHubScreen';
+import SignMessageScreen from '../screens/crypto/SignMessageScreen';
+import VerifyMessageScreen from '../screens/crypto/VerifyMessageScreen';
+import SignFileScreen from '../screens/crypto/SignFileScreen';
+import VerifyFileScreen from '../screens/crypto/VerifyFileScreen';
+import FingerprintToolScreen from '../screens/crypto/FingerprintToolScreen';
+import EncryptMessageScreen from '../screens/crypto/EncryptMessageScreen';
+import DecryptMessageScreen from '../screens/crypto/DecryptMessageScreen';
+import EncryptFileScreen from '../screens/crypto/EncryptFileScreen';
+import DecryptFileScreen from '../screens/crypto/DecryptFileScreen';
 import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
 import MailAccountSetupScreen from '../screens/mail/MailAccountSetupScreen';
 import MailInboxScreen from '../screens/mail/MailInboxScreen';
@@ -36,8 +44,16 @@ export type ContactsStackParamList = {
 };
 
 export type CryptoStackParamList = {
-  SignVerify: undefined;
-  EncryptDecrypt: undefined;
+  CryptoHub: undefined;
+  SignMessage: undefined;
+  VerifyMessage: undefined;
+  SignFile: undefined;
+  VerifyFile: undefined;
+  FingerprintTool: undefined;
+  EncryptMessage: undefined;
+  DecryptMessage: undefined;
+  EncryptFile: undefined;
+  DecryptFile: undefined;
 };
 
 export type MailStackParamList = {
@@ -153,14 +169,54 @@ function CryptoNavigator(): JSX.Element {
   return (
     <CryptoStack.Navigator screenOptions={stackScreenOptions}>
       <CryptoStack.Screen
-        name="SignVerify"
-        component={SignVerifyScreen}
+        name="CryptoHub"
+        component={CryptoHubScreen}
         options={{title: 'Crypto'}}
       />
       <CryptoStack.Screen
-        name="EncryptDecrypt"
-        component={EncryptDecryptScreen}
-        options={{title: 'Crypto'}}
+        name="SignMessage"
+        component={SignMessageScreen}
+        options={{title: 'Sign Message'}}
+      />
+      <CryptoStack.Screen
+        name="VerifyMessage"
+        component={VerifyMessageScreen}
+        options={{title: 'Verify Message'}}
+      />
+      <CryptoStack.Screen
+        name="SignFile"
+        component={SignFileScreen}
+        options={{title: 'Sign File'}}
+      />
+      <CryptoStack.Screen
+        name="VerifyFile"
+        component={VerifyFileScreen}
+        options={{title: 'Verify File'}}
+      />
+      <CryptoStack.Screen
+        name="FingerprintTool"
+        component={FingerprintToolScreen}
+        options={{title: 'Fingerprint'}}
+      />
+      <CryptoStack.Screen
+        name="EncryptMessage"
+        component={EncryptMessageScreen}
+        options={{title: 'Encrypt Message'}}
+      />
+      <CryptoStack.Screen
+        name="DecryptMessage"
+        component={DecryptMessageScreen}
+        options={{title: 'Decrypt Message'}}
+      />
+      <CryptoStack.Screen
+        name="EncryptFile"
+        component={EncryptFileScreen}
+        options={{title: 'Encrypt File'}}
+      />
+      <CryptoStack.Screen
+        name="DecryptFile"
+        component={DecryptFileScreen}
+        options={{title: 'Decrypt File'}}
       />
     </CryptoStack.Navigator>
   );
