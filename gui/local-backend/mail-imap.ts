@@ -202,7 +202,14 @@ export async function parseMailSourceInWorker(
         read: false,
         write: false,
         net: false,
-        env: false,
+        // mailparser/npm may probe these; deny all other env
+        env: [
+          "NODE_V8_COVERAGE",
+          "NODE_DEBUG_NATIVE",
+          "NODE_DISABLE_COMPILE_CACHE",
+          "NODE_COMPILE_CACHE_PORTABLE",
+          "NODE_COMPILE_CACHE",
+        ],
         run: false,
         ffi: false,
       },

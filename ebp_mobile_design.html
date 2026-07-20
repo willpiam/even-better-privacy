@@ -1,0 +1,1043 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EBP Mobile UI Plan</title>
+<style>
+:root {
+  --accent: #1a5fb4;
+  --accent-soft: #e8f0fa;
+  --text: #111;
+  --muted: #666;
+  --border: #e8e8e8;
+  --surface: #fff;
+  --page: #f4f5f7;
+  --danger: #d11a2a;
+  --success: #1a7f37;
+  --canvas: #2c2c2c;
+  --dot: #3a3a3a;
+  --pw: 390px;
+  --ph: 844px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  width: 100%; height: 100%; overflow: hidden;
+  font-family: var(--font); background: var(--canvas); color: #eee;
+  user-select: none;
+}
+
+.toolbar {
+  position: fixed; top: 0; left: 0; right: 0; height: 44px; z-index: 100;
+  display: flex; align-items: center; gap: 12px; padding: 0 14px;
+  background: #1e1e1e; border-bottom: 1px solid #333; font-size: 13px;
+}
+.toolbar h1 { font-size: 13px; font-weight: 600; color: #fff; white-space: nowrap; }
+.toolbar .hint { color: #888; font-size: 12px; }
+.toolbar .spacer { flex: 1; }
+.zoom-controls { display: flex; align-items: center; gap: 4px; }
+.zoom-controls button {
+  background: #333; border: 1px solid #444; color: #ddd;
+  height: 28px; min-width: 28px; border-radius: 6px; cursor: pointer; font-size: 14px; padding: 0 8px;
+}
+.zoom-controls button:hover { background: #404040; }
+#zoom-label {
+  min-width: 48px; text-align: center; font-variant-numeric: tabular-nums;
+  color: #bbb; font-size: 12px;
+}
+
+#viewport {
+  position: absolute; top: 44px; left: 0; right: 0; bottom: 0;
+  overflow: hidden; cursor: grab;
+  background-color: var(--canvas);
+  background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+#viewport.panning { cursor: grabbing; }
+#canvas {
+  position: absolute; top: 0; left: 0;
+  transform-origin: 0 0; will-change: transform;
+}
+
+.cluster {
+  position: absolute; font-size: 18px; font-weight: 700;
+  color: #666; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.frame { position: absolute; width: var(--pw); }
+.frame-label { margin-bottom: 10px; padding: 0 4px; }
+.frame-label .title { font-size: 14px; font-weight: 600; color: #fff; }
+.frame-label .note { font-size: 11px; color: #999; margin-top: 2px; line-height: 1.35; }
+
+.phone {
+  width: var(--pw); height: var(--ph); background: #1a1a1a;
+  border-radius: 36px; padding: 12px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+}
+.screen {
+  width: 100%; height: 100%; background: var(--surface);
+  border-radius: 26px; overflow: hidden;
+  display: flex; flex-direction: column;
+  color: var(--text); font-size: 14px; position: relative;
+}
+
+.status {
+  height: 28px; flex-shrink: 0; display: flex; align-items: center;
+  justify-content: space-between; padding: 0 18px;
+  font-size: 11px; font-weight: 600; background: var(--surface);
+}
+.status .island {
+  width: 90px; height: 10px; background: #111;
+  border-radius: 0 0 8px 8px;
+}
+.hdr {
+  height: 52px; flex-shrink: 0; display: flex; align-items: center;
+  padding: 0 12px; gap: 8px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.hdr .back { color: var(--accent); font-size: 22px; font-weight: 400; width: 28px; line-height: 1; }
+.hdr .ttl { flex: 1; font-size: 17px; font-weight: 600; text-align: center; }
+.hdr .act { color: var(--accent); font-size: 15px; font-weight: 500; min-width: 48px; text-align: right; }
+.hdr .act.dim { color: var(--muted); }
+
+.body {
+  flex: 1; overflow: hidden; background: var(--page);
+  padding: 12px; display: flex; flex-direction: column; gap: 10px;
+}
+
+.tabs {
+  height: 56px; flex-shrink: 0; display: flex;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.tab {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  font-size: 10px; color: var(--muted);
+}
+.tab.on { color: var(--accent); font-weight: 600; }
+.tab .ico { font-size: 16px; line-height: 1; height: 22px; display: flex; align-items: center; }
+
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  height: 44px; border-radius: 10px; font-size: 15px; font-weight: 600;
+  border: none; padding: 0 16px;
+}
+.btn.p { background: var(--accent); color: #fff; }
+.btn.s { background: var(--surface); color: var(--accent); border: 1px solid var(--border); }
+.btn.d { background: var(--danger); color: #fff; }
+.btn.off { opacity: 0.55; }
+.row { display: flex; gap: 8px; }
+.row .btn { flex: 1; }
+
+.field {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 10px 12px;
+}
+.field label {
+  display: block; font-size: 11px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px;
+}
+.field .v { font-size: 15px; min-height: 20px; }
+.field .ph { color: #aaa; }
+.field.ta .v { min-height: 72px; line-height: 1.4; }
+
+.card { background: var(--surface); border-radius: 10px; border: 1px solid var(--border); overflow: hidden; }
+.lr {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 14px; border-bottom: 1px solid var(--border); background: var(--surface);
+}
+.lr:last-child { border-bottom: none; }
+.av {
+  width: 36px; height: 36px; border-radius: 18px; flex-shrink: 0;
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 13px;
+}
+.lr .m { flex: 1; min-width: 0; }
+.lr .n { font-weight: 600; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lr .u { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chev { color: #ccc; font-size: 18px; }
+.badge {
+  font-size: 11px; font-weight: 600; color: var(--accent);
+  background: var(--accent-soft); padding: 2px 8px; border-radius: 10px;
+}
+
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 12px; font-weight: 600; padding: 6px 10px; border-radius: 16px;
+  align-self: flex-start;
+}
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+.sec {
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 2px;
+}
+.ban { border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.35; }
+.ban.i { background: var(--accent-soft); color: var(--accent); }
+.ban.ok { background: #e6f4ea; color: var(--success); }
+.ban.err { background: #fde8ea; color: var(--danger); }
+
+.seg { display: flex; background: #e5e5ea; border-radius: 9px; padding: 2px; }
+.seg > div {
+  flex: 1; text-align: center; padding: 7px 4px; font-size: 13px;
+  font-weight: 500; color: var(--muted); border-radius: 7px;
+}
+.seg > .on {
+  background: var(--surface); color: var(--text); font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+
+.empty {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; text-align: center; padding: 24px; gap: 8px; color: var(--muted);
+}
+.empty .big { font-size: 40px; opacity: 0.35; }
+.empty .msg { font-size: 15px; color: var(--text); font-weight: 600; }
+.empty .sub { font-size: 13px; max-width: 220px; line-height: 1.4; }
+
+.meta { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.meta b { color: var(--text); font-weight: 600; }
+.fp {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; word-break: break-all; color: var(--muted); line-height: 1.4;
+}
+
+.sp {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 2.5px solid var(--border); border-top-color: var(--accent);
+  animation: spin 0.7s linear infinite;
+}
+.sp.lg { width: 36px; height: 36px; border-width: 3px; }
+.sp.sm { width: 16px; height: 16px; border-width: 2px; }
+.sp.w { border-color: rgba(255,255,255,0.3); border-top-color: #fff; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.busy {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.35);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 20; border-radius: 26px;
+}
+.busy-box {
+  background: #fff; border-radius: 12px; padding: 24px 28px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  min-width: 180px; box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+}
+.busy-box .m { font-size: 15px; color: var(--text); text-align: center; }
+
+.inline-busy {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 24px; color: var(--muted); font-size: 13px;
+}
+
+.dim {
+  position: absolute; inset: 0; background: rgba(0,0,0,0.25);
+  z-index: 14; border-radius: 26px;
+}
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 15;
+  background: var(--surface); border-radius: 16px 16px 0 0;
+  padding: 12px 16px 28px; box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
+}
+.sheet .handle {
+  width: 36px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 14px;
+}
+.sheet h3 { font-size: 16px; margin-bottom: 10px; }
+
+.tog-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 14px; border-bottom: 1px solid var(--border);
+}
+.tog-row:last-child { border-bottom: none; }
+.tog {
+  width: 44px; height: 26px; background: var(--accent); border-radius: 13px; position: relative;
+}
+.tog::after {
+  content: ""; position: absolute; top: 2px; right: 2px;
+  width: 22px; height: 22px; background: #fff; border-radius: 50%;
+}
+.tog.off { background: #ccc; }
+.tog.off::after { right: auto; left: 2px; }
+
+.grow { flex: 1; }
+.tree { padding-left: 4px; }
+.tn {
+  padding: 8px 0 8px 12px; border-left: 2px solid var(--border);
+  margin-left: 8px; font-size: 13px;
+}
+.tn .n { font-weight: 600; }
+.tn .r { font-size: 11px; color: var(--muted); }
+.bubble {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px; font-size: 14px; line-height: 1.45;
+}
+.mm { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <h1>EBP Mobile UI Plan</h1>
+  <span class="hint">drag to pan · ctrl/⌘+scroll to zoom · space+drag also pans</span>
+  <div class="spacer"></div>
+  <div class="zoom-controls">
+    <button type="button" id="zoom-out" title="Zoom out">−</button>
+    <span id="zoom-label">100%</span>
+    <button type="button" id="zoom-in" title="Zoom in">+</button>
+    <button type="button" id="zoom-100">100%</button>
+    <button type="button" id="zoom-fit">Fit</button>
+  </div>
+</div>
+
+<div id="viewport">
+<div id="canvas">
+
+<!-- ========== CLUSTER LABELS ========== -->
+<div class="cluster" style="left:40px;top:24px;">1 · Identities</div>
+<div class="cluster" style="left:2260px;top:24px;">2 · Contacts</div>
+<div class="cluster" style="left:3580px;top:24px;">3 · Crypto</div>
+<div class="cluster" style="left:4900px;top:24px;">4 · Mail</div>
+<div class="cluster" style="left:7100px;top:24px;">5 · More</div>
+<div class="cluster" style="left:40px;top:1100px;">6 · Loading &amp; feedback patterns</div>
+
+<!-- ========== 1. IDENTITIES ========== -->
+
+<div class="frame" style="left:40px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Identities — Home</div>
+    <div class="note">Tab root. Current identity chip + list. Replaces button-farm hub.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Identities</span><span class="act">+</span></div>
+    <div class="body">
+      <div class="chip"><span class="dot"></span> Current: alice</div>
+      <div class="meta">Server: <b>https://keys.example</b><br/>Protocol: <b>1.2.0</b></div>
+      <div class="row"><div class="btn p">Create</div><div class="btn s">EBP-HD</div></div>
+      <div class="sec">Local identities</div>
+      <div class="card">
+        <div class="lr"><div class="av">A</div><div class="m"><div class="n">alice</div><div class="u">ML-DSA · a1b2…f9e0</div></div><span class="badge">Current</span><span class="chev">›</span></div>
+        <div class="lr"><div class="av">B</div><div class="m"><div class="n">bob-work</div><div class="u">SLH-DSA · 9c3d…12ab</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="av">C</div><div class="m"><div class="n">carol-hd</div><div class="u">HD · 7e4f…88cd</div></div><span class="chev">›</span></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab on"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:480px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Identities — Empty</div>
+    <div class="note">First-run empty state with clear primary actions.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Identities</span><span class="act">+</span></div>
+    <div class="body">
+      <div class="empty">
+        <div class="big">◎</div>
+        <div class="msg">No identities yet</div>
+        <div class="sub">Create a local identity or restore one from an EBP-HD mnemonic.</div>
+        <div class="btn p" style="width:100%;margin-top:8px;">Create identity</div>
+        <div class="btn s" style="width:100%;">Restore with EBP-HD</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab on"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:920px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Create Identity</div>
+    <div class="note">Stack push. Tabs hidden on focused forms.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Create Identity</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="field"><label>Name</label><div class="v">alice</div></div>
+      <div class="field"><label>Password</label><div class="v">••••••••••••</div></div>
+      <div class="field"><label>Confirm password</label><div class="v">••••••••••••</div></div>
+      <div class="sec">Signing type</div>
+      <div class="seg"><div class="on">ML-DSA</div><div>SLH-DSA</div></div>
+      <div class="ban i">Password must meet the policy configured in Settings.</div>
+      <div class="grow"></div>
+      <div class="btn p">Create</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:1360px;top:70px;">
+  <div class="frame-label">
+    <div class="title">EBP-HD — Mnemonic</div>
+    <div class="note">Write-down step before confirmation &amp; derivation.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">EBP-HD</span><span class="act dim">1/3</span></div>
+    <div class="body">
+      <div class="ban i">Write these words down offline. You will confirm them next.</div>
+      <div class="card" style="padding:14px;">
+        <div class="grid2">
+          <div>1. orchard</div><div>2. velvet</div>
+          <div>3. lighthouse</div><div>4. quartz</div>
+          <div>5. meadow</div><div>6. cedar</div>
+          <div>7. aurora</div><div>8. pebble</div>
+          <div>9. canyon</div><div>10. silver</div>
+          <div>11. nest</div><div>12. compass</div>
+        </div>
+      </div>
+      <div class="grow"></div>
+      <div class="btn p">I wrote them down</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:1800px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Identity Detail</div>
+    <div class="note">Publish, revoke, export, delete — grouped actions.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">alice</span><span class="act">⋯</span></div>
+    <div class="body">
+      <div class="card" style="padding:14px;">
+        <div style="font-weight:700;font-size:18px;margin-bottom:6px;">alice</div>
+        <div class="meta">ML-DSA · Published</div>
+        <div class="fp" style="margin-top:8px;">a1b2c3d4e5f6789012345678abcdef90fedcba0987654321</div>
+      </div>
+      <div class="btn p">Publish to server</div>
+      <div class="row"><div class="btn s">Export</div><div class="btn s">Import</div></div>
+      <div class="btn s">Emergency certificate</div>
+      <div class="btn s">View details</div>
+      <div class="grow"></div>
+      <div class="btn d">Revoke identity</div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== 2. CONTACTS ========== -->
+
+<div class="frame" style="left:2260px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Contacts — List</div>
+    <div class="note">Local contacts + fetch / browse key server.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Contacts</span><span class="act">Import</span></div>
+    <div class="body">
+      <div class="field"><label>Search</label><div class="v ph">Name or fingerprint…</div></div>
+      <div class="row"><div class="btn s">Fetch</div><div class="btn s">Browse server</div></div>
+      <div class="sec">Local</div>
+      <div class="card">
+        <div class="lr"><div class="av">D</div><div class="m"><div class="n">dana</div><div class="u">dana@example.com</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="av">E</div><div class="m"><div class="n">evan</div><div class="u">evan@work.example</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="av">F</div><div class="m"><div class="n">faye</div><div class="u">No email detail</div></div><span class="chev">›</span></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab on"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:2700px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Contact Detail</div>
+    <div class="note">Sync, opaque resolve, notes, delete.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">dana</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="card" style="padding:14px;">
+        <div style="font-weight:700;font-size:18px;">dana</div>
+        <div class="fp" style="margin-top:8px;">1122aabbccddeeff00112233445566778899aabb</div>
+        <div class="meta" style="margin-top:8px;">email: dana@example.com</div>
+      </div>
+      <div class="field ta"><label>Local notes</label><div class="v">Met at conference. Prefers SLH-DSA.</div></div>
+      <div class="row"><div class="btn p">Sync</div><div class="btn s">Opaque resolve</div></div>
+      <div class="grow"></div>
+      <div class="btn d">Delete contact</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:3140px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Contact Detail — Syncing</div>
+    <div class="note">Unified BusyOverlay for long network ops.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">dana</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="card" style="padding:14px;">
+        <div style="font-weight:700;font-size:18px;">dana</div>
+        <div class="fp" style="margin-top:8px;">1122aabbccddeeff00112233445566778899aabb</div>
+      </div>
+      <div class="row"><div class="btn p off">Sync</div><div class="btn s off">Opaque resolve</div></div>
+    </div>
+    <div class="busy">
+      <div class="busy-box"><div class="sp lg"></div><div class="m">Syncing contact…</div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== 3. CRYPTO ========== -->
+
+<div class="frame" style="left:3580px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Crypto — Hub</div>
+    <div class="note">Segmented entry for Sign/Verify vs Encrypt/Decrypt.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Crypto</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="seg"><div class="on">Sign / Verify</div><div>Encrypt / Decrypt</div></div>
+      <div class="chip"><span class="dot"></span> Signing as alice</div>
+      <div class="field ta"><label>Message</label><div class="v">Hello from EBP mobile.</div></div>
+      <div class="row"><div class="btn p">Sign</div><div class="btn s">Verify</div></div>
+      <div class="sec">Or use a file</div>
+      <div class="btn s">Choose file…</div>
+      <div class="ban ok">Signature verified for dana.</div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab on"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:4020px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Encrypt / Decrypt</div>
+    <div class="note">Contact picker + message/file modes.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Crypto</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="seg"><div>Sign / Verify</div><div class="on">Encrypt / Decrypt</div></div>
+      <div class="field"><label>Recipient</label><div class="v">dana · dana@example.com</div></div>
+      <div class="field ta"><label>Message</label><div class="v">Confidential payload for dana.</div></div>
+      <div class="row"><div class="btn p">Encrypt</div><div class="btn s">Decrypt</div></div>
+      <div class="sec">Output</div>
+      <div class="card" style="padding:12px;">
+        <div class="fp">EBP1:eyJhbGciOiJ… (truncated)</div>
+        <div class="btn s" style="margin-top:10px;height:36px;font-size:13px;">Copy</div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab on"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:4460px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Encrypting…</div>
+    <div class="note">BusyOverlay during heavy crypto work.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Crypto</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="seg"><div>Sign / Verify</div><div class="on">Encrypt / Decrypt</div></div>
+      <div class="field"><label>Recipient</label><div class="v">dana · dana@example.com</div></div>
+      <div class="field ta"><label>Message</label><div class="v">Confidential payload for dana.</div></div>
+      <div class="row"><div class="btn p off">Encrypt</div><div class="btn s off">Decrypt</div></div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab on"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+    <div class="busy">
+      <div class="busy-box"><div class="sp lg"></div><div class="m">Encrypting…</div></div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== 4. MAIL ========== -->
+
+<div class="frame" style="left:4900px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Mail — Accounts</div>
+    <div class="note">Account list, OAuth, PIN unlock entry.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Mail</span><span class="act">+</span></div>
+    <div class="body">
+      <div class="ban i">Secrets locked. Unlock with PIN to open inboxes.</div>
+      <div class="btn p">Unlock with PIN</div>
+      <div class="sec">Accounts</div>
+      <div class="card">
+        <div class="lr"><div class="av">✉</div><div class="m"><div class="n">alice@mail.example</div><div class="u">IMAP · OAuth linked</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="av">✉</div><div class="m"><div class="n">work@corp.example</div><div class="u">IMAP · Password</div></div><span class="chev">›</span></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab on"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:5340px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Mail — Account Setup</div>
+    <div class="note">Manual IMAP/SMTP or OAuth.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Add Account</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="seg"><div class="on">Manual</div><div>OAuth</div></div>
+      <div class="field"><label>Email</label><div class="v">alice@mail.example</div></div>
+      <div class="field"><label>IMAP host</label><div class="v">imap.mail.example</div></div>
+      <div class="field"><label>SMTP host</label><div class="v">smtp.mail.example</div></div>
+      <div class="field"><label>Password</label><div class="v">••••••••</div></div>
+      <div class="grow"></div>
+      <div class="btn s">Test connection</div>
+      <div class="btn p">Save account</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:5780px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Mail — Inbox (loading)</div>
+    <div class="note">Inline list spinner while fetching messages.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Inbox</span><span class="act">✎</span></div>
+    <div class="body">
+      <div class="meta">alice@mail.example</div>
+      <div class="inline-busy"><div class="sp"></div> Loading messages…</div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab on"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:6220px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Mail — Message</div>
+    <div class="note">Body + EBP decrypt affordance.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Message</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="mm"><b>From</b> dana@example.com<br/><b>Subject</b> Project update<br/><b>Date</b> Jul 20, 2026</div>
+      <div class="ban i">This message contains an EBP payload.</div>
+      <div class="btn p">Decrypt with alice</div>
+      <div class="bubble">Hi Alice — here are the encrypted notes for the release. Let me know when you have verified the cert tree.</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:6660px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Mail — Compose + resolve</div>
+    <div class="note">Recipient resolve sheet when To matches a contact.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">Cancel</span><span class="ttl">Compose</span><span class="act">Send</span></div>
+    <div class="body">
+      <div class="field"><label>To</label><div class="v">dana@example.com</div></div>
+      <div class="field"><label>Subject</label><div class="v">Re: Project update</div></div>
+      <div class="seg"><div>Plain</div><div class="on">EBP</div></div>
+      <div class="field ta"><label>Body</label><div class="v">Thanks — decrypting now.</div></div>
+    </div>
+    <div class="dim"></div>
+    <div class="sheet">
+      <div class="handle"></div>
+      <h3>Send as</h3>
+      <div class="card">
+        <div class="lr"><div class="av">D</div><div class="m"><div class="n">dana (contact)</div><div class="u">Encrypt to published key</div></div></div>
+        <div class="lr"><div class="m"><div class="n">Plain email only</div><div class="u">No EBP encryption</div></div></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== 5. MORE ========== -->
+
+<div class="frame" style="left:7100px;top:70px;">
+  <div class="frame-label">
+    <div class="title">More — Settings</div>
+    <div class="note">Server, policy, mail prefs. Dev tools demoted here.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">More</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="sec">Settings</div>
+      <div class="card">
+        <div class="lr"><div class="m"><div class="n">Server URL</div><div class="u">https://keys.example</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Password policy</div><div class="u">Length ≥ 12</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Mail preferences</div><div class="u">PIN unlock enabled</div></div><span class="chev">›</span></div>
+      </div>
+      <div class="sec">App</div>
+      <div class="card">
+        <div class="lr"><div class="m"><div class="n">Certificates</div><div class="u">Hierarchy tree</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Project info</div><div class="u">About EBP</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Activity log</div><div class="u">Recent operations</div></div><span class="chev">›</span></div>
+      </div>
+      <div class="sec">Developer</div>
+      <div class="card">
+        <div class="lr"><div class="m"><div class="n">Core self-test</div><div class="u">Run crypto parity checks</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Mail trace</div><div class="u">Protocol stubs</div></div><span class="chev">›</span></div>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab on"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:7540px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Certificates</div>
+    <div class="note">Propose / accept hierarchy + merged tree.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Certificates</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="row"><div class="btn p">Propose</div><div class="btn s">Pending</div></div>
+      <div class="sec">Merged tree</div>
+      <div class="card" style="padding:12px;">
+        <div class="tn" style="border:none;margin:0;padding-left:0;">
+          <div class="n">root-org</div><div class="r">Root · accepted</div>
+        </div>
+        <div class="tree">
+          <div class="tn"><div class="n">team-alpha</div><div class="r">Child · accepted</div></div>
+          <div class="tn"><div class="n">alice</div><div class="r">Leaf · pending accept</div></div>
+        </div>
+      </div>
+      <div class="ban i">1 proposal waiting for your response.</div>
+      <div class="row"><div class="btn p">Accept</div><div class="btn d">Reject</div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:7980px;top:70px;">
+  <div class="frame-label">
+    <div class="title">Project Info</div>
+    <div class="note">Static about + links.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Project Info</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="card" style="padding:16px;">
+        <div style="font-weight:700;font-size:20px;color:var(--accent);">Even Better Privacy</div>
+        <div class="meta" style="margin-top:8px;">Post-quantum encryption for people who care about lasting secrecy.</div>
+      </div>
+      <div class="card">
+        <div class="lr"><div class="m"><div class="n">Documentation</div><div class="u">ebp project docs</div></div><span class="chev">›</span></div>
+        <div class="lr"><div class="m"><div class="n">Protocol version</div><div class="u">1.2.0</div></div></div>
+        <div class="lr"><div class="m"><div class="n">App build</div><div class="u">mobile · parity v1</div></div></div>
+      </div>
+    </div>
+  </div></div>
+</div>
+
+<!-- ========== 6. PATTERNS ========== -->
+
+<div class="frame" style="left:40px;top:1150px;">
+  <div class="frame-label">
+    <div class="title">Pattern — BusyOverlay</div>
+    <div class="note">Canonical full-screen wait. Use for crypto, publish, sync, unlock.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Identity</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="btn p off">Publish to server</div>
+      <div class="meta">Underlying screen stays visible but non-interactive.</div>
+    </div>
+    <div class="busy">
+      <div class="busy-box"><div class="sp lg"></div><div class="m">Publishing…</div></div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:480px;top:1150px;">
+  <div class="frame-label">
+    <div class="title">Pattern — Inline spinner</div>
+    <div class="note">For list/content regions where a modal would be heavy.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Contacts</span><span class="act">Import</span></div>
+    <div class="body">
+      <div class="sec">Browsing key server</div>
+      <div class="inline-busy"><div class="sp"></div> Fetching directory…</div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab on"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:920px;top:1150px;">
+  <div class="frame-label">
+    <div class="title">Pattern — Button spinner</div>
+    <div class="note">Short saves: disable button + inline spinner, keep chrome usable.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back">‹</span><span class="ttl">Settings</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="field"><label>Server URL</label><div class="v">https://keys.example</div></div>
+      <div class="grow"></div>
+      <div class="btn p off"><div class="sp sm w"></div> Saving…</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:1360px;top:1150px;">
+  <div class="frame-label">
+    <div class="title">Pattern — Status banners</div>
+    <div class="note">Consistent info / success / error feedback.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Crypto</span><span class="act dim"></span></div>
+    <div class="body">
+      <div class="ban i">Waiting for confirmation before signing.</div>
+      <div class="ban ok">Message signed with alice.</div>
+      <div class="ban err">Verification failed: fingerprint mismatch.</div>
+      <div class="meta" style="margin-top:8px;">Replace ad-hoc status Text with these banners everywhere.</div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab on"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+  </div></div>
+</div>
+
+<div class="frame" style="left:1800px;top:1150px;">
+  <div class="frame-label">
+    <div class="title">Pattern — Unlock busy</div>
+    <div class="note">Mail PIN unlock uses the same overlay component.</div>
+  </div>
+  <div class="phone"><div class="screen">
+    <div class="status"><span>9:41</span><div class="island"></div><span>100%</span></div>
+    <div class="hdr"><span class="back"></span><span class="ttl">Mail</span><span class="act">+</span></div>
+    <div class="body">
+      <div class="field"><label>PIN</label><div class="v">••••</div></div>
+      <div class="btn p off">Unlock</div>
+    </div>
+    <div class="tabs">
+      <div class="tab"><span class="ico">◎</span>Identities</div>
+      <div class="tab"><span class="ico">◉</span>Contacts</div>
+      <div class="tab"><span class="ico">⬡</span>Crypto</div>
+      <div class="tab on"><span class="ico">✉</span>Mail</div>
+      <div class="tab"><span class="ico">⋯</span>More</div>
+    </div>
+    <div class="busy">
+      <div class="busy-box"><div class="sp lg"></div><div class="m">Unlocking mail secrets…</div></div>
+    </div>
+  </div></div>
+</div>
+
+</div><!-- /canvas -->
+</div><!-- /viewport -->
+
+<script>
+(function () {
+  const viewport = document.getElementById('viewport');
+  const canvas = document.getElementById('canvas');
+  const zoomLabel = document.getElementById('zoom-label');
+
+  let scale = 0.55;
+  let x = 40;
+  let y = 40;
+  let panning = false;
+  let spaceDown = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  const MIN = 0.15;
+  const MAX = 2.5;
+
+  function apply() {
+    canvas.style.transform = 'translate(' + x + 'px,' + y + 'px) scale(' + scale + ')';
+    zoomLabel.textContent = Math.round(scale * 100) + '%';
+  }
+
+  function zoomAt(clientX, clientY, nextScale) {
+    nextScale = Math.min(MAX, Math.max(MIN, nextScale));
+    const rect = viewport.getBoundingClientRect();
+    const vx = clientX - rect.left;
+    const vy = clientY - rect.top;
+    const wx = (vx - x) / scale;
+    const wy = (vy - y) / scale;
+    scale = nextScale;
+    x = vx - wx * scale;
+    y = vy - wy * scale;
+    apply();
+  }
+
+  function fit() {
+    let maxR = 0, maxB = 0;
+    canvas.querySelectorAll('.frame').forEach(function (el) {
+      const l = el.offsetLeft;
+      const t = el.offsetTop;
+      const r = l + el.offsetWidth;
+      const b = t + el.offsetHeight + 40;
+      if (r > maxR) maxR = r;
+      if (b > maxB) maxB = b;
+    });
+    const pad = 80;
+    const vw = viewport.clientWidth - pad * 2;
+    const vh = viewport.clientHeight - pad * 2;
+    const sx = vw / maxR;
+    const sy = vh / maxB;
+    scale = Math.min(MAX, Math.max(MIN, Math.min(sx, sy)));
+    x = pad + (vw - maxR * scale) / 2;
+    y = pad + (vh - maxB * scale) / 2;
+    apply();
+  }
+
+  viewport.addEventListener('wheel', function (e) {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+      zoomAt(e.clientX, e.clientY, scale * factor);
+    } else {
+      e.preventDefault();
+      x -= e.deltaX;
+      y -= e.deltaY;
+      apply();
+    }
+  }, { passive: false });
+
+  viewport.addEventListener('mousedown', function (e) {
+    const middle = e.button === 1;
+    const left = e.button === 0;
+    if (middle || (left && spaceDown) || left) {
+      // Always allow left-drag on empty canvas to pan (review-only viewer)
+      panning = true;
+      lastX = e.clientX;
+      lastY = e.clientY;
+      viewport.classList.add('panning');
+      e.preventDefault();
+    }
+  });
+
+  window.addEventListener('mousemove', function (e) {
+    if (!panning) return;
+    x += e.clientX - lastX;
+    y += e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    apply();
+  });
+
+  window.addEventListener('mouseup', function () {
+    panning = false;
+    viewport.classList.remove('panning');
+  });
+
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' && !e.repeat) {
+      spaceDown = true;
+      e.preventDefault();
+    }
+  });
+  window.addEventListener('keyup', function (e) {
+    if (e.code === 'Space') spaceDown = false;
+  });
+
+  // Prevent middle-click autoscroll
+  viewport.addEventListener('auxclick', function (e) {
+    if (e.button === 1) e.preventDefault();
+  });
+
+  document.getElementById('zoom-in').addEventListener('click', function () {
+    const r = viewport.getBoundingClientRect();
+    zoomAt(r.left + r.width / 2, r.top + r.height / 2, scale * 1.15);
+  });
+  document.getElementById('zoom-out').addEventListener('click', function () {
+    const r = viewport.getBoundingClientRect();
+    zoomAt(r.left + r.width / 2, r.top + r.height / 2, scale / 1.15);
+  });
+  document.getElementById('zoom-100').addEventListener('click', function () {
+    const r = viewport.getBoundingClientRect();
+    zoomAt(r.left + r.width / 2, r.top + r.height / 2, 1);
+  });
+  document.getElementById('zoom-fit').addEventListener('click', fit);
+
+  apply();
+  // Start slightly zoomed out so several phones are visible
+  requestAnimationFrame(function () {
+    fit();
+    // Prefer a readable starting zoom if fit is too small
+    if (scale < 0.35) {
+      scale = 0.4;
+      x = 60;
+      y = 40;
+      apply();
+    }
+  });
+})();
+</script>
+</body>
+</html>
