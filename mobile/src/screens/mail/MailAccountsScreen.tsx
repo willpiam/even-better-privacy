@@ -1,17 +1,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {
   getMailSecretsStatus,
@@ -38,9 +29,18 @@ import {
   getServerUrl,
 } from '../../services/settings';
 import {appendActivityLog} from '../../services/activityLog';
+import Screen from '../../components/Screen';
+import TextField from '../../components/TextField';
+import AppButton from '../../components/AppButton';
+import Card from '../../components/Card';
+import ListRow from '../../components/ListRow';
+import SectionTitle from '../../components/SectionTitle';
 import BusyOverlay from '../../components/BusyOverlay';
+import StatusBanner from '../../components/StatusBanner';
+import {statusKind} from '../../theme/statusKind';
+import {colors, radius, spacing, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailAccounts'>;
+type Props = NativeStackScreenProps<MailStackParamList, 'MailAccounts'>;
 
 const EMPTY_OAUTH_CONFIG: MailOauthServerConfig = {
   gmail: {clientId: '', configured: false},
@@ -182,111 +182,123 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen scroll>
       <BusyOverlay visible={unlocking} message="Unlocking mail secrets…" />
-      <ScrollView>
-        <Text style={styles.header}>Mail accounts ({identityName})</Text>
-        {accounts.map(a => {
-          const selected = a.id === selectedAccountId;
-          return (
-            <View
-              key={a.id}
-              style={[styles.accountRow, selected && styles.accountRowSelected]}>
-              <TouchableOpacity
-                onPress={() =>
-                  navigation.navigate('MailAccountSetup', {accountId: a.id})
-                }>
-                <Text style={styles.accountTitle}>
-                  {a.name} — {a.fromEmail}
-                  {selected ? ' (selected)' : ''}
-                </Text>
-                <Text style={styles.accountMeta}>
-                  {a.authType === 'oauth' ? 'OAuth' : 'Manual IMAP/SMTP'} · Tap to edit
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.accountActions}>
-                <Button
-                  title="Select"
-                  onPress={async () => {
-                    await selectMailAccount(identityName, a.id);
-                    await refresh();
-                  }}
+      <Text style={styles.header}>Mail accounts ({identityName || '…'})</Text>
+      <StatusBanner message={status} kind={statusKind(status)} />
+
+      {accounts.length > 0 ? (
+        <View style={styles.accountList}>
+          {accounts.map(a => {
+            const selected = a.id === selectedAccountId;
+            return (
+              <Card key={a.id}>
+                <ListRow
+                  title={a.name}
+                  subtitle={`${a.fromEmail} · ${
+                    a.authType === 'oauth' ? 'OAuth' : 'Manual IMAP/SMTP'
+                  }`}
+                  badge={selected ? 'Selected' : undefined}
+                  avatarText={a.name}
+                  onPress={() =>
+                    navigation.navigate('MailAccountSetup', {accountId: a.id})
+                  }
                 />
-              </View>
-            </View>
-          );
-        })}
+                {!selected ? (
+                  <View style={styles.selectWrap}>
+                    <AppButton
+                      title="Select"
+                      variant="secondary"
+                      onPress={() => {
+                        void (async () => {
+                          await selectMailAccount(identityName, a.id);
+                          await refresh();
+                        })();
+                      }}
+                    />
+                  </View>
+                ) : null}
+              </Card>
+            );
+          })}
+        </View>
+      ) : (
+        <Text style={styles.empty}>No mail accounts yet.</Text>
+      )}
 
-        {secretsLocked ? (
-          <View style={styles.unlockSection}>
-            <Text style={styles.sectionLabel}>
-              Unlock stored mail passwords with your email PIN
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={unlockPin}
-              onChangeText={setUnlockPin}
-              placeholder="Email PIN"
-              secureTextEntry
-            />
-            <Button
-              title={unlocking ? 'Unlocking…' : 'Unlock mail secrets'}
-              disabled={unlocking}
-              onPress={onUnlock}
-            />
-          </View>
-        ) : null}
+      {secretsLocked ? (
+        <View style={styles.unlockSection}>
+          <SectionTitle>Unlock secrets</SectionTitle>
+          <Text style={styles.unlockHint}>
+            Unlock stored mail passwords with your email PIN
+          </Text>
+          <TextField
+            label="Email PIN"
+            value={unlockPin}
+            onChangeText={setUnlockPin}
+            placeholder="Email PIN"
+            secureTextEntry
+          />
+          <AppButton
+            title={unlocking ? 'Unlocking…' : 'Unlock mail secrets'}
+            disabled={unlocking}
+            loading={unlocking}
+            onPress={onUnlock}
+          />
+        </View>
+      ) : null}
 
-        <View style={styles.buttonSpacer} />
-        <Button
-          title="Add manual account"
-          onPress={() => navigation.navigate('MailAccountSetup', {})}
-        />
-        <View style={styles.buttonSpacer} />
-        <Button title="Link Gmail (OAuth)" onPress={() => startOAuth('gmail')} />
-        <Button title="Link Outlook (OAuth)" onPress={() => startOAuth('outlook')} />
-        <View style={styles.buttonSpacer} />
-        <Button title="Open inbox" onPress={() => navigation.navigate('MailInbox')} />
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle>Add account</SectionTitle>
+      <AppButton
+        title="Add manual account"
+        onPress={() => navigation.navigate('MailAccountSetup', {})}
+      />
+      <AppButton
+        title="Link Gmail (OAuth)"
+        variant="secondary"
+        onPress={() => startOAuth('gmail')}
+      />
+      <AppButton
+        title="Link Outlook (OAuth)"
+        variant="secondary"
+        onPress={() => startOAuth('outlook')}
+      />
+      <AppButton
+        title="Open inbox"
+        variant="secondary"
+        onPress={() => navigation.navigate('MailInbox')}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  header: {fontWeight: '700', fontSize: 18, marginBottom: 12, color: '#111'},
-  accountRow: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
+  header: {
+    fontWeight: '700',
+    fontSize: typography.title,
+    color: colors.text,
   },
-  accountRowSelected: {
-    borderColor: '#2563eb',
-    backgroundColor: '#f0f6ff',
+  empty: {
+    color: colors.muted,
+    fontSize: typography.body,
+    paddingVertical: spacing.md,
   },
-  accountTitle: {fontWeight: '600', color: '#111', marginBottom: 4},
-  accountMeta: {fontSize: 12, color: '#555', marginBottom: 8},
-  accountActions: {alignSelf: 'flex-start'},
+  accountList: {gap: 10},
+  selectWrap: {
+    padding: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.border,
+  },
   unlockSection: {
     borderWidth: 1,
     borderColor: '#f59e0b',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
+    borderRadius: radius.md,
+    padding: spacing.md,
     backgroundColor: '#fffbeb',
+    gap: 10,
   },
-  sectionLabel: {color: '#111', marginBottom: 8},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    color: '#111',
+  unlockHint: {
+    color: colors.text,
+    fontSize: typography.caption,
   },
-  buttonSpacer: {height: 8},
-  status: {marginTop: 10, color: '#111'},
 });

@@ -1,28 +1,31 @@
-import React, {useCallback, useState} from 'react';
-import {
-  Button,
-  FlatList,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-} from 'react-native';
+import React, {useCallback, useLayoutEffect, useState} from 'react';
+import {FlatList, StyleSheet, Text} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {resolveSelectedAccount} from '../../services/mail/accountStore';
 import {listInboxMessages} from '../../services/mail/imap';
 import type {MailMessageSummary} from '../../services/mail/types';
+import Screen from '../../components/Screen';
+import AppButton from '../../components/AppButton';
+import ListRow from '../../components/ListRow';
+import Card from '../../components/Card';
+import InlineBusy from '../../components/InlineBusy';
+import StatusBanner from '../../components/StatusBanner';
+import {statusKind} from '../../theme/statusKind';
+import {colors, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailInbox'>;
+type Props = NativeStackScreenProps<MailStackParamList, 'MailInbox'>;
 
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
   const [status, setStatus] = useState('');
   const [accountEmail, setAccountEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const load = useCallback(async () => {
+    setLoading(true);
     try {
       const identityName = await getCurrentIdentityRequired();
       const resolved = await resolveSelectedAccount(identityName);
@@ -43,6 +46,8 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       setStatus(error instanceof Error ? error.message : String(error));
       setMessages([]);
       setAccountEmail('');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -52,44 +57,66 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     }, [load]),
   );
 
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Text
+          style={styles.headerAction}
+          onPress={() => navigation.navigate('MailCompose')}>
+          Compose
+        </Text>
+      ),
+    });
+  }, [navigation]);
+
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.screen} contentStyle={styles.content}>
       {accountEmail ? (
         <Text style={styles.accountEmail}>{accountEmail}</Text>
       ) : null}
-      <Button title="Refresh inbox" onPress={load} />
-      <Button title="Compose" onPress={() => navigation.navigate('MailCompose')} />
-      {status ? <Text style={styles.status}>{status}</Text> : null}
-      <FlatList
-        data={messages}
-        keyExtractor={item => String(item.uid)}
-        ListEmptyComponent={<Text style={styles.empty}>No messages loaded.</Text>}
-        renderItem={({item}) => (
-          <TouchableOpacity
-            style={styles.item}
-            onPress={() => navigation.navigate('MailMessage', {uid: item.uid})}>
-            <Text style={styles.subject}>{item.subject}</Text>
-            <Text style={styles.meta}>{item.from}</Text>
-            <Text style={styles.meta}>{item.date}</Text>
-          </TouchableOpacity>
-        )}
-      />
-    </SafeAreaView>
+      <AppButton title="Refresh inbox" variant="secondary" onPress={load} />
+      <StatusBanner message={status} kind={statusKind(status)} />
+      {loading ? <InlineBusy message="Loading messages…" /> : null}
+      {!loading ? (
+        <Card style={styles.listCard}>
+          <FlatList
+            data={messages}
+            keyExtractor={item => String(item.uid)}
+            ListEmptyComponent={
+              <Text style={styles.empty}>No messages loaded.</Text>
+            }
+            renderItem={({item}) => (
+              <ListRow
+                title={item.subject || '(no subject)'}
+                subtitle={`${item.from} · ${item.date}`}
+                onPress={() =>
+                  navigation.navigate('MailMessage', {uid: item.uid})
+                }
+              />
+            )}
+          />
+        </Card>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  accountEmail: {fontSize: 14, color: '#444', marginBottom: 8},
-  status: {marginVertical: 8, color: '#111'},
-  empty: {color: '#555', marginTop: 12},
-  item: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+  screen: {flex: 1},
+  content: {flex: 1},
+  accountEmail: {
+    fontSize: typography.body,
+    color: colors.muted,
   },
-  subject: {fontWeight: '600', color: '#111'},
-  meta: {fontSize: 12, color: '#444', marginTop: 2},
+  headerAction: {
+    color: colors.accent,
+    fontWeight: '600',
+    fontSize: 15,
+    paddingHorizontal: 8,
+  },
+  listCard: {flex: 1},
+  empty: {
+    color: colors.muted,
+    padding: 16,
+  },
 });

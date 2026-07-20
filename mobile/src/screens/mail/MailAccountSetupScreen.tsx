@@ -1,18 +1,8 @@
 import React, {useCallback, useState} from 'react';
-import {
-  Alert,
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {
   deleteMailAccount,
@@ -33,8 +23,17 @@ import {
   type MailAccountRecord,
 } from '../../services/mail/types';
 import {appendActivityLog} from '../../services/activityLog';
+import Screen from '../../components/Screen';
+import TextField from '../../components/TextField';
+import AppButton from '../../components/AppButton';
+import SectionTitle from '../../components/SectionTitle';
+import BusyOverlay from '../../components/BusyOverlay';
+import StatusBanner from '../../components/StatusBanner';
+import Card from '../../components/Card';
+import {statusKind} from '../../theme/statusKind';
+import {colors, spacing, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailAccountSetup'>;
+type Props = NativeStackScreenProps<MailStackParamList, 'MailAccountSetup'>;
 
 export default function MailAccountSetupScreen({
   navigation,
@@ -65,6 +64,7 @@ export default function MailAccountSetupScreen({
   const [emailPin, setEmailPin] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const name = await getCurrentIdentityRequired();
@@ -160,6 +160,7 @@ export default function MailAccountSetupScreen({
       return;
     }
     setLoading(true);
+    setBusyMessage('Testing mail connection…');
     setStatus('');
     try {
       await clearMailTrace();
@@ -173,6 +174,7 @@ export default function MailAccountSetupScreen({
       setStatus(message);
     } finally {
       setLoading(false);
+      setBusyMessage(null);
     }
   };
 
@@ -181,6 +183,7 @@ export default function MailAccountSetupScreen({
       return;
     }
     setLoading(true);
+    setBusyMessage('Saving mail account…');
     setStatus('');
     try {
       const config = buildConfig();
@@ -209,6 +212,7 @@ export default function MailAccountSetupScreen({
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setLoading(false);
+      setBusyMessage(null);
     }
   };
 
@@ -240,9 +244,9 @@ export default function MailAccountSetupScreen({
 
   if (isEdit && isOAuth && existing) {
     return (
-      <SafeAreaView style={styles.container}>
-        <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.section}>OAuth account</Text>
+      <Screen scroll>
+        <SectionTitle>OAuth account</SectionTitle>
+        <Card padded>
           <Text style={styles.readOnly}>{existing.name}</Text>
           <Text style={styles.readOnly}>{existing.config.fromEmail}</Text>
           <Text style={styles.readOnly}>
@@ -252,189 +256,175 @@ export default function MailAccountSetupScreen({
             OAuth-linked accounts cannot be edited here. Delete and re-link to
             change.
           </Text>
-          <Button title="Delete account" color="#c00" onPress={onDelete} />
-          {status ? <Text style={styles.status}>{status}</Text> : null}
-        </ScrollView>
-      </SafeAreaView>
+        </Card>
+        <AppButton title="Delete account" variant="danger" onPress={onDelete} />
+        <StatusBanner message={status} kind={statusKind(status)} />
+      </Screen>
     );
   }
 
   const showEmailPin = persistSecrets && !pinInSession;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.section}>Account</Text>
-        <Text style={styles.fieldLabel}>Account label</Text>
-        <TextInput
-          style={styles.input}
-          value={accountName}
-          onChangeText={setAccountName}
-          placeholder="Personal mail"
-        />
+    <Screen scroll>
+      <BusyOverlay visible={busyMessage !== null} message={busyMessage ?? undefined} />
+      <StatusBanner message={status} kind={statusKind(status)} />
 
-        <Text style={styles.section}>IMAP</Text>
-        <Text style={styles.fieldLabel}>Host</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          value={imapHost}
-          onChangeText={setImapHost}
-          placeholder="imap.example.com"
-        />
-        <Text style={styles.fieldLabel}>Port</Text>
-        <TextInput
-          keyboardType="number-pad"
-          style={styles.input}
-          value={imapPort}
-          onChangeText={setImapPort}
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Use TLS/SSL</Text>
-          <Switch value={imapSecure} onValueChange={setImapSecure} />
-        </View>
+      <SectionTitle>Account</SectionTitle>
+      <TextField
+        label="Account label"
+        value={accountName}
+        onChangeText={setAccountName}
+        placeholder="Personal mail"
+      />
 
-        <Text style={styles.section}>SMTP</Text>
-        <Text style={styles.fieldLabel}>Host</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          value={smtpHost}
-          onChangeText={setSmtpHost}
-          placeholder="smtp.example.com"
-        />
-        <Text style={styles.fieldLabel}>Port</Text>
-        <TextInput
-          keyboardType="number-pad"
-          style={styles.input}
-          value={smtpPort}
-          onChangeText={setSmtpPort}
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Use TLS/SSL</Text>
-          <Switch value={smtpSecure} onValueChange={setSmtpSecure} />
-        </View>
+      <SectionTitle>IMAP</SectionTitle>
+      <TextField
+        label="Host"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={imapHost}
+        onChangeText={setImapHost}
+        placeholder="imap.example.com"
+      />
+      <TextField
+        label="Port"
+        keyboardType="number-pad"
+        value={imapPort}
+        onChangeText={setImapPort}
+      />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Use TLS/SSL</Text>
+        <Switch value={imapSecure} onValueChange={setImapSecure} />
+      </View>
 
-        <Text style={styles.section}>Credentials</Text>
-        <Text style={styles.fieldLabel}>Username</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          value={username}
-          onChangeText={setUsername}
-          placeholder="you@example.com"
-        />
-        <Text style={styles.fieldLabel}>IMAP password</Text>
-        <TextInput
+      <SectionTitle>SMTP</SectionTitle>
+      <TextField
+        label="Host"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={smtpHost}
+        onChangeText={setSmtpHost}
+        placeholder="smtp.example.com"
+      />
+      <TextField
+        label="Port"
+        keyboardType="number-pad"
+        value={smtpPort}
+        onChangeText={setSmtpPort}
+      />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Use TLS/SSL</Text>
+        <Switch value={smtpSecure} onValueChange={setSmtpSecure} />
+      </View>
+
+      <SectionTitle>Credentials</SectionTitle>
+      <TextField
+        label="Username"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={username}
+        onChangeText={setUsername}
+        placeholder="you@example.com"
+      />
+      <TextField
+        label="IMAP password"
+        secureTextEntry
+        value={imapPassword}
+        onChangeText={setImapPassword}
+        placeholder={
+          isEdit && hasExistingSecrets ? 'Leave blank to keep existing' : 'App password'
+        }
+      />
+      <TextField
+        label="SMTP password"
+        secureTextEntry
+        value={smtpPassword}
+        onChangeText={setSmtpPassword}
+        placeholder={
+          isEdit && hasExistingSecrets ? 'Leave blank to keep existing' : 'App password'
+        }
+      />
+
+      <SectionTitle>Sender</SectionTitle>
+      <TextField
+        label="From email"
+        autoCapitalize="none"
+        autoCorrect={false}
+        value={fromEmail}
+        onChangeText={setFromEmail}
+        placeholder="you@example.com"
+      />
+      <TextField
+        label="From name (optional)"
+        value={fromName}
+        onChangeText={setFromName}
+        placeholder="Your Name"
+      />
+
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Persist passwords on this device</Text>
+        <Switch value={persistSecrets} onValueChange={setPersistSecrets} />
+      </View>
+
+      {showEmailPin ? (
+        <TextField
+          label="Email PIN (encrypt at rest)"
           secureTextEntry
-          style={styles.input}
-          value={imapPassword}
-          onChangeText={setImapPassword}
-          placeholder={
-            isEdit && hasExistingSecrets ? 'Leave blank to keep existing' : 'App password'
-          }
+          value={emailPin}
+          onChangeText={setEmailPin}
+          placeholder="PIN used to encrypt stored passwords"
         />
-        <Text style={styles.fieldLabel}>SMTP password</Text>
-        <TextInput
-          secureTextEntry
-          style={styles.input}
-          value={smtpPassword}
-          onChangeText={setSmtpPassword}
-          placeholder={
-            isEdit && hasExistingSecrets ? 'Leave blank to keep existing' : 'App password'
-          }
-        />
+      ) : null}
 
-        <Text style={styles.section}>Sender</Text>
-        <Text style={styles.fieldLabel}>From email</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          style={styles.input}
-          value={fromEmail}
-          onChangeText={setFromEmail}
-          placeholder="you@example.com"
-        />
-        <Text style={styles.fieldLabel}>From name (optional)</Text>
-        <TextInput
-          style={styles.input}
-          value={fromName}
-          onChangeText={setFromName}
-          placeholder="Your Name"
-        />
+      <Text style={styles.note}>
+        Mail credentials stay on this device. They are not sent to your EBP key
+        server.
+      </Text>
 
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Persist passwords on this device</Text>
-          <Switch value={persistSecrets} onValueChange={setPersistSecrets} />
-        </View>
-
-        {showEmailPin ? (
-          <>
-            <Text style={styles.fieldLabel}>Email PIN (encrypt at rest)</Text>
-            <TextInput
-              secureTextEntry
-              style={styles.input}
-              value={emailPin}
-              onChangeText={setEmailPin}
-              placeholder="PIN used to encrypt stored passwords"
-            />
-          </>
-        ) : null}
-
-        <Text style={styles.note}>
-          Mail credentials stay on this device. They are not sent to your EBP
-          key server.
-        </Text>
-
-        <Button
-          title={loading ? 'Testing…' : 'Test IMAP + SMTP'}
-          disabled={loading}
-          onPress={onTest}
-        />
-        <View style={styles.buttonSpacer} />
-        <Button
-          title={loading ? 'Saving…' : 'Save mail account'}
-          disabled={loading}
-          onPress={onSave}
-        />
-        {isEdit ? (
-          <>
-            <View style={styles.buttonSpacer} />
-            <Button title="Delete account" color="#c00" onPress={onDelete} />
-          </>
-        ) : null}
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      <AppButton
+        title={loading ? 'Testing…' : 'Test IMAP + SMTP'}
+        variant="secondary"
+        disabled={loading}
+        onPress={onTest}
+      />
+      <AppButton
+        title={loading ? 'Saving…' : 'Save mail account'}
+        disabled={loading}
+        onPress={onSave}
+      />
+      {isEdit ? (
+        <AppButton title="Delete account" variant="danger" onPress={onDelete} />
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff'},
-  scroll: {padding: 16},
-  section: {marginTop: 8, marginBottom: 8, fontWeight: '700', fontSize: 16, color: '#111'},
-  fieldLabel: {fontSize: 13, color: '#333', marginBottom: 4},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 12,
-    color: '#111',
-  },
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
   },
-  switchLabel: {flex: 1, color: '#111', marginRight: 8},
-  note: {fontSize: 13, color: '#444', marginBottom: 12},
-  readOnly: {fontSize: 14, color: '#111', marginBottom: 6},
-  buttonSpacer: {height: 8},
-  status: {marginTop: 12, color: '#111'},
+  switchLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: typography.body,
+    marginRight: spacing.sm,
+  },
+  note: {
+    fontSize: 13,
+    color: colors.muted,
+  },
+  readOnly: {
+    fontSize: typography.body,
+    color: colors.text,
+    marginBottom: 6,
+  },
 });

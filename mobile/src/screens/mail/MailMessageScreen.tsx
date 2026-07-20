@@ -1,20 +1,20 @@
 import React, {useEffect, useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import {StyleSheet, Text} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {resolveSelectedAccount} from '../../services/mail/accountStore';
 import {fetchMessageDetail} from '../../services/mail/imap';
 import {decryptMailBody} from '../../services/mail/ebpMail';
+import Screen from '../../components/Screen';
+import TextField from '../../components/TextField';
+import AppButton from '../../components/AppButton';
+import StatusBanner from '../../components/StatusBanner';
+import Card from '../../components/Card';
+import {statusKind} from '../../theme/statusKind';
+import {colors, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailMessage'>;
+type Props = NativeStackScreenProps<MailStackParamList, 'MailMessage'>;
 
 export default function MailMessageScreen({route}: Props): JSX.Element {
   const [subject, setSubject] = useState('');
@@ -63,37 +63,41 @@ export default function MailMessageScreen({route}: Props): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <Text style={styles.subject}>{subject}</Text>
+    <Screen scroll>
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <Text style={styles.subject}>{subject || '(no subject)'}</Text>
+      <Card padded>
         <Text style={styles.body}>{body}</Text>
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Identity password to decrypt EBP"
-          secureTextEntry
-        />
-        <Button title="Decrypt EBP body" onPress={onDecrypt} />
-        {decrypted ? <Text style={styles.decrypted}>{decrypted}</Text> : null}
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      </Card>
+      <TextField
+        label="Identity password"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Identity password to decrypt EBP"
+        secureTextEntry
+      />
+      <AppButton title="Decrypt EBP body" onPress={onDecrypt} />
+      {decrypted ? (
+        <Card padded>
+          <Text style={styles.decrypted}>{decrypted}</Text>
+        </Card>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  subject: {fontWeight: '700', fontSize: 18, color: '#111', marginBottom: 8},
-  body: {color: '#222', marginBottom: 12},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    color: '#111',
+  subject: {
+    fontWeight: '700',
+    fontSize: typography.title,
+    color: colors.text,
   },
-  decrypted: {marginTop: 12, color: '#111'},
-  status: {marginTop: 10, color: '#111'},
+  body: {
+    color: colors.text,
+    lineHeight: 20,
+  },
+  decrypted: {
+    color: colors.text,
+    lineHeight: 20,
+  },
 });

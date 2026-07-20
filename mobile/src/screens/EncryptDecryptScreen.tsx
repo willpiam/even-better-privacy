@@ -1,12 +1,6 @@
 import React, {useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import type {CryptoStackParamList} from '../navigation/AppNavigator';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import Share from 'react-native-share';
 import {
@@ -17,11 +11,20 @@ import {
 } from '../services/encryptDecrypt';
 import {parseEbpPayloadInput} from '../ebpCore';
 import {getCurrentIdentityRequired} from '../services/storage';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SectionTitle from '../components/SectionTitle';
+import BusyOverlay from '../components/BusyOverlay';
 import ContactPicker from '../components/ContactPicker';
 import CopyableOutput from '../components/CopyableOutput';
 import StatusBanner from '../components/StatusBanner';
+import CryptoModeSwitch from '../components/CryptoModeSwitch';
+import {statusKind} from '../theme/statusKind';
 
-export default function EncryptDecryptScreen(): JSX.Element {
+type Props = NativeStackScreenProps<CryptoStackParamList, 'EncryptDecrypt'>;
+
+export default function EncryptDecryptScreen({navigation}: Props): JSX.Element {
   const [password, setPassword] = useState('');
   const [recipient, setRecipient] = useState('');
   const [message, setMessage] = useState('');
@@ -43,8 +46,11 @@ export default function EncryptDecryptScreen(): JSX.Element {
   const [decryptFileSender, setDecryptFileSender] = useState('');
   const [decryptFileOutput, setDecryptFileOutput] = useState('');
   const [status, setStatus] = useState('');
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const onEncrypt = async () => {
+    setBusyMessage('Encrypting message...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const payload = await encryptMessage({
@@ -58,10 +64,14 @@ export default function EncryptDecryptScreen(): JSX.Element {
       setStatus('Message encrypted');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onDecrypt = async () => {
+    setBusyMessage('Decrypting message...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const payload = parseEbpPayloadInput(decryptPayload);
@@ -78,10 +88,14 @@ export default function EncryptDecryptScreen(): JSX.Element {
     } catch (error) {
       setDecryptOutput('');
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onEncryptFile = async () => {
+    setBusyMessage('Encrypting file...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const payload = await encryptFile({
@@ -97,10 +111,14 @@ export default function EncryptDecryptScreen(): JSX.Element {
       setStatus('File encrypted');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onDecryptFile = async () => {
+    setBusyMessage('Decrypting file...');
+    setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
       const payload = parseEbpPayloadInput(decryptFilePayload);
@@ -117,6 +135,8 @@ export default function EncryptDecryptScreen(): JSX.Element {
     } catch (error) {
       setDecryptFileOutput('');
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
@@ -147,127 +167,152 @@ export default function EncryptDecryptScreen(): JSX.Element {
     await Share.open({message: value, failOnCancel: false});
   };
 
+  const busy = busyMessage !== null;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <Text style={styles.header}>Encrypt / Decrypt</Text>
-        <StatusBanner message={status} kind={status.toLowerCase().includes('failed') ? 'error' : 'info'} />
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Identity password"
-          secureTextEntry
-        />
+    <Screen scroll>
+      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
+      <CryptoModeSwitch mode="encrypt" navigation={navigation} />
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <TextField
+        label="Identity password"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Identity password"
+        secureTextEntry
+      />
 
-        <Text style={styles.section}>Encrypt Message</Text>
-        <ContactPicker
-          value={recipient}
-          onChange={setRecipient}
-          placeholder="Recipient (name or fingerprint)"
-        />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Message"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={sign}
-          onChangeText={setSign}
-          placeholder="Sign: true or false"
-        />
-        <Button title="Encrypt Message" onPress={onEncrypt} />
-        <Button title="Share Output" onPress={() => shareOutput(encryptOutput)} />
-        <CopyableOutput value={encryptOutput} placeholder="Encrypted message payload..." />
+      <SectionTitle>Encrypt Message</SectionTitle>
+      <ContactPicker
+        value={recipient}
+        onChange={setRecipient}
+        placeholder="Recipient (name or fingerprint)"
+      />
+      <TextField
+        label="Message"
+        value={message}
+        onChangeText={setMessage}
+        placeholder="Message"
+        multiline
+      />
+      <TextField
+        label="Sign"
+        value={sign}
+        onChangeText={setSign}
+        placeholder="true or false"
+      />
+      <AppButton
+        title={busy ? 'Encrypting...' : 'Encrypt Message'}
+        onPress={onEncrypt}
+        disabled={busy}
+      />
+      <AppButton
+        title="Share Output"
+        variant="secondary"
+        onPress={() => shareOutput(encryptOutput)}
+      />
+      <CopyableOutput
+        value={encryptOutput}
+        placeholder="Encrypted message payload..."
+      />
 
-        <Text style={styles.section}>Decrypt Message</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={decryptPayload}
-          onChangeText={setDecryptPayload}
-          placeholder="Encrypted payload JSON"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={decryptSender}
-          onChangeText={setDecryptSender}
-          placeholder="Sender (for signed payloads)"
-        />
-        <Button title="Decrypt Message" onPress={onDecrypt} />
-        <TextInput style={[styles.input, styles.multi]} value={decryptOutput} editable={false} multiline />
+      <SectionTitle>Decrypt Message</SectionTitle>
+      <TextField
+        label="Encrypted payload"
+        value={decryptPayload}
+        onChangeText={setDecryptPayload}
+        placeholder="Encrypted payload JSON"
+        multiline
+      />
+      <TextField
+        label="Sender"
+        value={decryptSender}
+        onChangeText={setDecryptSender}
+        placeholder="Sender (for signed payloads)"
+      />
+      <AppButton
+        title={busy ? 'Decrypting...' : 'Decrypt Message'}
+        onPress={onDecrypt}
+        disabled={busy}
+      />
+      <TextField
+        label="Decrypted output"
+        value={decryptOutput}
+        editable={false}
+        multiline
+      />
 
-        <Text style={styles.section}>Encrypt File</Text>
-        <TextInput
-          style={styles.input}
-          value={fileUri}
-          onChangeText={setFileUri}
-          placeholder="File URI (file:///...)"
-        />
-        <Button title="Pick File" onPress={pickEncryptFile} />
-        <TextInput
-          style={styles.input}
-          value={fileName}
-          onChangeText={setFileName}
-          placeholder="File name"
-        />
-        <TextInput
-          style={styles.input}
-          value={fileMime}
-          onChangeText={setFileMime}
-          placeholder="MIME type"
-        />
-        <ContactPicker
-          value={fileRecipient}
-          onChange={setFileRecipient}
-          placeholder="Recipient (name or fingerprint)"
-        />
-        <TextInput
-          style={styles.input}
-          value={fileSign}
-          onChangeText={setFileSign}
-          placeholder="Sign: true or false"
-        />
-        <Button title="Encrypt File" onPress={onEncryptFile} />
-        <Button title="Share Output" onPress={() => shareOutput(encryptFileOutput)} />
-        <CopyableOutput value={encryptFileOutput} placeholder="Encrypted file payload..." />
+      <SectionTitle>Encrypt File</SectionTitle>
+      <TextField
+        label="File URI"
+        value={fileUri}
+        onChangeText={setFileUri}
+        placeholder="file:///..."
+        autoCapitalize="none"
+      />
+      <AppButton title="Pick File" variant="secondary" onPress={pickEncryptFile} />
+      <TextField
+        label="File name"
+        value={fileName}
+        onChangeText={setFileName}
+        placeholder="File name"
+      />
+      <TextField
+        label="MIME type"
+        value={fileMime}
+        onChangeText={setFileMime}
+        placeholder="MIME type"
+        autoCapitalize="none"
+      />
+      <ContactPicker
+        value={fileRecipient}
+        onChange={setFileRecipient}
+        placeholder="Recipient (name or fingerprint)"
+      />
+      <TextField
+        label="Sign"
+        value={fileSign}
+        onChangeText={setFileSign}
+        placeholder="true or false"
+      />
+      <AppButton
+        title={busy ? 'Encrypting...' : 'Encrypt File'}
+        onPress={onEncryptFile}
+        disabled={busy}
+      />
+      <AppButton
+        title="Share Output"
+        variant="secondary"
+        onPress={() => shareOutput(encryptFileOutput)}
+      />
+      <CopyableOutput
+        value={encryptFileOutput}
+        placeholder="Encrypted file payload..."
+      />
 
-        <Text style={styles.section}>Decrypt File</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={decryptFilePayload}
-          onChangeText={setDecryptFilePayload}
-          placeholder="Encrypted file payload JSON"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={decryptFileSender}
-          onChangeText={setDecryptFileSender}
-          placeholder="Sender (for signed payloads)"
-        />
-        <Button title="Decrypt File" onPress={onDecryptFile} />
-        <CopyableOutput value={decryptFileOutput} placeholder="Decrypted file info..." />
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle>Decrypt File</SectionTitle>
+      <TextField
+        label="Encrypted file payload"
+        value={decryptFilePayload}
+        onChangeText={setDecryptFilePayload}
+        placeholder="Encrypted file payload JSON"
+        multiline
+      />
+      <TextField
+        label="Sender"
+        value={decryptFileSender}
+        onChangeText={setDecryptFileSender}
+        placeholder="Sender (for signed payloads)"
+      />
+      <AppButton
+        title={busy ? 'Decrypting...' : 'Decrypt File'}
+        onPress={onDecryptFile}
+        disabled={busy}
+      />
+      <CopyableOutput
+        value={decryptFileOutput}
+        placeholder="Decrypted file info..."
+      />
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff', padding: 16},
-  header: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
-  section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 8,
-    color: '#111',
-  },
-  multi: {minHeight: 90, textAlignVertical: 'top'},
-});

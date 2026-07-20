@@ -1,22 +1,19 @@
 import React, {useCallback, useState} from 'react';
-import {
-  Button,
-  FlatList,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import {FlatList, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MoreStackParamList} from '../../navigation/AppNavigator';
 import {
   clearMailTrace,
   listMailTrace,
   type MailTraceEntry,
 } from '../../services/mail/mailTrace';
+import Screen from '../../components/Screen';
+import AppButton from '../../components/AppButton';
+import Card from '../../components/Card';
+import {colors, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailTrace'>;
+type Props = NativeStackScreenProps<MoreStackParamList, 'MailTrace'>;
 
 function formatTime(at: number): string {
   try {
@@ -45,14 +42,24 @@ export default function MailTraceScreen(_props: Props): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.screen} contentStyle={styles.content}>
       <Text style={styles.hint}>
         Newest first. Last stub before a hang is the stall point. Metro also
         shows lines tagged [ebp-mail].
       </Text>
       <View style={styles.row}>
-        <Button title="Refresh" onPress={() => void refresh()} />
-        <Button title="Clear" color="#c00" onPress={() => void onClear()} />
+        <AppButton
+          title="Refresh"
+          variant="secondary"
+          onPress={() => void refresh()}
+          style={styles.halfBtn}
+        />
+        <AppButton
+          title="Clear"
+          variant="danger"
+          onPress={() => void onClear()}
+          style={styles.halfBtn}
+        />
       </View>
       <FlatList
         data={entries}
@@ -61,7 +68,7 @@ export default function MailTraceScreen(_props: Props): JSX.Element {
           <Text style={styles.empty}>No mail stubs recorded yet.</Text>
         }
         renderItem={({item}) => (
-          <View style={styles.item}>
+          <Card padded style={styles.item}>
             <Text style={styles.meta}>
               #{item.seq} · {formatTime(item.at)}
             </Text>
@@ -69,30 +76,30 @@ export default function MailTraceScreen(_props: Props): JSX.Element {
             {item.detail ? (
               <Text style={styles.detail}>{item.detail}</Text>
             ) : null}
-          </View>
+          </Card>
         )}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  hint: {fontSize: 12, color: '#444', marginBottom: 8},
+  screen: {flex: 1},
+  content: {flex: 1},
+  hint: {fontSize: 12, color: colors.muted},
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 12,
+    gap: 8,
   },
-  empty: {color: '#555', marginTop: 12},
-  item: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+  halfBtn: {flex: 1},
+  empty: {color: colors.muted, marginTop: 12},
+  item: {marginBottom: 8},
+  meta: {fontSize: 11, color: colors.muted},
+  stub: {
+    fontWeight: '600',
+    color: colors.text,
+    marginTop: 2,
+    fontSize: typography.body,
   },
-  meta: {fontSize: 11, color: '#666'},
-  stub: {fontWeight: '600', color: '#111', marginTop: 2},
-  detail: {fontSize: 12, color: '#333', marginTop: 4},
+  detail: {fontSize: 12, color: colors.text, marginTop: 4},
 });

@@ -1,18 +1,13 @@
 import React, {useCallback, useState} from 'react';
 import {
   ActivityIndicator,
-  Button,
-  SafeAreaView,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type {ContactsStackParamList} from '../navigation/AppNavigator';
 import {
   browseServerIdentities,
   fetchContactFromServer,
@@ -22,8 +17,19 @@ import {
   type ServerIdentitySummary,
   type StoredContact,
 } from '../services/contacts';
+import Screen from '../components/Screen';
+import Card from '../components/Card';
+import ListRow from '../components/ListRow';
+import SectionTitle from '../components/SectionTitle';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import StatusBanner from '../components/StatusBanner';
+import BusyOverlay from '../components/BusyOverlay';
+import InlineBusy from '../components/InlineBusy';
+import {colors, typography} from '../theme/tokens';
+import {statusKind} from '../theme/statusKind';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Contacts'>;
+type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactsList'>;
 
 function formatCreatedAt(createdAt?: number): string {
   if (!createdAt || !Number.isFinite(createdAt)) {
@@ -36,6 +42,23 @@ function formatCreatedAt(createdAt?: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function truncateFp(fp: string): string {
+  if (fp.length <= 16) {
+    return fp;
+  }
+  return `${fp.slice(0, 8)}…${fp.slice(-4)}`;
+}
+
+function contactSubtitle(item: StoredContact): string {
+  const email =
+    getDetailValue(item.contact.details, 'email') ||
+    item.contact.resolvedOpaqueDetails?.['opaque::email'];
+  if (email) {
+    return email;
+  }
+  return truncateFp(item.contact.fingerprint);
 }
 
 export default function ContactsScreen({navigation}: Props): JSX.Element {
@@ -52,6 +75,8 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
     totalPages: 0,
   });
   const [browseLoaded, setBrowseLoaded] = useState(false);
+  const [browsingLoading, setBrowsingLoading] = useState(false);
+  const [fetching, setFetching] = useState(false);
   const [importingFingerprint, setImportingFingerprint] = useState<string | null>(
     null,
   );
@@ -70,18 +95,23 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
   const contactFingerprints = new Set(contacts.map(c => c.contact.fingerprint));
 
   const loadBrowsePage = async (page: number) => {
-    const result = await browseServerIdentities({
-      query: browseQuery || undefined,
-      page,
-    });
-    setServerResults(result.identities);
-    setBrowsePage(result.page);
-    setBrowsePagination({
-      total: result.total,
-      totalPages: result.totalPages,
-    });
-    setBrowseLoaded(true);
-    setStatus(`Loaded ${result.identities.length} server identities`);
+    setBrowsingLoading(true);
+    try {
+      const result = await browseServerIdentities({
+        query: browseQuery || undefined,
+        page,
+      });
+      setServerResults(result.identities);
+      setBrowsePage(result.page);
+      setBrowsePagination({
+        total: result.total,
+        totalPages: result.totalPages,
+      });
+      setBrowseLoaded(true);
+      setStatus(`Loaded ${result.identities.length} server identities`);
+    } finally {
+      setBrowsingLoading(false);
+    }
   };
 
   const onImport = async () => {
@@ -97,6 +127,7 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
   };
 
   const onFetch = async () => {
+    setFetching(true);
     try {
       await fetchContactFromServer({
         fingerprint: fetchFingerprint,
@@ -108,6 +139,8 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setFetching(false);
     }
   };
 
@@ -157,197 +190,176 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
   const visibleServerResults = serverResults.filter(entry => !entry.revoked);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.header}>Contacts</Text>
-        {status ? <Text style={styles.status}>{status}</Text> : null}
+    <Screen scroll>
+      <BusyOverlay visible={fetching} message="Fetching contact…" />
+      <StatusBanner message={status} kind={statusKind(status)} />
 
-        {contacts.length === 0 ? (
-          <Text style={styles.empty}>No contacts yet.</Text>
-        ) : (
-          contacts.map(item => (
-            <TouchableOpacity
+      <SectionTitle>Local</SectionTitle>
+      {contacts.length === 0 ? (
+        <Text style={styles.empty}>No contacts yet.</Text>
+      ) : (
+        <Card>
+          {contacts.map(item => (
+            <ListRow
               key={item.name}
-              style={styles.item}
+              avatarText={item.name}
+              title={item.name}
+              subtitle={contactSubtitle(item)}
               onPress={() =>
                 navigation.navigate('ContactDetail', {name: item.name})
-              }>
-              <Text style={styles.name}>{item.name}</Text>
-              <Text style={styles.fingerprint}>{item.contact.fingerprint}</Text>
-            </TouchableOpacity>
-          ))
-        )}
+              }
+            />
+          ))}
+        </Card>
+      )}
 
-        <Text style={styles.section}>Import Contact</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={contactJson}
-          onChangeText={setContactJson}
-          placeholder="Paste contact JSON"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={contactName}
-          onChangeText={setContactName}
-          placeholder="Name (optional)"
-        />
-        <Button title="Import Contact" onPress={onImport} />
+      <SectionTitle>Import</SectionTitle>
+      <TextField
+        label="Contact JSON"
+        value={contactJson}
+        onChangeText={setContactJson}
+        placeholder="Paste contact JSON"
+        multiline
+        autoCapitalize="none"
+      />
+      <TextField
+        label="Name (optional)"
+        value={contactName}
+        onChangeText={setContactName}
+        autoCapitalize="none"
+      />
+      <AppButton title="Import Contact" onPress={onImport} />
 
-        <Text style={styles.section}>Fetch From Server</Text>
-        <TextInput
-          style={styles.input}
-          value={fetchFingerprint}
-          onChangeText={setFetchFingerprint}
-          placeholder="Fingerprint"
-        />
-        <TextInput
-          style={styles.input}
-          value={fetchName}
-          onChangeText={setFetchName}
-          placeholder="Save as (optional)"
-        />
-        <Button title="Fetch Contact" onPress={onFetch} />
+      <SectionTitle>Fetch</SectionTitle>
+      <TextField
+        label="Fingerprint"
+        value={fetchFingerprint}
+        onChangeText={setFetchFingerprint}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <TextField
+        label="Save as (optional)"
+        value={fetchName}
+        onChangeText={setFetchName}
+        autoCapitalize="none"
+      />
+      <AppButton title="Fetch Contact" onPress={onFetch} disabled={fetching} />
 
-        <Text style={styles.section}>Browse Server</Text>
-        <View style={styles.row}>
-          <TextInput
-            style={[styles.input, styles.flex, styles.rowInput]}
+      <SectionTitle>Browse</SectionTitle>
+      <View style={styles.browseRow}>
+        <View style={styles.browseField}>
+          <TextField
+            label="Search query"
             value={browseQuery}
             onChangeText={setBrowseQuery}
-            placeholder="Search query"
+            autoCapitalize="none"
           />
-          <Button title="Browse" onPress={onBrowse} />
         </View>
+        <AppButton
+          title="Browse"
+          onPress={onBrowse}
+          disabled={browsingLoading}
+          style={styles.browseBtn}
+        />
+      </View>
 
-        {browseLoaded && visibleServerResults.length === 0 ? (
-          <Text style={styles.muted}>(none found)</Text>
-        ) : null}
+      {browsingLoading ? <InlineBusy message="Fetching directory…" /> : null}
 
-        {visibleServerResults.map(entry => {
-          const detailName = getDetailValue(entry.details, 'name');
-          const detailEmail = getDetailValue(entry.details, 'email');
-          const isAlreadyContact = contactFingerprints.has(entry.fingerprint);
-          const isImporting = importingFingerprint === entry.fingerprint;
+      {!browsingLoading && browseLoaded && visibleServerResults.length === 0 ? (
+        <Text style={styles.muted}>(none found)</Text>
+      ) : null}
 
-          return (
-            <View key={entry.fingerprint} style={styles.serverItem}>
-              <View style={styles.serverInfo}>
-                {detailName || detailEmail ? (
-                  <View style={styles.detailTags}>
-                    {detailName ? (
-                      <Text style={styles.detailTag}>Name: {detailName}</Text>
-                    ) : null}
-                    {detailEmail ? (
-                      <Text style={styles.detailTag}>Email: {detailEmail}</Text>
-                    ) : null}
-                  </View>
-                ) : null}
-                <Text style={styles.fingerprint}>{entry.fingerprint}</Text>
-                <Text style={styles.muted}>
-                  {entry.signingKeyType || '?'}/{entry.encryptionKeyType || '?'} ·{' '}
-                  {formatCreatedAt(entry.createdAt)}
-                </Text>
-              </View>
-              <View style={styles.serverActions}>
-                {isAlreadyContact ? (
-                  <Text style={styles.inContacts}>In contacts</Text>
-                ) : isImporting ? (
-                  <ActivityIndicator size="small" color="#007AFF" />
-                ) : (
-                  <Button
-                    title="Import"
-                    onPress={() => onImportServerIdentity(entry.fingerprint)}
-                  />
-                )}
-              </View>
+      {!browsingLoading && visibleServerResults.length > 0 ? (
+        <Card>
+          {visibleServerResults.map(entry => {
+            const detailName = getDetailValue(entry.details, 'name');
+            const detailEmail = getDetailValue(entry.details, 'email');
+            const isAlreadyContact = contactFingerprints.has(entry.fingerprint);
+            const isImporting = importingFingerprint === entry.fingerprint;
+            const title = detailName || truncateFp(entry.fingerprint);
+            const subtitle = [
+              detailEmail,
+              `${entry.signingKeyType || '?'}/${entry.encryptionKeyType || '?'}`,
+              formatCreatedAt(entry.createdAt),
+            ]
+              .filter(Boolean)
+              .join(' · ');
+
+            return (
+              <ListRow
+                key={entry.fingerprint}
+                avatarText={title}
+                title={title}
+                subtitle={subtitle || truncateFp(entry.fingerprint)}
+                showChevron={false}
+                badge={isAlreadyContact ? 'In contacts' : undefined}
+                right={
+                  isAlreadyContact ? undefined : isImporting ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <AppButton
+                      title="Import"
+                      variant="secondary"
+                      onPress={() => onImportServerIdentity(entry.fingerprint)}
+                      style={styles.importBtn}
+                    />
+                  )
+                }
+              />
+            );
+          })}
+        </Card>
+      ) : null}
+
+      {!browsingLoading && browseLoaded && browsePagination.total > 0 ? (
+        <View style={styles.pagination}>
+          <Text style={styles.paginationInfo}>
+            {browsePagination.totalPages <= 1
+              ? `${browsePagination.total} ${
+                  browsePagination.total === 1 ? 'identity' : 'identities'
+                }`
+              : `Page ${browsePage} of ${browsePagination.totalPages} (${browsePagination.total} total)`}
+          </Text>
+          {browsePagination.totalPages > 1 ? (
+            <View style={styles.paginationButtons}>
+              <AppButton
+                title="Previous"
+                variant="secondary"
+                onPress={onBrowsePrev}
+                disabled={browsePage <= 1 || browsingLoading}
+                style={styles.flexBtn}
+              />
+              <AppButton
+                title="Next"
+                variant="secondary"
+                onPress={onBrowseNext}
+                disabled={
+                  browsePage >= browsePagination.totalPages || browsingLoading
+                }
+                style={styles.flexBtn}
+              />
             </View>
-          );
-        })}
-
-        {browseLoaded && browsePagination.total > 0 ? (
-          <View style={styles.pagination}>
-            <Text style={styles.paginationInfo}>
-              {browsePagination.totalPages <= 1
-                ? `${browsePagination.total} ${
-                    browsePagination.total === 1 ? 'identity' : 'identities'
-                  }`
-                : `Page ${browsePage} of ${browsePagination.totalPages} (${browsePagination.total} total)`}
-            </Text>
-            {browsePagination.totalPages > 1 ? (
-              <View style={styles.paginationButtons}>
-                <Button
-                  title="Previous"
-                  onPress={onBrowsePrev}
-                  disabled={browsePage <= 1}
-                />
-                <Button
-                  title="Next"
-                  onPress={onBrowseNext}
-                  disabled={browsePage >= browsePagination.totalPages}
-                />
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </ScrollView>
-    </SafeAreaView>
+          ) : null}
+        </View>
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff'},
-  scroll: {padding: 16, paddingBottom: 32},
-  header: {fontSize: 20, fontWeight: '700', marginBottom: 8, color: '#111'},
-  status: {marginBottom: 8, color: '#111'},
-  item: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  name: {fontWeight: '700', color: '#111'},
-  fingerprint: {fontSize: 12, color: '#333', marginTop: 2},
-  empty: {color: '#333', marginBottom: 8},
-  muted: {fontSize: 12, color: '#666', marginTop: 2},
-  section: {marginTop: 10, marginBottom: 6, fontWeight: '600', color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 8,
-    color: '#111',
-  },
-  multi: {minHeight: 80, textAlignVertical: 'top'},
-  row: {flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8},
-  rowInput: {marginBottom: 0},
-  flex: {flex: 1},
-  serverItem: {
+  empty: {color: colors.muted, marginBottom: 4},
+  muted: {fontSize: typography.caption, color: colors.muted},
+  browseRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#eee',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
+    alignItems: 'flex-end',
     gap: 8,
   },
-  serverInfo: {flex: 1},
-  serverActions: {
-    justifyContent: 'center',
-    minWidth: 88,
-    paddingTop: 2,
-  },
-  detailTags: {marginBottom: 4, gap: 2},
-  detailTag: {fontSize: 12, color: '#333'},
-  inContacts: {fontSize: 12, color: '#2e7d32', fontWeight: '600'},
-  pagination: {marginTop: 8, alignItems: 'center', gap: 8},
-  paginationInfo: {fontSize: 13, color: '#333'},
-  paginationButtons: {
-    flexDirection: 'row',
-    gap: 12,
-  },
+  browseField: {flex: 1},
+  browseBtn: {marginBottom: 0, height: 52},
+  importBtn: {height: 36, paddingHorizontal: 12},
+  pagination: {alignItems: 'center', gap: 8, marginTop: 4},
+  paginationInfo: {fontSize: 13, color: colors.muted},
+  paginationButtons: {flexDirection: 'row', gap: 8, alignSelf: 'stretch'},
+  flexBtn: {flex: 1},
 });

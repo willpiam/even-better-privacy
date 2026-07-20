@@ -1,24 +1,25 @@
 import React, {useCallback, useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import type {SigningType} from '../types';
 import {getEnforcePasswordPolicy} from '../services/settings';
 import {createIdentity} from '../services/storage';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SegmentedControl from '../components/SegmentedControl';
+import SectionTitle from '../components/SectionTitle';
+import StatusBanner from '../components/StatusBanner';
+import {statusKind} from '../theme/statusKind';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'CreateIdentity'>;
+type Props = NativeStackScreenProps<IdentitiesStackParamList, 'CreateIdentity'>;
 
 export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [signingType, setSigningType] = useState<SigningType>('dilithium');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,6 +37,9 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
     setLoading(true);
     setStatus('');
     try {
+      if (password !== confirm) {
+        throw new Error('Passwords do not match');
+      }
       const created = await createIdentity({name, password, signingType});
       setStatus(`Created ${created.name}`);
       navigation.replace('IdentityDetail', {identityName: created.name});
@@ -48,64 +52,59 @@ export default function CreateIdentityScreen({navigation}: Props): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.label}>Identity Name</Text>
-      <TextInput
-        value={name}
-        onChangeText={setName}
-        style={styles.input}
-        autoCapitalize="none"
-      />
-      <Text style={styles.label}>
-        {enforcePasswordPolicy
-          ? 'Password (12+ chars, 3 of 4: upper, lower, digit, symbol)'
-          : 'Password (required; policy disabled in Settings)'}
-      </Text>
-      <TextInput
+    <Screen scroll>
+      <TextField label="Name" value={name} onChangeText={setName} autoCapitalize="none" />
+      <TextField
+        label={
+          enforcePasswordPolicy
+            ? 'Password (12+ chars, mixed classes)'
+            : 'Password'
+        }
         value={password}
         onChangeText={setPassword}
-        style={styles.input}
         secureTextEntry
         autoCapitalize="none"
       />
-      <Text style={styles.label}>Signing Type</Text>
-      <View style={styles.row}>
-        <Button
-          title={signingType === 'dilithium' ? 'Dilithium ✓' : 'Dilithium'}
-          onPress={() => setSigningType('dilithium')}
-        />
-        <Button
-          title={signingType === 'sphincs' ? 'Sphincs ✓' : 'Sphincs'}
-          onPress={() => setSigningType('sphincs')}
-        />
-      </View>
-      <Button
-        title={loading ? 'Creating...' : 'Create'}
-        disabled={loading}
+      <TextField
+        label="Confirm password"
+        value={confirm}
+        onChangeText={setConfirm}
+        secureTextEntry
+        autoCapitalize="none"
+      />
+      <SectionTitle>Signing type</SectionTitle>
+      <SegmentedControl
+        value={signingType}
+        onChange={v => setSigningType(v as SigningType)}
+        options={[
+          {label: 'ML-DSA', value: 'dilithium'},
+          {label: 'SLH-DSA', value: 'sphincs'},
+        ]}
+      />
+      <StatusBanner
+        message={
+          enforcePasswordPolicy
+            ? 'Password must meet the policy configured in Settings.'
+            : 'Password policy is disabled in Settings.'
+        }
+        kind="info"
+      />
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <View style={styles.spacer} />
+      <AppButton
+        title={loading ? 'Creating…' : 'Create'}
+        loading={loading}
         onPress={onCreate}
       />
-      <Button title="Create from mnemonic (EBP-HD)" onPress={() => navigation.navigate('HdCreate')} />
-      {status ? <Text style={styles.status}>{status}</Text> : null}
-    </SafeAreaView>
+      <AppButton
+        title="Create from mnemonic (EBP-HD)"
+        variant="secondary"
+        onPress={() => navigation.navigate('HdCreate')}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 16,
-  },
-  label: {marginTop: 8, marginBottom: 4, color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 10,
-    color: '#111',
-  },
-  status: {marginTop: 12, color: '#111'},
+  spacer: {height: 8},
 });

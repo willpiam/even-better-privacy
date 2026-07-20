@@ -4,19 +4,19 @@ overview: "Rebuild the React Native mobile app navigation and UI to match ebp_mo
 todos:
   - id: deps-theme
     content: Add bottom-tabs dep; create theme tokens + AppButton/TextField/ListRow/Chip/SegmentedControl/InlineBusy/Screen
-    status: pending
+    status: completed
   - id: nav-restructure
     content: Rebuild AppNavigator as 5 tabs + nested stacks; add MoreScreen; convert Home → IdentitiesHome
-    status: pending
+    status: completed
   - id: restyle-identities-contacts
     content: Restyle Identities + Contacts screens; BusyOverlay on publish/sync
-    status: pending
+    status: completed
   - id: restyle-crypto-mail-more
     content: Restyle Crypto (segment nav), Mail, More/Settings/Certs/Info; wire remaining busy/banner patterns
-    status: pending
+    status: completed
   - id: verify-types-tests
     content: Fix TypeScript navigate types; run tsc/lint/tests
-    status: pending
+    status: completed
 isProject: false
 ---
 

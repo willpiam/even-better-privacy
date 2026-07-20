@@ -1,13 +1,7 @@
 import React, {useState} from 'react';
-import {
-  Alert,
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import {Alert, StyleSheet, Text, View} from 'react-native';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import type {CryptoStackParamList} from '../navigation/AppNavigator';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import Share from 'react-native-share';
 import {
@@ -19,11 +13,20 @@ import {
 import {parseEbpPayloadInput} from '../ebpCore';
 import {fingerprintFromPublicIdentity} from '../services/identityHelpers';
 import {getCurrentIdentityRequired} from '../services/storage';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SectionTitle from '../components/SectionTitle';
 import BusyOverlay from '../components/BusyOverlay';
 import CopyableOutput from '../components/CopyableOutput';
 import StatusBanner from '../components/StatusBanner';
+import CryptoModeSwitch from '../components/CryptoModeSwitch';
+import {statusKind} from '../theme/statusKind';
+import {colors, typography} from '../theme/tokens';
 
-export default function SignVerifyScreen(): JSX.Element {
+type Props = NativeStackScreenProps<CryptoStackParamList, 'SignVerify'>;
+
+export default function SignVerifyScreen({navigation}: Props): JSX.Element {
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [detached, setDetached] = useState('false');
@@ -202,144 +205,147 @@ export default function SignVerifyScreen(): JSX.Element {
   const busy = busyMessage !== null;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen scroll>
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <ScrollView>
-        <Text style={styles.header}>Sign / Verify</Text>
-        <StatusBanner message={status} kind={status.toLowerCase().includes('failed') ? 'error' : 'info'} />
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Identity password"
-          secureTextEntry
-        />
+      <CryptoModeSwitch mode="sign" navigation={navigation} />
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <TextField
+        label="Identity password"
+        value={password}
+        onChangeText={setPassword}
+        placeholder="Identity password"
+        secureTextEntry
+      />
 
-        <Text style={styles.section}>Sign Message</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Message"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={detached}
-          onChangeText={setDetached}
-          placeholder="Detached: true or false"
-        />
-        <TextInput
-          style={styles.input}
-          value={includeIdentity}
-          onChangeText={setIncludeIdentity}
-          placeholder="Include identity: true or false"
-        />
-        <Button
-          title={busy ? 'Signing...' : 'Sign Message'}
-          onPress={onSign}
-          disabled={busy}
-        />
-        <Button title="Share Output" onPress={() => shareOutput(signOutput)} />
-        <CopyableOutput value={signOutput} placeholder="Signed output..." />
+      <SectionTitle>Sign Message</SectionTitle>
+      <TextField
+        label="Message"
+        value={message}
+        onChangeText={setMessage}
+        placeholder="Message"
+        multiline
+      />
+      <TextField
+        label="Detached"
+        value={detached}
+        onChangeText={setDetached}
+        placeholder="true or false"
+      />
+      <TextField
+        label="Include identity"
+        value={includeIdentity}
+        onChangeText={setIncludeIdentity}
+        placeholder="true or false"
+      />
+      <AppButton
+        title={busy ? 'Signing...' : 'Sign Message'}
+        onPress={onSign}
+        disabled={busy}
+      />
+      <AppButton
+        title="Share Output"
+        variant="secondary"
+        onPress={() => shareOutput(signOutput)}
+      />
+      <CopyableOutput value={signOutput} placeholder="Signed output..." />
 
-        <Text style={styles.section}>Fingerprint from public identity</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={publicIdentityJson}
-          onChangeText={setPublicIdentityJson}
-          placeholder="Public identity JSON"
-          multiline
-        />
-        <Button title="Compute fingerprint" onPress={onFingerprintFromPublic} />
-        {computedFingerprint ? (
-          <Text style={styles.output}>{computedFingerprint}</Text>
-        ) : null}
+      <SectionTitle>Fingerprint from public identity</SectionTitle>
+      <TextField
+        label="Public identity JSON"
+        value={publicIdentityJson}
+        onChangeText={setPublicIdentityJson}
+        placeholder="Public identity JSON"
+        multiline
+      />
+      <AppButton title="Compute fingerprint" onPress={onFingerprintFromPublic} />
+      {computedFingerprint ? (
+        <Text style={styles.output}>{computedFingerprint}</Text>
+      ) : null}
 
-        <Text style={styles.section}>Verify Message</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={verifyPayload}
-          onChangeText={setVerifyPayload}
-          placeholder="Signed payload JSON"
-          multiline
-        />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={verifyMessageText}
-          onChangeText={setVerifyMessageText}
-          placeholder="Detached message (if needed)"
-          multiline
-        />
-        <Button
-          title={busy ? 'Verifying...' : 'Verify Message'}
-          onPress={onVerify}
-          disabled={busy}
-        />
-        <Text style={styles.output}>{verifyOutput}</Text>
+      <SectionTitle>Verify Message</SectionTitle>
+      <TextField
+        label="Signed payload"
+        value={verifyPayload}
+        onChangeText={setVerifyPayload}
+        placeholder="Signed payload JSON"
+        multiline
+      />
+      <TextField
+        label="Detached message"
+        value={verifyMessageText}
+        onChangeText={setVerifyMessageText}
+        placeholder="Detached message (if needed)"
+        multiline
+      />
+      <AppButton
+        title={busy ? 'Verifying...' : 'Verify Message'}
+        onPress={onVerify}
+        disabled={busy}
+      />
+      {verifyOutput ? <Text style={styles.output}>{verifyOutput}</Text> : null}
 
-        <Text style={styles.section}>Sign File</Text>
-        <TextInput
-          style={styles.input}
-          value={fileUri}
-          onChangeText={setFileUri}
-          placeholder="File URI (file:///...)"
-        />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={fileContext}
-          onChangeText={setFileContext}
-          placeholder="Optional context message"
-          multiline
-        />
-        <Button
-          title={busy ? 'Signing...' : 'Sign File'}
-          onPress={onSignFile}
-          disabled={busy}
-        />
-        <Button title="Pick File" onPress={pickSignFile} />
-        <Button title="Share Output" onPress={() => shareOutput(fileSignOutput)} />
-        <CopyableOutput value={fileSignOutput} placeholder="Signed file payload..." />
+      <SectionTitle>Sign File</SectionTitle>
+      <TextField
+        label="File URI"
+        value={fileUri}
+        onChangeText={setFileUri}
+        placeholder="file:///..."
+        autoCapitalize="none"
+      />
+      <TextField
+        label="Context message"
+        value={fileContext}
+        onChangeText={setFileContext}
+        placeholder="Optional context message"
+        multiline
+      />
+      <AppButton
+        title={busy ? 'Signing...' : 'Sign File'}
+        onPress={onSignFile}
+        disabled={busy}
+      />
+      <AppButton title="Pick File" variant="secondary" onPress={pickSignFile} />
+      <AppButton
+        title="Share Output"
+        variant="secondary"
+        onPress={() => shareOutput(fileSignOutput)}
+      />
+      <CopyableOutput value={fileSignOutput} placeholder="Signed file payload..." />
 
-        <Text style={styles.section}>Verify File Signature</Text>
-        <TextInput
-          style={styles.input}
-          value={verifyFileUri}
-          onChangeText={setVerifyFileUri}
-          placeholder="File URI (file:///...)"
-        />
-        <Button title="Pick File" onPress={pickVerifyFile} />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={verifyFilePayload}
-          onChangeText={setVerifyFilePayload}
-          placeholder="Signed file payload JSON"
-          multiline
-        />
-        <Button
-          title={busy ? 'Verifying...' : 'Verify File Signature'}
-          onPress={onVerifyFile}
-          disabled={busy}
-        />
-        <CopyableOutput value={verifyFileOutput} placeholder="File verification result..." />
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle>Verify File Signature</SectionTitle>
+      <TextField
+        label="File URI"
+        value={verifyFileUri}
+        onChangeText={setVerifyFileUri}
+        placeholder="file:///..."
+        autoCapitalize="none"
+      />
+      <AppButton title="Pick File" variant="secondary" onPress={pickVerifyFile} />
+      <TextField
+        label="Signed file payload"
+        value={verifyFilePayload}
+        onChangeText={setVerifyFilePayload}
+        placeholder="Signed file payload JSON"
+        multiline
+      />
+      <AppButton
+        title={busy ? 'Verifying...' : 'Verify File Signature'}
+        onPress={onVerifyFile}
+        disabled={busy}
+      />
+      <CopyableOutput
+        value={verifyFileOutput}
+        placeholder="File verification result..."
+      />
+      <View style={styles.bottomPad} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff', padding: 16},
-  header: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
-  section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 8,
-    color: '#111',
+  output: {
+    fontSize: typography.body,
+    color: colors.text,
   },
-  multi: {minHeight: 90, textAlignVertical: 'top'},
-  output: {marginTop: 8, marginBottom: 8, color: '#111'},
+  bottomPad: {height: 16},
 });

@@ -1,14 +1,8 @@
 import React, {useCallback, useState} from 'react';
-import {
-  Button,
-  FlatList,
-  SafeAreaView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {FlatList, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import type {MoreStackParamList} from '../navigation/AppNavigator';
 import {
   acceptProposal,
   getMergedHierarchyTree,
@@ -22,8 +16,18 @@ import {
   getCurrentIdentityRequired,
   listIdentities,
 } from '../services/storage';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SectionTitle from '../components/SectionTitle';
+import StatusBanner from '../components/StatusBanner';
+import Card from '../components/Card';
+import {statusKind} from '../theme/statusKind';
+import {colors, typography} from '../theme/tokens';
 
-export default function CertificatesScreen(): JSX.Element {
+type Props = NativeStackScreenProps<MoreStackParamList, 'Certificates'>;
+
+export default function CertificatesScreen(_props: Props): JSX.Element {
   const [password, setPassword] = useState('');
   const [active, setActive] = useState<
     Array<{
@@ -149,121 +153,126 @@ export default function CertificatesScreen(): JSX.Element {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <Screen style={styles.screen} contentStyle={styles.content}>
       <FlatList
         data={active}
         keyExtractor={item => item.certificate}
+        contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          <View>
-            <Text style={styles.header}>Certificates</Text>
-            {status ? <Text style={styles.status}>{status}</Text> : null}
-            <TextInput
-              style={styles.input}
+          <View style={styles.headerBlock}>
+            <StatusBanner message={status} kind={statusKind(status)} />
+            <TextField
+              label="Identity password"
               value={password}
               onChangeText={setPassword}
               placeholder="Identity password (for propose/accept)"
               secureTextEntry
             />
-            <Button title="Reload Certificates" onPress={onReload} />
+            <AppButton title="Reload Certificates" variant="secondary" onPress={onReload} />
 
-            <Text style={styles.section}>Propose Hierarchy</Text>
-            <TextInput
-              style={styles.input}
+            <SectionTitle>Propose Hierarchy</SectionTitle>
+            <TextField
+              label="Master fingerprint"
               value={masterFingerprint}
               onChangeText={setMasterFingerprint}
               placeholder="Master fingerprint"
+              autoCapitalize="none"
             />
-            <TextInput
-              style={styles.input}
+            <TextField
+              label="Child fingerprint"
               value={childFingerprint}
               onChangeText={setChildFingerprint}
               placeholder="Child fingerprint"
+              autoCapitalize="none"
             />
-            <TextInput
-              style={styles.input}
+            <TextField
+              label="Context"
               value={context}
               onChangeText={setContext}
               placeholder="Context (optional)"
             />
-            <TextInput
-              style={styles.input}
+            <TextField
+              label="Expiry"
               value={expiry}
               onChangeText={setExpiry}
               placeholder="Expiry ms unix timestamp (0 for none)"
+              keyboardType="number-pad"
             />
-            <Button title="Create Proposal" onPress={onPropose} />
+            <AppButton title="Create Proposal" onPress={onPropose} />
 
-            <Text style={styles.section}>Pending Proposals</Text>
-            {pending.map(item => (
-              <View key={item.id} style={styles.pendingItem}>
-                <Text style={styles.small}>#{item.id}</Text>
-                <Text style={styles.small}>{item.masterFingerprint}</Text>
-                <Text style={styles.small}>{item.childFingerprint}</Text>
-                <Text style={styles.small}>By: {item.proposerFingerprint}</Text>
-                <View style={styles.row}>
-                  <Button title="Accept" onPress={() => onAccept(item.id)} />
-                  <Button title="Reject" color="#d11a2a" onPress={() => onReject(item.id)} />
-                </View>
-              </View>
-            ))}
+            <SectionTitle>Pending Proposals</SectionTitle>
+            {pending.length === 0 ? (
+              <Text style={styles.small}>No pending proposals.</Text>
+            ) : (
+              pending.map(item => (
+                <Card key={item.id} padded style={styles.cardGap}>
+                  <Text style={styles.small}>#{item.id}</Text>
+                  <Text style={styles.small}>{item.masterFingerprint}</Text>
+                  <Text style={styles.small}>{item.childFingerprint}</Text>
+                  <Text style={styles.small}>By: {item.proposerFingerprint}</Text>
+                  <View style={styles.row}>
+                    <AppButton
+                      title="Accept"
+                      onPress={() => onAccept(item.id)}
+                      style={styles.halfBtn}
+                    />
+                    <AppButton
+                      title="Reject"
+                      variant="danger"
+                      onPress={() => onReject(item.id)}
+                      style={styles.halfBtn}
+                    />
+                  </View>
+                </Card>
+              ))
+            )}
 
-            <Text style={styles.section}>Hierarchy Tree</Text>
-            <TextInput
-              style={styles.input}
+            <SectionTitle>Hierarchy Tree</SectionTitle>
+            <TextField
+              label="Fingerprint"
               value={treeFingerprint}
               onChangeText={setTreeFingerprint}
               placeholder="Fingerprint for hierarchy tree"
+              autoCapitalize="none"
             />
-            <Button title="Load Tree" onPress={onLoadTree} />
-            <TextInput style={[styles.input, styles.multi]} value={treeOutput} editable={false} multiline />
+            <AppButton title="Load Tree" onPress={onLoadTree} />
+            <TextField
+              label="Tree output"
+              value={treeOutput}
+              editable={false}
+              multiline
+            />
 
-            <Text style={styles.section}>Active Certificates</Text>
+            <SectionTitle>Active Certificates</SectionTitle>
           </View>
         }
         ListEmptyComponent={<Text style={styles.small}>No active certificates.</Text>}
         renderItem={({item}) => (
-          <View style={styles.item}>
+          <Card padded style={styles.cardGap}>
             <Text style={styles.small}>Master: {item.masterFingerprint}</Text>
             <Text style={styles.small}>Child: {item.childFingerprint}</Text>
             <Text style={styles.small}>Context: {item.context || '(none)'}</Text>
-            <Text style={styles.small}>Created: {new Date(item.timestamp).toISOString()}</Text>
-            <Text style={styles.small}>Expiry: {item.expiry ? new Date(item.expiry).toISOString() : 'none'}</Text>
-          </View>
+            <Text style={styles.small}>
+              Created: {new Date(item.timestamp).toISOString()}
+            </Text>
+            <Text style={styles.small}>
+              Expiry:{' '}
+              {item.expiry ? new Date(item.expiry).toISOString() : 'none'}
+            </Text>
+          </Card>
         )}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff', padding: 16},
-  header: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
-  status: {marginBottom: 8, color: '#111'},
-  section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 8,
-    color: '#111',
-  },
-  multi: {minHeight: 120, textAlignVertical: 'top'},
-  item: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  pendingItem: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-  },
-  small: {fontSize: 12, color: '#222', marginBottom: 2},
-  row: {flexDirection: 'row', justifyContent: 'space-between', marginTop: 6},
+  screen: {flex: 1},
+  content: {flex: 1, padding: 0},
+  listContent: {padding: 12, gap: 10},
+  headerBlock: {gap: 10, marginBottom: 8},
+  cardGap: {marginBottom: 8},
+  small: {fontSize: typography.caption, color: colors.text, marginBottom: 2},
+  row: {flexDirection: 'row', gap: 8, marginTop: 8},
+  halfBtn: {flex: 1},
 });

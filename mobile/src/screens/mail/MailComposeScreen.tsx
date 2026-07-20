@@ -1,17 +1,14 @@
 import React, {useCallback, useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import {StyleSheet, Text} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList} from '../../navigation/AppNavigator';
 import ContactPicker from '../../components/ContactPicker';
 import RecipientResolveModal from '../../components/RecipientResolveModal';
 import StatusBanner from '../../components/StatusBanner';
+import Screen from '../../components/Screen';
+import TextField from '../../components/TextField';
+import AppButton from '../../components/AppButton';
+import SectionTitle from '../../components/SectionTitle';
 import {
   findContactsByEmail,
   type StoredContact,
@@ -19,8 +16,10 @@ import {
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {sendEbpMail, sendPlainMail} from '../../services/mail/ebpMail';
 import {appendActivityLog} from '../../services/activityLog';
+import {statusKind} from '../../theme/statusKind';
+import {colors, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'MailCompose'>;
+type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
 type EncryptionIntent = 'pending' | 'encrypted' | 'unencrypted';
 
@@ -138,110 +137,103 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
   const showUnencryptedWarning = encryptionIntent === 'unencrypted';
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <Text style={styles.note}>
-          Compose an email. After you enter a To address, the app checks your
-          contacts for a matching email or opaque email detail.
-        </Text>
+    <Screen scroll>
+      <Text style={styles.note}>
+        Compose an email. After you enter a To address, the app checks your
+        contacts for a matching email or opaque email detail.
+      </Text>
 
-        {showUnencryptedWarning ? (
-          <StatusBanner
-            kind="error"
-            message="This message will not be encrypted because an EBP recipient identity could not be found nor was specified."
+      {showUnencryptedWarning ? (
+        <StatusBanner
+          kind="error"
+          message="This message will not be encrypted because an EBP recipient identity could not be found nor was specified."
+        />
+      ) : null}
+
+      <StatusBanner message={status} kind={statusKind(status)} />
+
+      <SectionTitle>Message</SectionTitle>
+      <TextField
+        label="To"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        value={to}
+        onChangeText={onToChange}
+        onBlur={() => {
+          void resolveRecipientFromTo();
+        }}
+        placeholder="recipient@example.com"
+        accessibilityLabel="To email address"
+      />
+      <TextField
+        label="Subject"
+        value={subject}
+        onChangeText={setSubject}
+        placeholder="Subject"
+        accessibilityLabel="Subject"
+      />
+      <TextField
+        label="Body"
+        value={message}
+        onChangeText={setMessage}
+        placeholder="Write your message..."
+        multiline
+        accessibilityLabel="Message body"
+        style={styles.bodyField}
+      />
+
+      <SectionTitle>EBP encryption</SectionTitle>
+      {encryptionIntent === 'encrypted' ? (
+        <>
+          <ContactPicker
+            variant="dropdown"
+            value={recipientContact}
+            onChange={onRecipientContactChange}
+            placeholder="Select EBP contact"
           />
-        ) : null}
-
-        <Text style={styles.section}>Message</Text>
-        <Text style={styles.fieldLabel}>To</Text>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="email-address"
-          style={styles.input}
-          value={to}
-          onChangeText={onToChange}
-          onBlur={() => {
-            void resolveRecipientFromTo();
-          }}
-          placeholder="recipient@example.com"
-          accessibilityLabel="To email address"
-        />
-        <Text style={styles.fieldLabel}>Subject</Text>
-        <TextInput
-          style={styles.input}
-          value={subject}
-          onChangeText={setSubject}
-          placeholder="Subject"
-          accessibilityLabel="Subject"
-        />
-        <Text style={styles.fieldLabel}>Body</Text>
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Write your message..."
-          multiline
-          accessibilityLabel="Message body"
-        />
-
-        <Text style={styles.section}>EBP encryption</Text>
-        {encryptionIntent === 'encrypted' ? (
-          <>
-            <Text style={styles.fieldLabel}>EBP contact</Text>
-            <ContactPicker
-              variant="dropdown"
-              value={recipientContact}
-              onChange={onRecipientContactChange}
-              placeholder="Select EBP contact"
-            />
-            <Text style={styles.hint}>
-              The message body is encrypted for the selected contact.
-            </Text>
-            <Text style={styles.fieldLabel}>Identity password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Password for your current identity"
-              secureTextEntry
-              accessibilityLabel="Identity password"
-            />
-            <Button title="Send EBP encrypted mail" onPress={onSend} />
-          </>
-        ) : encryptionIntent === 'unencrypted' ? (
-          <>
-            <Text style={styles.hint}>
-              Sending as plaintext. Change the To address to re-check contacts,
-              or pick an EBP contact below to encrypt.
-            </Text>
-            <Text style={styles.fieldLabel}>EBP contact (optional)</Text>
-            <ContactPicker
-              variant="dropdown"
-              value={recipientContact}
-              onChange={onRecipientContactChange}
-              placeholder="Select EBP contact to encrypt instead"
-            />
-            <Button title="Send unencrypted mail" onPress={onSend} />
-          </>
-        ) : (
-          <>
-            <Text style={styles.hint}>
-              Enter a To address and leave the field to resolve encryption, or
-              pick an EBP contact manually.
-            </Text>
-            <Text style={styles.fieldLabel}>EBP contact</Text>
-            <ContactPicker
-              variant="dropdown"
-              value={recipientContact}
-              onChange={onRecipientContactChange}
-              placeholder="Select EBP contact"
-            />
-            <Button title="Send" onPress={onSend} />
-          </>
-        )}
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
+          <Text style={styles.hint}>
+            The message body is encrypted for the selected contact.
+          </Text>
+          <TextField
+            label="Identity password"
+            value={password}
+            onChangeText={setPassword}
+            placeholder="Password for your current identity"
+            secureTextEntry
+            accessibilityLabel="Identity password"
+          />
+          <AppButton title="Send EBP encrypted mail" onPress={onSend} />
+        </>
+      ) : encryptionIntent === 'unencrypted' ? (
+        <>
+          <Text style={styles.hint}>
+            Sending as plaintext. Change the To address to re-check contacts, or
+            pick an EBP contact below to encrypt.
+          </Text>
+          <ContactPicker
+            variant="dropdown"
+            value={recipientContact}
+            onChange={onRecipientContactChange}
+            placeholder="Select EBP contact to encrypt instead"
+          />
+          <AppButton title="Send unencrypted mail" onPress={onSend} />
+        </>
+      ) : (
+        <>
+          <Text style={styles.hint}>
+            Enter a To address and leave the field to resolve encryption, or
+            pick an EBP contact manually.
+          </Text>
+          <ContactPicker
+            variant="dropdown"
+            value={recipientContact}
+            onChange={onRecipientContactChange}
+            placeholder="Select EBP contact"
+          />
+          <AppButton title="Send" onPress={onSend} />
+        </>
+      )}
 
       <RecipientResolveModal
         visible={resolveModalVisible}
@@ -251,32 +243,20 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
         onSelectContact={applyEncryptedContact}
         onMarkUnencrypted={applyUnencrypted}
       />
-    </SafeAreaView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff'},
-  scroll: {padding: 16},
-  note: {fontSize: 13, color: '#444', marginBottom: 12},
-  section: {
-    marginTop: 8,
-    marginBottom: 8,
-    fontWeight: '700',
-    fontSize: 16,
-    color: '#111',
+  note: {
+    fontSize: 13,
+    color: colors.muted,
   },
-  fieldLabel: {fontSize: 13, color: '#333', marginBottom: 4},
-  hint: {fontSize: 12, color: '#666', marginTop: -8, marginBottom: 12},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 12,
-    color: '#111',
+  hint: {
+    fontSize: typography.caption,
+    color: colors.muted,
   },
-  multi: {minHeight: 120, textAlignVertical: 'top'},
-  status: {marginTop: 12, color: '#111'},
+  bodyField: {
+    minHeight: 120,
+  },
 });

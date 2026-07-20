@@ -1,41 +1,67 @@
 import React from 'react';
-import {SafeAreaView, ScrollView, StyleSheet, Text} from 'react-native';
+import {Linking, StyleSheet, Text} from 'react-native';
+import type {NativeStackScreenProps} from '@react-navigation/native-stack';
+import type {MoreStackParamList} from '../navigation/AppNavigator';
+import Screen from '../components/Screen';
+import SectionTitle from '../components/SectionTitle';
+import Card from '../components/Card';
+import AppButton from '../components/AppButton';
+import {colors, typography} from '../theme/tokens';
 
-export default function ProjectInfoScreen(): JSX.Element {
+type Props = NativeStackScreenProps<MoreStackParamList, 'ProjectInfo'>;
+
+export default function ProjectInfoScreen(_props: Props): JSX.Element {
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <Text style={styles.header}>Project Info</Text>
+    <Screen scroll>
+      <Card padded>
         <Text style={styles.p}>
           EBP (Even Better Privacy) is a post-quantum cryptographic identity and
           messaging system using Dilithium/SPHINCS+ for signatures and Kyber for
           encryption.
         </Text>
-        <Text style={styles.section}>How It Works</Text>
+      </Card>
+
+      <SectionTitle>How It Works</SectionTitle>
+      <Card padded>
         <Text style={styles.p}>1. Generate identity (signing + encryption keys)</Text>
         <Text style={styles.p}>2. Share public identity and import contacts</Text>
         <Text style={styles.p}>3. Sign/verify messages and files</Text>
         <Text style={styles.p}>4. Encrypt/decrypt messages and files</Text>
         <Text style={styles.p}>5. Publish public identity to key server</Text>
+      </Card>
 
-        <Text style={styles.section}>Security Note</Text>
+      <SectionTitle>Security Note</SectionTitle>
+      <Card padded>
         <Text style={styles.p}>
           Keep private keys and revocation certificates secure. Anyone with your
           private keys (or emergency revocation cert) can act on your identity.
         </Text>
+      </Card>
 
-        <Text style={styles.section}>Links</Text>
-        <Text style={styles.link}>https://github.com/willpiam/even-better-privacy</Text>
-        <Text style={styles.link}>https://williamdoyle.ca/ebp</Text>
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle>Links</SectionTitle>
+      <AppButton
+        title="GitHub repository"
+        variant="secondary"
+        onPress={() =>
+          void Linking.openURL(
+            'https://github.com/willpiam/even-better-privacy',
+          )
+        }
+      />
+      <AppButton
+        title="Project website"
+        variant="secondary"
+        onPress={() => void Linking.openURL('https://williamdoyle.ca/ebp')}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, backgroundColor: '#fff', padding: 16},
-  header: {fontSize: 22, fontWeight: '700', color: '#111', marginBottom: 10},
-  section: {marginTop: 12, marginBottom: 6, fontSize: 16, fontWeight: '700', color: '#111'},
-  p: {marginBottom: 6, color: '#222', lineHeight: 20},
-  link: {marginBottom: 6, color: '#0b63d1'},
+  p: {
+    marginBottom: 6,
+    color: colors.text,
+    lineHeight: 20,
+    fontSize: typography.body,
+  },
 });

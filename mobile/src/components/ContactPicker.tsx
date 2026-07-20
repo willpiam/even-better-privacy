@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import {listContacts, type StoredContact} from '../services/contacts';
 
+import {colors} from '../theme/tokens';
+
 type Props = {
   value: string;
   onChange: (next: string) => void;
@@ -136,44 +138,45 @@ const styles = StyleSheet.create({
   dropdownWrap: {marginBottom: 12},
   dropdownTrigger: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderColor: colors.border,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
+    backgroundColor: colors.surface,
   },
   dropdownTriggerText: {flex: 1, marginRight: 8},
-  selectedLabel: {color: '#111', fontSize: 15},
+  selectedLabel: {color: colors.text, fontSize: 15},
   placeholderLabel: {color: '#999', fontSize: 15},
-  chevron: {color: '#666', fontSize: 12},
+  chevron: {color: colors.muted, fontSize: 12},
   dropdownList: {
     marginTop: 4,
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    backgroundColor: '#fafafa',
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.page,
     overflow: 'hidden',
   },
   dropdownScroll: {maxHeight: 220},
-  empty: {padding: 12, color: '#666', fontSize: 13},
+  empty: {padding: 12, color: colors.muted, fontSize: 13},
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
+    borderColor: colors.border,
+    borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
     marginBottom: 6,
-    color: '#111',
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
   item: {
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: colors.border,
     padding: 10,
   },
-  itemSelected: {backgroundColor: '#f0f6ff'},
-  name: {fontWeight: '700', color: '#111'},
-  fp: {fontSize: 11, color: '#333', marginTop: 2},
+  itemSelected: {backgroundColor: colors.accentSoft},
+  name: {fontWeight: '700', color: colors.text},
+  fp: {fontSize: 11, color: colors.muted, marginTop: 2},
 });

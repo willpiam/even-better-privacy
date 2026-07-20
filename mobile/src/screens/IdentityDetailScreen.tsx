@@ -1,20 +1,10 @@
 import React, {useEffect, useState} from 'react';
-import {
-  Alert,
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {pick, keepLocalCopy} from '@react-native-documents/picker';
 import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
   deleteIdentity,
   importIdentity,
@@ -33,10 +23,22 @@ import {
 } from '../services/revocation';
 import {exportPublicIdentity} from '../services/signVerify';
 import type {StoredIdentityMeta} from '../types';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SectionTitle from '../components/SectionTitle';
+import StatusBanner from '../components/StatusBanner';
+import BusyOverlay from '../components/BusyOverlay';
+import Card from '../components/Card';
+import {statusKind} from '../theme/statusKind';
+import {colors, typography} from '../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'IdentityDetail'>;
+type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentityDetail'>;
 
-export default function IdentityDetailScreen({route}: Props): JSX.Element {
+export default function IdentityDetailScreen({
+  route,
+  navigation,
+}: Props): JSX.Element {
   const [identity, setIdentity] = useState<StoredIdentityMeta | null>(null);
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
@@ -52,7 +54,12 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
   const [revokePush, setRevokePush] = useState(false);
   const [exportOutput, setExportOutput] = useState('');
   const [emergencyOutput, setEmergencyOutput] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [busyMessage, setBusyMessage] = useState('Working…');
+
+  useEffect(() => {
+    navigation.setOptions({title: route.params.identityName});
+  }, [navigation, route.params.identityName]);
 
   useEffect(() => {
     const load = async () => {
@@ -77,11 +84,12 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         }
       }
     };
-    load();
+    void load();
   }, [route.params.identityName, password]);
 
   const onPublish = async () => {
-    setLoading(true);
+    setBusy(true);
+    setBusyMessage('Publishing…');
     setStatus('');
     try {
       if (!identity) {
@@ -97,10 +105,9 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
       });
       setStatus(`Published: ${fingerprint}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   };
 
@@ -126,8 +133,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         }),
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -140,8 +146,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
       setExportOutput(JSON.stringify(publicIdentity, null, 2));
       setStatus('Public identity exported');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -167,8 +172,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         }),
       );
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -185,8 +189,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
       });
       setStatus('Identity revoked');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -197,9 +200,12 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
         destination: 'cachesDirectory',
         files: [{uri: file.uri, fileName: file.name ?? 'identity.json'}],
       });
-      const path = copy.uri.startsWith('file://')
-        ? copy.uri.replace('file://', '')
-        : copy.uri;
+      if (copy.status !== 'success') {
+        throw new Error('Failed to copy identity file');
+      }
+      const path = copy.localUri.startsWith('file://')
+        ? copy.localUri.replace('file://', '')
+        : copy.localUri;
       const raw = await RNFS.readFile(path, 'utf8');
       const meta = await importIdentity({storageJson: raw, overwrite: false});
       setStatus(`Imported ${meta.name}`);
@@ -242,6 +248,7 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
             try {
               await deleteIdentity(identity.name);
               setStatus('Identity deleted');
+              navigation.navigate('IdentitiesHome');
             } catch (error) {
               setStatus(error instanceof Error ? error.message : String(error));
             }
@@ -268,6 +275,8 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
   };
 
   const onEmergencyCert = async () => {
+    setBusy(true);
+    setBusyMessage('Generating certificate…');
     try {
       if (!identity) {
         throw new Error('Identity not found');
@@ -279,148 +288,157 @@ export default function IdentityDetailScreen({route}: Props): JSX.Element {
       setEmergencyOutput(JSON.stringify(cert, null, 2));
       setStatus('Emergency certificate generated');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setStatus(message);
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
     }
   };
 
   if (!identity) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Text style={{color: '#111'}}>Identity not found.</Text>
-      </SafeAreaView>
+      <Screen>
+        <StatusBanner message="Identity not found." kind="error" />
+      </Screen>
     );
   }
 
+  const signingLabel =
+    identity.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA';
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
+    <Screen scroll>
+      <BusyOverlay visible={busy} message={busyMessage} />
+      <Card padded>
         <Text style={styles.name}>{identity.name}</Text>
-        <Text style={styles.line}>Fingerprint: {identity.fingerprint}</Text>
-        <Text style={styles.line}>Signing: {identity.signingKeyType}</Text>
-        <Text style={styles.line}>Encryption: {identity.encryptionKeyType}</Text>
-        <Text style={styles.line}>Server: {serverUrl}</Text>
-        <Text style={styles.label}>Password to decrypt and sign</Text>
-        <TextInput
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          autoCapitalize="none"
-          style={styles.input}
+        <Text style={styles.meta}>
+          {signingLabel} · {identity.encryptionKeyType}
+        </Text>
+        <Text style={styles.fp}>{identity.fingerprint}</Text>
+        <Text style={styles.meta}>Server: {serverUrl || '—'}</Text>
+      </Card>
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <TextField
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        autoCapitalize="none"
+      />
+      <AppButton title="Publish to server" onPress={onPublish} disabled={busy} />
+      <View style={styles.row}>
+        <AppButton
+          title="Export"
+          variant="secondary"
+          onPress={onExportFile}
+          style={styles.flex}
         />
-        <Button
-          title={loading ? 'Publishing...' : 'Publish to key server'}
-          onPress={onPublish}
+        <AppButton
+          title="Import"
+          variant="secondary"
+          onPress={onImport}
+          style={styles.flex}
         />
-
-        <Text style={styles.section}>Import / Export</Text>
-        <Button title="Import identity file" onPress={onImport} />
-        <Button title="Export encrypted identity" onPress={onExportFile} />
-        <Button title="Delete identity" color="#d11a2a" onPress={onDelete} />
-
-        <Text style={styles.section}>Export Public Identity</Text>
-        <Button title="Export Public JSON" onPress={onExportPublic} />
-        <TextInput
-          value={exportOutput}
-          editable={false}
-          multiline
-          style={[styles.input, styles.multi]}
-        />
-
-        <Text style={styles.section}>Identity Details</Text>
-        {details.map(item => (
-          <View key={item.path} style={styles.detailRow}>
-            <Text style={styles.detail}>
-              {item.path}: {item.detail}
-            </Text>
-            {item.path.startsWith('email') || item.path.includes('email') ? (
-              <Button
-                title="Verify email"
-                onPress={() => onVerifyEmail(item.detail)}
-              />
-            ) : null}
-          </View>
-        ))}
-        <TextInput
-          value={detailPath}
-          onChangeText={setDetailPath}
-          style={styles.input}
-          placeholder="Detail path (e.g. email)"
-        />
-        <TextInput
-          value={detailValue}
-          onChangeText={setDetailValue}
-          style={styles.input}
-          placeholder="Detail value"
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Push to server</Text>
-          <Switch value={detailPush} onValueChange={setDetailPush} />
-        </View>
-        <Button title="Add Detail" onPress={onAddDetail} />
-
-        <Text style={styles.section}>Revocation</Text>
-        <TextInput
-          value={revokePath}
-          onChangeText={setRevokePath}
-          style={styles.input}
-          placeholder="Detail path to revoke"
-        />
-        <TextInput
-          value={revokeReason}
-          onChangeText={setRevokeReason}
-          style={styles.input}
-          placeholder="Revocation reason (optional)"
-        />
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Push to server</Text>
-          <Switch value={revokePush} onValueChange={setRevokePush} />
-        </View>
-        <Button title="Revoke Detail" onPress={onRevokeDetail} />
-        <Button title="Revoke Identity" color="#d11a2a" onPress={onRevokeIdentity} />
-
-        <Text style={styles.section}>Emergency Revocation Certificate</Text>
-        <Button title="Generate Emergency Certificate" onPress={onEmergencyCert} />
-        <TextInput
+      </View>
+      <AppButton
+        title="Emergency certificate"
+        variant="secondary"
+        onPress={onEmergencyCert}
+      />
+      <AppButton
+        title="Export public JSON"
+        variant="secondary"
+        onPress={onExportPublic}
+      />
+      {exportOutput ? (
+        <TextField label="Public JSON" value={exportOutput} editable={false} multiline />
+      ) : null}
+      {emergencyOutput ? (
+        <TextField
+          label="Emergency certificate"
           value={emergencyOutput}
           editable={false}
           multiline
-          style={[styles.input, styles.multi]}
         />
+      ) : null}
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      <SectionTitle>Identity details</SectionTitle>
+      {details.map(item => (
+        <Card key={item.path} padded style={styles.detailCard}>
+          <Text style={styles.detail}>
+            {item.path}: {item.detail}
+          </Text>
+          {item.path.startsWith('email') || item.path.includes('email') ? (
+            <AppButton
+              title="Verify email"
+              variant="secondary"
+              onPress={() => onVerifyEmail(item.detail)}
+            />
+          ) : null}
+        </Card>
+      ))}
+      <TextField
+        label="Detail path"
+        value={detailPath}
+        onChangeText={setDetailPath}
+        placeholder="e.g. email"
+      />
+      <TextField
+        label="Detail value"
+        value={detailValue}
+        onChangeText={setDetailValue}
+      />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Push to server</Text>
+        <Switch value={detailPush} onValueChange={setDetailPush} />
+      </View>
+      <AppButton title="Add detail" variant="secondary" onPress={onAddDetail} />
+
+      <SectionTitle>Revocation</SectionTitle>
+      <TextField
+        label="Detail path to revoke"
+        value={revokePath}
+        onChangeText={setRevokePath}
+      />
+      <TextField
+        label="Reason (optional)"
+        value={revokeReason}
+        onChangeText={setRevokeReason}
+      />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Push to server</Text>
+        <Switch value={revokePush} onValueChange={setRevokePush} />
+      </View>
+      <AppButton title="Revoke detail" variant="secondary" onPress={onRevokeDetail} />
+      <AppButton title="Revoke identity" variant="danger" onPress={onRevokeIdentity} />
+      <AppButton title="Delete from device" variant="danger" onPress={onDelete} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  name: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
-  line: {marginBottom: 8, color: '#111'},
-  section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
-  detail: {marginBottom: 4, color: '#222'},
-  detailRow: {marginBottom: 8},
-  label: {marginTop: 12, marginBottom: 4, color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    marginBottom: 12,
-    color: '#111',
+  name: {fontWeight: '700', fontSize: 18, color: colors.text, marginBottom: 6},
+  meta: {fontSize: typography.caption, color: colors.muted, marginTop: 4},
+  fp: {
+    marginTop: 8,
+    fontFamily: 'monospace',
+    fontSize: 11,
+    color: colors.muted,
+    lineHeight: 16,
   },
+  row: {flexDirection: 'row', gap: 8},
+  flex: {flex: 1},
+  detailCard: {gap: 8},
+  detail: {color: colors.text, marginBottom: 4},
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
   },
-  switchLabel: {flex: 1, marginRight: 12, color: '#111'},
-  multi: {
-    minHeight: 100,
-    textAlignVertical: 'top',
-  },
-  status: {marginTop: 12, color: '#111'},
+  switchLabel: {flex: 1, marginRight: 12, color: colors.text},
 });

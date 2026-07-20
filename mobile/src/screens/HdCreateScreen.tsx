@@ -1,14 +1,7 @@
 import React, {useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
   createHdIdentity,
   createHdMnemonic,
@@ -16,8 +9,18 @@ import {
   verifyHdMnemonic,
 } from '../services/hd';
 import type {HdProfile} from '../ebpCore';
+import Screen from '../components/Screen';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SegmentedControl from '../components/SegmentedControl';
+import SectionTitle from '../components/SectionTitle';
+import StatusBanner from '../components/StatusBanner';
+import BusyOverlay from '../components/BusyOverlay';
+import Card from '../components/Card';
+import {statusKind} from '../theme/statusKind';
+import {colors} from '../theme/tokens';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'HdCreate'>;
+type Props = NativeStackScreenProps<IdentitiesStackParamList, 'HdCreate'>;
 
 export default function HdCreateScreen({navigation}: Props): JSX.Element {
   const [name, setName] = useState('');
@@ -30,6 +33,8 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
   const [index, setIndex] = useState('0');
   const [discoverOutput, setDiscoverOutput] = useState('');
   const [status, setStatus] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [busyMessage, setBusyMessage] = useState('Working…');
 
   const onGenerate = () => {
     setMnemonic(createHdMnemonic(256));
@@ -37,6 +42,9 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
   };
 
   const onCreate = async () => {
+    setBusy(true);
+    setBusyMessage('Creating HD identity…');
+    setStatus('');
     try {
       if (mnemonic.trim() !== confirmMnemonic.trim()) {
         throw new Error('Mnemonic confirmation does not match');
@@ -57,10 +65,15 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       navigation.replace('IdentityDetail', {identityName: created.name});
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
     }
   };
 
   const onDiscover = async () => {
+    setBusy(true);
+    setBusyMessage('Discovering on server…');
+    setStatus('');
     try {
       const matches = await discoverHdIdentities({
         mnemonic,
@@ -72,71 +85,89 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       setStatus(`Discovery found ${matches.length} match(es)`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
     }
   };
 
+  const words = mnemonic.trim().split(/\s+/).filter(Boolean);
+
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
-        <Text style={styles.header}>EBP-HD Identity</Text>
-        <Button title="Generate mnemonic" onPress={onGenerate} />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={mnemonic}
-          onChangeText={setMnemonic}
-          placeholder="Mnemonic (24 words)"
-          multiline
-        />
-        <TextInput
-          style={[styles.input, styles.multi]}
-          value={confirmMnemonic}
-          onChangeText={setConfirmMnemonic}
-          placeholder="Confirm mnemonic"
-          multiline
-        />
-        <TextInput
-          style={styles.input}
-          value={passphrase}
-          onChangeText={setPassphrase}
-          placeholder="Optional passphrase"
-          secureTextEntry
-        />
-        <TextInput style={styles.input} value={name} onChangeText={setName} placeholder="Identity name" />
-        <TextInput
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-          placeholder="Encryption password"
-          secureTextEntry
-        />
-        <TextInput
-          style={styles.input}
-          value={profile}
-          onChangeText={v => setProfile(v === 'sphincs' ? 'sphincs' : 'dilithium')}
-          placeholder="Profile: dilithium or sphincs"
-        />
-        <TextInput style={styles.input} value={account} onChangeText={setAccount} placeholder="Account index" />
-        <TextInput style={styles.input} value={index} onChangeText={setIndex} placeholder="Address index" />
-        <Button title="Create HD identity" onPress={onCreate} />
-        <Button title="Discover on server" onPress={onDiscover} />
-        <TextInput style={[styles.input, styles.multi]} value={discoverOutput} editable={false} multiline />
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+    <Screen scroll>
+      <BusyOverlay visible={busy} message={busyMessage} />
+      <StatusBanner message={status} kind={statusKind(status)} />
+      <AppButton title="Generate mnemonic" variant="secondary" onPress={onGenerate} />
+      {words.length >= 12 ? (
+        <Card padded>
+          <Text style={styles.hint}>
+            Write these words down offline. You will confirm them below.
+          </Text>
+          <View style={styles.wordGrid}>
+            {words.map((word, i) => (
+              <Text key={`${i}-${word}`} style={styles.word}>
+                {i + 1}. {word}
+              </Text>
+            ))}
+          </View>
+        </Card>
+      ) : null}
+      <TextField
+        label="Mnemonic"
+        value={mnemonic}
+        onChangeText={setMnemonic}
+        multiline
+        autoCapitalize="none"
+      />
+      <TextField
+        label="Confirm mnemonic"
+        value={confirmMnemonic}
+        onChangeText={setConfirmMnemonic}
+        multiline
+        autoCapitalize="none"
+      />
+      <TextField
+        label="Optional passphrase"
+        value={passphrase}
+        onChangeText={setPassphrase}
+        secureTextEntry
+      />
+      <TextField label="Identity name" value={name} onChangeText={setName} autoCapitalize="none" />
+      <TextField
+        label="Encryption password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      <SectionTitle>Profile</SectionTitle>
+      <SegmentedControl
+        value={profile}
+        onChange={v => setProfile(v as HdProfile)}
+        options={[
+          {label: 'ML-DSA', value: 'dilithium'},
+          {label: 'SLH-DSA', value: 'sphincs'},
+        ]}
+      />
+      <View style={styles.row}>
+        <View style={styles.flex}>
+          <TextField label="Account" value={account} onChangeText={setAccount} keyboardType="number-pad" />
+        </View>
+        <View style={styles.flex}>
+          <TextField label="Index" value={index} onChangeText={setIndex} keyboardType="number-pad" />
+        </View>
+      </View>
+      <AppButton title="Create HD identity" onPress={onCreate} disabled={busy} />
+      <AppButton title="Discover on server" variant="secondary" onPress={onDiscover} disabled={busy} />
+      {discoverOutput ? (
+        <TextField label="Discovery output" value={discoverOutput} editable={false} multiline />
+      ) : null}
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  header: {fontWeight: '700', fontSize: 20, marginBottom: 12, color: '#111'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10,
-    color: '#111',
-  },
-  multi: {minHeight: 80, textAlignVertical: 'top'},
-  status: {marginTop: 10, color: '#111'},
+  hint: {fontSize: 13, color: colors.accent, marginBottom: 10, lineHeight: 18},
+  wordGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
+  word: {width: '47%', fontSize: 13, color: colors.text},
+  row: {flexDirection: 'row', gap: 8},
+  flex: {flex: 1},
 });

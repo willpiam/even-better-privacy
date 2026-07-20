@@ -1,15 +1,8 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {
-  Button,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {RootStackParamList} from '../navigation/AppNavigator';
+import type {ContactsStackParamList} from '../navigation/AppNavigator';
 import {
   deleteContact,
   fetchContactFromServer,
@@ -18,11 +11,24 @@ import {
   updateContactLocalNotes,
 } from '../services/contacts';
 import {getServerUrl} from '../services/settings';
+import Screen from '../components/Screen';
+import Card from '../components/Card';
+import TextField from '../components/TextField';
+import AppButton from '../components/AppButton';
+import SectionTitle from '../components/SectionTitle';
+import StatusBanner from '../components/StatusBanner';
+import BusyOverlay from '../components/BusyOverlay';
+import {colors, typography} from '../theme/tokens';
+import {statusKind} from '../theme/statusKind';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ContactDetail'>;
+type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactDetail'>;
 
-export default function ContactDetailScreen({route, navigation}: Props): JSX.Element {
+export default function ContactDetailScreen({
+  route,
+  navigation,
+}: Props): JSX.Element {
   const [status, setStatus] = useState('');
+  const [syncing, setSyncing] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [contact, setContact] = useState<{
     name: string;
@@ -94,6 +100,7 @@ export default function ContactDetailScreen({route, navigation}: Props): JSX.Ele
   };
 
   const onSync = async () => {
+    setSyncing(true);
     try {
       if (!contact) {
         throw new Error('Contact not found');
@@ -106,6 +113,8 @@ export default function ContactDetailScreen({route, navigation}: Props): JSX.Ele
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -146,80 +155,129 @@ export default function ContactDetailScreen({route, navigation}: Props): JSX.Ele
 
   if (!contact) {
     return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.text}>Contact not found.</Text>
-      </SafeAreaView>
+      <Screen>
+        <StatusBanner message="Contact not found." kind="error" />
+      </Screen>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView>
+    <Screen scroll>
+      <BusyOverlay visible={syncing} message="Syncing contact…" />
+      <Card padded>
         <Text style={styles.name}>{contact.name}</Text>
-        <Text style={styles.text}>Fingerprint: {contact.fingerprint}</Text>
         {contact.localAlias ? (
-          <Text style={styles.text}>Alias: {contact.localAlias}</Text>
+          <Text style={styles.meta}>Alias: {contact.localAlias}</Text>
         ) : null}
+        <Text style={styles.fp}>{contact.fingerprint}</Text>
+        <Text style={styles.meta}>
+          {contact.signingKeyType}/{contact.encryptionKeyType}
+        </Text>
+      </Card>
+      <StatusBanner message={status} kind={statusKind(status)} />
 
-        <Text style={styles.section}>Details</Text>
-        {Object.entries(contact.details).map(([path, [hash, label]]) => (
-          <Text style={styles.detail} key={path}>
-            {path}: {label || hash}
-            {contact.resolvedOpaqueDetails?.[path]
-              ? ` (resolved: ${contact.resolvedOpaqueDetails[path]})`
-              : ''}
-          </Text>
-        ))}
+      <SectionTitle>Details</SectionTitle>
+      {Object.keys(contact.details).length === 0 ? (
+        <Text style={styles.meta}>No published details.</Text>
+      ) : (
+        Object.entries(contact.details).map(([path, [hash, label]]) => (
+          <Card key={path} padded style={styles.detailCard}>
+            <Text style={styles.detail}>
+              {path}: {label || hash}
+              {contact.resolvedOpaqueDetails?.[path]
+                ? ` (resolved: ${contact.resolvedOpaqueDetails[path]})`
+                : ''}
+            </Text>
+          </Card>
+        ))
+      )}
 
-        <Text style={styles.section}>Resolve opaque detail</Text>
-        <TextInput
-          style={styles.input}
-          value={opaquePath}
-          onChangeText={setOpaquePath}
-          placeholder="opaque:: path"
+      <SectionTitle>Resolve opaque detail</SectionTitle>
+      <TextField
+        label="opaque:: path"
+        value={opaquePath}
+        onChangeText={setOpaquePath}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <TextField
+        label="Plaintext value"
+        value={opaqueValue}
+        onChangeText={setOpaqueValue}
+        autoCapitalize="none"
+      />
+
+      <SectionTitle>Local notes</SectionTitle>
+      <TextField
+        label="Alias"
+        value={localAlias}
+        onChangeText={setLocalAlias}
+      />
+      <TextField
+        label="Description"
+        value={localDescription}
+        onChangeText={setLocalDescription}
+        multiline
+      />
+      <TextField
+        label="Local email"
+        value={localEmail}
+        onChangeText={setLocalEmail}
+        autoCapitalize="none"
+        keyboardType="email-address"
+      />
+      <AppButton title="Save notes" onPress={onSaveNotes} />
+
+      <Text style={styles.meta}>
+        {`${serverUrl}/api/v1/identity/${contact.fingerprint}`}
+      </Text>
+      <View style={styles.row}>
+        <AppButton
+          title="Sync"
+          onPress={onSync}
+          disabled={syncing}
+          style={styles.flex}
         />
-        <TextInput
-          style={styles.input}
-          value={opaqueValue}
-          onChangeText={setOpaqueValue}
-          placeholder="Plaintext value"
+        <AppButton
+          title="Opaque resolve"
+          variant="secondary"
+          onPress={onResolveOpaque}
+          disabled={syncing}
+          style={styles.flex}
         />
-        <Button title="Resolve opaque" onPress={onResolveOpaque} />
-
-        <Text style={styles.section}>Local notes</Text>
-        <TextInput style={styles.input} value={localAlias} onChangeText={setLocalAlias} placeholder="Alias" />
-        <TextInput
-          style={styles.input}
-          value={localDescription}
-          onChangeText={setLocalDescription}
-          placeholder="Description"
-        />
-        <TextInput style={styles.input} value={localEmail} onChangeText={setLocalEmail} placeholder="Local email" />
-        <Button title="Save local notes" onPress={onSaveNotes} />
-
-        <Text style={styles.section}>Server</Text>
-        <Text style={styles.text}>{`${serverUrl}/api/v1/identity/${contact.fingerprint}`}</Text>
-        <Button title="Sync from Server" onPress={onSync} />
-        <Button title="Delete Contact" onPress={onDelete} color="#d11a2a" />
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-      </ScrollView>
-    </SafeAreaView>
+      </View>
+      <AppButton
+        title="Delete"
+        variant="danger"
+        onPress={onDelete}
+        disabled={syncing}
+      />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {flex: 1, padding: 16, backgroundColor: '#fff'},
-  name: {fontWeight: '700', fontSize: 20, marginBottom: 8, color: '#111'},
-  text: {marginBottom: 6, color: '#111'},
-  section: {marginTop: 12, marginBottom: 6, fontWeight: '700', color: '#111'},
-  detail: {marginBottom: 4, color: '#333'},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 8,
-    color: '#111',
+  name: {
+    fontWeight: '700',
+    fontSize: 18,
+    color: colors.text,
   },
-  status: {marginTop: 10, color: '#111'},
+  fp: {
+    marginTop: 8,
+    fontSize: typography.caption,
+    color: colors.muted,
+    fontFamily: 'monospace',
+  },
+  meta: {
+    marginTop: 6,
+    fontSize: typography.caption,
+    color: colors.muted,
+  },
+  detail: {
+    fontSize: typography.body,
+    color: colors.text,
+  },
+  detailCard: {marginBottom: 0},
+  row: {flexDirection: 'row', gap: 8},
+  flex: {flex: 1},
 });

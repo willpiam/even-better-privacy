@@ -1,5 +1,6 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
+import {colors, radius} from '../theme/tokens';
 
 export default function StatusBanner({
   message,
@@ -17,9 +18,15 @@ export default function StatusBanner({
         styles.base,
         kind === 'success' ? styles.success : null,
         kind === 'error' ? styles.error : null,
+        kind === 'info' ? styles.info : null,
       ]}>
       <Text
-        style={[styles.text, kind === 'error' ? styles.errorText : null]}>
+        style={[
+          styles.text,
+          kind === 'success' ? styles.successText : null,
+          kind === 'error' ? styles.errorText : null,
+          kind === 'info' ? styles.infoText : null,
+        ]}>
         {message}
       </Text>
     </View>
@@ -28,25 +35,23 @@ export default function StatusBanner({
 
 const styles = StyleSheet.create({
   base: {
-    backgroundColor: '#eef4ff',
-    borderColor: '#c6dcff',
-    borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: radius.md,
     padding: 10,
-    marginBottom: 8,
+  },
+  info: {
+    backgroundColor: colors.accentSoft,
   },
   success: {
-    backgroundColor: '#e8f8eb',
-    borderColor: '#84d79a',
+    backgroundColor: colors.successSoft,
   },
   error: {
-    backgroundColor: '#ffeef0',
-    borderColor: '#ffb8bf',
+    backgroundColor: colors.dangerSoft,
   },
   text: {
-    color: '#111',
+    fontSize: 13,
+    lineHeight: 18,
   },
-  errorText: {
-    color: '#b00020',
-  },
+  infoText: {color: colors.accent},
+  successText: {color: colors.success},
+  errorText: {color: colors.danger},
 });
