@@ -1,5 +1,14 @@
 # Wiki Log
 
+## [2026-07-21] query | opaque detail endorsement status
+
+- Answered: not working; verify-email hard-codes path `email`. Cleartext email
+  endorsement works. Build plan: hash-check request, confirm opaque path,
+  client cleartext prompt, tests.
+- Filed: [[analysis-opaque-detail-endorsement]].
+- Updated: [[overview]], [[analysis-mobile-encrypted-mail-reader-ux]],
+  [[analysis-weakest-defined-architecture-concepts]].
+
 ## [2026-07-21] query | mobile mail authenticity indicator + sender summary
 
 - Answered: add tappable signature/From/endorsement indicator; drill-down covers

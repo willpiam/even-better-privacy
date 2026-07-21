@@ -115,7 +115,7 @@ Show for each relevant path (`email` and/or matching `opaque::email`):
 - `verifiedAt` when present
 - Plain explanation: verified means they completed the link-in-email procedure; unverified means the identity merely *claims* the address via a signed detail.
 
-**Wiki gap / uncertainty:** [[overview]] still lists “Hashed/opaque detail endorsement” under upcoming features. Cleartext email verify-email is implemented on the server; whether opaque paths get the same `detailsMeta.verified` endorsement should be confirmed in implementation when building this UI — do not claim opaque endorsement works unless `detailsMeta` says so for that path.
+**Wiki status:** Opaque/`opaque::email` endorsement is **not implemented** yet — only cleartext `email` verify-email works. See [[analysis-opaque-detail-endorsement]]. Until that ships, the authenticity UI should only show endorsement green for `detailsMeta.email.verified`, and treat opaque matches as claim+hash-binding without server endorsement.
 
 #### D. From header vs claims (explicit comparison)
 
@@ -185,6 +185,7 @@ Reuse contact email matching helpers from compose (`findContactsByEmail` / opaqu
 - [[component-server]]
 - [[email-transport]]
 - [[analysis-mobile-compose-recipient-resolve]]
+- [[analysis-opaque-detail-endorsement]]
 - [[analysis-mobile-mail-decrypt-invalid-json]]
 - [[analysis-gui-mobile-parity-deltas]]
 - [[component-gui]]

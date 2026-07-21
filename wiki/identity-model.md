@@ -75,6 +75,8 @@ This two-step design creates an auditable trail via signed revocation certificat
 
 Details can be marked as **opaque** (prefixed with `opaque::`). For opaque details, only `SHA-256(value)` is stored — the cleartext value is never published. This allows verification that an email is associated with an identity without exposing the email to the public server.
 
+**Endorsement:** Server verify-email currently endorses the cleartext `email` path only. Endorsing `opaque::email` (link-in-email → `detailsMeta` verified) is not implemented yet; see [[analysis-opaque-detail-endorsement]].
+
 ## Revocation Integration
 
 See [[revocation-system]] for how identities and individual details can be revoked using signed certificates.
@@ -100,6 +102,7 @@ NIST SP 800-57 Part 1's key lifecycle vocabulary is useful for future identity e
 - [[component-cli]]
 - [[component-gui]]
 - [[overview]]
+- [[analysis-opaque-detail-endorsement]]
 
 ## Sources
 

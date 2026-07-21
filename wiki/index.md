@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-21 (mobile encrypted mail reader UX)
+Last updated: 2026-07-21 (opaque detail endorsement status)
 
 ## Wiki Operations
 
@@ -147,6 +147,9 @@ Last updated: 2026-07-21 (mobile encrypted mail reader UX)
   hide armor behind (i), Decrypt above the fold, replace body with plaintext;
   authenticity indicator (signature / From binding / verify-email endorsement)
   with sender-summary drill-down.
+- [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement is
+  not implemented; cleartext `email` verify-email works; server+client work to
+  add hash-check request and `detailsMeta` for opaque paths.
 
 ## Security Audits
 
