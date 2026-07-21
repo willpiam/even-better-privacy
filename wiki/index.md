@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-21 (opaque detail endorsement status)
+Last updated: 2026-07-21 (mail authenticity UX + opaque endorsement)
 
 ## Wiki Operations
 
@@ -143,13 +143,12 @@ Last updated: 2026-07-21 (opaque detail endorsement status)
 - [[analysis-mobile-mail-decrypt-invalid-json]] - Mobile decrypt shows
   `Invalid JSON payload` because MIME is not CTE-decoded before armor parse;
   password is unused for this error.
-- [[analysis-mobile-encrypted-mail-reader-ux]] - Mobile encrypted mail reader:
-  hide armor behind (i), Decrypt above the fold, replace body with plaintext;
-  authenticity indicator (signature / From binding / verify-email endorsement)
-  with sender-summary drill-down.
-- [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement is
-  not implemented; cleartext `email` verify-email works; server+client work to
-  add hash-check request and `detailsMeta` for opaque paths.
+- [[analysis-mobile-encrypted-mail-reader-ux]] - Mobile encrypted mail reader
+  (implemented): locked layout, authenticity badge, sender-summary drill-down;
+  opaque endorsement supported via [[analysis-opaque-detail-endorsement]].
+- [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement
+  implemented: hash-check verify-email request, GUI/mobile cleartext prompts,
+  `detailsMeta` for opaque paths.
 
 ## Security Audits
 

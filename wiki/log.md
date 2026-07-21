@@ -1,5 +1,23 @@
 # Wiki Log
 
+## [2026-07-21] fix | mobile mail authenticity reader UX
+
+- Locked EBP message view (Decrypt above fold, armor behind technical details);
+  authenticity badge + MailSenderAuthenticityScreen; enriched decryptMailBody.
+- Code: `MailMessageScreen.tsx`, `AuthenticityBadge.tsx`,
+  `MailSenderAuthenticityScreen.tsx`, `ebpMail.ts`, `mailAuthenticity.ts`,
+  `encryptDecrypt.ts`, `AppNavigator.tsx`.
+- Updated: [[analysis-mobile-encrypted-mail-reader-ux]].
+
+## [2026-07-21] fix | opaque::email verify-email endorsement
+
+- Server accepts `path: opaque::email` on verify-email/request (hash-check
+  cleartext); confirm allows opaque path; SQLite 64-bit timestamp bind/read fix.
+- GUI/mobile: verify UX for opaque with cleartext prompt; mobile hashes opaque
+  attach; GUI proxy forwards `path`.
+- Updated: [[analysis-opaque-detail-endorsement]], [[overview]],
+  [[identity-model]], [[component-server]].
+
 ## [2026-07-21] query | opaque detail endorsement status
 
 - Answered: not working; verify-email hard-codes path `email`. Cleartext email

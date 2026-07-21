@@ -368,6 +368,7 @@ export async function updateContactLocalNotes(params: {
 export async function requestVerifyEmail(params: {
   fingerprint: string;
   detail: string;
+  path?: string;
   server?: string;
 }): Promise<unknown> {
   const server = params.server ?? (await getServerUrl());
@@ -377,6 +378,7 @@ export async function requestVerifyEmail(params: {
     body: JSON.stringify({
       fingerprint: params.fingerprint,
       detail: params.detail,
+      ...(params.path ? {path: params.path} : {}),
     }),
   });
   const body = await res.json().catch(() => ({}));

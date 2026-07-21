@@ -159,9 +159,10 @@ documented separately in [[message-payload-formats]].
   the deterministic generation layer, while hierarchy certificates remain the
   trust-delegation layer
 - Advanced email features (search, drafts, rich rendering, scheduled send)
-- Hashed/opaque detail endorsement (cleartext `email` verify-email works;
-  `opaque::email` endorsement not yet — [[analysis-opaque-detail-endorsement]])
 - Identity expiry dates
+
+Hashed/opaque detail endorsement for `email` and `opaque::email` is available;
+see [[analysis-opaque-detail-endorsement]].
 
 ## Sources
 

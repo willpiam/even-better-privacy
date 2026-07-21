@@ -24,7 +24,9 @@ import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
 import MailAccountSetupScreen from '../screens/mail/MailAccountSetupScreen';
 import MailInboxScreen from '../screens/mail/MailInboxScreen';
 import MailMessageScreen from '../screens/mail/MailMessageScreen';
+import MailSenderAuthenticityScreen from '../screens/mail/MailSenderAuthenticityScreen';
 import MailComposeScreen from '../screens/mail/MailComposeScreen';
+import type {MailAuthenticitySummary} from '../services/mail/ebpMail';
 import MoreScreen from '../screens/MoreScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import CertificatesScreen from '../screens/CertificatesScreen';
@@ -61,6 +63,7 @@ export type MailStackParamList = {
   MailAccountSetup: {accountId?: string};
   MailInbox: undefined;
   MailMessage: {uid: number};
+  MailSenderAuthenticity: {summary: MailAuthenticitySummary};
   MailCompose: undefined;
 };
 
@@ -246,6 +249,11 @@ function MailNavigator(): JSX.Element {
         name="MailMessage"
         component={MailMessageScreen}
         options={{title: 'Message'}}
+      />
+      <MailStack.Screen
+        name="MailSenderAuthenticity"
+        component={MailSenderAuthenticityScreen}
+        options={{title: 'Sender authenticity'}}
       />
       <MailStack.Screen
         name="MailCompose"

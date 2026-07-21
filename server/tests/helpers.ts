@@ -6,7 +6,9 @@ import {
   toHex,
 } from "../crypto.ts";
 import type { IdentityRow } from "../types.ts";
-import { buildMessageHashEnvelope, buildMessageHashEnvelopeFromHash, sha256Hex } from "../../core/MessageHash.ts";
+import { buildMessageHashEnvelope, buildMessageHashEnvelopeFromHash, buildPurposeHashEnvelope, sha256Hex } from "../../core/MessageHash.ts";
+import { canonicalJsonStringify } from "../../core/CanonicalJson.ts";
+import { stringToHex } from "../../core/Hex.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -18,7 +20,7 @@ type SigningKeyLike = {
 
 export function createSphincsIdentity(): { identity: IdentityRow; signingKey: SphincsSigningKey } {
   const signingKey = new SphincsSigningKey();
-  const encryptionKey = "enc-key-deadbeef";
+  const encryptionKey = "deadbeef".repeat(8);
   const createdAt = Date.now();
 
   const identity: IdentityRow = {
@@ -52,7 +54,9 @@ export function createIdentityPayload(): {
   signingKey: SphincsSigningKey;
 } {
   const signingKey = new SphincsSigningKey();
-  const encryptionKey = `enc-${crypto.randomUUID()}`;
+  const encryptionBytes = new Uint8Array(32);
+  crypto.getRandomValues(encryptionBytes);
+  const encryptionKey = toHex(encryptionBytes);
 
   const fingerprint = computeIdentityFingerprint({
     signingKeyType: "sphincs",
@@ -105,10 +109,12 @@ export function createSignedProof(
     signature: null as string | null,
   };
 
-  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
+  const signature = signingKey.sign(
+    buildPurposeHashEnvelope("detail-proof", canonicalJsonStringify(payload)),
+  );
   const signedRecord = { ...payload, signature };
 
-  return { proof: encodeProof(signedRecord), record: signedRecord };
+  return { proof: stringToHex(canonicalJsonStringify(signedRecord)), record: signedRecord };
 }
 
 export function createRevocationCertificate(

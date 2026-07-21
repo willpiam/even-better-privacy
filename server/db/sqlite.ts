@@ -21,7 +21,24 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     params: DatabaseQueryParams = [],
   ): Promise<T[]> {
     const stmt = this.db.prepare(sql);
-    return Promise.resolve(stmt.values<T>(params as never));
+    const bound = Array.isArray(params)
+      ? params.map((value) => {
+        // @db/sqlite truncates JS numbers/BigInts to 32-bit on bind/read.
+        // Binding large integers as decimal strings preserves full INTEGER values.
+        if (
+          typeof value === "number" &&
+          Number.isInteger(value) &&
+          (value > 0x7fffffff || value < -0x80000000)
+        ) {
+          return String(value);
+        }
+        if (typeof value === "bigint") {
+          return value.toString();
+        }
+        return value;
+      })
+      : params;
+    return Promise.resolve(stmt.values<T>(bound as never));
   }
 
   close(): Promise<void> {

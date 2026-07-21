@@ -1,12 +1,20 @@
 import {armorPayload, parseEbpPayloadInput} from '../../ebpCore';
 import {decryptMessage, encryptMessage} from '../encryptDecrypt';
-import {loadContact} from '../contacts';
+import {listContacts, getDetailValue} from '../contacts';
 import {loadIdentity} from '../storage';
-import {getMailIncludePublicKeys} from '../settings';
+import {getMailIncludePublicKeys, getServerUrl} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
 import {fetchMessageDetail} from './imap';
 import {buildMultipartMimeMessage, buildSimpleMimeMessage} from './mime';
 import {sendMimeMessage} from './smtp';
+import {
+  getDetailMeta,
+  matchFromToIdentity,
+  type MailAuthenticitySummary,
+  type MailVerifyStatus,
+} from './mailAuthenticity';
+
+export type {MailAuthenticitySummary};
 
 export async function sendEbpMail(params: {
   identityName: string;
@@ -80,7 +88,7 @@ export async function decryptMailBody(params: {
   identityName: string;
   password: string;
   uid: number;
-}): Promise<{plaintext: string; verified: boolean}> {
+}): Promise<MailAuthenticitySummary> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
     throw new Error('No mail account configured');
@@ -108,8 +116,111 @@ export async function decryptMailBody(params: {
     password: params.password,
     payload,
   });
+
+  let verifyStatus: MailVerifyStatus = result.verifyStatus;
+  if (result.verified === true && !result.isKnownContact) {
+    if (result.verifyStatus === 'valid' || result.verifyStatus === 'valid_unbound') {
+      verifyStatus = 'valid_unknown_signer';
+    }
+  }
+
+  const messageFrom = detail.from ?? '';
+  let signerEmail: string | null = null;
+  let opaqueEmailMatched = false;
+  let matchedEmailPath: 'email' | 'opaque::email' | null = null;
+  let signerEmailVerified: boolean | null = null;
+  let signerMatchesSenderEmail: boolean | null = null;
+  let serverIdentityMatch: boolean | null = null;
+  let contactName: string | null = null;
+
+  if (result.contact) {
+    const match = matchFromToIdentity(result.contact, messageFrom);
+    signerEmail = match.signerEmail;
+    opaqueEmailMatched = match.opaqueEmailMatched;
+    matchedEmailPath = match.matchedPath;
+    signerMatchesSenderEmail = match.matches;
+    if (match.matchedPath) {
+      const meta = getDetailMeta(result.contact.detailsMeta, match.matchedPath);
+      signerEmailVerified = meta ? meta.verified : false;
+    } else if (
+      getDetailValue(result.contact.details, 'email') ||
+      getDetailValue(result.contact.details, 'opaque::email')
+    ) {
+      // Has a claim but it did not match From
+      const emailMeta = getDetailMeta(result.contact.detailsMeta, 'email');
+      const opaqueMeta = getDetailMeta(
+        result.contact.detailsMeta,
+        'opaque::email',
+      );
+      if (emailMeta || opaqueMeta) {
+        signerEmailVerified = Boolean(
+          emailMeta?.verified || opaqueMeta?.verified,
+        );
+      }
+    }
+
+    if (result.isKnownContact && result.signerFingerprint) {
+      const contacts = await listContacts();
+      const named = contacts.find(
+        c => c.contact.fingerprint === result.signerFingerprint,
+      );
+      contactName = named?.name ?? null;
+    }
+
+    if (
+      result.verified &&
+      !result.isKnownContact &&
+      result.signerFingerprint
+    ) {
+      try {
+        const server = await getServerUrl();
+        const res = await fetch(
+          `${server.replace(/\/+$/, '')}/api/v1/identity/${encodeURIComponent(
+            result.signerFingerprint,
+          )}`,
+        );
+        if (res.ok) {
+          const body = (await res.json()) as {
+            fingerprint?: string;
+            signingKey?: string;
+            encryptionKey?: string;
+            detailsMeta?: Record<
+              string,
+              {verified: boolean; verifiedAt: number | null}
+            >;
+          };
+          serverIdentityMatch =
+            body.fingerprint === result.contact.fingerprint &&
+            body.signingKey === result.contact.signingKey &&
+            body.encryptionKey === result.contact.encryptionKey;
+          if (body.detailsMeta && match.matchedPath) {
+            const serverMeta = body.detailsMeta[match.matchedPath];
+            if (serverMeta && typeof serverMeta.verified === 'boolean') {
+              signerEmailVerified = serverMeta.verified;
+            }
+          }
+        } else {
+          serverIdentityMatch = false;
+        }
+      } catch {
+        serverIdentityMatch = false;
+      }
+    }
+  }
+
   return {
     plaintext: result.message,
-    verified: result.verified ?? false,
+    verified: result.verified,
+    verifyStatus,
+    signerFingerprint: result.signerFingerprint,
+    contactName,
+    isKnownContact: result.isKnownContact,
+    signerEmail,
+    opaqueEmailMatched,
+    matchedEmailPath,
+    signerEmailVerified,
+    signerMatchesSenderEmail,
+    serverIdentityMatch,
+    messageFrom,
   };
 }

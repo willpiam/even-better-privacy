@@ -5,6 +5,7 @@ export type SecretPromptOptions = {
   title: string;
   placeholder?: string;
   submitLabel?: string;
+  secureTextEntry?: boolean;
 };
 
 type Pending = {
@@ -48,6 +49,7 @@ export function useSecretPrompt(): {
         title={pending?.options.title ?? 'Enter password'}
         placeholder={pending?.options.placeholder}
         submitLabel={pending?.options.submitLabel}
+        secureTextEntry={pending?.options.secureTextEntry ?? true}
         onCancel={() => close(null)}
         onSubmit={value => close(value)}
       />

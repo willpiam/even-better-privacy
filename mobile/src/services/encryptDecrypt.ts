@@ -74,7 +74,10 @@ export async function decryptMessage(params: {
 }): Promise<{
   message: string;
   verified: boolean | null;
-  verifyStatus: 'unsigned' | 'valid' | 'invalid';
+  verifyStatus: 'unsigned' | 'valid' | 'valid_unbound' | 'invalid';
+  isKnownContact: boolean;
+  signerFingerprint: string | null;
+  contact: import('../ebpCore').ExternalIdentity | null;
 }> {
   const identity = await loadIdentity(params.identityName, params.password);
   const type = params.payload.type;
@@ -87,6 +90,9 @@ export async function decryptMessage(params: {
       message: identity.encryptionKey.decrypt(ciphertext),
       verified: null,
       verifyStatus: 'unsigned',
+      isKnownContact: false,
+      signerFingerprint: null,
+      contact: null,
     };
   }
   if (type === 'ebp-encrypted-signed-message-multi') {
@@ -104,7 +110,7 @@ export async function decryptMessage(params: {
       typeof params.payload.senderIdentity === 'object'
         ? (params.payload.senderIdentity as Record<string, unknown>)
         : undefined;
-    const {contact} = await resolveSenderForDecrypt({
+    const {contact, isKnownContact} = await resolveSenderForDecrypt({
       senderHint: params.sender,
       senderFingerprint: senderFp,
       embeddedIdentity: embedded,
@@ -116,7 +122,10 @@ export async function decryptMessage(params: {
     return {
       message: result.message,
       verified: result.verified,
-      verifyStatus: result.verified ? 'valid' : 'invalid',
+      verifyStatus: result.verifyStatus,
+      isKnownContact,
+      signerFingerprint: contact.fingerprint ?? senderFp ?? null,
+      contact,
     };
   }
   if (type === 'ebp-encrypted-signed-message') {
@@ -129,7 +138,7 @@ export async function decryptMessage(params: {
       typeof params.payload.senderIdentity === 'object'
         ? (params.payload.senderIdentity as Record<string, unknown>)
         : undefined;
-    const {contact} = await resolveSenderForDecrypt({
+    const {contact, isKnownContact} = await resolveSenderForDecrypt({
       senderHint: params.sender,
       senderFingerprint: senderFp,
       embeddedIdentity: embedded,
@@ -138,7 +147,10 @@ export async function decryptMessage(params: {
     return {
       message: result.message,
       verified: result.verified,
-      verifyStatus: result.verified ? 'valid' : 'invalid',
+      verifyStatus: result.verifyStatus,
+      isKnownContact,
+      signerFingerprint: contact.fingerprint ?? senderFp ?? null,
+      contact,
     };
   }
   throw new Error('Unsupported payload type');

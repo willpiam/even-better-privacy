@@ -127,15 +127,15 @@ export function renderIdentityDetails() {
     const serverDetail = state.serverDetails.find(d => d.path === item.path);
     const isOnServer = serverDetail && serverDetail.detail === item.detail;
     const isLocalOnly = !isOnServer;
-    const isEmailDetail = item.path === "email";
+    const isEmailDetail = item.path === "email" || item.path === "opaque::email";
     const emailMeta = isEmailDetail && isOnServer
-      ? (state.serverDetailsMeta?.email || null)
+      ? (state.serverDetailsMeta?.[item.path] || null)
       : null;
     const emailMarker = emailMeta?.verified
       ? '<span class="email-verified" title="Email verified">●</span>'
       : "";
-    const emailAction = emailMeta && !emailMeta.verified
-      ? `<button class="btn-verify-email secondary" data-email="${escapeHtml(item.detail)}">Send verification link</button>`
+    const emailAction = isEmailDetail && isOnServer && !emailMeta?.verified
+      ? `<button class="btn-verify-email secondary" data-email="${escapeHtml(isOpaque ? "" : item.detail)}" data-path="${escapeHtml(item.path)}">Send verification link</button>`
       : "";
     
     li.innerHTML = `
@@ -171,7 +171,8 @@ export function renderIdentityDetails() {
     btn.addEventListener("click", async (e) => {
       e.preventDefault();
       const email = btn.dataset.email;
-      await requestEmailVerification(email, btn);
+      const path = btn.dataset.path || "email";
+      await requestEmailVerification(email, btn, path);
     });
   });
 }
@@ -196,12 +197,21 @@ export async function showPushDetailModal(path, btn) {
   }
 }
 
-export async function requestEmailVerification(email, btn) {
+export async function requestEmailVerification(email, btn, path = "email") {
   if (!state.server) {
     setStatus("No server configured for verification", "error");
     return;
   }
-  if (!email) {
+
+  let cleartext = email;
+  if (path === "opaque::email") {
+    cleartext = await requestTextInput(
+      "Enter the cleartext email to verify (must match the opaque hash)",
+      "you@example.com",
+    );
+    if (!cleartext) return;
+  }
+  if (!cleartext) {
     setStatus("Email detail missing", "error");
     return;
   }
@@ -212,10 +222,11 @@ export async function requestEmailVerification(email, btn) {
       method: "POST",
       body: JSON.stringify({
         fingerprint: state.currentFingerprint,
-        detail: email,
+        detail: cleartext,
+        path,
       }),
     });
-    setStatus(`Verification email sent to ${email}`, "success");
+    setStatus(`Verification email sent to ${cleartext}`, "success");
   } catch (err) {
     setStatus(err.message, "error");
   } finally {

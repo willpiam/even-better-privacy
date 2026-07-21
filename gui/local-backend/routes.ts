@@ -4341,6 +4341,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         server?: unknown;
         fingerprint?: unknown;
         detail?: unknown;
+        path?: unknown;
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const identityName = typeof body.identity === "string"
@@ -4353,6 +4354,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.fingerprint
         : undefined;
       const detail = typeof body.detail === "string" ? body.detail : undefined;
+      const path = typeof body.path === "string" ? body.path : undefined;
 
       const ctx = await getContext(home, identityName);
       const server = resolveServer(ctx, serverOverride);
@@ -4369,6 +4371,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         body: JSON.stringify({
           fingerprint,
           detail,
+          ...(path ? { path } : {}),
         }),
       });
 

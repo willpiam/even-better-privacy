@@ -34,7 +34,9 @@ The server (`server/main.ts`) is the publish/discovery layer for public identiti
 | `POST` | `/api/v1/verify-email/request` | Request email verification for an email detail |
 | `GET/POST` | `/api/v1/verify-email` | Email verification confirmation (browser + API) |
 
-Verify-email endorses the cleartext `email` detail path only today. Opaque/`opaque::email` endorsement is not implemented; see [[analysis-opaque-detail-endorsement]].
+Verify-email endorses cleartext `email` and `opaque::email` (optional `path` on
+request; opaque requires cleartext that hashes to the stored detail). See
+[[analysis-opaque-detail-endorsement]].
 
 **Detail uniqueness:** The server enforces one active value per detail path. `POST /api/v1/detail` returns **409 Conflict** if an unrevoked detail already exists at the given path. To update a detail, the old value must be revoked first (via `POST /api/v1/revoke`), after which the server accepts a new value at that path. See [[identity-model#Updating a Detail]].
 

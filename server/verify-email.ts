@@ -10,6 +10,7 @@ import {
 } from "./db/index.ts";
 import type { DatabaseAdapter } from "./db/index.ts";
 import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
+import { sha256Hex } from "../core/MessageHash.ts";
 
 // =============================================================================
 // Email Verification Configuration
@@ -20,6 +21,13 @@ export const EMAIL_VERIFICATION_TTL_MS =
 
 export const EMAIL_VERIFICATION_STORE_PLAINTEXT =
   (Deno.env.get("EMAIL_VERIFICATION_STORE_PLAINTEXT") ?? "false").toLowerCase() === "true";
+
+export const VERIFY_EMAIL_PATHS = ["email", "opaque::email"] as const;
+export type VerifyEmailPath = (typeof VERIFY_EMAIL_PATHS)[number];
+
+export function isVerifyEmailPath(path: string): path is VerifyEmailPath {
+  return (VERIFY_EMAIL_PATHS as readonly string[]).includes(path);
+}
 
 export function generateVerificationToken(): string {
   const bytes = new Uint8Array(32);
@@ -192,16 +200,37 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
   if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
   const providedDetail = detailCheck.value;
 
-  const record = await getDetailRecord(db, fingerprint, "email");
+  let path: VerifyEmailPath = "email";
+  if (payload.path !== undefined && payload.path !== null) {
+    const pathCheck = validateStringLength(payload.path, "path", LIMITS.path);
+    if (!pathCheck.ok) return json({ error: pathCheck.error }, 400);
+    if (!isVerifyEmailPath(pathCheck.value)) {
+      return json({ error: "path must be email or opaque::email" }, 400);
+    }
+    path = pathCheck.value;
+  }
+
+  const record = await getDetailRecord(db, fingerprint, path);
   if (!record) {
-    return json({ error: "email detail not found" }, 404);
+    return json({ error: `${path} detail not found` }, 404);
   }
   if (record.revoked_at !== null) {
-    return json({ error: "email detail is revoked" }, 409);
+    return json({ error: `${path} detail is revoked` }, 409);
   }
-  if (record.detail !== providedDetail) {
-    return json({ error: "email detail mismatch" }, 409);
+
+  let mailTo: string;
+  if (path === "opaque::email") {
+    if (sha256Hex(providedDetail) !== record.detail) {
+      return json({ error: "opaque::email detail mismatch" }, 409);
+    }
+    mailTo = providedDetail;
+  } else {
+    if (record.detail !== providedDetail) {
+      return json({ error: "email detail mismatch" }, 409);
+    }
+    mailTo = record.detail;
   }
+
   if (record.verified_at !== null) {
     return json({ ok: true, status: "already_verified" });
   }
@@ -211,7 +240,7 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
   const now = Date.now();
   await updateDetailVerification(db, {
     fingerprint,
-    path: "email",
+    path,
     verifiedAt: null,
     verificationToken: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
     verificationTokenHash: tokenHash,
@@ -228,7 +257,7 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
   // fragment; fragments are processed client-side and never sent to the server.
   const link = `${baseUrl}/api/v1/verify-email#token=${encodeURIComponent(token)}`;
   try {
-    await sendVerificationEmail(record.detail, link, fingerprint);
+    await sendVerificationEmail(mailTo, link, fingerprint);
   } catch (err) {
     console.error("failed to send verification email:", err);
   }
@@ -268,7 +297,7 @@ export async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter
         message: "Token not found.",
       }), 404);
   }
-  if (record.path !== "email") {
+  if (!isVerifyEmailPath(record.path)) {
     return wantsJson(req)
       ? json({ error: "token not valid for email verification" }, 400)
       : html(renderVerifyEmailPage({

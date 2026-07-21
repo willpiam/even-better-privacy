@@ -372,7 +372,7 @@ export async function handlePostDetail(
         return json({ ok: true, warning: "verification_email_not_sent" });
       }
 
-      const link = `${baseUrl}/api/v1/verify-email?token=${
+      const link = `${baseUrl}/api/v1/verify-email#token=${
         encodeURIComponent(token)
       }`;
       sendVerificationEmail(detail, link, fingerprint).catch((err) => {

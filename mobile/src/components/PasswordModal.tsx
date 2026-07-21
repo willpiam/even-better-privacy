@@ -14,6 +14,7 @@ export default function PasswordModal({
   title = 'Enter Password',
   placeholder = 'Password',
   submitLabel = 'Submit',
+  secureTextEntry = true,
   onCancel,
   onSubmit,
 }: {
@@ -21,6 +22,7 @@ export default function PasswordModal({
   title?: string;
   placeholder?: string;
   submitLabel?: string;
+  secureTextEntry?: boolean;
   onCancel: () => void;
   onSubmit: (password: string) => void;
 }): JSX.Element {
@@ -51,12 +53,13 @@ export default function PasswordModal({
             style={styles.input}
             value={password}
             onChangeText={setPassword}
-            secureTextEntry
+            secureTextEntry={secureTextEntry}
             placeholder={placeholder}
             placeholderTextColor="#aaa"
             autoCapitalize="none"
             autoCorrect={false}
             autoFocus
+            keyboardType={secureTextEntry ? 'default' : 'email-address'}
             onSubmitEditing={submit}
           />
           <View style={styles.row}>

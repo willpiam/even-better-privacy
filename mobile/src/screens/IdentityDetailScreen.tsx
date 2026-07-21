@@ -30,6 +30,7 @@ import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import BusyOverlay from '../components/BusyOverlay';
 import Card from '../components/Card';
+import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
 
@@ -39,6 +40,7 @@ export default function IdentityDetailScreen({
   route,
   navigation,
 }: Props): JSX.Element {
+  const {promptSecret, secretPrompt} = useSecretPrompt();
   const [identity, setIdentity] = useState<StoredIdentityMeta | null>(null);
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
@@ -258,17 +260,35 @@ export default function IdentityDetailScreen({
     );
   };
 
-  const onVerifyEmail = async (detail: string) => {
+  const onVerifyEmail = async (path: string, detail: string) => {
     try {
       if (!identity) {
         throw new Error('Identity not found');
       }
+      let cleartext = detail;
+      const verifyPath = path === 'opaque::email' ? 'opaque::email' : 'email';
+      if (path === 'opaque::email') {
+        const entered = await promptSecret({
+          title: 'Verify opaque email',
+          placeholder: 'Cleartext email matching the hash',
+          submitLabel: 'Send',
+          secureTextEntry: false,
+        });
+        if (entered === null) {
+          return;
+        }
+        cleartext = entered.trim();
+        if (!cleartext) {
+          throw new Error('Email is required');
+        }
+      }
       await requestVerifyEmail({
         fingerprint: identity.fingerprint,
-        detail,
+        detail: cleartext,
+        path: verifyPath,
         server: serverUrl,
       });
-      setStatus(`Verification email requested for ${detail}`);
+      setStatus(`Verification email requested for ${cleartext}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -307,6 +327,7 @@ export default function IdentityDetailScreen({
 
   return (
     <Screen scroll>
+      {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage} />
       <Card padded>
         <Text style={styles.name}>{identity.name}</Text>
@@ -367,11 +388,11 @@ export default function IdentityDetailScreen({
           <Text style={styles.detail}>
             {item.path}: {item.detail}
           </Text>
-          {item.path.startsWith('email') || item.path.includes('email') ? (
+          {item.path === 'email' || item.path === 'opaque::email' ? (
             <AppButton
               title="Verify email"
               variant="secondary"
-              onPress={() => onVerifyEmail(item.detail)}
+              onPress={() => onVerifyEmail(item.path, item.detail)}
             />
           ) : null}
         </Card>

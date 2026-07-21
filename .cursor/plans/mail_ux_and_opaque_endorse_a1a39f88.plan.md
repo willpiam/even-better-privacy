@@ -4,25 +4,25 @@ overview: Implement opaque::email verify-email endorsement on the server and ide
 todos:
   - id: opaque-server
     content: Extend verify-email request/confirm for opaque::email + server tests
-    status: pending
+    status: completed
   - id: opaque-clients
     content: "GUI/mobile identity verify UX: cleartext + path; proxy path; hash attach if needed"
-    status: pending
+    status: completed
   - id: opaque-wiki
     content: "Update wiki: opaque endorsement now implemented"
-    status: pending
+    status: completed
   - id: mail-locked-layout
     content: "MailMessageScreen: locked placeholder, Decrypt above fold, (i) for armor"
-    status: pending
+    status: completed
   - id: mail-decrypt-enrich
     content: Enrich decryptMailBody/decryptMessage with GUI-parity authenticity fields
-    status: pending
+    status: completed
   - id: mail-auth-ui
     content: AuthenticityBadge + MailSenderAuthenticityScreen + navigator wiring
-    status: pending
+    status: completed
   - id: mail-wiki
     content: Update mail-reader UX analysis + wiki log for ship
-    status: pending
+    status: completed
 isProject: false
 ---
 

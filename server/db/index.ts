@@ -123,7 +123,11 @@ export async function getDetailRecord(
       number | string | bigint | null,
     ]
   >(
-    "SELECT detail, proof, revoked_at, revocation_certificate, verified_at, verification_token, verification_token_hash, verification_expires_at, verification_sent_at FROM details WHERE identity_fingerprint = ? AND path = ?",
+    `SELECT detail, proof,
+            CAST(revoked_at AS TEXT), revocation_certificate,
+            CAST(verified_at AS TEXT), verification_token, verification_token_hash,
+            CAST(verification_expires_at AS TEXT), CAST(verification_sent_at AS TEXT)
+     FROM details WHERE identity_fingerprint = ? AND path = ?`,
     [fingerprint, path],
   );
   if (rows.length === 0) {
@@ -227,7 +231,9 @@ export async function getDetailByVerificationToken(
       number | string | bigint | null,
     ]
   >(
-    `SELECT identity_fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at
+    `SELECT identity_fingerprint, path, detail,
+            CAST(verified_at AS TEXT), CAST(verification_expires_at AS TEXT),
+            CAST(verification_sent_at AS TEXT), CAST(revoked_at AS TEXT)
      FROM details WHERE verification_token_hash = ?`,
     [tokenHash],
   );
@@ -245,7 +251,10 @@ export async function getDetailByVerificationToken(
         string,
       ]
     >(
-      `SELECT identity_fingerprint, path, detail, verified_at, verification_expires_at, verification_sent_at, revoked_at, verification_token
+      `SELECT identity_fingerprint, path, detail,
+              CAST(verified_at AS TEXT), CAST(verification_expires_at AS TEXT),
+              CAST(verification_sent_at AS TEXT), CAST(revoked_at AS TEXT),
+              verification_token
        FROM details WHERE verification_token IS NOT NULL`,
     );
     rows = plaintextRows

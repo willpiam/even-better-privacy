@@ -1,5 +1,6 @@
 import {loadIdentity, saveIdentity} from './storage';
 import {getServerUrl} from './settings';
+import {sha256Hex} from '../../../core/MessageHash.ts';
 
 function apiUrl(server: string, path: string): string {
   const base = server.replace(/\/+$/, '');
@@ -29,8 +30,11 @@ export async function addDetail(params: {
   if (!params.path || !params.detail) {
     throw new Error('Path and detail are required');
   }
+  const detailToAttach = params.path.startsWith('opaque::')
+    ? sha256Hex(params.detail)
+    : params.detail;
   const identity = await loadIdentity(params.identityName, params.password);
-  identity.attachDetail(params.path, params.detail);
+  identity.attachDetail(params.path, detailToAttach);
   await saveIdentity(params.identityName, params.password, identity);
 
   if (params.push) {
@@ -52,7 +56,9 @@ export async function addDetail(params: {
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as {error?: string};
-      throw new Error(`Failed to push detail: ${body.error ?? `HTTP ${res.status}`}`);
+      throw new Error(
+        `Failed to push detail: ${body.error ?? `HTTP ${res.status}`}`,
+      );
     }
   }
 }

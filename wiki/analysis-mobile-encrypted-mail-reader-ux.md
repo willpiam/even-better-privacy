@@ -3,7 +3,7 @@ title: "Mobile Encrypted Mail Reader UX"
 type: analysis
 status: active
 last_updated: 2026-07-21
-source_count: 9
+source_count: 10
 tags:
   - analysis
   - mobile
@@ -15,6 +15,14 @@ tags:
 ---
 
 # Mobile Encrypted Mail Reader UX
+
+## Implementation status (2026-07-21)
+
+Shipped on [[component-mobile]]:
+
+- Locked EBP view: Decrypt above the fold, placeholder body, armor behind **ⓘ Technical details**
+- After decrypt: plaintext replaces the body slot; tappable authenticity badge → `MailSenderAuthenticity` summary
+- `decryptMailBody` returns full authenticity fields (signature, From binding, `detailsMeta` endorsement for `email` / `opaque::email`, `serverIdentityMatch`)
 
 ## Problem
 
@@ -115,7 +123,10 @@ Show for each relevant path (`email` and/or matching `opaque::email`):
 - `verifiedAt` when present
 - Plain explanation: verified means they completed the link-in-email procedure; unverified means the identity merely *claims* the address via a signed detail.
 
-**Wiki status:** Opaque/`opaque::email` endorsement is **not implemented** yet — only cleartext `email` verify-email works. See [[analysis-opaque-detail-endorsement]]. Until that ships, the authenticity UI should only show endorsement green for `detailsMeta.email.verified`, and treat opaque matches as claim+hash-binding without server endorsement.
+**Wiki status:** Opaque/`opaque::email` endorsement is implemented
+([[analysis-opaque-detail-endorsement]]). Authenticity UI should treat
+`detailsMeta.email.verified` **or** `detailsMeta["opaque::email"].verified`
+as endorsement green when that path matched From.
 
 #### D. From header vs claims (explicit comparison)
 

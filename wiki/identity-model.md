@@ -75,7 +75,9 @@ This two-step design creates an auditable trail via signed revocation certificat
 
 Details can be marked as **opaque** (prefixed with `opaque::`). For opaque details, only `SHA-256(value)` is stored — the cleartext value is never published. This allows verification that an email is associated with an identity without exposing the email to the public server.
 
-**Endorsement:** Server verify-email currently endorses the cleartext `email` path only. Endorsing `opaque::email` (link-in-email → `detailsMeta` verified) is not implemented yet; see [[analysis-opaque-detail-endorsement]].
+**Endorsement:** Server verify-email endorses cleartext `email` and hashed
+`opaque::email` (client supplies cleartext for hash check; cleartext is not
+stored). See [[analysis-opaque-detail-endorsement]].
 
 ## Revocation Integration
 

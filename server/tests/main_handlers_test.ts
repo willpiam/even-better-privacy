@@ -306,8 +306,107 @@ Deno.test("Email detail is unverified until verification endpoint is called", as
     );
     assertEquals(refreshedRows.length, 1);
     const [refreshedVerifiedAtRaw, refreshedToken] = refreshedRows[0];
-    assert(refreshedVerifiedAtRaw !== null, "email should be marked verified");
+    assertEquals(refreshedVerifiedAtRaw !== null, true, "email should be marked verified");
     assertEquals(refreshedToken, null);
+  });
+});
+
+Deno.test("opaque::email verify-email request endorses without storing cleartext", async () => {
+  await withServer(async (mod) => {
+    Deno.env.set("PUBLIC_BASE_URL", "http://localhost");
+    const { fingerprint, signingKey } = await registerIdentity(mod);
+    const cleartext = "opaque-user@example.com";
+    const hashed = sha256Hex(cleartext);
+
+    const detailRes = await postDetail(
+      mod,
+      fingerprint,
+      signingKey,
+      "opaque::email",
+      hashed,
+      0,
+    );
+    assertEquals(detailRes.status, 200);
+
+    const mismatch = await mod.handleRequest(
+      new Request("http://localhost/api/v1/verify-email/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fingerprint,
+          detail: "wrong@example.com",
+          path: "opaque::email",
+        }),
+      }),
+    );
+    assertEquals(mismatch.status, 409);
+
+    const badPath = await mod.handleRequest(
+      new Request("http://localhost/api/v1/verify-email/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fingerprint,
+          detail: cleartext,
+          path: "opaque::name",
+        }),
+      }),
+    );
+    assertEquals(badPath.status, 400);
+
+    const requestRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/verify-email/request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fingerprint,
+          detail: cleartext,
+          path: "opaque::email",
+        }),
+      }),
+    );
+    assertEquals(requestRes.status, 200);
+    const requestBody = await requestRes.json();
+    assertEquals(requestBody.ok, true);
+    assertEquals(requestBody.status, "sent");
+
+    const db = await mod.getDbForTests();
+    const rows = await db.query<
+      [string, number | string | bigint | null, string | null]
+    >(
+      "SELECT detail, verified_at, verification_token FROM details WHERE identity_fingerprint = ? AND path = ?",
+      [fingerprint, "opaque::email"],
+    );
+    assertEquals(rows.length, 1);
+    const [storedDetail, verifiedAtRaw, verificationToken] = rows[0];
+    assertEquals(storedDetail, hashed);
+    assertEquals(verifiedAtRaw, null);
+    assert(verificationToken, "verification token should be set");
+
+    const verifyRes = await mod.handleRequest(
+      new Request("http://localhost/api/v1/verify-email", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "accept": "application/json",
+        },
+        body: JSON.stringify({ token: verificationToken }),
+      }),
+    );
+    assertEquals(verifyRes.status, 200);
+    const verifyBody = await verifyRes.json();
+    assertEquals(verifyBody.ok, true);
+
+    const identityRes = await mod.handleRequest(
+      new Request(`http://localhost/api/v1/identity/${fingerprint}`),
+    );
+    assertEquals(identityRes.status, 200);
+    const identity = await identityRes.json();
+    assertEquals(identity.details["opaque::email"][0], hashed);
+    assertEquals(identity.detailsMeta["opaque::email"].verified, true);
+    assert(identity.detailsMeta["opaque::email"].verifiedAt !== null);
+
+    Deno.env.delete("PUBLIC_BASE_URL");
   });
 });
 

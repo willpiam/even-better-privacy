@@ -46,9 +46,8 @@ The page includes one concrete normalization detail but lacks an explicit archit
 - ENS integration for fingerprint lookup
 - identity hierarchy (master/cold/hot chain model)
 - identity expiry dates
-- hashed/opaque detail endorsement — status and build plan now in
-  [[analysis-opaque-detail-endorsement]] (cleartext email endorsement works;
-  opaque path endorsement does not)
+- hashed/opaque detail endorsement — **implemented** for `email` /
+  `opaque::email`; see [[analysis-opaque-detail-endorsement]]
 
 These are architecture-relevant ideas currently defined only as bullets, without threat model boundaries, protocol fields, state transitions, or implementation decomposition.
 
