@@ -126,4 +126,34 @@ describe('IMAP BODY literal parsing', () => {
     expect(parseHeaderField(starOnly, 'Subject')).toBe('');
     expect(starOnly).not.toContain('hello');
   });
+
+  it('parseHeaderField ignores from: lines in the body', () => {
+    const rfc822 = [
+      'From: willdoyle422@gmail.com',
+      'To: bob@example.com',
+      'Subject: Hello',
+      '',
+      'from:to:cc:subject:date:message-id:reply-to',
+      'body mentions From: spoof@evil.test as well',
+      '',
+    ].join('\r\n');
+    expect(parseHeaderField(rfc822, 'From')).toBe('willdoyle422@gmail.com');
+    expect(messageDetailFromRfc822(1, rfc822, {text: '', html: ''}, null).from).toBe(
+      'willdoyle422@gmail.com',
+    );
+  });
+
+  it('parseHeaderField unfolds continued header lines', () => {
+    const rfc822 = [
+      'From: Alice Example',
+      ' <alice@example.com>',
+      'Subject: Hello',
+      '',
+      'body',
+      '',
+    ].join('\r\n');
+    expect(parseHeaderField(rfc822, 'From')).toBe(
+      'Alice Example <alice@example.com>',
+    );
+  });
 });

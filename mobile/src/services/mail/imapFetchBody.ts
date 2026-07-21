@@ -8,10 +8,44 @@ export type FetchBodyClient = {
 const BODY_LITERAL_RE = /BODY(?:\.PEEK)?\[\] \{(\d+)\}\s*$/i;
 const BODY_QUOTED_RE = /BODY(?:\.PEEK)?\[\] "((?:\\.|[^"\\])*)"/i;
 
+/**
+ * Return only the RFC822 header block (before the first blank line).
+ * Searching the full source lets body text / armor falsely match header names
+ * (e.g. a line containing `from:to:cc:...`).
+ */
+export function rfc822HeaderBlock(source: string): string {
+  const normalized = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const idx = normalized.search(/\n\n/);
+  if (idx < 0) {
+    return normalized;
+  }
+  return normalized.slice(0, idx);
+}
+
+/**
+ * Parse a header field from an RFC822 message or header-only blob.
+ * Matches only at the start of a line within the header section and unfolds
+ * RFC 5322 continuation lines.
+ */
 export function parseHeaderField(blob: string, name: string): string {
-  const re = new RegExp(`${name}:\\s*(.+)$`, 'im');
-  const m = blob.match(re);
-  return m ? m[1].trim() : '';
+  const headers = rfc822HeaderBlock(blob);
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${escaped}:\\s*(.*)$`, 'im');
+  const m = headers.match(re);
+  if (!m || m.index === undefined) {
+    return '';
+  }
+  let value = m[1] ?? '';
+  // Unfold continuation lines that follow the matched header line.
+  const after = headers.slice(m.index + m[0].length);
+  const cont = after.match(/^(?:\n[ \t]+(.*))+/);
+  if (cont) {
+    const parts = cont[0].split(/\n[ \t]+/).filter(Boolean);
+    value = [value, ...parts].join(' ').replace(/\s+/g, ' ').trim();
+  } else {
+    value = value.trim();
+  }
+  return value;
 }
 
 /**

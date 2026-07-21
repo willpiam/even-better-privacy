@@ -112,7 +112,7 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
     : undefined;
   const clientIp = getClientIp(req, remoteAddr);
   const origin = req.headers.get("origin");
-  const corsHeaders = buildCorsHeaders(origin);
+  const corsHeaders = buildCorsHeaders(origin, req);
 
   const respond = (response: Response, extra?: Record<string, unknown>): Response => {
     logRequest(req, response.status, performance.now() - start, { clientIp, ...extra });
@@ -126,7 +126,7 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
       return jsonResponse({ error: "host not allowed" }, 403);
     }
 
-    if (origin && !isOriginAllowed(origin)) {
+    if (origin && !isOriginAllowed(origin, req)) {
       return jsonResponse({ error: "origin not allowed" }, 403);
     }
 
