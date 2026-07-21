@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-20 (mobile mail decrypt Invalid JSON)
+Last updated: 2026-07-21 (mobile encrypted mail reader UX)
 
 ## Wiki Operations
 
@@ -143,6 +143,10 @@ Last updated: 2026-07-20 (mobile mail decrypt Invalid JSON)
 - [[analysis-mobile-mail-decrypt-invalid-json]] - Mobile decrypt shows
   `Invalid JSON payload` because MIME is not CTE-decoded before armor parse;
   password is unused for this error.
+- [[analysis-mobile-encrypted-mail-reader-ux]] - Mobile encrypted mail reader:
+  hide armor behind (i), Decrypt above the fold, replace body with plaintext;
+  authenticity indicator (signature / From binding / verify-email endorsement)
+  with sender-summary drill-down.
 
 ## Security Audits
 

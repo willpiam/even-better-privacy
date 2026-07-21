@@ -1,5 +1,26 @@
 # Wiki Log
 
+## [2026-07-21] query | mobile mail authenticity indicator + sender summary
+
+- Answered: add tappable signature/From/endorsement indicator; drill-down covers
+  signer, `email` / `opaque::email` claims, verify-email endorsement, From bind.
+- Updated: [[analysis-mobile-encrypted-mail-reader-ux]].
+
+## [2026-07-21] query | mobile encrypted mail reader UX
+
+- Answered: hide ciphertext by default behind (i); Decrypt above the fold;
+  replace body slot with plaintext after decrypt (no scroll-past-armor layout).
+- Filed: [[analysis-mobile-encrypted-mail-reader-ux]].
+
+## [2026-07-20] fix | mobile mail decrypt Invalid JSON payload
+
+- Implemented MIME multipart + QP/base64 decode before EBP armor extract;
+  removed marker-only `ebpPayload` fallback; clearer decrypt error when markers
+  exist but JSON does not parse.
+- Code: `mobile/src/services/mail/mime.ts`, `ebpMail.ts`,
+  `mobile/__tests__/mimeDecode-test.ts`, `mobile/jest.config.js`.
+- Updated: [[analysis-mobile-mail-decrypt-invalid-json]].
+
 ## [2026-07-20] query | mobile mail decrypt Invalid JSON payload
 
 - Answered: failure is pre-crypto payload parse on raw MIME; password unused;

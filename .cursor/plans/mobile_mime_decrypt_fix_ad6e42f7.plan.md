@@ -4,16 +4,16 @@ overview: Fix mobile mail decrypt `Invalid JSON payload` by decoding MIME (multi
 todos:
   - id: mime-decode
     content: Implement multipart + QP/base64 decode and rewrite extractTextFromMimeSource / extractEbpPayloadFromMime in mime.ts
-    status: pending
+    status: completed
   - id: ebp-error
     content: Improve decryptMailBody error when armor markers exist but extract failed
-    status: pending
+    status: completed
   - id: tests
     content: Add mimeDecode-test.ts fixtures for 7bit, QP, base64, and corrupt-marker cases
-    status: pending
+    status: completed
   - id: wiki
     content: Document resolution in analysis page + wiki log
-    status: pending
+    status: completed
 isProject: false
 ---
 

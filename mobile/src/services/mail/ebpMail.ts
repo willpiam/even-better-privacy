@@ -70,6 +70,12 @@ export async function sendPlainMail(params: {
   await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
 }
 
+function sourceLooksLikeEbpArmor(source: string): boolean {
+  return (
+    source.includes('-----BEGIN EBP') && source.includes('-----END EBP')
+  );
+}
+
 export async function decryptMailBody(params: {
   identityName: string;
   password: string;
@@ -85,6 +91,15 @@ export async function decryptMailBody(params: {
     params.uid,
   );
   if (!detail.ebpPayload) {
+    if (
+      sourceLooksLikeEbpArmor(detail.rawSource) ||
+      sourceLooksLikeEbpArmor(detail.bodyText) ||
+      sourceLooksLikeEbpArmor(detail.bodyHtml)
+    ) {
+      throw new Error(
+        'Could not parse EBP armor (message may need MIME decode)',
+      );
+    }
     throw new Error('No EBP payload in message');
   }
   const payload = parseEbpPayloadInput(detail.ebpPayload);
