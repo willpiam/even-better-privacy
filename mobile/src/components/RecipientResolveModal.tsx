@@ -6,14 +6,14 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
+import {listContacts, type StoredContact} from '../services/contacts';
 import {
-  getDetailValue,
-  listContacts,
-  type StoredContact,
-} from '../services/contacts';
+  contactSearchHaystack,
+  storedContactToLike,
+} from '../services/contactDisplay';
+import ContactListRow from './ContactListRow';
 
 type Props = {
   visible: boolean;
@@ -24,20 +24,6 @@ type Props = {
   onSelectContact: (name: string) => void;
   onMarkUnencrypted: () => void;
 };
-
-function contactSearchHaystack(item: StoredContact): string {
-  const detailEmail = getDetailValue(item.contact.details, 'email') ?? '';
-  const resolvedOpaque =
-    item.contact.resolvedOpaqueDetails?.['opaque::email'] ?? '';
-  return [
-    item.name,
-    item.contact.fingerprint,
-    detailEmail,
-    resolvedOpaque,
-  ]
-    .join(' ')
-    .toLowerCase();
-}
 
 export default function RecipientResolveModal({
   visible,
@@ -77,7 +63,9 @@ export default function RecipientResolveModal({
     if (!q) {
       return pool;
     }
-    return pool.filter(item => contactSearchHaystack(item).includes(q));
+    return pool.filter(item =>
+      contactSearchHaystack(storedContactToLike(item)).includes(q),
+    );
   }, [contacts, preferredContacts, query]);
 
   return (
@@ -107,16 +95,12 @@ export default function RecipientResolveModal({
               <Text style={styles.empty}>No contacts match this search.</Text>
             }
             renderItem={({item}) => (
-              <TouchableOpacity
-                style={styles.item}
+              <ContactListRow
+                contact={storedContactToLike(item)}
+                showAvatar={false}
+                showChevron={false}
                 onPress={() => onSelectContact(item.name)}
-                accessibilityRole="button"
-                accessibilityLabel={`Select contact ${item.name}`}>
-                <Text style={styles.name}>{item.name}</Text>
-                <Text style={styles.fp} numberOfLines={1}>
-                  {item.contact.fingerprint}
-                </Text>
-              </TouchableOpacity>
+              />
             )}
           />
           <Button
@@ -162,13 +146,5 @@ const styles = StyleSheet.create({
   },
   list: {maxHeight: 240, marginBottom: 12},
   empty: {padding: 12, color: '#666', fontSize: 13},
-  item: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingVertical: 10,
-    paddingHorizontal: 4,
-  },
-  name: {fontWeight: '700', color: '#111'},
-  fp: {fontSize: 11, color: '#333', marginTop: 2},
   cancelRow: {marginTop: 8},
 });

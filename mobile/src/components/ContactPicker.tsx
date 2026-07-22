@@ -10,6 +10,11 @@ import {
   View,
 } from 'react-native';
 import {listContacts, type StoredContact} from '../services/contacts';
+import {
+  contactSearchHaystack,
+  resolveContactLabels,
+  storedContactToLike,
+} from '../services/contactDisplay';
 
 import {colors} from '../theme/tokens';
 
@@ -19,6 +24,18 @@ type Props = {
   placeholder?: string;
   variant?: 'search' | 'dropdown';
 };
+
+function ContactPickerLabels({item}: {item: StoredContact}): JSX.Element {
+  const {primary, secondary} = resolveContactLabels(storedContactToLike(item));
+  return (
+    <>
+      <Text style={styles.name}>{primary}</Text>
+      <Text style={styles.fp} numberOfLines={1}>
+        {secondary}
+      </Text>
+    </>
+  );
+}
 
 export default function ContactPicker({
   value,
@@ -44,15 +61,16 @@ export default function ContactPicker({
     if (!q) {
       return contacts;
     }
-    return contacts.filter(
-      item =>
-        item.name.toLowerCase().includes(q) ||
-        item.contact.fingerprint.toLowerCase().includes(q),
+    return contacts.filter(item =>
+      contactSearchHaystack(storedContactToLike(item)).includes(q),
     );
   }, [contacts, value]);
 
   if (variant === 'dropdown') {
     const selected = contacts.find(c => c.name === value);
+    const selectedLabels = selected
+      ? resolveContactLabels(storedContactToLike(selected))
+      : null;
     return (
       <View style={styles.dropdownWrap}>
         <TouchableOpacity
@@ -64,11 +82,13 @@ export default function ContactPicker({
           <View style={styles.dropdownTriggerText}>
             <Text
               style={value ? styles.selectedLabel : styles.placeholderLabel}>
-              {value ? (selected?.name ?? value) : placeholder}
+              {value
+                ? (selectedLabels?.primary ?? value)
+                : placeholder}
             </Text>
-            {selected ? (
+            {selectedLabels ? (
               <Text style={styles.fp} numberOfLines={1}>
-                {selected.contact.fingerprint}
+                {selectedLabels.secondary}
               </Text>
             ) : null}
           </View>
@@ -95,10 +115,7 @@ export default function ContactPicker({
                         onChange(item.name);
                         setOpen(false);
                       }}>
-                      <Text style={styles.name}>{item.name}</Text>
-                      <Text style={styles.fp} numberOfLines={1}>
-                        {item.contact.fingerprint}
-                      </Text>
+                      <ContactPickerLabels item={item} />
                     </TouchableOpacity>
                   );
                 })}
@@ -125,8 +142,7 @@ export default function ContactPicker({
           <TouchableOpacity
             style={styles.item}
             onPress={() => onChange(item.name)}>
-            <Text style={styles.name}>{item.name}</Text>
-            <Text style={styles.fp}>{item.contact.fingerprint}</Text>
+            <ContactPickerLabels item={item} />
           </TouchableOpacity>
         )}
       />

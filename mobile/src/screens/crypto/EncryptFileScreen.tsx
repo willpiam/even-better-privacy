@@ -124,10 +124,9 @@ export default function EncryptFileScreen(): JSX.Element {
       <AppButton
         title="Share Output"
         variant="secondary"
+        disabled={!encryptFileOutput}
         onPress={() => {
-          if (encryptFileOutput) {
-            void Share.open({message: encryptFileOutput, failOnCancel: false});
-          }
+          void Share.open({message: encryptFileOutput, failOnCancel: false});
         }}
       />
       <CopyableOutput

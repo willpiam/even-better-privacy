@@ -5,14 +5,14 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {ContactsStackParamList} from '../navigation/AppNavigator';
 import {
   fetchContactFromServer,
-  getDetailValue,
   importContact,
   listContacts,
   type StoredContact,
 } from '../services/contacts';
+import {storedContactToLike} from '../services/contactDisplay';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
-import ListRow from '../components/ListRow';
+import ContactListRow from '../components/ContactListRow';
 import SectionTitle from '../components/SectionTitle';
 import AppButton from '../components/AppButton';
 import StatusBanner from '../components/StatusBanner';
@@ -24,39 +24,6 @@ import {colors} from '../theme/tokens';
 import {statusKind} from '../theme/statusKind';
 
 type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactsList'>;
-
-function truncateFp(fp: string): string {
-  if (fp.length <= 16) {
-    return fp;
-  }
-  return `${fp.slice(0, 8)}…${fp.slice(-4)}`;
-}
-
-function contactDisplayTitle(item: StoredContact): string {
-  const alias = item.localAlias?.trim();
-  if (alias) {
-    return alias;
-  }
-  const publishedName = getDetailValue(item.contact.details, 'name')?.trim();
-  if (publishedName) {
-    return publishedName;
-  }
-  const autoStub = item.contact.fingerprint.slice(0, 16);
-  if (item.name !== autoStub) {
-    return item.name;
-  }
-  return truncateFp(item.contact.fingerprint);
-}
-
-function contactSubtitle(item: StoredContact): string {
-  const email =
-    getDetailValue(item.contact.details, 'email') ||
-    item.contact.resolvedOpaqueDetails?.['opaque::email'];
-  if (email) {
-    return email;
-  }
-  return truncateFp(item.contact.fingerprint);
-}
 
 export default function ContactsScreen({navigation}: Props): JSX.Element {
   const [contacts, setContacts] = useState<StoredContact[]>([]);
@@ -123,20 +90,15 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
         <Text style={styles.empty}>No contacts yet.</Text>
       ) : (
         <Card>
-          {contacts.map(item => {
-            const title = contactDisplayTitle(item);
-            return (
-              <ListRow
-                key={item.name}
-                avatarText={title}
-                title={title}
-                subtitle={contactSubtitle(item)}
-                onPress={() =>
-                  navigation.navigate('ContactDetail', {name: item.name})
-                }
-              />
-            );
-          })}
+          {contacts.map(item => (
+            <ContactListRow
+              key={item.name}
+              contact={storedContactToLike(item)}
+              onPress={() =>
+                navigation.navigate('ContactDetail', {name: item.name})
+              }
+            />
+          ))}
         </Card>
       )}
 

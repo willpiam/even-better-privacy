@@ -99,10 +99,9 @@ export default function SignFileScreen(): JSX.Element {
       <AppButton
         title="Share Output"
         variant="secondary"
+        disabled={!fileSignOutput}
         onPress={() => {
-          if (fileSignOutput) {
-            void Share.open({message: fileSignOutput, failOnCancel: false});
-          }
+          void Share.open({message: fileSignOutput, failOnCancel: false});
         }}
       />
       <CopyableOutput value={fileSignOutput} placeholder="Signed file payload…" />

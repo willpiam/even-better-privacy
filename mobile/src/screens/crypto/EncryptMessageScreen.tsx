@@ -87,10 +87,9 @@ export default function EncryptMessageScreen(): JSX.Element {
       <AppButton
         title="Share Output"
         variant="secondary"
+        disabled={!encryptOutput}
         onPress={() => {
-          if (encryptOutput) {
-            void Share.open({message: encryptOutput, failOnCancel: false});
-          }
+          void Share.open({message: encryptOutput, failOnCancel: false});
         }}
       />
       <CopyableOutput

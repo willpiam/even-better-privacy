@@ -1,5 +1,34 @@
 # Wiki Log
 
+## [2026-07-22] fix | mobile android release build script
+
+- Added `build_mobile_android.sh` (assembleRelease → `dist/mobile/`, optional
+  `--install`) and `android:release` npm wrappers.
+- Updated: [[analysis-mobile-standalone-install]].
+
+## [2026-07-22] query | mobile standalone install after disconnect
+
+- Answered: Wiki has no offline mobile install path; documented flow is Metro
+  debug (`npm run android`/`ios`). Standalone needs a release APK/IPA (not
+  packaged in release-process).
+- Filed: [[analysis-mobile-standalone-install]].
+
+## [2026-07-22] fix | mobile contact display labels
+
+- Shipped shared contact labels: alias → name → email → 12…12 fingerprint;
+  ContactListRow; ContactPicker / Contacts / resolve / browse wired.
+- Code: `contactDisplay.ts`, `ContactListRow.tsx`, `ContactPicker.tsx`,
+  `ContactsScreen.tsx`, `RecipientResolveModal.tsx`, `BrowseContactsModal.tsx`,
+  `contactDisplay-test.ts`.
+- Updated: [[analysis-mobile-contact-display-component]].
+
+## [2026-07-22] query | mobile contact display component
+
+- Answered: No shared contact row exists; ContactPicker shows storage name +
+  full fingerprint. Proposed three-layer design (resolver / ContactListRow /
+  picker) with alias → name → email → 12…12 fingerprint priority.
+- Filed: [[analysis-mobile-contact-display-component]].
+
 ## [2026-07-21] query | mobile mail reply
 
 - Answered / shipped: Reply on message view with To/`Re:`/quote/`In-Reply-To`;

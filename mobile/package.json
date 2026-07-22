@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "android": "react-native run-android",
+    "android:release": "bash ../build_mobile_android.sh --skip-npm",
+    "android:release:install": "bash ../build_mobile_android.sh --skip-npm --install",
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",

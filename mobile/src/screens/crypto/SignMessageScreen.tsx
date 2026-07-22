@@ -94,10 +94,9 @@ export default function SignMessageScreen(): JSX.Element {
       <AppButton
         title="Share Output"
         variant="secondary"
+        disabled={!signOutput}
         onPress={() => {
-          if (signOutput) {
-            void Share.open({message: signOutput, failOnCancel: false});
-          }
+          void Share.open({message: signOutput, failOnCancel: false});
         }}
       />
       <CopyableOutput value={signOutput} placeholder="Signed output…" />

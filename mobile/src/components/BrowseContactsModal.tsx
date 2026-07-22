@@ -9,13 +9,13 @@ import {
 } from 'react-native';
 import {
   browseServerIdentities,
-  getDetailValue,
   type ServerIdentitySummary,
 } from '../services/contacts';
+import {serverIdentityToLike} from '../services/contactDisplay';
 import AppButton from './AppButton';
 import Card from './Card';
+import ContactListRow from './ContactListRow';
 import InlineBusy from './InlineBusy';
-import ListRow from './ListRow';
 import TextField from './TextField';
 import {colors, radius, spacing, typography} from '../theme/tokens';
 
@@ -30,13 +30,6 @@ function formatCreatedAt(createdAt?: number): string {
     hour: '2-digit',
     minute: '2-digit',
   });
-}
-
-function truncateFp(fp: string): string {
-  if (fp.length <= 16) {
-    return fp;
-  }
-  return `${fp.slice(0, 8)}…${fp.slice(-4)}`;
 }
 
 export default function BrowseContactsModal({
@@ -172,30 +165,23 @@ export default function BrowseContactsModal({
             {!browsingLoading && visibleServerResults.length > 0 ? (
               <Card>
                 {visibleServerResults.map(entry => {
-                  const detailName = getDetailValue(entry.details, 'name');
-                  const detailEmail = getDetailValue(entry.details, 'email');
                   const isAlreadyContact = knownFingerprints.has(
                     entry.fingerprint,
                   );
                   const isImporting =
                     importingFingerprint === entry.fingerprint;
-                  const title = detailName || truncateFp(entry.fingerprint);
-                  const subtitle = [
-                    detailEmail,
+                  const subtitleExtra = [
                     `${entry.signingKeyType || '?'}/${
                       entry.encryptionKeyType || '?'
                     }`,
                     formatCreatedAt(entry.createdAt),
-                  ]
-                    .filter(Boolean)
-                    .join(' · ');
+                  ].join(' · ');
 
                   return (
-                    <ListRow
+                    <ContactListRow
                       key={entry.fingerprint}
-                      avatarText={title}
-                      title={title}
-                      subtitle={subtitle || truncateFp(entry.fingerprint)}
+                      contact={serverIdentityToLike(entry)}
+                      subtitleExtra={subtitleExtra}
                       showChevron={false}
                       badge={isAlreadyContact ? 'In contacts' : undefined}
                       right={

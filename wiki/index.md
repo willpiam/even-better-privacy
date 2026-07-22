@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-21
+last_updated: 2026-07-22
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-21 (mobile mail reply)
+Last updated: 2026-07-22 (mobile standalone install gap)
 
 ## Wiki Operations
 
@@ -148,6 +148,11 @@ Last updated: 2026-07-21 (mobile mail reply)
   opaque endorsement supported via [[analysis-opaque-detail-endorsement]].
 - [[analysis-mobile-mail-reply]] - Mobile Reply: prefill To/`Re:`/quote/
   threading headers; EBP replies encrypt to signer contact and sign as responder.
+- [[analysis-mobile-contact-display-component]] - Shared mobile contact
+  primary/secondary labels (alias → name → email → condensed fp) and call sites
+  for ContactPicker / Contacts / resolve / browse.
+- [[analysis-mobile-standalone-install]] - Why debug Metro installs die after
+  disconnect; Android release via `build_mobile_android.sh`; iOS still open.
 - [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement
   implemented: hash-check verify-email request, GUI/mobile cleartext prompts,
   `detailsMeta` for opaque paths.

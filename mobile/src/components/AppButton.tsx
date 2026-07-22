@@ -52,6 +52,7 @@ export default function AppButton({
           variant === 'secondary' && styles.labelSecondary,
           variant === 'danger' && styles.labelDanger,
           variant === 'primary' && styles.labelPrimary,
+          isDisabled && styles.labelDisabled,
         ]}>
         {title}
       </Text>
@@ -76,7 +77,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   danger: {backgroundColor: colors.danger},
-  disabled: {opacity: 0.55},
+  disabled: {
+    backgroundColor: colors.segmentTrack,
+    borderWidth: 1,
+    borderColor: colors.border,
+    opacity: 0.85,
+  },
   pressed: {opacity: 0.85},
   label: {
     fontSize: typography.body,
@@ -85,4 +91,5 @@ const styles = StyleSheet.create({
   labelPrimary: {color: '#fff'},
   labelSecondary: {color: colors.accent},
   labelDanger: {color: '#fff'},
+  labelDisabled: {color: colors.muted},
 });
