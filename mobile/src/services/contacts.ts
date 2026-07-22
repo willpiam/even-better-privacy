@@ -7,6 +7,7 @@ import {ensureAppDirs, getContactsDir} from './storage';
 export type StoredContact = {
   name: string;
   contact: ExternalIdentity;
+  localAlias?: string;
 };
 
 export type ServerIdentitySummary = {
@@ -126,8 +127,11 @@ export async function listContacts(): Promise<StoredContact[]> {
     }
     const name = entry.name.replace(/\.json$/, '');
     const raw = await RNFS.readFile(entry.path, 'utf8');
-    const contact = JSON.parse(raw) as ExternalIdentity;
-    contacts.push({name, contact});
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const contact = parsed as unknown as ExternalIdentity;
+    const localAlias =
+      typeof parsed.localAlias === 'string' ? parsed.localAlias : undefined;
+    contacts.push({name, contact, localAlias});
   }
   contacts.sort((a, b) => a.name.localeCompare(b.name));
   return contacts;

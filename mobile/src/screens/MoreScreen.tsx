@@ -4,6 +4,7 @@ import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import {runCoreSelfTest} from '../services/storage';
 import Screen from '../components/Screen';
+import BrandHeader from '../components/BrandHeader';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
 import Card from '../components/Card';
@@ -39,6 +40,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
   return (
     <Screen scroll>
       <BusyOverlay visible={busy} message="Running core self-test…" />
+      <BrandHeader />
       <StatusBanner message={status} kind={statusKind(status)} />
       <SectionTitle>Settings</SectionTitle>
       <Card>

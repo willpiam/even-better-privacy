@@ -105,6 +105,19 @@ not matched.
   or specified; send uses plaintext MIME (`sendPlainMail`) instead of an EBP
   armor payload.
 
+## Reply
+
+On a message view, **Reply** opens Compose prefilled with To (sender address),
+`Re:` subject, a quoted original body, and `In-Reply-To` / `References` from
+the original `Message-ID` when present.
+
+- **Plain mail:** Reply is available once the message has loaded. Encryption
+  still follows the normal To-blur contact resolve path.
+- **EBP mail:** Reply is available only after decrypt. The encrypt-to contact
+  is bound to the **signer** identity (known contact, fingerprint lookup, or
+  server fetch/import), not SMTP From alone. Send uses `sendEbpMail` with
+  `sign: true`.
+
 ## Unlock after restart
 
 After restarting the app, open **Mail Accounts** and **Unlock mail secrets** with

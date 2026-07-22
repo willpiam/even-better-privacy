@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-20
+last_updated: 2026-07-21
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-21 (mail authenticity UX + opaque endorsement)
+Last updated: 2026-07-21 (mobile mail reply)
 
 ## Wiki Operations
 
@@ -146,6 +146,8 @@ Last updated: 2026-07-21 (mail authenticity UX + opaque endorsement)
 - [[analysis-mobile-encrypted-mail-reader-ux]] - Mobile encrypted mail reader
   (implemented): locked layout, authenticity badge, sender-summary drill-down;
   opaque endorsement supported via [[analysis-opaque-detail-endorsement]].
+- [[analysis-mobile-mail-reply]] - Mobile Reply: prefill To/`Re:`/quote/
+  threading headers; EBP replies encrypt to signer contact and sign as responder.
 - [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement
   implemented: hash-check verify-email request, GUI/mobile cleartext prompts,
   `detailsMeta` for opaque paths.

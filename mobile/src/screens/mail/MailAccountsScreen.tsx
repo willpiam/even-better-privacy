@@ -30,10 +30,10 @@ import {
 } from '../../services/settings';
 import {appendActivityLog} from '../../services/activityLog';
 import Screen from '../../components/Screen';
+import AddAccountModal from '../../components/AddAccountModal';
 import AppButton from '../../components/AppButton';
 import Card from '../../components/Card';
 import ListRow from '../../components/ListRow';
-import SectionTitle from '../../components/SectionTitle';
 import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
@@ -60,6 +60,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [secretsLocked, setSecretsLocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [status, setStatus] = useState('');
+  const [addAccountVisible, setAddAccountVisible] = useState(false);
   const promptedThisFocus = useRef(false);
 
   const loadOAuthConfig = useCallback(async () => {
@@ -274,20 +275,25 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         <Text style={styles.empty}>No mail accounts yet.</Text>
       )}
 
-      <SectionTitle>Add account</SectionTitle>
       <AppButton
-        title="Add manual account"
-        onPress={() => navigation.navigate('MailAccountSetup', {})}
+        title="Add account"
+        onPress={() => setAddAccountVisible(true)}
       />
-      <AppButton
-        title="Link Gmail (OAuth)"
-        variant="secondary"
-        onPress={() => startOAuth('gmail')}
-      />
-      <AppButton
-        title="Link Outlook (OAuth)"
-        variant="secondary"
-        onPress={() => startOAuth('outlook')}
+      <AddAccountModal
+        visible={addAccountVisible}
+        onCancel={() => setAddAccountVisible(false)}
+        onManual={() => {
+          setAddAccountVisible(false);
+          navigation.navigate('MailAccountSetup', {});
+        }}
+        onGmail={() => {
+          setAddAccountVisible(false);
+          startOAuth('gmail');
+        }}
+        onOutlook={() => {
+          setAddAccountVisible(false);
+          startOAuth('outlook');
+        }}
       />
       <AppButton
         title="Open inbox"

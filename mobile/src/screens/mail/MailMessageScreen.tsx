@@ -9,6 +9,13 @@ import {
   decryptMailBody,
   type MailAuthenticitySummary,
 } from '../../services/mail/ebpMail';
+import {
+  extractEmailAddress,
+  formatQuotedBody,
+  formatReplySubject,
+  parseMessageId,
+  resolveReplyRecipientContact,
+} from '../../services/mail/mailReply';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
 import StatusBanner from '../../components/StatusBanner';
@@ -28,21 +35,27 @@ export default function MailMessageScreen({
   const {promptSecret, secretPrompt} = useSecretPrompt();
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
+  const [date, setDate] = useState('');
   const [body, setBody] = useState('');
+  const [rawSource, setRawSource] = useState('');
   const [hasEbp, setHasEbp] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
   const [authenticity, setAuthenticity] =
     useState<MailAuthenticitySummary | null>(null);
   const [status, setStatus] = useState('Loading message…');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       setStatus('Loading message…');
+      setLoaded(false);
       setSubject('');
       setFrom('');
+      setDate('');
       setBody('');
+      setRawSource('');
       setHasEbp(false);
       setShowTechnical(false);
       setAuthenticity(null);
@@ -62,9 +75,12 @@ export default function MailMessageScreen({
         }
         setSubject(detail.subject);
         setFrom(detail.from || '');
+        setDate(detail.date || '');
         setBody(detail.bodyText || detail.bodyHtml || '');
+        setRawSource(detail.rawSource || '');
         const ebp = Boolean(detail.ebpPayload);
         setHasEbp(ebp);
+        setLoaded(true);
         setStatus(
           ebp
             ? 'Encrypted with EBP — decrypt to read'
@@ -113,9 +129,42 @@ export default function MailMessageScreen({
     }
   };
 
+  const onReply = async () => {
+    const readableBody = authenticity?.plaintext ?? body;
+    const messageId = parseMessageId(rawSource);
+    setBusyMessage('Preparing reply…');
+    try {
+      const recipientContact = hasEbp
+        ? await resolveReplyRecipientContact(authenticity)
+        : null;
+      const to =
+        extractEmailAddress(authenticity?.messageFrom || from) ||
+        extractEmailAddress(from);
+      navigation.navigate('MailCompose', {
+        to,
+        subject: formatReplySubject(subject),
+        message: formatQuotedBody({
+          from: authenticity?.messageFrom || from,
+          date,
+          body: readableBody,
+        }),
+        recipientContact: recipientContact ?? undefined,
+        encryptionIntent: recipientContact ? 'encrypted' : undefined,
+        inReplyTo: messageId || undefined,
+        references: messageId || undefined,
+      });
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
+    }
+  };
+
   const busy = busyMessage !== null;
   const decrypted = authenticity?.plaintext ?? '';
   const locked = hasEbp && !decrypted;
+  const canReply =
+    loaded && !locked && (Boolean(body) || Boolean(decrypted) || !hasEbp);
 
   return (
     <Screen scroll>
@@ -150,9 +199,16 @@ export default function MailMessageScreen({
       ) : null}
 
       {locked ? (
-        <Card padded>
-          <Text style={styles.placeholder}>This message is encrypted.</Text>
-        </Card>
+        <>
+          <Card padded>
+            <Text style={styles.placeholder}>This message is encrypted.</Text>
+          </Card>
+          <Text style={styles.replyHint}>Decrypt to reply securely</Text>
+        </>
+      ) : null}
+
+      {canReply ? (
+        <AppButton title="Reply" onPress={() => void onReply()} />
       ) : null}
 
       {!hasEbp && body ? (
@@ -216,6 +272,12 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 20,
     fontStyle: 'italic',
+  },
+  replyHint: {
+    marginTop: spacing.sm,
+    marginBottom: spacing.sm,
+    color: colors.muted,
+    fontSize: typography.caption,
   },
   infoBtn: {
     marginTop: spacing.md,

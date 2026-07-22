@@ -1,18 +1,32 @@
 import React from 'react';
-import {Linking, StyleSheet, Text} from 'react-native';
+import {Image, Linking, StyleSheet, Text, useWindowDimensions} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import Screen from '../components/Screen';
 import SectionTitle from '../components/SectionTitle';
 import Card from '../components/Card';
 import AppButton from '../components/AppButton';
-import {colors, typography} from '../theme/tokens';
+import {colors, radius, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'ProjectInfo'>;
 
+const largeLogo = require('../../../assets/large-logo.png');
+
 export default function ProjectInfoScreen(_props: Props): JSX.Element {
+  const {width} = useWindowDimensions();
+  const logoSize = Math.min(width - 48, 320);
+
   return (
     <Screen scroll>
+      <Card padded style={styles.logoCard}>
+        <Image
+          source={largeLogo}
+          style={{width: logoSize, height: logoSize}}
+          resizeMode="contain"
+          accessibilityLabel="Even Better Privacy watercolor logo"
+        />
+      </Card>
+
       <Card padded>
         <Text style={styles.p}>
           EBP (Even Better Privacy) is a post-quantum cryptographic identity and
@@ -58,6 +72,11 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  logoCard: {
+    alignItems: 'center',
+    marginBottom: 12,
+    borderRadius: radius.md,
+  },
   p: {
     marginBottom: 6,
     color: colors.text,

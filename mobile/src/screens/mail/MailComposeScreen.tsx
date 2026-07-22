@@ -27,19 +27,40 @@ function looksLikeEmail(value: string): boolean {
   return value.trim().includes('@');
 }
 
-export default function MailComposeScreen({navigation}: Props): JSX.Element {
-  const [to, setTo] = useState('');
-  const [subject, setSubject] = useState('');
-  const [message, setMessage] = useState('');
-  const [recipientContact, setRecipientContact] = useState('');
+function initialIntent(
+  params: Props['route']['params'],
+): EncryptionIntent {
+  if (params?.encryptionIntent === 'encrypted' || params?.recipientContact) {
+    return 'encrypted';
+  }
+  if (params?.encryptionIntent === 'unencrypted') {
+    return 'unencrypted';
+  }
+  return 'pending';
+}
+
+export default function MailComposeScreen({
+  navigation,
+  route,
+}: Props): JSX.Element {
+  const params = route.params;
+  const [to, setTo] = useState(params?.to ?? '');
+  const [subject, setSubject] = useState(params?.subject ?? '');
+  const [message, setMessage] = useState(params?.message ?? '');
+  const [recipientContact, setRecipientContact] = useState(
+    params?.recipientContact ?? '',
+  );
   const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
-  const [encryptionIntent, setEncryptionIntent] =
-    useState<EncryptionIntent>('pending');
+  const [encryptionIntent, setEncryptionIntent] = useState<EncryptionIntent>(
+    () => initialIntent(params),
+  );
   const [resolveModalVisible, setResolveModalVisible] = useState(false);
   const [preferredContacts, setPreferredContacts] = useState<StoredContact[]>(
     [],
   );
+  const inReplyTo = params?.inReplyTo;
+  const references = params?.references;
 
   const applyEncryptedContact = useCallback((name: string) => {
     setRecipientContact(name);
@@ -107,6 +128,8 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
           to,
           subject,
           message,
+          inReplyTo,
+          references,
         });
         await appendActivityLog(`Sent unencrypted mail to ${to}`, 'success');
         setStatus('Unencrypted message sent');
@@ -125,6 +148,8 @@ export default function MailComposeScreen({navigation}: Props): JSX.Element {
         message,
         recipientContact,
         sign: true,
+        inReplyTo,
+        references,
       });
       await appendActivityLog(`Sent EBP mail to ${to}`, 'success');
       setStatus('EBP message sent');

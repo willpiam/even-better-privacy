@@ -216,16 +216,33 @@ export function extractEbpPayloadFromMime(source: string): string | null {
   return null;
 }
 
+function threadingHeaders(params: {
+  inReplyTo?: string;
+  references?: string;
+}): string[] {
+  const headers: string[] = [];
+  if (params.inReplyTo?.trim()) {
+    headers.push(`In-Reply-To: ${params.inReplyTo.trim()}`);
+  }
+  if (params.references?.trim()) {
+    headers.push(`References: ${params.references.trim()}`);
+  }
+  return headers;
+}
+
 export function buildSimpleMimeMessage(params: {
   from: string;
   to: string;
   subject: string;
   body: string;
+  inReplyTo?: string;
+  references?: string;
 }): string {
   const headers = [
     `From: ${params.from}`,
     `To: ${params.to}`,
     `Subject: ${params.subject}`,
+    ...threadingHeaders(params),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     '',
@@ -239,12 +256,15 @@ export function buildMultipartMimeMessage(params: {
   subject: string;
   plainBody: string;
   ebpArmor?: string;
+  inReplyTo?: string;
+  references?: string;
 }): string {
   const boundary = `ebp_${Date.now().toString(36)}`;
   const lines = [
     `From: ${params.from}`,
     `To: ${params.to}`,
     `Subject: ${params.subject}`,
+    ...threadingHeaders(params),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',

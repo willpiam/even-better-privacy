@@ -64,7 +64,17 @@ export type MailStackParamList = {
   MailInbox: undefined;
   MailMessage: {uid: number};
   MailSenderAuthenticity: {summary: MailAuthenticitySummary};
-  MailCompose: undefined;
+  MailCompose:
+    | {
+        to?: string;
+        subject?: string;
+        message?: string;
+        recipientContact?: string;
+        encryptionIntent?: 'encrypted' | 'unencrypted';
+        inReplyTo?: string;
+        references?: string;
+      }
+    | undefined;
 };
 
 export type MoreStackParamList = {

@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-07-21] query | mobile mail reply
+
+- Answered / shipped: Reply on message view with To/`Re:`/quote/`In-Reply-To`;
+  EBP replies encrypt to signer contact and sign as responder.
+- Filed: [[analysis-mobile-mail-reply]].
+- Code: `mailReply.ts`, `MailMessageScreen.tsx`, `MailComposeScreen.tsx`,
+  `mime.ts`, `ebpMail.ts`.
+
 ## [2026-07-21] fix | mobile mail authenticity reader UX
 
 - Locked EBP message view (Decrypt above fold, armor behind technical details);

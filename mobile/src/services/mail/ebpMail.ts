@@ -24,13 +24,14 @@ export async function sendEbpMail(params: {
   message: string;
   recipientContact: string;
   sign?: boolean;
+  inReplyTo?: string;
+  references?: string;
 }): Promise<void> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
     throw new Error('No mail account configured');
   }
   const identity = await loadIdentity(params.identityName, params.password);
-  await loadContact(params.recipientContact);
   const includePublicKeys = await getMailIncludePublicKeys();
   const encrypted = await encryptMessage({
     identityName: params.identityName,
@@ -51,6 +52,8 @@ export async function sendEbpMail(params: {
       ? 'This message is encrypted with Even Better Privacy. Open the EBP block below.'
       : 'Encrypted with Even Better Privacy.',
     ebpArmor: armor,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
   });
   await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
 }
@@ -61,6 +64,8 @@ export async function sendPlainMail(params: {
   to: string;
   subject: string;
   message: string;
+  inReplyTo?: string;
+  references?: string;
 }): Promise<void> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
@@ -74,6 +79,8 @@ export async function sendPlainMail(params: {
     to: params.to,
     subject: params.subject,
     body: params.message,
+    inReplyTo: params.inReplyTo,
+    references: params.references,
   });
   await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
 }
