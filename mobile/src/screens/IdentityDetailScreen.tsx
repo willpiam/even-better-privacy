@@ -1,18 +1,14 @@
 import React, {useEffect, useState} from 'react';
 import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
-import {pick, keepLocalCopy} from '@react-native-documents/picker';
 import Share from 'react-native-share';
-import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
   deleteIdentity,
-  importIdentity,
   listIdentities,
   readIdentityRaw,
 } from '../services/storage';
 import {requestVerifyEmail} from '../services/contacts';
-import {appendActivityLog} from '../services/activityLog';
 import {publishIdentity} from '../services/publish';
 import {getServerUrl} from '../services/settings';
 import {addDetail, listDetails} from '../services/details';
@@ -195,28 +191,6 @@ export default function IdentityDetailScreen({
     }
   };
 
-  const onImport = async () => {
-    try {
-      const [file] = await pick({mode: 'import'});
-      const [copy] = await keepLocalCopy({
-        destination: 'cachesDirectory',
-        files: [{uri: file.uri, fileName: file.name ?? 'identity.json'}],
-      });
-      if (copy.status !== 'success') {
-        throw new Error('Failed to copy identity file');
-      }
-      const path = copy.localUri.startsWith('file://')
-        ? copy.localUri.replace('file://', '')
-        : copy.localUri;
-      const raw = await RNFS.readFile(path, 'utf8');
-      const meta = await importIdentity({storageJson: raw, overwrite: false});
-      setStatus(`Imported ${meta.name}`);
-      await appendActivityLog(`Imported identity ${meta.name}`, 'success');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  };
-
   const onExportFile = async () => {
     try {
       if (!identity) {
@@ -346,20 +320,11 @@ export default function IdentityDetailScreen({
         autoCapitalize="none"
       />
       <AppButton title="Publish to server" onPress={onPublish} disabled={busy} />
-      <View style={styles.row}>
-        <AppButton
-          title="Export"
-          variant="secondary"
-          onPress={onExportFile}
-          style={styles.flex}
-        />
-        <AppButton
-          title="Import"
-          variant="secondary"
-          onPress={onImport}
-          style={styles.flex}
-        />
-      </View>
+      <AppButton
+        title="Export identity file"
+        variant="secondary"
+        onPress={onExportFile}
+      />
       <AppButton
         title="Emergency certificate"
         variant="secondary"
@@ -446,8 +411,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 16,
   },
-  row: {flexDirection: 'row', gap: 8},
-  flex: {flex: 1},
   detailCard: {gap: 8},
   detail: {color: colors.text, marginBottom: 4},
   switchRow: {

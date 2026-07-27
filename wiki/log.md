@@ -1,5 +1,19 @@
 # Wiki Log
 
+## [2026-07-27] query | mobile certificates UX vs app standards
+
+- Answered: Certificates used an inline password field and dual fingerprint
+  TextFields; standards are `useSecretPrompt` + ContactPicker / GUI role+other.
+- Code: `CertificatesScreen.tsx`, `ContactPicker` `selectValue`,
+  `resolveContactFingerprint`, reject without unlock.
+- Filed: [[analysis-mobile-certificates-ux]].
+
+## [2026-07-27] query | email-backed chat brainstorm
+
+- Captured seed idea: chat UI facade over ordinary email, addresses like
+  `<ebp-fingerprint>@williamdoyle.ca` (or a dedicated product domain).
+- Filed: [[analysis-email-backed-chat]].
+
 ## [2026-07-22] fix | mobile android release build script
 
 - Added `build_mobile_android.sh` (assembleRelease → `dist/mobile/`, optional

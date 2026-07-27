@@ -3,10 +3,8 @@ import {
   AES,
   Identity,
   randomBytes,
-  validatePassword,
 } from '../ebpCore';
 import {deriveIdentityKey} from './argon2';
-import {getEnforcePasswordPolicy} from './settings';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
 
@@ -137,43 +135,6 @@ export async function persistIdentity(params: {
   if (!publicData) {
     throw new Error('Failed to read identity public data');
   }
-  await setCurrentIdentity(name);
-  return publicDataToMeta(name, publicData);
-}
-
-export async function createIdentity(params: {
-  name: string;
-  password: string;
-  signingType: SigningType;
-}): Promise<StoredIdentityMeta> {
-  const name = normalizeName(params.name);
-  const password = params.password;
-  const enforcePasswordPolicy = await getEnforcePasswordPolicy();
-  const passwordCheck = validatePassword(password, {
-    enforcePolicy: enforcePasswordPolicy,
-  });
-  if (!passwordCheck.ok) {
-    const hint = passwordCheck.suggestions.length
-      ? ` ${passwordCheck.suggestions.join(' ')}`
-      : '';
-    throw new Error(`${passwordCheck.reason}.${hint}`);
-  }
-
-  await ensureBaseDir();
-  const path = identityPath(name);
-  const exists = await RNFS.exists(path);
-  if (exists) {
-    throw new Error('Identity already exists');
-  }
-
-  const identity = new Identity(params.signingType, 'kyber');
-  const storageData = await writeIdentityStorage(path, identity, password);
-
-  const publicData = Identity.readPublicData(storageData);
-  if (!publicData) {
-    throw new Error('Failed to read identity public data');
-  }
-
   await setCurrentIdentity(name);
   return publicDataToMeta(name, publicData);
 }

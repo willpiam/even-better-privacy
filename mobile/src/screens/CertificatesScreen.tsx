@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {FlatList, StyleSheet, Text, View} from 'react-native';
+import {FlatList, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
@@ -11,6 +11,7 @@ import {
   proposeHierarchy,
   rejectProposal,
 } from '../services/hierarchy';
+import {resolveContactFingerprint} from '../services/contacts';
 import {
   getCurrentIdentity,
   getCurrentIdentityRequired,
@@ -22,13 +23,16 @@ import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import Card from '../components/Card';
+import ContactPicker from '../components/ContactPicker';
+import BusyOverlay from '../components/BusyOverlay';
+import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Certificates'>;
 
 export default function CertificatesScreen(_props: Props): JSX.Element {
-  const [password, setPassword] = useState('');
+  const {promptSecret, secretPrompt} = useSecretPrompt();
   const [active, setActive] = useState<
     Array<{
       certificate: string;
@@ -51,13 +55,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
       createdAt: number;
     }>
   >([]);
-  const [masterFingerprint, setMasterFingerprint] = useState('');
-  const [childFingerprint, setChildFingerprint] = useState('');
+  const [iAmMaster, setIAmMaster] = useState(true);
+  const [otherParty, setOtherParty] = useState('');
   const [context, setContext] = useState('');
   const [expiry, setExpiry] = useState('');
   const [treeFingerprint, setTreeFingerprint] = useState('');
   const [treeOutput, setTreeOutput] = useState('');
   const [status, setStatus] = useState('');
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const current = await getCurrentIdentity();
@@ -71,15 +76,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
-      // If password is not set yet, we still show active local certificates.
       void (async () => {
         try {
-          setActive(await listCertificates());
+          await refresh();
         } catch {
           // Ignore initial read failures.
         }
       })();
-    }, []),
+    }, [refresh]),
   );
 
   const onReload = async () => {
@@ -91,9 +95,37 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
     }
   };
 
+  const currentFingerprint = async (): Promise<string> => {
+    const identityName = await getCurrentIdentityRequired();
+    const identities = await listIdentities();
+    const meta = identities.find(item => item.name === identityName);
+    if (!meta?.fingerprint) {
+      throw new Error('Current identity fingerprint is unavailable');
+    }
+    return meta.fingerprint;
+  };
+
   const onPropose = async () => {
     try {
+      const myFingerprint = await currentFingerprint();
+      const otherFingerprint = await resolveContactFingerprint(otherParty);
+      if (!otherFingerprint) {
+        setStatus('Other party fingerprint is required');
+        return;
+      }
+      const password = await promptSecret({
+        title: 'Identity password',
+        placeholder: 'Identity password',
+        submitLabel: 'Propose',
+      });
+      if (password === null) {
+        return;
+      }
+      setBusyMessage('Creating proposal…');
+      setStatus('');
       const identityName = await getCurrentIdentityRequired();
+      const masterFingerprint = iAmMaster ? myFingerprint : otherFingerprint;
+      const childFingerprint = iAmMaster ? otherFingerprint : myFingerprint;
       await proposeHierarchy({
         identityName,
         password,
@@ -103,45 +135,68 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
         expiry: expiry ? Number(expiry) : 0,
       });
       setStatus('Proposal created');
-      setMasterFingerprint('');
-      setChildFingerprint('');
+      setOtherParty('');
       setContext('');
       setExpiry('');
-      await onReload();
+      await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onAccept = async (proposalId: number) => {
     try {
+      const password = await promptSecret({
+        title: 'Identity password',
+        placeholder: 'Identity password',
+        submitLabel: 'Accept',
+      });
+      if (password === null) {
+        return;
+      }
+      setBusyMessage('Accepting proposal…');
+      setStatus('');
       const identityName = await getCurrentIdentityRequired();
       await acceptProposal({identityName, password, proposalId});
       setStatus('Proposal accepted');
-      await onReload();
+      await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onReject = async (proposalId: number) => {
     try {
-      const identityName = await getCurrentIdentityRequired();
+      setBusyMessage('Rejecting proposal…');
+      setStatus('');
+      const rejectorFingerprint = await currentFingerprint();
       await rejectProposal({
         proposalId,
-        identityName,
-        password,
+        rejectorFingerprint,
       });
       setStatus('Proposal rejected');
-      await onReload();
+      await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
   const onLoadTree = async () => {
     try {
-      const tree = await getMergedHierarchyTree(treeFingerprint);
+      const fingerprint = await resolveContactFingerprint(treeFingerprint);
+      if (!fingerprint) {
+        setStatus('Fingerprint is required');
+        return;
+      }
+      setBusyMessage('Loading hierarchy tree…');
+      setStatus('');
+      const tree = await getMergedHierarchyTree(fingerprint);
       setTreeOutput(JSON.stringify(tree, null, 2));
       setStatus(
         `Tree: root ${tree.root}, ${tree.relationships.length} relationship(s)`,
@@ -149,41 +204,48 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
     } catch (error) {
       setTreeOutput('');
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
     }
   };
 
+  const busy = busyMessage !== null;
+
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
+      {secretPrompt}
+      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <FlatList
         data={active}
         keyExtractor={item => item.certificate}
         contentContainerStyle={styles.listContent}
+        keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             <StatusBanner message={status} kind={statusKind(status)} />
-            <TextField
-              label="Identity password"
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Identity password (for propose/accept)"
-              secureTextEntry
+            <AppButton
+              title="Reload Certificates"
+              variant="secondary"
+              onPress={onReload}
+              disabled={busy}
             />
-            <AppButton title="Reload Certificates" variant="secondary" onPress={onReload} />
 
             <SectionTitle>Propose Hierarchy</SectionTitle>
-            <TextField
-              label="Master fingerprint"
-              value={masterFingerprint}
-              onChangeText={setMasterFingerprint}
-              placeholder="Master fingerprint"
-              autoCapitalize="none"
-            />
-            <TextField
-              label="Child fingerprint"
-              value={childFingerprint}
-              onChangeText={setChildFingerprint}
-              placeholder="Child fingerprint"
-              autoCapitalize="none"
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>I am the Master</Text>
+              <Switch value={iAmMaster} onValueChange={setIAmMaster} />
+            </View>
+            <Text style={styles.hint}>
+              {iAmMaster
+                ? 'Current identity will be master; pick the child below.'
+                : 'Current identity will be child; pick the master below.'}
+            </Text>
+            <Text style={styles.fieldLabel}>Other party</Text>
+            <ContactPicker
+              value={otherParty}
+              onChange={setOtherParty}
+              selectValue="fingerprint"
+              placeholder="Search contacts or paste fingerprint..."
             />
             <TextField
               label="Context"
@@ -198,7 +260,11 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
               placeholder="Expiry ms unix timestamp (0 for none)"
               keyboardType="number-pad"
             />
-            <AppButton title="Create Proposal" onPress={onPropose} />
+            <AppButton
+              title="Create Proposal"
+              onPress={onPropose}
+              disabled={busy}
+            />
 
             <SectionTitle>Pending Proposals</SectionTitle>
             {pending.length === 0 ? (
@@ -215,12 +281,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
                       title="Accept"
                       onPress={() => onAccept(item.id)}
                       style={styles.halfBtn}
+                      disabled={busy}
                     />
                     <AppButton
                       title="Reject"
                       variant="danger"
                       onPress={() => onReject(item.id)}
                       style={styles.halfBtn}
+                      disabled={busy}
                     />
                   </View>
                 </Card>
@@ -228,14 +296,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
             )}
 
             <SectionTitle>Hierarchy Tree</SectionTitle>
-            <TextField
-              label="Fingerprint"
+            <Text style={styles.fieldLabel}>Fingerprint</Text>
+            <ContactPicker
               value={treeFingerprint}
-              onChangeText={setTreeFingerprint}
-              placeholder="Fingerprint for hierarchy tree"
-              autoCapitalize="none"
+              onChange={setTreeFingerprint}
+              selectValue="fingerprint"
+              placeholder="Search contacts or paste fingerprint..."
             />
-            <AppButton title="Load Tree" onPress={onLoadTree} />
+            <AppButton title="Load Tree" onPress={onLoadTree} disabled={busy} />
             <TextField
               label="Tree output"
               value={treeOutput}
@@ -273,6 +341,31 @@ const styles = StyleSheet.create({
   headerBlock: {gap: 10, marginBottom: 8},
   cardGap: {marginBottom: 8},
   small: {fontSize: typography.caption, color: colors.text, marginBottom: 2},
+  hint: {fontSize: 13, color: colors.muted},
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  switchLabel: {
+    flex: 1,
+    marginRight: 12,
+    color: colors.text,
+    fontSize: typography.body,
+  },
   row: {flexDirection: 'row', gap: 8, marginTop: 8},
   halfBtn: {flex: 1},
 });

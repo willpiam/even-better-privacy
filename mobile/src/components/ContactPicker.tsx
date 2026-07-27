@@ -23,6 +23,8 @@ type Props = {
   onChange: (next: string) => void;
   placeholder?: string;
   variant?: 'search' | 'dropdown';
+  /** What to write into `value` when a contact is selected. Default: storage name. */
+  selectValue?: 'name' | 'fingerprint';
 };
 
 function ContactPickerLabels({item}: {item: StoredContact}): JSX.Element {
@@ -37,11 +39,37 @@ function ContactPickerLabels({item}: {item: StoredContact}): JSX.Element {
   );
 }
 
+function selectedValue(
+  item: StoredContact,
+  selectValue: 'name' | 'fingerprint',
+): string {
+  return selectValue === 'fingerprint' ? item.contact.fingerprint : item.name;
+}
+
+function findSelected(
+  contacts: StoredContact[],
+  value: string,
+  selectValue: 'name' | 'fingerprint',
+): StoredContact | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (selectValue === 'fingerprint') {
+    return contacts.find(
+      c =>
+        c.contact.fingerprint === value ||
+        c.contact.fingerprint.startsWith(value),
+    );
+  }
+  return contacts.find(c => c.name === value);
+}
+
 export default function ContactPicker({
   value,
   onChange,
   placeholder = 'Search contacts...',
   variant = 'search',
+  selectValue = 'name',
 }: Props): JSX.Element {
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [open, setOpen] = useState(false);
@@ -67,7 +95,7 @@ export default function ContactPicker({
   }, [contacts, value]);
 
   if (variant === 'dropdown') {
-    const selected = contacts.find(c => c.name === value);
+    const selected = findSelected(contacts, value, selectValue);
     const selectedLabels = selected
       ? resolveContactLabels(storedContactToLike(selected))
       : null;
@@ -106,13 +134,14 @@ export default function ContactPicker({
                 nestedScrollEnabled
                 keyboardShouldPersistTaps="handled">
                 {contacts.map(item => {
-                  const isSelected = item.name === value;
+                  const next = selectedValue(item, selectValue);
+                  const isSelected = next === value;
                   return (
                     <TouchableOpacity
                       key={item.name}
                       style={[styles.item, isSelected && styles.itemSelected]}
                       onPress={() => {
-                        onChange(item.name);
+                        onChange(next);
                         setOpen(false);
                       }}>
                       <ContactPickerLabels item={item} />
@@ -134,14 +163,17 @@ export default function ContactPicker({
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
+        autoCapitalize="none"
+        autoCorrect={false}
       />
       <FlatList
         data={filtered.slice(0, 6)}
         keyExtractor={item => item.name}
+        keyboardShouldPersistTaps="handled"
         renderItem={({item}) => (
           <TouchableOpacity
             style={styles.item}
-            onPress={() => onChange(item.name)}>
+            onPress={() => onChange(selectedValue(item, selectValue))}>
             <ContactPickerLabels item={item} />
           </TouchableOpacity>
         )}

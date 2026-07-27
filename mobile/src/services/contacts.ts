@@ -274,6 +274,27 @@ export async function loadContact(nameOrFingerprint: string): Promise<ExternalId
   return byPrefix.contact;
 }
 
+/**
+ * Resolve a typed contact name / fingerprint / prefix to a full fingerprint.
+ * Mirrors GUI `resolveCertificateFingerprint`: raw `ebp…` values pass through;
+ * otherwise try local contacts, then return the trimmed input.
+ */
+export async function resolveContactFingerprint(value: string): Promise<string> {
+  const raw = value.trim();
+  if (!raw) {
+    return '';
+  }
+  if (raw.startsWith('ebp')) {
+    return raw;
+  }
+  try {
+    const contact = await loadContact(raw);
+    return contact.fingerprint;
+  } catch {
+    return raw;
+  }
+}
+
 export async function fetchContactFromServer(params: {
   fingerprint: string;
   name?: string;

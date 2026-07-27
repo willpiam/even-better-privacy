@@ -77,6 +77,11 @@ hierarchy, emergency certs, EBP-HD, native mail.
 - Revoked-details stripping on server sync ([[analysis-sync-revoked-details-bug]])
 - Hierarchy proposal certificate hex encoding
 
+## Related
+
+- [[analysis-mobile-certificates-ux]] — Certificates password modal + contact
+  picker alignment (post–Parity v1 UX polish)
+
 ## Sources
 
 - [[component-gui]]

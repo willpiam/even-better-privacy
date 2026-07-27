@@ -5,7 +5,6 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {colors} from '../theme/tokens';
 import IdentitiesHomeScreen from '../screens/IdentitiesHomeScreen';
-import CreateIdentityScreen from '../screens/CreateIdentityScreen';
 import HdCreateScreen from '../screens/HdCreateScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import ContactsScreen from '../screens/ContactsScreen';
@@ -29,13 +28,14 @@ import MailComposeScreen from '../screens/mail/MailComposeScreen';
 import type {MailAuthenticitySummary} from '../services/mail/ebpMail';
 import MoreScreen from '../screens/MoreScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import ActivityLogScreen from '../screens/ActivityLogScreen';
+import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import CertificatesScreen from '../screens/CertificatesScreen';
 import ProjectInfoScreen from '../screens/ProjectInfoScreen';
 import MailTraceScreen from '../screens/mail/MailTraceScreen';
 
 export type IdentitiesStackParamList = {
   IdentitiesHome: undefined;
-  CreateIdentity: undefined;
   HdCreate: undefined;
   IdentityDetail: {identityName: string};
 };
@@ -80,6 +80,8 @@ export type MailStackParamList = {
 export type MoreStackParamList = {
   MoreHome: undefined;
   Settings: undefined;
+  ActivityLog: undefined;
+  Diagnostics: undefined;
   Certificates: undefined;
   ProjectInfo: undefined;
   MailTrace: undefined;
@@ -143,14 +145,9 @@ function IdentitiesNavigator(): JSX.Element {
         options={{title: 'Identities'}}
       />
       <IdentitiesStack.Screen
-        name="CreateIdentity"
-        component={CreateIdentityScreen}
-        options={{title: 'Create Identity'}}
-      />
-      <IdentitiesStack.Screen
         name="HdCreate"
         component={HdCreateScreen}
-        options={{title: 'EBP-HD'}}
+        options={{title: 'Create Identity'}}
       />
       <IdentitiesStack.Screen
         name="IdentityDetail"
@@ -286,6 +283,16 @@ function MoreNavigator(): JSX.Element {
         name="Settings"
         component={SettingsScreen}
         options={{title: 'Settings'}}
+      />
+      <MoreStack.Screen
+        name="ActivityLog"
+        component={ActivityLogScreen}
+        options={{title: 'Activity Log'}}
+      />
+      <MoreStack.Screen
+        name="Diagnostics"
+        component={DiagnosticsScreen}
+        options={{title: 'Diagnostics'}}
       />
       <MoreStack.Screen
         name="Certificates"

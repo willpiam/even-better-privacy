@@ -65,7 +65,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
       <Card>
         <ListRow
           title="Encrypt message"
-          subtitle="Encrypt text for a contact"
+          subtitle="Encrypt text for a contact, optionally signed"
           onPress={() => navigation.navigate('EncryptMessage')}
         />
         <ListRow

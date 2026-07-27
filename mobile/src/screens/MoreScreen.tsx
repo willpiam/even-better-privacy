@@ -1,5 +1,6 @@
-import React, {useState} from 'react';
+import React, {useCallback, useState} from 'react';
 import {Alert, StyleSheet, View} from 'react-native';
+import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import {runCoreSelfTest} from '../services/storage';
@@ -20,9 +21,11 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
 
-  React.useEffect(() => {
-    void getServerUrl().then(setServerUrl);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void getServerUrl().then(setServerUrl);
+    }, []),
+  );
 
   const onSelfTest = async () => {
     setBusy(true);
@@ -42,22 +45,17 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
       <BusyOverlay visible={busy} message="Running core self-test…" />
       <BrandHeader />
       <StatusBanner message={status} kind={statusKind(status)} />
-      <SectionTitle>Settings</SectionTitle>
+      <SectionTitle>Preferences</SectionTitle>
       <Card>
         <ListRow
-          title="Server URL"
-          subtitle={serverUrl || 'Not set'}
+          title="Settings"
+          subtitle={serverUrl || 'Server, password policy, mail'}
           onPress={() => navigation.navigate('Settings')}
         />
         <ListRow
-          title="Password policy"
-          subtitle="Open Settings"
-          onPress={() => navigation.navigate('Settings')}
-        />
-        <ListRow
-          title="Mail preferences"
-          subtitle="PIN, OAuth overrides"
-          onPress={() => navigation.navigate('Settings')}
+          title="Activity log"
+          subtitle="Recent operations"
+          onPress={() => navigation.navigate('ActivityLog')}
         />
       </Card>
       <SectionTitle>App</SectionTitle>
@@ -68,14 +66,9 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           onPress={() => navigation.navigate('Certificates')}
         />
         <ListRow
-          title="Project info"
-          subtitle="About EBP"
+          title="About EBP"
+          subtitle="Project info"
           onPress={() => navigation.navigate('ProjectInfo')}
-        />
-        <ListRow
-          title="Activity log"
-          subtitle="Recent operations"
-          onPress={() => navigation.navigate('Settings')}
         />
       </Card>
       <SectionTitle>Developer</SectionTitle>
@@ -94,6 +87,11 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           title="Mail trace"
           subtitle="Protocol stubs"
           onPress={() => navigation.navigate('MailTrace')}
+        />
+        <ListRow
+          title="Diagnostics"
+          subtitle="Parity checks, paths"
+          onPress={() => navigation.navigate('Diagnostics')}
         />
       </Card>
       <View style={styles.spacer} />

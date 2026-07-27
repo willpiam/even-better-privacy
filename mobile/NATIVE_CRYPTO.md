@@ -29,6 +29,6 @@ npm run ios
 ## Implementation map
 
 - `mobile/src/services/argon2.ts` — native KDF + parity vector
-- `mobile/src/services/storage.ts` — `loadIdentity` / `createIdentity` / `saveIdentity`
+- `mobile/src/services/storage.ts` — `loadIdentity` / `persistIdentity` / `saveIdentity`
 - `core/AES.ts` — `encryptWithKey`, `decryptWithKey`, `readHeader`
 - `core/Identity.ts` — `fromStorageFormatWithKey`, `toStorageFormatWithKey`

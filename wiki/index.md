@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-22
+last_updated: 2026-07-27
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-22 (mobile standalone install gap)
+Last updated: 2026-07-27 (mobile certificates UX)
 
 ## Wiki Operations
 
@@ -95,6 +95,10 @@ Last updated: 2026-07-22 (mobile standalone install gap)
 
 ## Analyses
 
+- [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
+  with `<ebp-fingerprint>@domain` addressing (personal or product domain).
+- [[analysis-mobile-certificates-ux]] - Certificates screen aligned to password
+  popup + ContactPicker hierarchy propose (GUI parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material
   encoding origins and the migration work needed to unify key encodings.
 - [[analysis-ebp-hd-bip-compliance]] - Reviews whether EBP-HD can claim

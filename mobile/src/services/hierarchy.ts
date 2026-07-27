@@ -237,6 +237,8 @@ export async function rejectProposal(params: {
   proposalId: number;
   identityName?: string;
   password?: string;
+  /** Prefer this when rejecting without unlocking the identity. */
+  rejectorFingerprint?: string;
   server?: string;
 }): Promise<void> {
   const pending = await readPendingLocal();
@@ -246,22 +248,28 @@ export async function rejectProposal(params: {
   }
   await writePendingLocal(pending.filter(p => p.id !== params.proposalId));
 
-  if (params.identityName && params.password) {
+  let rejectorFingerprint = params.rejectorFingerprint?.trim() || undefined;
+  if (!rejectorFingerprint && params.identityName && params.password) {
     const identity = await loadIdentity(params.identityName, params.password);
-    const server = params.server ?? (await getServerUrl());
-    try {
-      await fetch(apiUrl(server, '/api/v1/hierarchy/reject'), {
-        method: 'POST',
-        headers: {'content-type': 'application/json'},
-        body: JSON.stringify({
-          proposerFingerprint: proposal.proposerFingerprint,
-          certificate: proposal.certificate,
-          rejectorFingerprint: identity.toFingerprint(),
-        }),
-      });
-    } catch {
-      // Local reject still succeeds if server notify fails.
-    }
+    rejectorFingerprint = identity.toFingerprint();
+  }
+  if (!rejectorFingerprint) {
+    return;
+  }
+
+  const server = params.server ?? (await getServerUrl());
+  try {
+    await fetch(apiUrl(server, '/api/v1/hierarchy/reject'), {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        proposerFingerprint: proposal.proposerFingerprint,
+        certificate: proposal.certificate,
+        rejectorFingerprint,
+      }),
+    });
+  } catch {
+    // Local reject still succeeds if server notify fails.
   }
 }
 

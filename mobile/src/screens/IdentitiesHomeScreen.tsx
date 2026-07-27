@@ -1,13 +1,17 @@
 import React, {useCallback, useState} from 'react';
 import {FlatList, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
+import {pick, keepLocalCopy} from '@react-native-documents/picker';
+import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
   getCurrentIdentity,
+  importIdentity,
   listIdentities,
   setCurrentIdentity,
 } from '../services/storage';
+import {appendActivityLog} from '../services/activityLog';
 import type {StoredIdentityMeta} from '../types';
 import {getServerUrl} from '../services/settings';
 import {PROTOCOL_VERSION} from '../../../core/version';
@@ -17,6 +21,8 @@ import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
 import Card from '../components/Card';
+import StatusBanner from '../components/StatusBanner';
+import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentitiesHome'>;
@@ -34,6 +40,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
     null,
   );
   const [serverUrl, setServerUrl] = useState<string>('');
+  const [status, setStatus] = useState('');
 
   const refresh = useCallback(async () => {
     const [list, current, server] = await Promise.all([
@@ -57,7 +64,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
       headerRight: () => (
         <Text
           style={styles.headerAction}
-          onPress={() => navigation.navigate('CreateIdentity')}>
+          onPress={() => navigation.navigate('HdCreate')}>
           +
         </Text>
       ),
@@ -70,6 +77,30 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
     navigation.navigate('IdentityDetail', {identityName: name});
   };
 
+  const onImport = async () => {
+    setStatus('');
+    try {
+      const [file] = await pick({mode: 'import'});
+      const [copy] = await keepLocalCopy({
+        destination: 'cachesDirectory',
+        files: [{uri: file.uri, fileName: file.name ?? 'identity.json'}],
+      });
+      if (copy.status !== 'success') {
+        throw new Error('Failed to copy identity file');
+      }
+      const path = copy.localUri.startsWith('file://')
+        ? copy.localUri.replace('file://', '')
+        : copy.localUri;
+      const raw = await RNFS.readFile(path, 'utf8');
+      const meta = await importIdentity({storageJson: raw, overwrite: false});
+      await appendActivityLog(`Imported identity ${meta.name}`, 'success');
+      setStatus(`Imported ${meta.name}`);
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
       {currentIdentity ? (
@@ -80,16 +111,17 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
         {'\n'}
         Protocol: <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
       </Text>
+      <StatusBanner message={status} kind={statusKind(status)} />
       <View style={styles.row}>
         <AppButton
           title="Create"
-          onPress={() => navigation.navigate('CreateIdentity')}
+          onPress={() => navigation.navigate('HdCreate')}
           style={styles.flexBtn}
         />
         <AppButton
-          title="EBP-HD"
+          title="Import"
           variant="secondary"
-          onPress={() => navigation.navigate('HdCreate')}
+          onPress={() => void onImport()}
           style={styles.flexBtn}
         />
       </View>
@@ -99,17 +131,18 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           <Text style={styles.emptyIcon}>◎</Text>
           <Text style={styles.emptyTitle}>No identities yet</Text>
           <Text style={styles.emptySub}>
-            Create a local identity or restore one from an EBP-HD mnemonic.
+            Create an identity from a mnemonic, or import an existing identity
+            file.
           </Text>
           <AppButton
             title="Create identity"
-            onPress={() => navigation.navigate('CreateIdentity')}
+            onPress={() => navigation.navigate('HdCreate')}
             style={styles.fullBtn}
           />
           <AppButton
-            title="Restore with EBP-HD"
+            title="Import identity file"
             variant="secondary"
-            onPress={() => navigation.navigate('HdCreate')}
+            onPress={() => void onImport()}
             style={styles.fullBtn}
           />
         </View>
