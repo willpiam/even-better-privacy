@@ -2,7 +2,7 @@
   "name": "ebp",
   "private": true,
   "dependencies": {
-    "imapflow": "1.2.12",
+    "imapflow": "1.6.1",
     "mailparser": "3.9.3"
   },
   "devDependencies": {
