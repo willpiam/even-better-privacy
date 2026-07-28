@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-07-28] query | mobile graphical hierarchy tree approach
+
+- Answered: Port desktop leveled SVG tree with `react-native-svg`; enrich nodes
+  like GUI; adapt hover/drag to tap sheet + pinch/pan; replace Certificates JSON dump.
+- Filed: [[analysis-mobile-hierarchy-graph-rendering]].
+
 ## [2026-07-28] query | pending proposals proposer visibility
 
 - Answered: Pending Proposals shows only proposals from others involving this

@@ -27,9 +27,11 @@ import Card from '../components/Card';
 import ListRow from '../components/ListRow';
 import ContactPicker from '../components/ContactPicker';
 import BusyOverlay from '../components/BusyOverlay';
+import CertificateDetailModal from '../components/CertificateDetailModal';
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, spacing, typography} from '../theme/tokens';
+import {isHierarchyCertificateExpired} from '../ebpCore';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Certificates'>;
 
@@ -65,6 +67,7 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
   const [treeOutput, setTreeOutput] = useState('');
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [selectedCert, setSelectedCert] = useState<ActiveCert | null>(null);
 
   const refresh = useCallback(async () => {
     const current = await getCurrentIdentity();
@@ -173,12 +176,21 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
 
   const onReject = async (proposalId: number) => {
     try {
+      const password = await promptSecret({
+        title: 'Identity password',
+        placeholder: 'Identity password',
+        submitLabel: 'Reject',
+      });
+      if (password === null) {
+        return;
+      }
       setBusyMessage('Rejecting proposal…');
       setStatus('');
-      const rejectorFingerprint = await currentFingerprint();
+      const identityName = await getCurrentIdentityRequired();
       await rejectProposal({
         proposalId,
-        rejectorFingerprint,
+        identityName,
+        password,
       });
       setStatus('Proposal rejected');
       await refresh();
@@ -216,6 +228,10 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
       {secretPrompt}
+      <CertificateDetailModal
+        certificate={selectedCert}
+        onClose={() => setSelectedCert(null)}
+      />
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <ScrollView
         contentContainerStyle={styles.listContent}
@@ -335,20 +351,29 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
           </Card>
         ) : (
           <Card>
-            {active.map((item, index) => (
-              <ListRow
-                key={item.certificate}
-                title={`${condenseFingerprint(item.masterFingerprint)} → ${condenseFingerprint(item.childFingerprint)}`}
-                subtitle={[
-                  item.context || 'No context',
-                  item.expiry
-                    ? `Expires ${new Date(item.expiry).toLocaleDateString()}`
-                    : 'No expiry',
-                ].join(' · ')}
-                showChevron={false}
-                showDivider={index < active.length - 1}
-              />
-            ))}
+            {active.map((item, index) => {
+              const expired = isHierarchyCertificateExpired({
+                expiry: item.expiry,
+              });
+              return (
+                <ListRow
+                  key={item.certificate}
+                  title={`${condenseFingerprint(item.masterFingerprint)} → ${condenseFingerprint(item.childFingerprint)}`}
+                  subtitle={[
+                    item.context || 'No context',
+                    item.expiry
+                      ? `Expires ${new Date(item.expiry).toLocaleDateString()}`
+                      : 'No expiry',
+                    expired ? 'EXPIRED' : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                  showChevron
+                  onPress={() => setSelectedCert(item)}
+                  showDivider={index < active.length - 1}
+                />
+              );
+            })}
           </Card>
         )}
       </ScrollView>

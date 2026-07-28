@@ -55,6 +55,15 @@ app pending-list semantics ([[analysis-querying-live-key-server-db]]).
 proposer-exclusion rule. No dedicated hierarchy concept page spells out the
 UX contract.
 
+## Mobile fetch bug (fixed 2026-07-28)
+
+Mobile previously listed pending only from local
+`pending-certificates.json` and never called
+`GET /api/v1/hierarchy/pending/:fingerprint`, so proposals created on another
+client (or the GUI) did not appear. `listPending` now merges server + local
+(server wins per master→child pair). Propose/accept also sign with purpose
+`hierarchy` (matching the server verifier).
+
 ## Related
 
 - [[component-server]]

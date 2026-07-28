@@ -5,6 +5,7 @@ import {
   encodeHierarchyCertificate,
   getHierarchySignaturePayload,
   hexToString,
+  stableStringify,
   stringToHex,
   type SignedHierarchyCertificate,
 } from '../ebpCore';
@@ -12,6 +13,12 @@ import {
   buildHierarchyTreeFromCertificates,
   decodeCertsFromStored,
 } from './hierarchyTree';
+import {
+  filterPendingForIdentity,
+  mergePendingProposals,
+  pendingPairKey,
+  type PendingHierarchyProposal,
+} from './hierarchyPending';
 import {getServerUrl} from './settings';
 import {
   ensureAppDirs,
@@ -20,16 +27,7 @@ import {
   loadIdentity,
 } from './storage';
 
-export type PendingHierarchyProposal = {
-  id: number;
-  masterFingerprint: string;
-  childFingerprint: string;
-  proposerFingerprint: string;
-  certificate: string;
-  context: string;
-  expiry: number;
-  createdAt: number;
-};
+export type {PendingHierarchyProposal};
 
 function apiUrl(server: string, path: string): string {
   const base = server.replace(/\/+$/, '');
@@ -135,7 +133,7 @@ export async function proposeHierarchy(params: {
     },
   );
   const payload = getHierarchySignaturePayload(cert);
-  const signature = identity.signMessage(payload);
+  const signature = identity.signMessage(payload, undefined, 'hierarchy');
   if (proposerFingerprint === cert.masterFingerprint) {
     cert.masterSignature = signature;
   } else if (proposerFingerprint === cert.childFingerprint) {
@@ -154,12 +152,13 @@ export async function proposeHierarchy(params: {
     context: cert.context,
     expiry: cert.expiry,
     createdAt: Date.now(),
+    source: 'local',
   };
-  await writePendingLocal([...pending, proposal]);
 
   const server = params.server ?? (await getServerUrl());
+  let serverError: Error | null = null;
   try {
-    await fetch(apiUrl(server, '/api/v1/hierarchy/propose'), {
+    const res = await fetch(apiUrl(server, '/api/v1/hierarchy/propose'), {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({
@@ -167,23 +166,83 @@ export async function proposeHierarchy(params: {
         certificate: encoded,
       }),
     });
+    const body = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      proposal?: {id?: number; createdAt?: number};
+    };
+    if (!res.ok) {
+      serverError = new Error(
+        body.error ?? `Failed to propose hierarchy on server (HTTP ${res.status})`,
+      );
+    } else {
+      if (typeof body.proposal?.id === 'number') {
+        proposal.id = body.proposal.id;
+        proposal.source = 'server';
+      }
+      if (typeof body.proposal?.createdAt === 'number') {
+        proposal.createdAt = body.proposal.createdAt;
+      }
+    }
   } catch {
-    // Keep proposal locally even if server sync fails.
+    // Offline / network failure: keep local-only proposal.
+  }
+  await writePendingLocal([...pending, proposal]);
+  if (serverError) {
+    throw serverError;
   }
   return proposal;
 }
 
-export async function listPending(identityFingerprint?: string): Promise<PendingHierarchyProposal[]> {
-  const items = await readPendingLocal();
-  if (!identityFingerprint) {
-    return items;
-  }
-  return items.filter(
-    p =>
-      (p.masterFingerprint === identityFingerprint ||
-        p.childFingerprint === identityFingerprint) &&
-      p.proposerFingerprint !== identityFingerprint,
+async function fetchServerPending(
+  fingerprint: string,
+  server: string,
+): Promise<PendingHierarchyProposal[]> {
+  const res = await fetch(
+    apiUrl(server, `/api/v1/hierarchy/pending/${encodeURIComponent(fingerprint)}`),
   );
+  const body = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    proposals?: Array<{
+      id: number;
+      masterFingerprint: string;
+      childFingerprint: string;
+      proposerFingerprint: string;
+      certificate: string;
+      context: string;
+      expiry: number;
+      createdAt: number;
+    }>;
+  };
+  if (!res.ok) {
+    throw new Error(body.error ?? `HTTP ${res.status}`);
+  }
+  return (body.proposals ?? []).map(p => ({
+    ...p,
+    source: 'server' as const,
+  }));
+}
+
+export async function listPending(
+  identityFingerprint?: string,
+  server?: string,
+): Promise<PendingHierarchyProposal[]> {
+  const local = await readPendingLocal();
+  let serverItems: PendingHierarchyProposal[] = [];
+  if (identityFingerprint) {
+    try {
+      serverItems = await fetchServerPending(
+        identityFingerprint,
+        server ?? (await getServerUrl()),
+      );
+    } catch {
+      // Offline or identity not published: fall back to local-only.
+    }
+  }
+  const merged = mergePendingProposals(local, serverItems);
+  if (!identityFingerprint) {
+    return merged;
+  }
+  return filterPendingForIdentity(merged, identityFingerprint);
 }
 
 export async function acceptProposal(params: {
@@ -193,18 +252,21 @@ export async function acceptProposal(params: {
   server?: string;
 }): Promise<void> {
   const identity = await loadIdentity(params.identityName, params.password);
-  const pending = await readPendingLocal();
+  const myFingerprint = identity.toFingerprint();
+  const pending = await listPending(myFingerprint, params.server);
   const proposal = pending.find(p => p.id === params.proposalId);
   if (!proposal) {
     throw new Error('Pending proposal not found');
+  }
+  if (proposal.proposerFingerprint === myFingerprint) {
+    throw new Error('Proposer cannot accept their own pending entry');
   }
   const certDraft = JSON.parse(hexToString(proposal.certificate)) as Record<
     string,
     unknown
   >;
   const payload = getHierarchySignaturePayload(certDraft as never);
-  const sig = identity.signMessage(payload);
-  const myFingerprint = identity.toFingerprint();
+  const sig = identity.signMessage(payload, undefined, 'hierarchy');
   if (myFingerprint === certDraft.masterFingerprint) {
     certDraft.masterSignature = sig;
   } else if (myFingerprint === certDraft.childFingerprint) {
@@ -218,58 +280,90 @@ export async function acceptProposal(params: {
   }
 
   const server = params.server ?? (await getServerUrl());
-  const res = await fetch(apiUrl(server, '/api/v1/hierarchy'), {
-    method: 'POST',
-    headers: {'content-type': 'application/json'},
-    body: JSON.stringify({certificate: signed}),
-  });
+  const useAcceptEndpoint = proposal.source === 'server';
+  const res = await fetch(
+    apiUrl(
+      server,
+      useAcceptEndpoint ? '/api/v1/hierarchy/accept' : '/api/v1/hierarchy',
+    ),
+    {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify(
+        useAcceptEndpoint
+          ? {proposalId: proposal.id, certificate: signed}
+          : {certificate: signed},
+      ),
+    },
+  );
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as {error?: string};
     throw new Error(
       `Failed to publish accepted hierarchy certificate: ${body.error ?? `HTTP ${res.status}`}`,
     );
   }
-  await writePendingLocal(pending.filter(p => p.id !== params.proposalId));
+  const local = await readPendingLocal();
+  const pair = pendingPairKey(proposal);
+  await writePendingLocal(local.filter(p => pendingPairKey(p) !== pair));
   await storeActiveCertificate(signed);
 }
 
 export async function rejectProposal(params: {
   proposalId: number;
-  identityName?: string;
-  password?: string;
-  /** Prefer this when rejecting without unlocking the identity. */
-  rejectorFingerprint?: string;
+  identityName: string;
+  password: string;
   server?: string;
 }): Promise<void> {
-  const pending = await readPendingLocal();
+  const identity = await loadIdentity(params.identityName, params.password);
+  const rejectorFingerprint = identity.toFingerprint();
+  const pending = await listPending(rejectorFingerprint, params.server);
   const proposal = pending.find(p => p.id === params.proposalId);
   if (!proposal) {
     throw new Error('Pending proposal not found');
   }
-  await writePendingLocal(pending.filter(p => p.id !== params.proposalId));
-
-  let rejectorFingerprint = params.rejectorFingerprint?.trim() || undefined;
-  if (!rejectorFingerprint && params.identityName && params.password) {
-    const identity = await loadIdentity(params.identityName, params.password);
-    rejectorFingerprint = identity.toFingerprint();
+  if (proposal.proposerFingerprint === rejectorFingerprint) {
+    throw new Error('Proposer cannot reject their own pending entry');
   }
-  if (!rejectorFingerprint) {
+
+  const local = await readPendingLocal();
+  const pair = pendingPairKey(proposal);
+  await writePendingLocal(local.filter(p => pendingPairKey(p) !== pair));
+
+  if (proposal.source !== 'server') {
     return;
   }
 
   const server = params.server ?? (await getServerUrl());
+  const timestamp = Date.now();
+  const rejectMessage = stableStringify({
+    action: 'hierarchy::reject',
+    fingerprint: rejectorFingerprint,
+    proposalId: proposal.id,
+    timestamp,
+  });
+  const signature = identity.signMessage(rejectMessage);
   try {
-    await fetch(apiUrl(server, '/api/v1/hierarchy/reject'), {
+    const res = await fetch(apiUrl(server, '/api/v1/hierarchy/reject'), {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({
-        proposerFingerprint: proposal.proposerFingerprint,
-        certificate: proposal.certificate,
-        rejectorFingerprint,
+        proposalId: proposal.id,
+        fingerprint: rejectorFingerprint,
+        timestamp,
+        signature,
       }),
     });
-  } catch {
-    // Local reject still succeeds if server notify fails.
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as {error?: string};
+      throw new Error(
+        body.error ?? `Failed to reject hierarchy proposal (HTTP ${res.status})`,
+      );
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith('Failed to reject')) {
+      throw error;
+    }
+    // Local reject still succeeds if network notify fails.
   }
 }
 
