@@ -2,7 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import { generateHumanName } from "./name_generator.ts";
 
-const testPassword = "smoke-test-password";
+const testPassword = "Smoke-test-password1";
 const testServerUrl = "http://localhost:8788";
 
 async function expandSection(page: Page, sectionTitle: string) {

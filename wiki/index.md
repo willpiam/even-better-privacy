@@ -97,8 +97,10 @@ Last updated: 2026-07-27 (mobile certificates UX)
 
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
-- [[analysis-mobile-certificates-ux]] - Certificates screen aligned to password
-  popup + ContactPicker hierarchy propose (GUI parity).
+- [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright covers two-identity
+  hierarchy propose/accept/tree; no GUI↔mobile hierarchy E2E.
+- [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
+  hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material
   encoding origins and the migration work needed to unify key encodings.
 - [[analysis-ebp-hd-bip-compliance]] - Reviews whether EBP-HD can claim

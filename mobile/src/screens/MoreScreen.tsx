@@ -56,6 +56,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           title="Activity log"
           subtitle="Recent operations"
           onPress={() => navigation.navigate('ActivityLog')}
+          showDivider={false}
         />
       </Card>
       <SectionTitle>App</SectionTitle>
@@ -69,6 +70,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           title="About EBP"
           subtitle="Project info"
           onPress={() => navigation.navigate('ProjectInfo')}
+          showDivider={false}
         />
       </Card>
       <SectionTitle>Developer</SectionTitle>
@@ -92,6 +94,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           title="Diagnostics"
           subtitle="Parity checks, paths"
           onPress={() => navigation.navigate('Diagnostics')}
+          showDivider={false}
         />
       </Card>
       <View style={styles.spacer} />

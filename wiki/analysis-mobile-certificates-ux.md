@@ -3,7 +3,7 @@ title: "Mobile Certificates UX Alignment"
 type: analysis
 status: active
 last_updated: 2026-07-27
-source_count: 4
+source_count: 5
 tags:
   - analysis
   - mobile
@@ -15,7 +15,7 @@ tags:
 # Mobile Certificates UX Alignment
 
 How [[component-mobile]] Certificates / hierarchy propose should match app-wide
-secrets UX and [[component-gui]] hierarchy propose patterns.
+secrets UX, list chrome, and [[component-gui]] hierarchy propose patterns.
 
 ## Verdict
 
@@ -26,7 +26,7 @@ and two raw master/child fingerprint text inputs. That diverged from:
 - GUI certificates: role (I am Master / Child) + contact search for the other
   party; password via `requestPassword` modal
 
-Aligned (2026-07-27):
+## Aligned (2026-07-27)
 
 | Concern | Standard | Certificates now |
 |---------|----------|------------------|
@@ -35,12 +35,15 @@ Aligned (2026-07-27):
 | Role | Current identity is one side | “I am the Master” switch |
 | Reject | No password in GUI | Uses public fingerprint metadata; no unlock |
 | Tree root | Contact or fingerprint | Same `ContactPicker` + `resolveContactFingerprint` |
+| Section / list boundaries | `SectionTitle` + `Card` + `ListRow` dividers (Crypto / More hubs) | Propose / Tree / Pending / Active each in Cards; active certs as divided `ListRow`s |
+| Contact suggestions | Bordered results only while focused (not an always-on floating list) | Search `ContactPicker` matches dropdown chrome |
 
 ## Code surface
 
 - `mobile/src/screens/CertificatesScreen.tsx`
 - `mobile/src/hooks/useSecretPrompt.tsx` / `PasswordModal.tsx`
-- `mobile/src/components/ContactPicker.tsx` (`selectValue: 'name' \| 'fingerprint'`)
+- `mobile/src/components/ContactPicker.tsx` (`selectValue`, focus-gated bordered results)
+- `mobile/src/components/ListRow.tsx` (`showDivider` for last-row polish)
 - `mobile/src/services/contacts.ts` (`resolveContactFingerprint`)
 - `mobile/src/services/hierarchy.ts` (`rejectorFingerprint` without unlock)
 

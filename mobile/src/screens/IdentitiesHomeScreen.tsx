@@ -152,7 +152,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
             data={identities}
             keyExtractor={item => item.name}
             scrollEnabled={false}
-            renderItem={({item}) => (
+            renderItem={({item, index}) => (
               <ListRow
                 avatarText={item.name}
                 title={item.name}
@@ -161,6 +161,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
                 } · ${truncateFp(item.fingerprint)}`}
                 badge={item.name === currentIdentity ? 'Current' : undefined}
                 onPress={() => onSelectIdentity(item.name)}
+                showDivider={index < identities.length - 1}
               />
             )}
           />

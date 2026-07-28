@@ -1,5 +1,19 @@
 # Wiki Log
 
+## [2026-07-27] query | GUI hierarchy E2E between two identities
+
+- Answered: Playwright `gui/e2e/hierarchy.spec.ts` covers GUI-to-GUI propose /
+  accept / tree render for two identities; no GUI↔mobile hierarchy E2E.
+- Filed: [[analysis-hierarchy-gui-e2e-coverage]].
+
+## [2026-07-27] query | certificates section / list boundaries
+
+- Answered: Certificates (and ContactPicker search) lacked Card/ListRow
+  boundaries used by Crypto/More hubs; suggestions always floated into the form.
+- Code: Card-wrapped sections, active `ListRow`s, focus-gated picker results,
+  `ListRow.showDivider`.
+- Updated: [[analysis-mobile-certificates-ux]].
+
 ## [2026-07-27] query | mobile certificates UX vs app standards
 
 - Answered: Certificates used an inline password field and dual fingerprint

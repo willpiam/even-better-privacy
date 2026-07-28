@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {FlatList, StyleSheet, Switch, Text, View} from 'react-native';
+import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
@@ -12,6 +12,7 @@ import {
   rejectProposal,
 } from '../services/hierarchy';
 import {resolveContactFingerprint} from '../services/contacts';
+import {condenseFingerprint} from '../services/contactDisplay';
 import {
   getCurrentIdentity,
   getCurrentIdentityRequired,
@@ -23,38 +24,39 @@ import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import Card from '../components/Card';
+import ListRow from '../components/ListRow';
 import ContactPicker from '../components/ContactPicker';
 import BusyOverlay from '../components/BusyOverlay';
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
-import {colors, typography} from '../theme/tokens';
+import {colors, spacing, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Certificates'>;
 
+type ActiveCert = {
+  certificate: string;
+  masterFingerprint: string;
+  childFingerprint: string;
+  timestamp: number;
+  expiry: number;
+  context: string;
+};
+
+type PendingProposal = {
+  id: number;
+  masterFingerprint: string;
+  childFingerprint: string;
+  proposerFingerprint: string;
+  certificate: string;
+  context: string;
+  expiry: number;
+  createdAt: number;
+};
+
 export default function CertificatesScreen(_props: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
-  const [active, setActive] = useState<
-    Array<{
-      certificate: string;
-      masterFingerprint: string;
-      childFingerprint: string;
-      timestamp: number;
-      expiry: number;
-      context: string;
-    }>
-  >([]);
-  const [pending, setPending] = useState<
-    Array<{
-      id: number;
-      masterFingerprint: string;
-      childFingerprint: string;
-      proposerFingerprint: string;
-      certificate: string;
-      context: string;
-      expiry: number;
-      createdAt: number;
-    }>
-  >([]);
+  const [active, setActive] = useState<ActiveCert[]>([]);
+  const [pending, setPending] = useState<PendingProposal[]>([]);
   const [iAmMaster, setIAmMaster] = useState(true);
   const [otherParty, setOtherParty] = useState('');
   const [context, setContext] = useState('');
@@ -215,121 +217,141 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
     <Screen style={styles.screen} contentStyle={styles.content}>
       {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <FlatList
-        data={active}
-        keyExtractor={item => item.certificate}
+      <ScrollView
         contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
-        ListHeaderComponent={
-          <View style={styles.headerBlock}>
-            <StatusBanner message={status} kind={statusKind(status)} />
-            <AppButton
-              title="Reload Certificates"
-              variant="secondary"
-              onPress={onReload}
-              disabled={busy}
-            />
+        keyboardShouldPersistTaps="handled">
+        <StatusBanner message={status} kind={statusKind(status)} />
+        <AppButton
+          title="Reload Certificates"
+          variant="secondary"
+          onPress={onReload}
+          disabled={busy}
+        />
 
-            <SectionTitle>Propose Hierarchy</SectionTitle>
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>I am the Master</Text>
-              <Switch value={iAmMaster} onValueChange={setIAmMaster} />
-            </View>
-            <Text style={styles.hint}>
-              {iAmMaster
-                ? 'Current identity will be master; pick the child below.'
-                : 'Current identity will be child; pick the master below.'}
-            </Text>
-            <Text style={styles.fieldLabel}>Other party</Text>
-            <ContactPicker
-              value={otherParty}
-              onChange={setOtherParty}
-              selectValue="fingerprint"
-              placeholder="Search contacts or paste fingerprint..."
-            />
-            <TextField
-              label="Context"
-              value={context}
-              onChangeText={setContext}
-              placeholder="Context (optional)"
-            />
-            <TextField
-              label="Expiry"
-              value={expiry}
-              onChangeText={setExpiry}
-              placeholder="Expiry ms unix timestamp (0 for none)"
-              keyboardType="number-pad"
-            />
-            <AppButton
-              title="Create Proposal"
-              onPress={onPropose}
-              disabled={busy}
-            />
+        <SectionTitle>Propose Hierarchy</SectionTitle>
+        <Card padded style={styles.sectionCard}>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>I am the Master</Text>
+            <Switch value={iAmMaster} onValueChange={setIAmMaster} />
+          </View>
+          <Text style={styles.hint}>
+            {iAmMaster
+              ? 'Current identity will be master; pick the child below.'
+              : 'Current identity will be child; pick the master below.'}
+          </Text>
+          <Text style={styles.fieldLabel}>Other party</Text>
+          <ContactPicker
+            value={otherParty}
+            onChange={setOtherParty}
+            selectValue="fingerprint"
+            placeholder="Search contacts or paste fingerprint..."
+          />
+          <TextField
+            label="Context"
+            value={context}
+            onChangeText={setContext}
+            placeholder="Context (optional)"
+          />
+          <TextField
+            label="Expiry"
+            value={expiry}
+            onChangeText={setExpiry}
+            placeholder="Expiry ms unix timestamp (0 for none)"
+            keyboardType="number-pad"
+          />
+          <AppButton
+            title="Create Proposal"
+            onPress={onPropose}
+            disabled={busy}
+          />
+        </Card>
 
-            <SectionTitle>Pending Proposals</SectionTitle>
-            {pending.length === 0 ? (
-              <Text style={styles.small}>No pending proposals.</Text>
-            ) : (
-              pending.map(item => (
-                <Card key={item.id} padded style={styles.cardGap}>
-                  <Text style={styles.small}>#{item.id}</Text>
-                  <Text style={styles.small}>{item.masterFingerprint}</Text>
-                  <Text style={styles.small}>{item.childFingerprint}</Text>
-                  <Text style={styles.small}>By: {item.proposerFingerprint}</Text>
-                  <View style={styles.row}>
-                    <AppButton
-                      title="Accept"
-                      onPress={() => onAccept(item.id)}
-                      style={styles.halfBtn}
-                      disabled={busy}
-                    />
-                    <AppButton
-                      title="Reject"
-                      variant="danger"
-                      onPress={() => onReject(item.id)}
-                      style={styles.halfBtn}
-                      disabled={busy}
-                    />
-                  </View>
-                </Card>
-              ))
-            )}
+        <SectionTitle>Pending Proposals</SectionTitle>
+        {pending.length === 0 ? (
+          <Card padded>
+            <Text style={styles.muted}>No pending proposals.</Text>
+          </Card>
+        ) : (
+          <View style={styles.pendingStack}>
+            {pending.map(item => (
+              <Card key={item.id} padded>
+                <Text style={styles.cardTitle}>#{item.id}</Text>
+                <Text style={styles.small}>
+                  Master: {condenseFingerprint(item.masterFingerprint)}
+                </Text>
+                <Text style={styles.small}>
+                  Child: {condenseFingerprint(item.childFingerprint)}
+                </Text>
+                <Text style={styles.small}>
+                  By: {condenseFingerprint(item.proposerFingerprint)}
+                </Text>
+                {item.context ? (
+                  <Text style={styles.small}>Context: {item.context}</Text>
+                ) : null}
+                <View style={styles.row}>
+                  <AppButton
+                    title="Accept"
+                    onPress={() => onAccept(item.id)}
+                    style={styles.halfBtn}
+                    disabled={busy}
+                  />
+                  <AppButton
+                    title="Reject"
+                    variant="danger"
+                    onPress={() => onReject(item.id)}
+                    style={styles.halfBtn}
+                    disabled={busy}
+                  />
+                </View>
+              </Card>
+            ))}
+          </View>
+        )}
 
-            <SectionTitle>Hierarchy Tree</SectionTitle>
-            <Text style={styles.fieldLabel}>Fingerprint</Text>
-            <ContactPicker
-              value={treeFingerprint}
-              onChange={setTreeFingerprint}
-              selectValue="fingerprint"
-              placeholder="Search contacts or paste fingerprint..."
-            />
-            <AppButton title="Load Tree" onPress={onLoadTree} disabled={busy} />
+        <SectionTitle>Hierarchy Tree</SectionTitle>
+        <Card padded style={styles.sectionCard}>
+          <Text style={styles.fieldLabel}>Fingerprint</Text>
+          <ContactPicker
+            value={treeFingerprint}
+            onChange={setTreeFingerprint}
+            selectValue="fingerprint"
+            placeholder="Search contacts or paste fingerprint..."
+          />
+          <AppButton title="Load Tree" onPress={onLoadTree} disabled={busy} />
+          {treeOutput ? (
             <TextField
               label="Tree output"
               value={treeOutput}
               editable={false}
               multiline
             />
+          ) : null}
+        </Card>
 
-            <SectionTitle>Active Certificates</SectionTitle>
-          </View>
-        }
-        ListEmptyComponent={<Text style={styles.small}>No active certificates.</Text>}
-        renderItem={({item}) => (
-          <Card padded style={styles.cardGap}>
-            <Text style={styles.small}>Master: {item.masterFingerprint}</Text>
-            <Text style={styles.small}>Child: {item.childFingerprint}</Text>
-            <Text style={styles.small}>Context: {item.context || '(none)'}</Text>
-            <Text style={styles.small}>
-              Created: {new Date(item.timestamp).toISOString()}
-            </Text>
-            <Text style={styles.small}>
-              Expiry:{' '}
-              {item.expiry ? new Date(item.expiry).toISOString() : 'none'}
-            </Text>
+        <SectionTitle>Active Certificates</SectionTitle>
+        {active.length === 0 ? (
+          <Card padded>
+            <Text style={styles.muted}>No active certificates.</Text>
+          </Card>
+        ) : (
+          <Card>
+            {active.map((item, index) => (
+              <ListRow
+                key={item.certificate}
+                title={`${condenseFingerprint(item.masterFingerprint)} → ${condenseFingerprint(item.childFingerprint)}`}
+                subtitle={[
+                  item.context || 'No context',
+                  item.expiry
+                    ? `Expires ${new Date(item.expiry).toLocaleDateString()}`
+                    : 'No expiry',
+                ].join(' · ')}
+                showChevron={false}
+                showDivider={index < active.length - 1}
+              />
+            ))}
           </Card>
         )}
-      />
+      </ScrollView>
     </Screen>
   );
 }
@@ -337,10 +359,17 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
 const styles = StyleSheet.create({
   screen: {flex: 1},
   content: {flex: 1, padding: 0},
-  listContent: {padding: 12, gap: 10},
-  headerBlock: {gap: 10, marginBottom: 8},
-  cardGap: {marginBottom: 8},
+  listContent: {padding: spacing.md, gap: 10, paddingBottom: 24},
+  sectionCard: {gap: 10},
+  pendingStack: {gap: 10},
+  cardTitle: {
+    fontSize: typography.body,
+    fontWeight: '700',
+    color: colors.text,
+    marginBottom: 4,
+  },
   small: {fontSize: typography.caption, color: colors.text, marginBottom: 2},
+  muted: {fontSize: typography.caption, color: colors.muted},
   hint: {fontSize: 13, color: colors.muted},
   fieldLabel: {
     fontSize: 11,
@@ -353,7 +382,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.page,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: colors.border,

@@ -17,7 +17,7 @@ type TestMailConfig = {
 };
 
 const MAIL_PIN = "246810";
-const IDENTITY_PASSWORD = "smoke-test-password";
+const IDENTITY_PASSWORD = "Smoke-test-password1";
 const TEST_SERVER_URL = "http://localhost:8788";
 
 function readEnv(name: string): string {

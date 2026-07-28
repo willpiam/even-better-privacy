@@ -58,6 +58,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
           title="Fingerprint from public JSON"
           subtitle="Compute fingerprint from a public identity"
           onPress={() => navigation.navigate('FingerprintTool')}
+          showDivider={false}
         />
       </Card>
 
@@ -82,6 +83,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
           title="Decrypt file"
           subtitle="Decrypt a file payload"
           onPress={() => navigation.navigate('DecryptFile')}
+          showDivider={false}
         />
       </Card>
     </Screen>

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const testPassword = "smoke-test-password";
+const testPassword = "Smoke-test-password1";
 const testServerUrl = "http://localhost:8788";
 
 async function expandSection(page: Page, sectionTitle: string) {
@@ -169,17 +169,13 @@ test("rejects a loop when attempting reverse hierarchy relationship", async ({ p
   await submitPassword(page);
   await expect(page.locator("#status")).toContainText(/accepted|signed/i);
 
-  await createAndSignHierarchyViaGui(page, {
-    role: "master",
-    otherFingerprint: masterFingerprint,
-    context: "reverse",
-  });
-  await ensureIdentitySelected(page, masterIdentity);
-  await page.locator(".nav-item", { hasText: "Certificates" }).click();
-  await expandSection(page, "Pending Proposals");
-  const pendingReverse = page.locator("#certificates-pending-list li", { hasText: childFingerprint }).first();
-  await pendingReverse.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(page.locator("#confirm-modal")).toBeVisible();
-  await page.locator("#confirm-modal-confirm").click();
-  await expect(page.locator("#status")).toContainText(/rejected/i);
+  // Reverse edge is rejected at propose time (server/core loop detection),
+  // not left as a pending proposal for the other party to reject.
+  await openHierarchyCreateForm(page);
+  await page.locator("#certificate-role-master").setChecked(true);
+  await page.fill("#certificate-other-fingerprint", masterFingerprint);
+  await page.fill("#certificate-context", "reverse");
+  await page.getByRole("button", { name: "Propose Certificate", exact: true }).click();
+  await submitPassword(page);
+  await expect(page.locator("#status")).toContainText(/hierarchy loop detected/i);
 });

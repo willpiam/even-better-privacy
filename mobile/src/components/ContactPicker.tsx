@@ -1,7 +1,6 @@
 import React, {useCallback, useMemo, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import {
-  FlatList,
   ScrollView,
   StyleSheet,
   Text,
@@ -64,6 +63,52 @@ function findSelected(
   return contacts.find(c => c.name === value);
 }
 
+function ResultsList({
+  items,
+  value,
+  selectValue,
+  onPick,
+}: {
+  items: StoredContact[];
+  value: string;
+  selectValue: 'name' | 'fingerprint';
+  onPick: (next: string) => void;
+}): JSX.Element {
+  if (items.length === 0) {
+    return (
+      <View style={styles.resultsList}>
+        <Text style={styles.empty}>No matching contacts</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.resultsList}>
+      <ScrollView
+        style={styles.resultsScroll}
+        nestedScrollEnabled
+        keyboardShouldPersistTaps="handled">
+        {items.map((item, index) => {
+          const next = selectedValue(item, selectValue);
+          const isSelected = next === value;
+          const isLast = index === items.length - 1;
+          return (
+            <TouchableOpacity
+              key={item.name}
+              style={[
+                styles.item,
+                !isLast && styles.itemDivider,
+                isSelected && styles.itemSelected,
+              ]}
+              onPress={() => onPick(next)}>
+              <ContactPickerLabels item={item} />
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+    </View>
+  );
+}
+
 export default function ContactPicker({
   value,
   onChange,
@@ -73,6 +118,7 @@ export default function ContactPicker({
 }: Props): JSX.Element {
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [open, setOpen] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   const loadContacts = useCallback(async () => {
     setContacts(await listContacts());
@@ -100,7 +146,7 @@ export default function ContactPicker({
       ? resolveContactLabels(storedContactToLike(selected))
       : null;
     return (
-      <View style={styles.dropdownWrap}>
+      <View style={styles.wrap}>
         <TouchableOpacity
           style={styles.dropdownTrigger}
           onPress={() => setOpen(wasOpen => !wasOpen)}
@@ -123,41 +169,32 @@ export default function ContactPicker({
           <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
         </TouchableOpacity>
         {open ? (
-          <View style={styles.dropdownList}>
-            {contacts.length === 0 ? (
+          contacts.length === 0 ? (
+            <View style={styles.resultsList}>
               <Text style={styles.empty}>
                 No contacts yet. Add contacts on the Contacts screen.
               </Text>
-            ) : (
-              <ScrollView
-                style={styles.dropdownScroll}
-                nestedScrollEnabled
-                keyboardShouldPersistTaps="handled">
-                {contacts.map(item => {
-                  const next = selectedValue(item, selectValue);
-                  const isSelected = next === value;
-                  return (
-                    <TouchableOpacity
-                      key={item.name}
-                      style={[styles.item, isSelected && styles.itemSelected]}
-                      onPress={() => {
-                        onChange(next);
-                        setOpen(false);
-                      }}>
-                      <ContactPickerLabels item={item} />
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            )}
-          </View>
+            </View>
+          ) : (
+            <ResultsList
+              items={contacts}
+              value={value}
+              selectValue={selectValue}
+              onPick={next => {
+                onChange(next);
+                setOpen(false);
+              }}
+            />
+          )
         ) : null}
       </View>
     );
   }
 
+  const showResults = focused;
+
   return (
-    <View>
+    <View style={styles.wrap}>
       <TextInput
         style={styles.input}
         value={value}
@@ -165,25 +202,29 @@ export default function ContactPicker({
         placeholder={placeholder}
         autoCapitalize="none"
         autoCorrect={false}
+        onFocus={() => setFocused(true)}
+        onBlur={() => {
+          // Defer so a result tap can register before the list unmounts.
+          setTimeout(() => setFocused(false), 150);
+        }}
       />
-      <FlatList
-        data={filtered.slice(0, 6)}
-        keyExtractor={item => item.name}
-        keyboardShouldPersistTaps="handled"
-        renderItem={({item}) => (
-          <TouchableOpacity
-            style={styles.item}
-            onPress={() => onChange(selectedValue(item, selectValue))}>
-            <ContactPickerLabels item={item} />
-          </TouchableOpacity>
-        )}
-      />
+      {showResults ? (
+        <ResultsList
+          items={filtered.slice(0, 8)}
+          value={value}
+          selectValue={selectValue}
+          onPick={next => {
+            onChange(next);
+            setFocused(false);
+          }}
+        />
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  dropdownWrap: {marginBottom: 12},
+  wrap: {gap: 4},
   dropdownTrigger: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -199,15 +240,14 @@ const styles = StyleSheet.create({
   selectedLabel: {color: colors.text, fontSize: 15},
   placeholderLabel: {color: '#999', fontSize: 15},
   chevron: {color: colors.muted, fontSize: 12},
-  dropdownList: {
-    marginTop: 4,
+  resultsList: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 10,
-    backgroundColor: colors.page,
+    backgroundColor: colors.surface,
     overflow: 'hidden',
   },
-  dropdownScroll: {maxHeight: 220},
+  resultsScroll: {maxHeight: 220},
   empty: {padding: 12, color: colors.muted, fontSize: 13},
   input: {
     borderWidth: 1,
@@ -215,14 +255,15 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    marginBottom: 6,
     color: colors.text,
     backgroundColor: colors.surface,
   },
   item: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     padding: 10,
+  },
+  itemDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   itemSelected: {backgroundColor: colors.accentSoft},
   name: {fontWeight: '700', color: colors.text},
