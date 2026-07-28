@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-27
+last_updated: 2026-07-28
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-27 (mobile certificates UX)
+Last updated: 2026-07-28 (pending proposal proposer visibility)
 
 ## Wiki Operations
 
@@ -95,6 +95,10 @@ Last updated: 2026-07-27 (mobile certificates UX)
 
 ## Analyses
 
+- [[analysis-pending-hierarchy-proposer-visibility]] - Pending Proposals lists
+  counterparty proposals only; creators do not see their own pending rows.
+- [[analysis-querying-live-key-server-db]] - Workstation path to run SQL against
+  live Render Postgres via `scripts/postgres/` and `query:prod:*` tasks.
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright covers two-identity

@@ -27,9 +27,19 @@ Run scripts with Deno (each script includes a shebang):
 ./scripts/postgres/list-identities.ts --limit=50
 ./scripts/postgres/list-details.ts --fingerprint=abc123
 ./scripts/postgres/list-revocations.ts --fingerprint=abc123
+./scripts/postgres/list-proposals.ts --omit-certificate
 ./scripts/postgres/search-identities.ts --query=alice
 ./scripts/postgres/reset-database.ts --yes
 ```
+
+Deno task shortcuts (same `.env` connection):
+
+```
+deno task query:prod:identities
+deno task query:prod:proposals
+deno task query:prod:all
+```
+
 
 Use `--help` on any script for options.
 

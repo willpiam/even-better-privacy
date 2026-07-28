@@ -76,6 +76,7 @@ happy path.
 - [[component-server]]
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-certificates-ux]]
+- [[analysis-pending-hierarchy-proposer-visibility]]
 
 ## Sources
 

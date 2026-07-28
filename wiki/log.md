@@ -1,5 +1,17 @@
 # Wiki Log
 
+## [2026-07-28] query | pending proposals proposer visibility
+
+- Answered: Pending Proposals shows only proposals from others involving this
+  identity; the creator does not see their own proposal there.
+- Filed: [[analysis-pending-hierarchy-proposer-visibility]].
+
+## [2026-07-28] query | query live key-server database from workstation
+
+- Answered: Yes — `scripts/postgres/` + `deno task query:prod:*` against Render
+  Postgres via `.env` `DATABASE_URL`; ad-hoc SQL via `psql` (no run-sql wrapper).
+- Filed: [[analysis-querying-live-key-server-db]].
+
 ## [2026-07-27] query | GUI hierarchy E2E between two identities
 
 - Answered: Playwright `gui/e2e/hierarchy.spec.ts` covers GUI-to-GUI propose /
