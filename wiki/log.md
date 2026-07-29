@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-07-29] implement | mobile hierarchy SVG diagram
+
+- Certificates Hierarchy Tree now renders a leveled SVG graph (`react-native-svg`)
+  with pan, Fit all / ± zoom, and tap detail modal; JSON dump removed.
+- Layout BFS runs before orphan roots so children sit below masters.
+- Filed/updated: [[analysis-mobile-hierarchy-graph-rendering]].
+
 ## [2026-07-28] query | mobile graphical hierarchy tree approach
 
 - Answered: Port desktop leveled SVG tree with `react-native-svg`; enrich nodes

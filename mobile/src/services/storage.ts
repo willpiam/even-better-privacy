@@ -270,6 +270,27 @@ export async function getCurrentIdentity(): Promise<string | null> {
   }
 }
 
+/** Public identity data for the current wallet (no password unlock). */
+export async function readCurrentIdentityPublic(): Promise<{
+  name: string;
+  publicData: IdentityPublicData;
+} | null> {
+  const name = await getCurrentIdentity();
+  if (!name) {
+    return null;
+  }
+  const path = identityPath(normalizeName(name));
+  if (!(await RNFS.exists(path))) {
+    return null;
+  }
+  const raw = await RNFS.readFile(path, 'utf8');
+  const publicData = Identity.readPublicData(raw);
+  if (!publicData) {
+    return null;
+  }
+  return {name, publicData};
+}
+
 export async function runCoreSelfTest(): Promise<string> {
   const identity = new Identity('dilithium', 'kyber');
   const fingerprint = identity.toFingerprint();

@@ -11,12 +11,17 @@ import {
   proposeHierarchy,
   rejectProposal,
 } from '../services/hierarchy';
-import {resolveContactFingerprint} from '../services/contacts';
+import {listContacts, resolveContactFingerprint} from '../services/contacts';
 import {condenseFingerprint} from '../services/contactDisplay';
+import {
+  enrichHierarchyDiagram,
+  type HierarchyDiagram,
+} from '../services/hierarchyDiagram';
 import {
   getCurrentIdentity,
   getCurrentIdentityRequired,
   listIdentities,
+  readCurrentIdentityPublic,
 } from '../services/storage';
 import Screen from '../components/Screen';
 import TextField from '../components/TextField';
@@ -28,6 +33,10 @@ import ListRow from '../components/ListRow';
 import ContactPicker from '../components/ContactPicker';
 import BusyOverlay from '../components/BusyOverlay';
 import CertificateDetailModal from '../components/CertificateDetailModal';
+import HierarchyTreeView from '../components/HierarchyTreeView';
+import HierarchyDiagramDetailModal, {
+  type HierarchyDiagramDetail,
+} from '../components/HierarchyDiagramDetailModal';
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, spacing, typography} from '../theme/tokens';
@@ -64,7 +73,8 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
   const [context, setContext] = useState('');
   const [expiry, setExpiry] = useState('');
   const [treeFingerprint, setTreeFingerprint] = useState('');
-  const [treeOutput, setTreeOutput] = useState('');
+  const [treeDiagram, setTreeDiagram] = useState<HierarchyDiagram | null>(null);
+  const [treeDetail, setTreeDetail] = useState<HierarchyDiagramDetail>(null);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [selectedCert, setSelectedCert] = useState<ActiveCert | null>(null);
@@ -211,12 +221,22 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
       setBusyMessage('Loading hierarchy tree…');
       setStatus('');
       const tree = await getMergedHierarchyTree(fingerprint);
-      setTreeOutput(JSON.stringify(tree, null, 2));
+      const [contacts, selfPublic] = await Promise.all([
+        listContacts(),
+        readCurrentIdentityPublic(),
+      ]);
+      const diagram = enrichHierarchyDiagram(tree, {
+        selfFingerprint: selfPublic?.publicData.fingerprint ?? null,
+        selfName: selfPublic?.name ?? null,
+        selfPublic: selfPublic?.publicData ?? null,
+        contacts,
+      });
+      setTreeDiagram(diagram);
       setStatus(
         `Tree: root ${tree.root}, ${tree.relationships.length} relationship(s)`,
       );
     } catch (error) {
-      setTreeOutput('');
+      setTreeDiagram(null);
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyMessage(null);
@@ -232,10 +252,15 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
         certificate={selectedCert}
         onClose={() => setSelectedCert(null)}
       />
+      <HierarchyDiagramDetailModal
+        detail={treeDetail}
+        onClose={() => setTreeDetail(null)}
+      />
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <ScrollView
         contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled>
         <StatusBanner message={status} kind={statusKind(status)} />
         <AppButton
           title="Reload Certificates"
@@ -334,12 +359,10 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
             placeholder="Search contacts or paste fingerprint..."
           />
           <AppButton title="Load Tree" onPress={onLoadTree} disabled={busy} />
-          {treeOutput ? (
-            <TextField
-              label="Tree output"
-              value={treeOutput}
-              editable={false}
-              multiline
+          {treeDiagram ? (
+            <HierarchyTreeView
+              diagram={treeDiagram}
+              onSelectDetail={setTreeDetail}
             />
           ) : null}
         </Card>

@@ -95,8 +95,8 @@ Last updated: 2026-07-28 (pending proposal proposer visibility)
 
 ## Analyses
 
-- [[analysis-mobile-hierarchy-graph-rendering]] - Port GUI SVG hierarchy tree to
-  React Native via `react-native-svg`; touch pan/zoom/tap sheet; keep leveled layout.
+- [[analysis-mobile-hierarchy-graph-rendering]] - Mobile Certificates SVG hierarchy
+  tree (leveled layout, pan/zoom/tap detail); JSON dump replaced.
 - [[analysis-pending-hierarchy-proposer-visibility]] - Pending Proposals lists
   counterparty proposals only; creators do not see their own pending rows.
 - [[analysis-querying-live-key-server-db]] - Workstation path to run SQL against

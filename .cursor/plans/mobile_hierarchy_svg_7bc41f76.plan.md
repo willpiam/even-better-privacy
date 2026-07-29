@@ -4,19 +4,19 @@ overview: Replace the Certificates screen JSON tree dump with a React Native SVG
 todos:
   - id: dep-svg
     content: Add react-native-svg to mobile and install/pods
-    status: pending
+    status: completed
   - id: diagram-model
     content: hierarchyDiagram.ts enrichment + fingerprintColor + ebpCore export
-    status: pending
+    status: completed
   - id: layout-view
     content: hierarchyLayout.ts + HierarchyTreeView + detail modal
-    status: pending
+    status: completed
   - id: wire-certs
     content: Replace CertificatesScreen JSON dump with diagram
-    status: pending
+    status: completed
   - id: tests-wiki
     content: Layout unit test + wiki log/analysis status update
-    status: pending
+    status: completed
 isProject: false
 ---
 

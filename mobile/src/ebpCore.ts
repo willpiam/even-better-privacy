@@ -29,7 +29,10 @@ export {
   tryResolveSenderIdentity,
   externalIdentityFromEmbeddedRecord,
 } from '../../core/SenderResolution';
-export {computeExternalFingerprint} from '../../core/Fingerprint';
+export {
+  computeExternalFingerprint,
+  decodeFingerprintBech32,
+} from '../../core/Fingerprint';
 export {
   createHierarchyCertificate,
   decodeHierarchyCertificate,

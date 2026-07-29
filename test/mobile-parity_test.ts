@@ -8,6 +8,10 @@ import {
 import { createHierarchyCertificate } from "../core/HierarchyCertificate.ts";
 import { buildHierarchyTreeFromCertificates } from "../mobile/src/services/hierarchyTree.ts";
 import {
+  hierarchyEdgePathD,
+  layoutHierarchyTree,
+} from "../mobile/src/services/hierarchyLayout.ts";
+import {
   filterPendingForIdentity,
   mergePendingProposals,
   type PendingHierarchyProposal,
@@ -64,6 +68,26 @@ Deno.test("mobile parity: hierarchy tree builder merges edges", () => {
   assertEquals(tree.root, master);
   assertEquals(tree.descendants.includes(child), true);
   assertEquals(tree.relationships.length, 1);
+});
+
+Deno.test("mobile parity: hierarchy layout places child below master", () => {
+  const master = "fp_master";
+  const child = "fp_child";
+  const layout = layoutHierarchyTree(
+    [{ fingerprint: master }, { fingerprint: child }],
+    [{ masterFingerprint: master, childFingerprint: child }],
+    [master],
+  );
+  const masterPos = layout.positions.get(master);
+  const childPos = layout.positions.get(child);
+  assert(masterPos);
+  assert(childPos);
+  assert(Number.isFinite(masterPos.x) && Number.isFinite(masterPos.y));
+  assert(Number.isFinite(childPos.x) && Number.isFinite(childPos.y));
+  assert(childPos.y > masterPos.y);
+  const path = hierarchyEdgePathD(masterPos, childPos, layout.nodeRadius);
+  assert(path.startsWith("M "));
+  assert(path.includes(" C "));
 });
 
 Deno.test("mobile parity: pending merge prefers server id for same pair", () => {
