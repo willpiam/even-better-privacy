@@ -25,6 +25,7 @@ import type {
   HierarchyNodeDetail,
 } from './HierarchyDiagramDetailModal';
 import {colors, radius, spacing, typography} from '../theme/tokens';
+import {shortFingerprint} from '../ebpCore';
 
 const VIEW_HEIGHT = 320;
 const WARNING = '#d29922';
@@ -44,10 +45,6 @@ function truncateLabel(label: string, max = 14): string {
     return label;
   }
   return `${label.substring(0, max - 1)}…`;
-}
-
-function shortFp(fp: string): string {
-  return `${fp.substring(0, 16)}…`;
 }
 
 export default function HierarchyTreeView({
@@ -259,8 +256,8 @@ export default function HierarchyTreeView({
               kind: 'edge',
               masterFingerprint: rel.masterFingerprint,
               childFingerprint: rel.childFingerprint,
-              masterLabel: master?.label ?? shortFp(rel.masterFingerprint),
-              childLabel: child?.label ?? shortFp(rel.childFingerprint),
+              masterLabel: master?.label ?? shortFingerprint(rel.masterFingerprint),
+              childLabel: child?.label ?? shortFingerprint(rel.childFingerprint),
               context: rel.context,
               timestamp: rel.timestamp,
               expiry: rel.expiry,
@@ -336,7 +333,7 @@ export default function HierarchyTreeView({
                   fill={colors.muted}
                   fontSize={9}
                   textAnchor="middle">
-                  {shortFp(node.fingerprint)}
+                  {shortFingerprint(node.fingerprint)}
                 </SvgText>
               </G>
             );

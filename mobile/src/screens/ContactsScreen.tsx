@@ -10,6 +10,7 @@ import {
   type StoredContact,
 } from '../services/contacts';
 import {storedContactToLike} from '../services/contactDisplay';
+import {shortFingerprint} from '../ebpCore';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import ContactListRow from '../components/ContactListRow';
@@ -71,7 +72,7 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
     setImportingFingerprint(fingerprint);
     try {
       await fetchContactFromServer({fingerprint});
-      setStatus(`Imported ${fingerprint.substring(0, 16)}... as contact`);
+      setStatus(`Imported ${shortFingerprint(fingerprint)} as contact`);
       await refresh();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));

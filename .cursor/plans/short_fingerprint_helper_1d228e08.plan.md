@@ -4,13 +4,13 @@ overview: Add a canonical `shortFingerprint` formatter next to fingerprint compu
 todos:
   - id: core-short-fp
     content: Add shortFingerprint to core/Fingerprint.ts + Identity.toShortFingerprint() + Deno tests
-    status: pending
+    status: completed
   - id: mobile-adopt
     content: Re-export via ebpCore; replace mobile truncation helpers/call sites; update contactDisplay tests
-    status: pending
+    status: completed
   - id: gui-adopt
     content: Add gui/js/fingerprint.js mirror; replace GUI JS + local-backend hierarchy label truncations
-    status: pending
+    status: completed
 isProject: false
 ---
 

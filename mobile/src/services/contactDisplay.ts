@@ -2,6 +2,7 @@ import type {
   ServerIdentitySummary,
   StoredContact,
 } from './contacts';
+import {shortFingerprint} from '../../../core/Fingerprint';
 
 export type ContactLike = {
   fingerprint: string;
@@ -32,13 +33,8 @@ function getDetailValue(
   return typeof val === 'string' ? val : null;
 }
 
-/** First 12 + … + last 12; full string if shorter than 25 chars. */
-export function condenseFingerprint(fp: string): string {
-  if (fp.length < 25) {
-    return fp;
-  }
-  return `${fp.slice(0, 12)}…${fp.slice(-12)}`;
-}
+/** Alias of shortFingerprint for existing contact-display callers. */
+export const condenseFingerprint = shortFingerprint;
 
 function displayEmail(like: ContactLike): string | null {
   const published = getDetailValue(like.details, 'email')?.trim();
@@ -50,7 +46,7 @@ function displayEmail(like: ContactLike): string | null {
 }
 
 export function resolveContactLabels(like: ContactLike): ContactLabels {
-  const condensedFingerprint = condenseFingerprint(like.fingerprint);
+  const condensedFingerprint = shortFingerprint(like.fingerprint);
   const email = displayEmail(like);
 
   const alias = like.localAlias?.trim();

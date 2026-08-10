@@ -2,7 +2,7 @@ import nodemailer from "nodemailer";
 import { type ExternalIdentity, Identity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
-import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
+import { isValidFingerprintBech32, shortFingerprint } from "../../core/Fingerprint.ts";
 import {
   type MultiRecipientAttachmentManifestEntry,
   sha256Hex,
@@ -2495,7 +2495,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }> = [];
       for (const fp of allFingerprints) {
         const isSelf = fp === selfFingerprint;
-        let label = fp.substring(0, 16) + "…";
+        let label = shortFingerprint(fp);
         const details: Record<string, string> = {};
         if (isSelf && pub) {
           for (const [k, v] of Object.entries(selfDetails)) {
@@ -2914,7 +2914,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       for (const fp of treeData.allFingerprints) {
         const isSelf = fp === selfFingerprint;
         const isFocus = fp === fingerprint;
-        let label = fp.substring(0, 16) + "…";
+        let label = shortFingerprint(fp);
         const details: Record<string, string> = {};
         if (isSelf && pub) {
           for (const [k, v] of Object.entries(selfDetails)) {

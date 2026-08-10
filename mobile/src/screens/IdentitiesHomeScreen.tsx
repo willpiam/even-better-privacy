@@ -24,15 +24,9 @@ import Card from '../components/Card';
 import StatusBanner from '../components/StatusBanner';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
+import {shortFingerprint} from '../ebpCore';
 
 type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentitiesHome'>;
-
-function truncateFp(fp: string): string {
-  if (fp.length <= 12) {
-    return fp;
-  }
-  return `${fp.slice(0, 4)}…${fp.slice(-4)}`;
-}
 
 export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   const [identities, setIdentities] = useState<StoredIdentityMeta[]>([]);
@@ -158,7 +152,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
                 title={item.name}
                 subtitle={`${
                   item.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA'
-                } · ${truncateFp(item.fingerprint)}`}
+                } · ${shortFingerprint(item.fingerprint)}`}
                 badge={item.name === currentIdentity ? 'Current' : undefined}
                 onPress={() => onSelectIdentity(item.name)}
                 showDivider={index < identities.length - 1}

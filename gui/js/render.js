@@ -3,6 +3,7 @@ import { api, sleep, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
 import { showConfirmModal, requestPassword, requestTextInput } from "./modals.js";
 import { updateRevokeDetailPathOptions, updateRevocationStatus } from "./revocation.js";
 import { renderHierarchyTreeSVG, loadContactHierarchyDiagram, renderCertificatesPage } from "./hierarchy.js";
+import { shortFingerprint } from "./fingerprint.js";
 
 const ctxCurrent = document.getElementById("ctx-current");
 const ctxServer = document.getElementById("ctx-server");
@@ -660,7 +661,7 @@ export async function importServerIdentityAsContact(fingerprint, btn) {
       method: "POST",
       body: JSON.stringify({ fingerprint }),
     });
-    setStatus(`Imported ${fingerprint.substring(0, 16)}... as contact`, "success");
+    setStatus(`Imported ${shortFingerprint(fingerprint)} as contact`, "success");
     await loadAll();
   } catch (err) {
     setStatus(err.message, "error");

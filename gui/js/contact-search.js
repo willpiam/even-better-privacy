@@ -1,5 +1,6 @@
 import { state, getDetailValue } from "./state.js";
 import { escapeHtml } from "./ui.js";
+import { shortFingerprint } from "./fingerprint.js";
 
 const contactSearchFields = [
   { inputId: "enc-recipient", dropdownId: "enc-recipient-dropdown" },
@@ -114,7 +115,7 @@ function renderContactDropdown(contacts, dropdown, query, input) {
     const detailName = getDetailValue(c.details, "name");
     const alias = c.localAlias || '';
     const dropdownEmail = email || c.localEmail || '';
-    const shortFp = c.fingerprint.substring(0, 24) + "...";
+    const shortFp = shortFingerprint(c.fingerprint);
 
     item.innerHTML = `
       <div class="contact-search-item-name">

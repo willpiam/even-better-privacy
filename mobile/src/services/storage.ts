@@ -3,6 +3,7 @@ import {
   AES,
   Identity,
   randomBytes,
+  shortFingerprint,
 } from '../ebpCore';
 import {deriveIdentityKey} from './argon2';
 import type {IdentityPublicData} from '../../../core/Identity';
@@ -301,5 +302,5 @@ export async function runCoreSelfTest(): Promise<string> {
     throw new Error('Core self-test failed');
   }
 
-  return `Core OK (${fingerprint.slice(0, 16)}...)`;
+  return `Core OK (${shortFingerprint(fingerprint)})`;
 }

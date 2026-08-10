@@ -77,6 +77,7 @@ happy path.
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-certificates-ux]]
 - [[analysis-pending-hierarchy-proposer-visibility]]
+- [[analysis-mobile-e2e-framework]] — plan to add Maestro mobile E2E mirroring GUI Playwright
 
 ## Sources
 

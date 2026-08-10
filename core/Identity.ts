@@ -16,6 +16,7 @@ import {
   computeIdentityFingerprint,
   computeIdentityMerkleRootRaw,
   computeSigningLeafRaw,
+  shortFingerprint,
 } from "./Fingerprint.ts";
 import {
   buildLegacyMessageHashEnvelopeFromHash,
@@ -1132,6 +1133,10 @@ export class Identity extends Key {
       signingKey: this.signingKey.publicKey,
       encryptionKey: this.encryptionKey.publicKey,
     });
+  }
+
+  toShortFingerprint(): string {
+    return shortFingerprint(this.toFingerprint());
   }
 
   toJSON(): string {

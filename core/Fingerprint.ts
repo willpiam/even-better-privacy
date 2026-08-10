@@ -145,6 +145,14 @@ export function computeIdentityFingerprint(
   return encodeFingerprintBech32(root, hrp);
 }
 
+/** First 12 + … + last 12; unchanged if shorter than 25 chars. */
+export function shortFingerprint(fp: string): string {
+  if (fp.length < 25) {
+    return fp;
+  }
+  return `${fp.slice(0, 12)}…${fp.slice(-12)}`;
+}
+
 /** Fingerprint for a public identity record (contact / embedded sender). */
 export function computeExternalFingerprint(
   identity: Pick<ExternalIdentity, "signingKeyType" | "encryptionKeyType"> &

@@ -7,5 +7,6 @@ module.exports = {
     '^@babel/runtime/(.*)$': '<rootDir>/node_modules/@babel/runtime/$1',
     '^@noble/hashes/(.*)$': '<rootDir>/node_modules/@noble/hashes/$1',
     '^@noble/ciphers/(.*)$': '<rootDir>/node_modules/@noble/ciphers/$1',
+    '^bech32$': '<rootDir>/node_modules/bech32',
   },
 };

@@ -1,5 +1,11 @@
 # Wiki Log
 
+## [2026-08-10] query | mobile E2E framework like GUI Playwright
+
+- Answered: No mobile UI E2E today; recommend Maestro under `mobile/e2e/` reusing
+  the GUI’s `:8788` server isolation, with smoke → identity → hierarchy ladder.
+- Filed: [[analysis-mobile-e2e-framework]].
+
 ## [2026-07-29] implement | mobile hierarchy SVG diagram
 
 - Certificates Hierarchy Tree now renders a leveled SVG graph (`react-native-svg`)

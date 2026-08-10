@@ -3,6 +3,7 @@ import { api, setStatus, setButtonLoading, withLoading, escapeHtml } from "./ui.
 import { requestPassword } from "./modals.js";
 import { updateMailComposeSendState, setMailTab, initMailTabs, syncMailFolderCustomUi, getSelectedMailFolder } from "./contact-search.js";
 import { updateVerifyResult, autoFillSenderContact, extractEbpPayloadFromText, extractEmailAddress, renderMailVerifyMeta, loadAll } from "./render.js";
+import { shortFingerprint } from "./fingerprint.js";
 
 let mailMessageAbortController = null;
 let mailMessageTimeoutId = null;
@@ -576,7 +577,7 @@ function renderComposeRecipientDropdown(row, matches, query) {
       <div class="contact-search-item-details">
         <span class="contact-search-item-detail">${escapeHtml(`${detailLabel}${aliasLabel}${emailLabel}`.replace(/^ • /, ""))}</span>
       </div>
-      <div class="contact-search-item-fingerprint">${escapeHtml(`${fields.fingerprint.slice(0, 24)}...`)}</div>
+      <div class="contact-search-item-fingerprint">${escapeHtml(shortFingerprint(fields.fingerprint))}</div>
     `;
     item.addEventListener("click", () => {
       selectComposeRecipientFromDropdown(row, contact);

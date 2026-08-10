@@ -32,6 +32,7 @@ export {
 export {
   computeExternalFingerprint,
   decodeFingerprintBech32,
+  shortFingerprint,
 } from '../../core/Fingerprint';
 export {
   createHierarchyCertificate,

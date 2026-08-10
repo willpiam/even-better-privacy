@@ -1,8 +1,7 @@
-import {decodeFingerprintBech32, toHex} from '../ebpCore';
+import {decodeFingerprintBech32, shortFingerprint, toHex} from '../ebpCore';
 import type {IdentityPublicData} from '../ebpCore';
 import type {StoredContact} from './contacts';
 import {
-  condenseFingerprint,
   resolveContactLabels,
   storedContactToLike,
 } from './contactDisplay';
@@ -88,7 +87,7 @@ export function enrichHierarchyDiagram(
   const nodes: HierarchyDiagramNode[] = tree.allFingerprints.map(fp => {
     const isSelf = Boolean(opts.selfFingerprint && fp === opts.selfFingerprint);
     const isFocus = fp === tree.fingerprint;
-    let label = condenseFingerprint(fp);
+    let label = shortFingerprint(fp);
     let details: Record<string, string> = {};
 
     if (isSelf) {

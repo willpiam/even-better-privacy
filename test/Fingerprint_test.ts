@@ -7,6 +7,7 @@ import {
   decodeFingerprintBech32,
   encodeFingerprintBech32,
   isValidFingerprintBech32,
+  shortFingerprint,
 } from "../core/Fingerprint.ts";
 import { hexToBytes, toHex } from "../core/Hex.ts";
 import { sha256 } from "@noble/hashes/sha2";
@@ -88,4 +89,20 @@ Deno.test("Fingerprint: can compute identity from one omitted key hash", () => {
     }),
     expected,
   );
+});
+
+Deno.test("Fingerprint: shortFingerprint uses 12…12 for long fingerprints", () => {
+  const identity = new Identity("dilithium", "kyber");
+  const fp = identity.toFingerprint();
+  assertEquals(fp.length >= 25, true);
+  assertEquals(
+    shortFingerprint(fp),
+    `${fp.slice(0, 12)}…${fp.slice(-12)}`,
+  );
+  assertEquals(identity.toShortFingerprint(), shortFingerprint(fp));
+});
+
+Deno.test("Fingerprint: shortFingerprint leaves short strings unchanged", () => {
+  assertEquals(shortFingerprint("ebpdk1short"), "ebpdk1short");
+  assertEquals(shortFingerprint("a".repeat(24)), "a".repeat(24));
 });

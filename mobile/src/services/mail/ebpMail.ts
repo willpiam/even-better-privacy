@@ -41,7 +41,7 @@ export async function sendEbpMail(params: {
     sign: params.sign ?? true,
   });
   const armor = armorPayload(encrypted);
-  const fromName = resolved.account.config.fromName || identity.toFingerprint().slice(0, 12);
+  const fromName = resolved.account.config.fromName || identity.toShortFingerprint();
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
   const mime = buildMultipartMimeMessage({

@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-07-28
+last_updated: 2026-08-10
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-07-28 (pending proposal proposer visibility)
+Last updated: 2026-08-10 (mobile E2E framework plan)
 
 ## Wiki Operations
 
@@ -105,6 +105,8 @@ Last updated: 2026-07-28 (pending proposal proposer visibility)
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright covers two-identity
   hierarchy propose/accept/tree; no GUI↔mobile hierarchy E2E.
+- [[analysis-mobile-e2e-framework]] - Plan for Maestro mobile E2E mirroring GUI
+  Playwright (server harness, spec ladder, testID readiness).
 - [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
   hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material

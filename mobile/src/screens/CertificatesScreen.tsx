@@ -12,11 +12,11 @@ import {
   rejectProposal,
 } from '../services/hierarchy';
 import {listContacts, resolveContactFingerprint} from '../services/contacts';
-import {condenseFingerprint} from '../services/contactDisplay';
 import {
   enrichHierarchyDiagram,
   type HierarchyDiagram,
 } from '../services/hierarchyDiagram';
+import {isHierarchyCertificateExpired, shortFingerprint} from '../ebpCore';
 import {
   getCurrentIdentity,
   getCurrentIdentityRequired,
@@ -40,7 +40,6 @@ import HierarchyDiagramDetailModal, {
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, spacing, typography} from '../theme/tokens';
-import {isHierarchyCertificateExpired} from '../ebpCore';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Certificates'>;
 
@@ -318,13 +317,13 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
               <Card key={item.id} padded>
                 <Text style={styles.cardTitle}>#{item.id}</Text>
                 <Text style={styles.small}>
-                  Master: {condenseFingerprint(item.masterFingerprint)}
+                  Master: {shortFingerprint(item.masterFingerprint)}
                 </Text>
                 <Text style={styles.small}>
-                  Child: {condenseFingerprint(item.childFingerprint)}
+                  Child: {shortFingerprint(item.childFingerprint)}
                 </Text>
                 <Text style={styles.small}>
-                  By: {condenseFingerprint(item.proposerFingerprint)}
+                  By: {shortFingerprint(item.proposerFingerprint)}
                 </Text>
                 {item.context ? (
                   <Text style={styles.small}>Context: {item.context}</Text>
@@ -381,7 +380,7 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
               return (
                 <ListRow
                   key={item.certificate}
-                  title={`${condenseFingerprint(item.masterFingerprint)} → ${condenseFingerprint(item.childFingerprint)}`}
+                  title={`${shortFingerprint(item.masterFingerprint)} → ${shortFingerprint(item.childFingerprint)}`}
                   subtitle={[
                     item.context || 'No context',
                     item.expiry

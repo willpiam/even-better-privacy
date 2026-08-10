@@ -4,6 +4,7 @@ import {
   resolveContactLabels,
   type ContactLike,
 } from '../src/services/contactDisplay';
+import {shortFingerprint} from '../../core/Fingerprint';
 
 const LONG_FP =
   'ebpdk1qqqqqqqqqqabcdefghijklmnopqr0123456789xyzabcdefghij';
@@ -16,14 +17,18 @@ function like(overrides: Partial<ContactLike> = {}): ContactLike {
 }
 
 describe('contactDisplay', () => {
-  test('condenseFingerprint uses 12…12 for long fingerprints', () => {
-    expect(condenseFingerprint(LONG_FP)).toBe(
+  test('shortFingerprint uses 12…12 for long fingerprints', () => {
+    expect(shortFingerprint(LONG_FP)).toBe(
       `${LONG_FP.slice(0, 12)}…${LONG_FP.slice(-12)}`,
     );
   });
 
-  test('condenseFingerprint leaves short fingerprints unchanged', () => {
-    expect(condenseFingerprint('ebpdk1short')).toBe('ebpdk1short');
+  test('shortFingerprint leaves short fingerprints unchanged', () => {
+    expect(shortFingerprint('ebpdk1short')).toBe('ebpdk1short');
+  });
+
+  test('condenseFingerprint aliases shortFingerprint', () => {
+    expect(condenseFingerprint(LONG_FP)).toBe(shortFingerprint(LONG_FP));
   });
 
   test('alias wins as primary', () => {
@@ -60,12 +65,12 @@ describe('contactDisplay', () => {
       }),
     );
     expect(labels.primary).toBe('solo@example.com');
-    expect(labels.secondary).toBe(condenseFingerprint(LONG_FP));
+    expect(labels.secondary).toBe(shortFingerprint(LONG_FP));
   });
 
   test('falls back to condensed fingerprint for both lines', () => {
     const labels = resolveContactLabels(like());
-    const condensed = condenseFingerprint(LONG_FP);
+    const condensed = shortFingerprint(LONG_FP);
     expect(labels.primary).toBe(condensed);
     expect(labels.secondary).toBe(condensed);
   });

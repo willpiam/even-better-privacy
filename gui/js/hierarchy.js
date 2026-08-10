@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { api, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
 import { showConfirmModal, requestPassword } from "./modals.js";
+import { shortFingerprint } from "./fingerprint.js";
 
 let _hierarchyTreeTooltip = null;
 
@@ -55,8 +56,8 @@ function _buildNodeTooltipHtml(node) {
 }
 
 function _buildEdgeTooltipHtml(rel, nodeMap) {
-  const masterLabel = nodeMap.get(rel.masterFingerprint)?.label || rel.masterFingerprint.substring(0, 16);
-  const childLabel = nodeMap.get(rel.childFingerprint)?.label || rel.childFingerprint.substring(0, 16);
+  const masterLabel = nodeMap.get(rel.masterFingerprint)?.label || shortFingerprint(rel.masterFingerprint);
+  const childLabel = nodeMap.get(rel.childFingerprint)?.label || shortFingerprint(rel.childFingerprint);
   let html = `<div class="ht-tooltip-title">Relationship`;
   if (rel.expired) html += `<span class="ht-tooltip-badge expired-badge">EXPIRED</span>`;
   html += `</div>`;
@@ -334,7 +335,7 @@ export function renderHierarchyTreeSVG(container, data) {
     fpText.setAttribute("x", 0);
     fpText.setAttribute("y", nodeRadius + 28);
     fpText.setAttribute("class", "ht-fp-label");
-    fpText.textContent = node.fingerprint.substring(0, 16) + "…";
+    fpText.textContent = shortFingerprint(node.fingerprint);
     g.appendChild(fpText);
 
     g.addEventListener("mousedown", (e) => {
