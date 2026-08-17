@@ -1,0 +1,6 @@
+appId: com.mobile
+---
+# Android password-manager sheet can sit on top of PasswordModal.
+- tapOn:
+    text: "No thanks"
+    optional: true

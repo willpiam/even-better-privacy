@@ -11,6 +11,7 @@ export default function ListRow({
   showChevron = true,
   right,
   showDivider = true,
+  testID,
 }: {
   title: string;
   subtitle?: string;
@@ -21,6 +22,7 @@ export default function ListRow({
   right?: React.ReactNode;
   /** Hairline under the row. Pass false for the last row in a Card. */
   showDivider?: boolean;
+  testID?: string;
 }): JSX.Element {
   const content = (
     <>
@@ -54,6 +56,7 @@ export default function ListRow({
   if (onPress) {
     return (
       <Pressable
+        testID={testID}
         onPress={onPress}
         style={({pressed}) => [...rowStyle, pressed && styles.pressed]}>
         {content}
@@ -61,7 +64,11 @@ export default function ListRow({
     );
   }
 
-  return <View style={rowStyle}>{content}</View>;
+  return (
+    <View testID={testID} style={rowStyle}>
+      {content}
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({

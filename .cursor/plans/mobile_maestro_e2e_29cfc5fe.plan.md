@@ -4,19 +4,19 @@ overview: "Add an Android-first Maestro E2E harness for the React Native app tha
 todos:
   - id: testids
     content: Add testID support to AppButton/TextField/PasswordModal and stamp Identities, HD create, Settings, Identity detail, More, Certificates, tab bar
-    status: pending
+    status: completed
   - id: harness
     content: Add scripts/mobile-e2e.sh (server :8788, adb clear, Maestro) + deno tasks test:e2e:mobile* + mobile/e2e/README.md
-    status: pending
+    status: completed
   - id: smoke-identity
     content: Write Maestro smoke.yaml and identity.yaml (HD create, set 10.0.2.2:8788, publish)
-    status: pending
+    status: completed
   - id: hierarchy
     content: Write Maestro hierarchy.yaml porting GUI two-identity propose/accept/Load Tree
-    status: pending
+    status: completed
   - id: wiki
     content: Update analysis-mobile-e2e-framework and hierarchy E2E coverage + log after implementation
-    status: pending
+    status: completed
 isProject: false
 ---
 

@@ -109,11 +109,13 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
       <View style={styles.row}>
         <AppButton
           title="Create"
+          testID="identities-create"
           onPress={() => navigation.navigate('HdCreate')}
           style={styles.flexBtn}
         />
         <AppButton
           title="Import"
+          testID="identities-import"
           variant="secondary"
           onPress={() => void onImport()}
           style={styles.flexBtn}
@@ -121,7 +123,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
       </View>
       <SectionTitle>Local identities</SectionTitle>
       {identities.length === 0 ? (
-        <View style={styles.empty}>
+        <View style={styles.empty} testID="identities-empty">
           <Text style={styles.emptyIcon}>◎</Text>
           <Text style={styles.emptyTitle}>No identities yet</Text>
           <Text style={styles.emptySub}>
@@ -130,11 +132,13 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           </Text>
           <AppButton
             title="Create identity"
+            testID="identities-create-empty"
             onPress={() => navigation.navigate('HdCreate')}
             style={styles.fullBtn}
           />
           <AppButton
             title="Import identity file"
+            testID="identities-import-empty"
             variant="secondary"
             onPress={() => void onImport()}
             style={styles.fullBtn}
@@ -146,8 +150,10 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
             data={identities}
             keyExtractor={item => item.name}
             scrollEnabled={false}
+            testID="identities-list"
             renderItem={({item, index}) => (
               <ListRow
+                testID={`identity-row-${item.name}`}
                 avatarText={item.name}
                 title={item.name}
                 subtitle={`${

@@ -17,6 +17,7 @@ export default function AppButton({
   disabled = false,
   loading = false,
   style,
+  testID,
 }: {
   title: string;
   onPress: () => void;
@@ -24,10 +25,12 @@ export default function AppButton({
   disabled?: boolean;
   loading?: boolean;
   style?: ViewStyle;
+  testID?: string;
 }): JSX.Element {
   const isDisabled = disabled || loading;
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="button"
       disabled={isDisabled}
       onPress={onPress}

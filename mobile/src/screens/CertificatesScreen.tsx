@@ -270,9 +270,13 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
 
         <SectionTitle>Propose Hierarchy</SectionTitle>
         <Card padded style={styles.sectionCard}>
-          <View style={styles.switchRow}>
+          <View style={styles.switchRow} testID="cert-role-master-row">
             <Text style={styles.switchLabel}>I am the Master</Text>
-            <Switch value={iAmMaster} onValueChange={setIAmMaster} />
+            <Switch
+              testID="cert-role-master-switch"
+              value={iAmMaster}
+              onValueChange={setIAmMaster}
+            />
           </View>
           <Text style={styles.hint}>
             {iAmMaster
@@ -281,6 +285,7 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
           </Text>
           <Text style={styles.fieldLabel}>Other party</Text>
           <ContactPicker
+            testID="cert-other-party"
             value={otherParty}
             onChange={setOtherParty}
             selectValue="fingerprint"
@@ -288,12 +293,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
           />
           <TextField
             label="Context"
+            testID="cert-context"
             value={context}
             onChangeText={setContext}
             placeholder="Context (optional)"
           />
           <TextField
             label="Expiry"
+            testID="cert-expiry"
             value={expiry}
             onChangeText={setExpiry}
             placeholder="Expiry ms unix timestamp (0 for none)"
@@ -301,6 +308,7 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
           />
           <AppButton
             title="Create Proposal"
+            testID="cert-create-proposal"
             onPress={onPropose}
             disabled={busy}
           />
@@ -308,13 +316,13 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
 
         <SectionTitle>Pending Proposals</SectionTitle>
         {pending.length === 0 ? (
-          <Card padded>
+          <Card padded testID="cert-pending-empty">
             <Text style={styles.muted}>No pending proposals.</Text>
           </Card>
         ) : (
-          <View style={styles.pendingStack}>
+          <View style={styles.pendingStack} testID="cert-pending-list">
             {pending.map(item => (
-              <Card key={item.id} padded>
+              <Card key={item.id} padded testID={`cert-pending-${item.id}`}>
                 <Text style={styles.cardTitle}>#{item.id}</Text>
                 <Text style={styles.small}>
                   Master: {shortFingerprint(item.masterFingerprint)}
@@ -331,12 +339,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
                 <View style={styles.row}>
                   <AppButton
                     title="Accept"
+                    testID={`cert-accept-${item.id}`}
                     onPress={() => onAccept(item.id)}
                     style={styles.halfBtn}
                     disabled={busy}
                   />
                   <AppButton
                     title="Reject"
+                    testID={`cert-reject-${item.id}`}
                     variant="danger"
                     onPress={() => onReject(item.id)}
                     style={styles.halfBtn}
@@ -352,17 +362,25 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
         <Card padded style={styles.sectionCard}>
           <Text style={styles.fieldLabel}>Fingerprint</Text>
           <ContactPicker
+            testID="cert-tree-fingerprint"
             value={treeFingerprint}
             onChange={setTreeFingerprint}
             selectValue="fingerprint"
             placeholder="Search contacts or paste fingerprint..."
           />
-          <AppButton title="Load Tree" onPress={onLoadTree} disabled={busy} />
+          <AppButton
+            title="Load Tree"
+            testID="cert-load-tree"
+            onPress={onLoadTree}
+            disabled={busy}
+          />
           {treeDiagram ? (
-            <HierarchyTreeView
-              diagram={treeDiagram}
-              onSelectDetail={setTreeDetail}
-            />
+            <View testID="cert-hierarchy-tree">
+              <HierarchyTreeView
+                diagram={treeDiagram}
+                onSelectDetail={setTreeDetail}
+              />
+            </View>
           ) : null}
         </Card>
 

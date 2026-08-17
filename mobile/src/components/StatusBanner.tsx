@@ -14,6 +14,7 @@ export default function StatusBanner({
   }
   return (
     <View
+      testID="status-banner"
       style={[
         styles.base,
         kind === 'success' ? styles.success : null,
@@ -21,6 +22,7 @@ export default function StatusBanner({
         kind === 'info' ? styles.info : null,
       ]}>
       <Text
+        testID="status-banner-text"
         style={[
           styles.text,
           kind === 'success' ? styles.successText : null,

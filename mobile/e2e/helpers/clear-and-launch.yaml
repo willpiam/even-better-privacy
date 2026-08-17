@@ -1,0 +1,8 @@
+appId: com.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "tab-identities"
+    timeout: 30000

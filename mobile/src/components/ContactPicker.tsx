@@ -24,6 +24,7 @@ type Props = {
   variant?: 'search' | 'dropdown';
   /** What to write into `value` when a contact is selected. Default: storage name. */
   selectValue?: 'name' | 'fingerprint';
+  testID?: string;
 };
 
 function ContactPickerLabels({item}: {item: StoredContact}): JSX.Element {
@@ -115,6 +116,7 @@ export default function ContactPicker({
   placeholder = 'Search contacts...',
   variant = 'search',
   selectValue = 'name',
+  testID,
 }: Props): JSX.Element {
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [open, setOpen] = useState(false);
@@ -196,6 +198,7 @@ export default function ContactPicker({
   return (
     <View style={styles.wrap}>
       <TextInput
+        testID={testID}
         style={styles.input}
         value={value}
         onChangeText={onChange}

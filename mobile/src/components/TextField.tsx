@@ -12,9 +12,11 @@ export default function TextField({
   label,
   multiline = false,
   style,
+  testID,
   ...rest
 }: TextInputProps & {
   label: string;
+  testID?: string;
 }): JSX.Element {
   return (
     <View style={styles.wrap}>
@@ -22,6 +24,7 @@ export default function TextField({
       <TextInput
         placeholderTextColor="#aaa"
         {...rest}
+        testID={testID}
         multiline={multiline}
         style={[styles.input, multiline && styles.multiline, style]}
       />

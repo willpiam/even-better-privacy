@@ -48,6 +48,8 @@
     "test:e2e": "deno run -A npm:@playwright/test@1.58.2 test ./gui/e2e --headed --reporter=line",
     "test:e2e:psql": "./scripts/e2e-with-postgres.sh",
     "test:e2e:inspect": "PWDEBUG=1 deno run -A npm:@playwright/test@1.58.2 test gui/e2e/identity.spec.ts --headed",
+    "test:e2e:mobile": "./scripts/mobile-e2e.sh",
+    "test:e2e:mobile:smoke": "./scripts/mobile-e2e.sh ./mobile/e2e/smoke.yaml",
     "unsafe:purge:all": "deno run --allow-read --allow-write --allow-env --allow-net ./scripts/postgres/reset-database.ts",
     "query:prod:identities": "deno run -A scripts/postgres/list-identities.ts",
     "query:prod:proposals": "deno run -A scripts/postgres/list-proposals.ts --omit-certificate",

@@ -1,0 +1,25 @@
+appId: com.mobile
+---
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "tab-identities"
+    timeout: 30000
+- assertVisible:
+    id: "tab-identities"
+- assertVisible: "Identities"
+- tapOn: "More"
+- extendedWaitUntil:
+    visible:
+      id: "more-settings"
+    timeout: 15000
+- tapOn:
+    id: "more-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-server-url"
+    timeout: 10000
+- assertVisible: "Settings"
+- assertVisible:
+    id: "settings-save"

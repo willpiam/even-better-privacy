@@ -6,13 +6,17 @@ export default function Card({
   children,
   style,
   padded = false,
+  testID,
 }: {
   children: React.ReactNode;
   style?: ViewStyle;
   padded?: boolean;
+  testID?: string;
 }): JSX.Element {
   return (
-    <View style={[styles.card, padded && styles.padded, style]}>{children}</View>
+    <View testID={testID} style={[styles.card, padded && styles.padded, style]}>
+      {children}
+    </View>
   );
 }
 

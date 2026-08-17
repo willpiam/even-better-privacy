@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-08-10 (mobile E2E framework plan)
+Last updated: 2026-08-10 (mobile Maestro E2E)
 
 ## Wiki Operations
 
@@ -103,10 +103,10 @@ Last updated: 2026-08-10 (mobile E2E framework plan)
   live Render Postgres via `scripts/postgres/` and `query:prod:*` tasks.
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
-- [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright covers two-identity
-  hierarchy propose/accept/tree; no GUI↔mobile hierarchy E2E.
-- [[analysis-mobile-e2e-framework]] - Plan for Maestro mobile E2E mirroring GUI
-  Playwright (server harness, spec ladder, testID readiness).
+- [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
+  same-client hierarchy; no GUI↔mobile hierarchy E2E.
+- [[analysis-mobile-e2e-framework]] - Android Maestro E2E (smoke / identity /
+  hierarchy) via `deno task test:e2e:mobile`.
 - [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
   hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material

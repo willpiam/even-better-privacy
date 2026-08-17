@@ -48,11 +48,13 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
       <SectionTitle>Preferences</SectionTitle>
       <Card>
         <ListRow
+          testID="more-settings"
           title="Settings"
           subtitle={serverUrl || 'Server, password policy, mail'}
           onPress={() => navigation.navigate('Settings')}
         />
         <ListRow
+          testID="more-activity-log"
           title="Activity log"
           subtitle="Recent operations"
           onPress={() => navigation.navigate('ActivityLog')}
@@ -62,11 +64,13 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
       <SectionTitle>App</SectionTitle>
       <Card>
         <ListRow
+          testID="more-certificates"
           title="Certificates"
           subtitle="Hierarchy tree"
           onPress={() => navigation.navigate('Certificates')}
         />
         <ListRow
+          testID="more-about"
           title="About EBP"
           subtitle="Project info"
           onPress={() => navigation.navigate('ProjectInfo')}

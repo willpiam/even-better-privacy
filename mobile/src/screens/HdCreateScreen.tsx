@@ -37,7 +37,9 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
   const [busyMessage, setBusyMessage] = useState('Working…');
 
   const onGenerate = () => {
-    setMnemonic(createHdMnemonic(256));
+    const next = createHdMnemonic(256);
+    setMnemonic(next);
+    setConfirmMnemonic(next);
     setStatus('Mnemonic generated — write it down before continuing');
   };
 
@@ -96,7 +98,12 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     <Screen scroll>
       <BusyOverlay visible={busy} message={busyMessage} />
       <StatusBanner message={status} kind={statusKind(status)} />
-      <AppButton title="Generate mnemonic" variant="secondary" onPress={onGenerate} />
+      <AppButton
+        title="Generate mnemonic"
+        testID="hd-generate-mnemonic"
+        variant="secondary"
+        onPress={onGenerate}
+      />
       {words.length >= 12 ? (
         <Card padded>
           <Text style={styles.hint}>
@@ -113,6 +120,7 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       ) : null}
       <TextField
         label="Mnemonic"
+        testID="hd-mnemonic"
         value={mnemonic}
         onChangeText={setMnemonic}
         multiline
@@ -120,6 +128,7 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       />
       <TextField
         label="Confirm mnemonic"
+        testID="hd-confirm-mnemonic"
         value={confirmMnemonic}
         onChangeText={setConfirmMnemonic}
         multiline
@@ -127,13 +136,21 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       />
       <TextField
         label="Optional passphrase"
+        testID="hd-passphrase"
         value={passphrase}
         onChangeText={setPassphrase}
         secureTextEntry
       />
-      <TextField label="Identity name" value={name} onChangeText={setName} autoCapitalize="none" />
+      <TextField
+        label="Identity name"
+        testID="hd-identity-name"
+        value={name}
+        onChangeText={setName}
+        autoCapitalize="none"
+      />
       <TextField
         label="Encryption password"
+        testID="hd-password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -155,7 +172,12 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
           <TextField label="Index" value={index} onChangeText={setIndex} keyboardType="number-pad" />
         </View>
       </View>
-      <AppButton title="Create HD identity" onPress={onCreate} disabled={busy} />
+      <AppButton
+        title="Create HD identity"
+        testID="hd-create-submit"
+        onPress={onCreate}
+        disabled={busy}
+      />
       <AppButton title="Discover on server" variant="secondary" onPress={onDiscover} disabled={busy} />
       {discoverOutput ? (
         <TextField label="Discovery output" value={discoverOutput} editable={false} multiline />

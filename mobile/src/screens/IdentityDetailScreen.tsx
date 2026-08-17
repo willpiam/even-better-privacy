@@ -304,22 +304,32 @@ export default function IdentityDetailScreen({
       {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage} />
       <Card padded>
-        <Text style={styles.name}>{identity.name}</Text>
+        <Text style={styles.name} testID="identity-name">
+          {identity.name}
+        </Text>
         <Text style={styles.meta}>
           {signingLabel} · {identity.encryptionKeyType}
         </Text>
-        <Text style={styles.fp}>{identity.fingerprint}</Text>
+        <Text style={styles.fp} testID="identity-fingerprint" selectable>
+          {identity.fingerprint}
+        </Text>
         <Text style={styles.meta}>Server: {serverUrl || '—'}</Text>
       </Card>
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Password"
+        testID="identity-password"
         value={password}
         onChangeText={setPassword}
         secureTextEntry
         autoCapitalize="none"
       />
-      <AppButton title="Publish to server" onPress={onPublish} disabled={busy} />
+      <AppButton
+        title="Publish to server"
+        testID="identity-publish"
+        onPress={onPublish}
+        disabled={busy}
+      />
       <AppButton
         title="Export identity file"
         variant="secondary"

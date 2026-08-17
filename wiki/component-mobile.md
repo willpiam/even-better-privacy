@@ -2,8 +2,8 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-07-21
-source_count: 4
+last_updated: 2026-08-10
+source_count: 5
 tags:
   - component
   - mobile
@@ -29,12 +29,13 @@ The mobile app implements **Parity v1** with the GUI (wallet, HD, native mail, h
 
 ## Parity
 
-See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-parity-roadmap]] (phases). Mail stack documented in `mobile/MAIL.md`.
+See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-parity-roadmap]] (phases). Mail stack documented in `mobile/MAIL.md`. Android Maestro E2E: [[analysis-mobile-e2e-framework]] (`deno task test:e2e:mobile`).
 
 ## Related Pages
 
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-parity-roadmap]]
+- [[analysis-mobile-e2e-framework]]
 - [[analysis-mobile-imap-smtp-inbox-empty]]
 - [[analysis-mobile-compose-recipient-resolve]]
 - [[analysis-mobile-encrypted-mail-reader-ux]]
@@ -49,3 +50,5 @@ See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-pari
 
 - `ReadMe.md`
 - `mobile/MAIL.md`
+- `mobile/e2e/README.md`
+- [[analysis-mobile-e2e-framework]]

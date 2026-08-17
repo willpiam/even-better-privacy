@@ -2,8 +2,8 @@
 title: "Hierarchy GUI E2E Coverage"
 type: analysis
 status: active
-last_updated: 2026-07-27
-source_count: 4
+last_updated: 2026-08-10
+source_count: 5
 tags:
   - analysis
   - hierarchy
@@ -20,8 +20,10 @@ and [[component-mobile]], and what is still untested.
 
 ## Verdict
 
-**Yes — GUI-to-GUI hierarchy setup is covered by Playwright E2E.** There is
-**no** automated cross-client (GUI ↔ mobile) hierarchy proposal/load test.
+**Yes — GUI-to-GUI hierarchy setup is covered by Playwright E2E.** **Yes —
+mobile-to-mobile hierarchy propose/accept/Load Tree is covered by Maestro**
+(`mobile/e2e/hierarchy.yaml`). There is still **no** automated cross-client
+(GUI ↔ mobile) hierarchy proposal/load test.
 
 ## GUI E2E (exists)
 
@@ -40,6 +42,16 @@ This is the automated answer to “can the GUI set up a hierarchical relationshi
 between two identities?” — **yes, for two identities maintained in the same GUI
 against a local test server** (`http://localhost:8788`).
 
+## Mobile E2E (exists)
+
+File: `mobile/e2e/hierarchy.yaml` (Maestro). See [[analysis-mobile-e2e-framework]].
+
+| Flow | What it exercises |
+|------|-------------------|
+| Two HD identities + propose/accept + Load Tree | Create/publish master and child against `:8788` via `10.0.2.2`, propose as master, accept as child, assert hierarchy tree container |
+
+Runner: `deno task test:e2e:mobile` / `scripts/mobile-e2e.sh`.
+
 ## Not covered
 
 | Flow | Status |
@@ -47,7 +59,7 @@ against a local test server** (`http://localhost:8788`).
 | GUI propose → mobile see/accept pending | no automated test |
 | Mobile propose → GUI see/accept pending | no automated test |
 | Loading established hierarchy tree GUI ↔ mobile | no automated interop E2E |
-| Mobile Certificates UI propose/accept E2E | no Maestro/Detox (or similar) suite found |
+| Mobile loop-reject reverse propose | not ported from GUI loop test |
 
 Parity analyses note hierarchy **feature** parity and hex encoding alignment
 ([[analysis-gui-mobile-parity-deltas]], [[analysis-mobile-certificates-ux]]) but
@@ -62,12 +74,11 @@ do not claim cross-client E2E.
 
 ## Implications for GUI ↔ mobile loading bugs
 
-If proposals created on one client do not appear on the other, the existing GUI
-E2E will **not** catch that: it never leaves the GUI process or exercises mobile
-pending-fetch / certificate decode paths. Debugging should focus on server
-pending endpoints ([[component-server]] hierarchy routes), certificate hex
-encoding, and each client’s pending-list sync — not on absence of the GUI-only
-happy path.
+Same-client GUI and mobile happy paths are covered separately. Cross-client
+bugs still will **not** be caught: neither suite leaves its client process.
+Debugging interop should focus on server pending endpoints
+([[component-server]] hierarchy routes), certificate hex encoding, and each
+client’s pending-list sync.
 
 ## Related
 
@@ -77,11 +88,13 @@ happy path.
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-certificates-ux]]
 - [[analysis-pending-hierarchy-proposer-visibility]]
-- [[analysis-mobile-e2e-framework]] — plan to add Maestro mobile E2E mirroring GUI Playwright
+- [[analysis-mobile-e2e-framework]]
 
 ## Sources
 
 - `gui/e2e/hierarchy.spec.ts`
+- `mobile/e2e/hierarchy.yaml`
 - `test/HierarchyCertificate_test.ts`
 - `test/mobile-parity_test.ts`
 - [[analysis-gui-mobile-parity-deltas]]
+- [[analysis-mobile-e2e-framework]]

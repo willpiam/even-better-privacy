@@ -1,0 +1,33 @@
+appId: com.mobile
+---
+- tapOn: "More"
+- extendedWaitUntil:
+    visible:
+      id: "more-settings"
+    timeout: 10000
+- tapOn:
+    id: "more-settings"
+- extendedWaitUntil:
+    visible:
+      id: "settings-server-url"
+    timeout: 10000
+- tapOn:
+    id: "settings-server-url"
+# selectTextOnFocus highlights the default URL; one Backspace removes it.
+# eraseText then covers leftover characters if selection did not apply.
+- pressKey: Backspace
+- eraseText: 80
+- inputText: ${SERVER_URL}
+- hideKeyboard
+- tapOn:
+    id: "settings-save"
+- extendedWaitUntil:
+    visible: "Saved"
+    timeout: 10000
+- back
+- tapOn:
+    id: "tab-identities"
+- extendedWaitUntil:
+    visible:
+      id: "tab-identities"
+    timeout: 10000

@@ -1,0 +1,33 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-mobile-id
+  IDENTITY_PASSWORD: Smoke-test-password1
+---
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 60000
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible:
+    id: "status-banner-text"
+- assertVisible:
+    text: "Published.*"

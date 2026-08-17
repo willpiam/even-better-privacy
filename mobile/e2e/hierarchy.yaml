@@ -1,0 +1,159 @@
+appId: com.mobile
+env:
+  MASTER_NAME: e2e-h-master
+  CHILD_NAME: e2e-h-child
+  IDENTITY_PASSWORD: Smoke-test-password1
+---
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+
+# --- Master identity ---
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${MASTER_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- copyTextFrom:
+    id: "identity-fingerprint"
+- evalScript: ${output.masterFp = maestro.copiedText}
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible:
+    text: "Published.*"
+- back
+
+# --- Child identity ---
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${CHILD_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- copyTextFrom:
+    id: "identity-fingerprint"
+- evalScript: ${output.childFp = maestro.copiedText}
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible:
+    text: "Published.*"
+- back
+
+# --- Propose as master ---
+- tapOn:
+    id: "identity-row-${MASTER_NAME}"
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 15000
+- back
+- tapOn: "More"
+- tapOn:
+    id: "more-certificates"
+- extendedWaitUntil:
+    visible:
+      id: "cert-create-proposal"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "cert-other-party"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "cert-other-party"
+- inputText: ${output.childFp}
+- hideKeyboard
+- tapOn:
+    id: "cert-context"
+- inputText: e2e hierarchy
+- hideKeyboard
+- tapOn:
+    id: "cert-create-proposal"
+- runFlow: helpers/dismiss-autofill.yaml
+- extendedWaitUntil:
+    visible:
+      id: "password-modal-input"
+    timeout: 15000
+- tapOn:
+    id: "password-modal-input"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "password-modal-submit"
+- extendedWaitUntil:
+    visible: "Proposal created"
+    timeout: 60000
+
+# --- Accept as child ---
+- back
+- tapOn:
+    id: "tab-identities"
+- tapOn:
+    id: "identity-row-${CHILD_NAME}"
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 15000
+- back
+- tapOn: "More"
+- tapOn:
+    id: "more-certificates"
+- extendedWaitUntil:
+    visible:
+      id: "cert-pending-list"
+    timeout: 30000
+- tapOn:
+    text: "Accept"
+- runFlow: helpers/dismiss-autofill.yaml
+- extendedWaitUntil:
+    visible:
+      id: "password-modal-input"
+    timeout: 15000
+- tapOn:
+    id: "password-modal-input"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "password-modal-submit"
+- extendedWaitUntil:
+    visible: "Proposal accepted"
+    timeout: 60000
+
+# --- Load hierarchy tree ---
+- scrollUntilVisible:
+    element:
+      id: "cert-tree-fingerprint"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "cert-tree-fingerprint"
+- inputText: ${output.masterFp}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "cert-load-tree"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "cert-load-tree"
+- extendedWaitUntil:
+    visible:
+      id: "cert-hierarchy-tree"
+    timeout: 60000
+- assertVisible:
+    id: "cert-hierarchy-tree"

@@ -1,0 +1,47 @@
+appId: com.mobile
+---
+- tapOn:
+    id: "tab-identities"
+- extendedWaitUntil:
+    visible:
+      id: "identities-create"
+    timeout: 15000
+- tapOn:
+    id: "identities-create"
+- extendedWaitUntil:
+    visible:
+      id: "hd-generate-mnemonic"
+    timeout: 15000
+- tapOn:
+    id: "hd-generate-mnemonic"
+- scrollUntilVisible:
+    element:
+      id: "hd-identity-name"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "hd-identity-name"
+- inputText: ${IDENTITY_NAME}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "hd-password"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "hd-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "hd-create-submit"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "hd-create-submit"
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 120000
+- assertVisible:
+    id: "identity-name"

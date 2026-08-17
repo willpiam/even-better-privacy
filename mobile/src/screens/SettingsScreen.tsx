@@ -84,13 +84,16 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       <SectionTitle>Key Server</SectionTitle>
       <TextField
         label="Server URL"
+        testID="settings-server-url"
         autoCapitalize="none"
         autoCorrect={false}
+        selectTextOnFocus
         value={serverUrl}
         onChangeText={setServerUrlValue}
       />
       <AppButton
         title={loading ? 'Saving…' : 'Save'}
+        testID="settings-save"
         loading={loading}
         disabled={loading}
         onPress={onSave}

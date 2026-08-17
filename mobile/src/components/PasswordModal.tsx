@@ -50,6 +50,7 @@ export default function PasswordModal({
         <View style={styles.modal}>
           <Text style={styles.title}>{title}</Text>
           <TextInput
+            testID="password-modal-input"
             style={styles.input}
             value={password}
             onChangeText={setPassword}
@@ -68,11 +69,13 @@ export default function PasswordModal({
               variant="secondary"
               onPress={cancel}
               style={styles.flex}
+              testID="password-modal-cancel"
             />
             <AppButton
               title={submitLabel}
               onPress={submit}
               style={styles.flex}
+              testID="password-modal-submit"
             />
           </View>
         </View>

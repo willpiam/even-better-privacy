@@ -1,5 +1,13 @@
 # Wiki Log
 
+## [2026-08-10] implement | mobile Maestro E2E framework
+
+- Added Android Maestro harness: `scripts/mobile-e2e.sh`,
+  `deno task test:e2e:mobile` / `test:e2e:mobile:smoke`, flows under
+  `mobile/e2e/` (smoke, identity, hierarchy + helpers).
+- Instrumented critical mobile `testID`s; HD generate auto-fills confirm mnemonic.
+- Updated: [[analysis-mobile-e2e-framework]], [[analysis-hierarchy-gui-e2e-coverage]].
+
 ## [2026-08-10] query | mobile E2E framework like GUI Playwright
 
 - Answered: No mobile UI E2E today; recommend Maestro under `mobile/e2e/` reusing

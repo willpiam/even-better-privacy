@@ -335,6 +335,7 @@ export default function AppNavigator(): JSX.Element {
           component={IdentitiesNavigator}
           options={{
             title: 'Identities',
+            tabBarButtonTestID: 'tab-identities',
             tabBarIcon: ({focused}) => <TabIcon label="◎" focused={focused} />,
           }}
         />
@@ -343,6 +344,7 @@ export default function AppNavigator(): JSX.Element {
           component={ContactsNavigator}
           options={{
             title: 'Contacts',
+            tabBarButtonTestID: 'tab-contacts',
             tabBarIcon: ({focused}) => <TabIcon label="◉" focused={focused} />,
           }}
         />
@@ -351,6 +353,7 @@ export default function AppNavigator(): JSX.Element {
           component={CryptoNavigator}
           options={{
             title: 'Crypto',
+            tabBarButtonTestID: 'tab-crypto',
             tabBarIcon: ({focused}) => <TabIcon label="⬡" focused={focused} />,
           }}
         />
@@ -359,6 +362,7 @@ export default function AppNavigator(): JSX.Element {
           component={MailNavigator}
           options={{
             title: 'Mail',
+            tabBarButtonTestID: 'tab-mail',
             tabBarIcon: ({focused}) => <TabIcon label="✉" focused={focused} />,
           }}
         />
@@ -367,6 +371,7 @@ export default function AppNavigator(): JSX.Element {
           component={MoreNavigator}
           options={{
             title: 'More',
+            tabBarButtonTestID: 'tab-more',
             tabBarIcon: ({focused}) => <TabIcon label="⋯" focused={focused} />,
           }}
         />
