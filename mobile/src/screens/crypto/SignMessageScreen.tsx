@@ -1,6 +1,7 @@
 import React, {useState} from 'react';
 import {Alert, Switch, Text, View} from 'react-native';
 import Share from 'react-native-share';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {signMessage} from '../../services/signVerify';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import Screen from '../../components/Screen';
@@ -33,7 +34,9 @@ export default function SignMessageScreen(): JSX.Element {
         message,
         options: {detached, includeIdentity},
       });
-      setSignOutput(JSON.stringify(payload, null, 2));
+      const serialized = JSON.stringify(payload, null, 2);
+      Clipboard.setString(serialized);
+      setSignOutput(serialized);
       setStatus('Message signed');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -73,24 +76,51 @@ export default function SignMessageScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Message"
+        testID="sign-message-input"
         value={message}
         onChangeText={setMessage}
         placeholder="Message"
         multiline
+        autoCapitalize="none"
+        autoCorrect={false}
       />
       <View style={cryptoStyles.switchRow}>
         <Text style={cryptoStyles.switchLabel}>Detached signature</Text>
-        <Switch value={detached} onValueChange={setDetached} />
+        <Switch
+          testID="sign-detached"
+          value={detached}
+          onValueChange={setDetached}
+        />
       </View>
       <View style={cryptoStyles.switchRow}>
         <Text style={cryptoStyles.switchLabel}>Include identity</Text>
-        <Switch value={includeIdentity} onValueChange={setIncludeIdentity} />
+        <Switch
+          testID="sign-include-identity"
+          value={includeIdentity}
+          onValueChange={setIncludeIdentity}
+        />
       </View>
-      <AppButton
-        title={busy ? 'Signing…' : 'Sign Message'}
-        onPress={onSign}
-        disabled={busy}
-      />
+      <View style={cryptoStyles.signActions}>
+        <AppButton
+          title={busy ? 'Signing…' : 'Sign Message'}
+          testID="sign-message-submit"
+          onPress={onSign}
+          disabled={busy}
+          style={cryptoStyles.flexBtn}
+        />
+        <AppButton
+          title="Copy"
+          testID="sign-message-output-copy"
+          variant="secondary"
+          disabled={!signOutput}
+          onPress={() => {
+            if (signOutput) {
+              Clipboard.setString(signOutput);
+            }
+          }}
+          style={cryptoStyles.flexBtn}
+        />
+      </View>
       <AppButton
         title="Share Output"
         variant="secondary"
@@ -99,7 +129,12 @@ export default function SignMessageScreen(): JSX.Element {
           void Share.open({message: signOutput, failOnCancel: false});
         }}
       />
-      <CopyableOutput value={signOutput} placeholder="Signed output…" />
+      <CopyableOutput
+        testID="sign-message-output"
+        value={signOutput}
+        placeholder="Signed output…"
+        showCopyButton={false}
+      />
     </Screen>
   );
 }

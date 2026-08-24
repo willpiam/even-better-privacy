@@ -9,6 +9,7 @@ import {
   randomHex,
   buildFileSignMessage,
   type ExternalIdentity,
+  externalIdentityFromEmbeddedRecord,
 } from '../ebpCore';
 import {loadContact} from './contacts';
 import {loadIdentity, readIdentityRaw} from './storage';
@@ -107,8 +108,16 @@ export async function verifyMessage(params: {
   if (hashTextSha256Hex(message) !== messageHash) {
     throw new Error('Message hash mismatch');
   }
+  const embedded =
+    payload.identity && typeof payload.identity === 'object'
+      ? externalIdentityFromEmbeddedRecord(
+          payload.identity as Record<string, unknown>,
+          fingerprint || undefined,
+        )
+      : null;
   const senderIdentity =
     params.publicIdentity ??
+    embedded ??
     (await loadContact(params.sender ?? fingerprint.slice(0, 16)));
   const verified = Identity.VerifySignature(senderIdentity, message, signature, salt);
   return {verified};

@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-08-10
+last_updated: 2026-08-24
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-08-10 (mobile Maestro E2E)
+Last updated: 2026-08-24 (mobile testing status + GUI gaps)
 
 ## Wiki Operations
 
@@ -106,7 +106,9 @@ Last updated: 2026-08-10 (mobile Maestro E2E)
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
 - [[analysis-mobile-e2e-framework]] - Android Maestro E2E (smoke / identity /
-  hierarchy) via `deno task test:e2e:mobile`.
+  details / sign-verify / hierarchy) via `deno task test:e2e:mobile`.
+- [[analysis-mobile-testing-and-gui-gaps]] - Pass/fail of the 5 Maestro flows,
+  GUI E2E cases still unported, and GUI features missing from mobile.
 - [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
   hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material

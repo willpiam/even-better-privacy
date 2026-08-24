@@ -4,19 +4,19 @@ overview: Harden the passing Android Maestro harness, then add identity-detail a
 todos:
   - id: wiki-harness
     content: Update analysis-mobile-e2e-framework + mobile/e2e/README for USB reverse, SQLite, env-override pitfalls, autofill helper
-    status: pending
+    status: completed
   - id: testids-crypto-details
     content: Add testIDs on Identity details, Crypto hub, Sign/Verify, Contacts fetch/search
-    status: pending
+    status: completed
   - id: flow-details
     content: "Write details.yaml: push detail + searchable on Contacts; optional wrong-password publish"
-    status: pending
+    status: completed
   - id: flow-sign-verify
     content: "Write sign-verify.yaml: sign message, verify payload, dismiss autofill on password modal"
-    status: pending
+    status: completed
   - id: runner-tasks
     content: Include new flows in mobile-e2e.sh default list and deno tasks
-    status: pending
+    status: completed
 isProject: false
 ---
 

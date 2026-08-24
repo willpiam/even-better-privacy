@@ -41,6 +41,7 @@ const styles = StyleSheet.create({
   flex: {flex: 1},
   content: {
     padding: spacing.md,
+    paddingBottom: 96,
     gap: 10,
   },
 });

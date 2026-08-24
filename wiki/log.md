@@ -1,5 +1,33 @@
 # Wiki Log
 
+## [2026-08-24] implement | mobile Maestro sign-verify E2E passing
+
+- `mobile/e2e/sign-verify.yaml` passed on Android USB (~2m 19s): HD create,
+  sign attached message, paste, verify Valid signature.
+- Pitfalls: `hideKeyboard` after sign pops the stack; Copy can open Quick
+  Share (auto-copy on sign instead); huge JSON EditText hid Verify; verify
+  needs embedded payload `identity` when there is no local contact.
+- Updated: [[analysis-mobile-e2e-framework]], [[analysis-mobile-testing-and-gui-gaps]].
+
+## [2026-08-24] query | mobile testing status and GUI feature gaps
+
+- Answered: 4 of 5 Maestro flows have passed independently; sign-verify has
+  never fully passed; the 5-flow suite has not passed in one sitting. Listed
+  GUI E2E cases still unported and GUI surfaces missing from mobile.
+- Filed: [[analysis-mobile-testing-and-gui-gaps]].
+
+## [2026-08-17] implement | mobile Maestro identity/crypto E2E
+
+- Hardened harness notes: USB `adb reverse` + `SERVER_URL=http://127.0.0.1:8788`,
+  `DENO_SQLITE_PATH`, `MOBILE_E2E_SKIP_METRO=1`, helper `env:` overwrite pitfall,
+  `helpers/dismiss-autofill.yaml`.
+- Added identity-detail / crypto / Contacts `testID`s; flows
+  `mobile/e2e/details.yaml` (push + browse/search) and
+  `mobile/e2e/sign-verify.yaml`; identity.yaml now covers wrong-password publish.
+- Default suite: smoke → identity → details → sign-verify → hierarchy;
+  `deno task test:e2e:mobile:fast` is smoke + identity.
+- Updated: [[analysis-mobile-e2e-framework]], `mobile/e2e/README.md`.
+
 ## [2026-08-10] implement | mobile Maestro E2E framework
 
 - Added Android Maestro harness: `scripts/mobile-e2e.sh`,

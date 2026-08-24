@@ -1,0 +1,83 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-mobile-sign
+  IDENTITY_PASSWORD: Smoke-test-password1
+  SIGN_MESSAGE: e2e mobile sign message
+---
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "tab-crypto"
+- extendedWaitUntil:
+    visible:
+      id: "crypto-sign-message"
+    timeout: 15000
+- tapOn:
+    id: "crypto-sign-message"
+- extendedWaitUntil:
+    visible:
+      id: "sign-message-input"
+    timeout: 15000
+- tapOn:
+    id: "sign-message-input"
+- inputText: ${SIGN_MESSAGE}
+- hideKeyboard
+- tapOn:
+    id: "sign-message-submit"
+- extendedWaitUntil:
+    visible: "Confirm sign"
+    timeout: 15000
+- tapOn:
+    text: "^Sign$"
+- runFlow: helpers/dismiss-autofill.yaml
+- extendedWaitUntil:
+    visible:
+      id: "password-modal-input"
+    timeout: 15000
+- tapOn:
+    id: "password-modal-input"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "password-modal-submit"
+# Do not hideKeyboard here: with no IME up, Android Back pops Sign Message.
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible: "Message signed"
+# Payload is already on the clipboard from sign. Do not tap Copy/Share —
+# on this device Copy can open system Quick Share over the app.
+# One Android Back returns to the Crypto hub. Do not hideKeyboard first.
+- back
+- extendedWaitUntil:
+    visible:
+      id: "crypto-verify-message"
+    timeout: 15000
+- tapOn:
+    id: "crypto-verify-message"
+- extendedWaitUntil:
+    visible:
+      id: "verify-paste-clipboard"
+    timeout: 15000
+- tapOn:
+    id: "verify-paste-clipboard"
+- extendedWaitUntil:
+    visible: "Pasted payload"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "verify-submit"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "verify-submit"
+- extendedWaitUntil:
+    visible: "Verification complete"
+    timeout: 60000
+- assertVisible:
+    id: "verify-result"
+- assertVisible: "Valid signature"

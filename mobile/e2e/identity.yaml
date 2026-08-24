@@ -19,6 +19,20 @@ env:
     timeout: 60000
 - tapOn:
     id: "identity-password"
+- inputText: definitely-wrong-password
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 60000
+- assertVisible: "Wrong password.*"
+- assertNotVisible: "Published.*"
+- tapOn:
+    id: "identity-password"
+- pressKey: Backspace
+- eraseText: 80
 - inputText: ${IDENTITY_PASSWORD}
 - hideKeyboard
 - tapOn:

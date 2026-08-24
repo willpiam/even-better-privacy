@@ -23,4 +23,13 @@ export const cryptoStyles = StyleSheet.create({
     fontSize: typography.body,
     color: colors.text,
   },
+  flexBtn: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  signActions: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
 });

@@ -109,11 +109,13 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
       />
       <AppButton
         title="Import via fingerprint"
+        testID="contacts-fetch"
         variant="secondary"
         onPress={() => setFetchVisible(true)}
       />
       <AppButton
         title="Browse server identities"
+        testID="contacts-browse"
         variant="secondary"
         onPress={() => setBrowseVisible(true)}
       />

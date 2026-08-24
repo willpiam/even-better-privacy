@@ -1,5 +1,6 @@
 import React, {useState} from 'react';
 import {Text} from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {verifyMessage} from '../../services/signVerify';
 import {parseEbpPayloadInput} from '../../ebpCore';
 import Screen from '../../components/Screen';
@@ -44,10 +45,26 @@ export default function VerifyMessageScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Signed payload"
+        testID="verify-payload-input"
         value={verifyPayload}
         onChangeText={setVerifyPayload}
         placeholder="Signed payload JSON"
         multiline
+      />
+      <AppButton
+        title="Paste from clipboard"
+        testID="verify-paste-clipboard"
+        variant="secondary"
+        onPress={() => {
+          void Clipboard.getString().then(text => {
+            if (text.trim()) {
+              setVerifyPayload(text);
+              setStatus('Pasted payload');
+            } else {
+              setStatus('Clipboard is empty');
+            }
+          });
+        }}
       />
       <TextField
         label="Detached message"
@@ -58,10 +75,15 @@ export default function VerifyMessageScreen(): JSX.Element {
       />
       <AppButton
         title={busy ? 'Verifying…' : 'Verify Message'}
+        testID="verify-submit"
         onPress={onVerify}
         disabled={busy}
       />
-      {verifyOutput ? <Text style={cryptoStyles.output}>{verifyOutput}</Text> : null}
+      {verifyOutput ? (
+        <Text testID="verify-result" style={cryptoStyles.output}>
+          {verifyOutput}
+        </Text>
+      ) : null}
     </Screen>
   );
 }

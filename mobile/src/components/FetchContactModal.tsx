@@ -48,6 +48,7 @@ export default function FetchContactModal({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <TextField
             label="Fingerprint"
+            testID="contacts-fetch-fingerprint"
             value={fingerprint}
             onChangeText={setFingerprint}
             autoCapitalize="none"
@@ -69,6 +70,7 @@ export default function FetchContactModal({
             />
             <AppButton
               title="Fetch"
+              testID="contacts-fetch-submit"
               onPress={submit}
               style={styles.flex}
               disabled={busy}

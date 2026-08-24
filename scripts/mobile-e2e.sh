@@ -185,6 +185,8 @@ if [[ ${#FLOW_ARGS[@]} -eq 0 ]]; then
   FLOW_ARGS=(
     "${ROOT}/mobile/e2e/smoke.yaml"
     "${ROOT}/mobile/e2e/identity.yaml"
+    "${ROOT}/mobile/e2e/details.yaml"
+    "${ROOT}/mobile/e2e/sign-verify.yaml"
     "${ROOT}/mobile/e2e/hierarchy.yaml"
   )
 fi

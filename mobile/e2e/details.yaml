@@ -1,0 +1,79 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-mobile-detail
+  IDENTITY_PASSWORD: Smoke-test-password1
+  DETAIL_EMAIL: e2e-detail@example.com
+---
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 60000
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible:
+    text: "Published.*"
+- scrollUntilVisible:
+    element:
+      id: "identity-detail-path"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "identity-detail-path"
+- inputText: email
+- hideKeyboard
+- tapOn:
+    id: "identity-detail-value"
+- inputText: ${DETAIL_EMAIL}
+- hideKeyboard
+- tapOn:
+    id: "identity-detail-push"
+- scrollUntilVisible:
+    element:
+      id: "identity-add-detail"
+    direction: UP
+    timeout: 15000
+- tapOn:
+    id: "identity-add-detail"
+- extendedWaitUntil:
+    visible: "Detail added"
+    timeout: 120000
+- tapOn:
+    id: "tab-contacts"
+- extendedWaitUntil:
+    visible:
+      id: "contacts-browse"
+    timeout: 15000
+- tapOn:
+    id: "contacts-browse"
+- extendedWaitUntil:
+    visible:
+      id: "contacts-browse-query"
+    timeout: 15000
+- tapOn:
+    id: "contacts-browse-query"
+- inputText: ${DETAIL_EMAIL}
+- hideKeyboard
+- tapOn:
+    id: "contacts-browse-submit"
+- extendedWaitUntil:
+    visible: ${DETAIL_EMAIL}
+    timeout: 30000
+- assertVisible: ${DETAIL_EMAIL}

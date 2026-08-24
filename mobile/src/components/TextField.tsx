@@ -23,6 +23,7 @@ export default function TextField({
       <Text style={styles.label}>{label}</Text>
       <TextInput
         placeholderTextColor="#aaa"
+        scrollEnabled={multiline}
         {...rest}
         testID={testID}
         multiline={multiline}
@@ -57,6 +58,7 @@ const styles = StyleSheet.create({
   },
   multiline: {
     minHeight: 72,
+    maxHeight: 180,
     textAlignVertical: 'top',
   },
 });

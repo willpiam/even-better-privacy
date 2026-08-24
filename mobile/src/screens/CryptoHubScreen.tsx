@@ -37,11 +37,13 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         <ListRow
           title="Sign message"
           subtitle="Sign text with your identity"
+          testID="crypto-sign-message"
           onPress={() => navigation.navigate('SignMessage')}
         />
         <ListRow
           title="Verify message"
           subtitle="Check a signed payload"
+          testID="crypto-verify-message"
           onPress={() => navigation.navigate('VerifyMessage')}
         />
         <ListRow

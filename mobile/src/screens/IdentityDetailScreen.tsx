@@ -330,6 +330,50 @@ export default function IdentityDetailScreen({
         onPress={onPublish}
         disabled={busy}
       />
+
+      <SectionTitle>Identity details</SectionTitle>
+      <AppButton
+        title="Add detail"
+        testID="identity-add-detail"
+        variant="secondary"
+        onPress={onAddDetail}
+      />
+      {details.map(item => (
+        <Card key={item.path} padded style={styles.detailCard}>
+          <Text style={styles.detail}>
+            {item.path}: {item.detail}
+          </Text>
+          {item.path === 'email' || item.path === 'opaque::email' ? (
+            <AppButton
+              title="Verify email"
+              variant="secondary"
+              onPress={() => onVerifyEmail(item.path, item.detail)}
+            />
+          ) : null}
+        </Card>
+      ))}
+      <TextField
+        label="Detail path"
+        testID="identity-detail-path"
+        value={detailPath}
+        onChangeText={setDetailPath}
+        placeholder="e.g. email"
+      />
+      <TextField
+        label="Detail value"
+        testID="identity-detail-value"
+        value={detailValue}
+        onChangeText={setDetailValue}
+      />
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Push to server</Text>
+        <Switch
+          testID="identity-detail-push"
+          value={detailPush}
+          onValueChange={setDetailPush}
+        />
+      </View>
+
       <AppButton
         title="Export identity file"
         variant="secondary"
@@ -356,38 +400,6 @@ export default function IdentityDetailScreen({
           multiline
         />
       ) : null}
-
-      <SectionTitle>Identity details</SectionTitle>
-      {details.map(item => (
-        <Card key={item.path} padded style={styles.detailCard}>
-          <Text style={styles.detail}>
-            {item.path}: {item.detail}
-          </Text>
-          {item.path === 'email' || item.path === 'opaque::email' ? (
-            <AppButton
-              title="Verify email"
-              variant="secondary"
-              onPress={() => onVerifyEmail(item.path, item.detail)}
-            />
-          ) : null}
-        </Card>
-      ))}
-      <TextField
-        label="Detail path"
-        value={detailPath}
-        onChangeText={setDetailPath}
-        placeholder="e.g. email"
-      />
-      <TextField
-        label="Detail value"
-        value={detailValue}
-        onChangeText={setDetailValue}
-      />
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Push to server</Text>
-        <Switch value={detailPush} onValueChange={setDetailPush} />
-      </View>
-      <AppButton title="Add detail" variant="secondary" onPress={onAddDetail} />
 
       <SectionTitle>Revocation</SectionTitle>
       <TextField

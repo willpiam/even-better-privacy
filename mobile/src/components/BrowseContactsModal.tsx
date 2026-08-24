@@ -141,6 +141,7 @@ export default function BrowseContactsModal({
               <View style={styles.browseField}>
                 <TextField
                   label="Search query"
+                  testID="contacts-browse-query"
                   value={browseQuery}
                   onChangeText={setBrowseQuery}
                   autoCapitalize="none"
@@ -148,6 +149,7 @@ export default function BrowseContactsModal({
               </View>
               <AppButton
                 title="Browse"
+                testID="contacts-browse-submit"
                 onPress={onBrowse}
                 disabled={browsingLoading}
                 style={styles.browseBtn}

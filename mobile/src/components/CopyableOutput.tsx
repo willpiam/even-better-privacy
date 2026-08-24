@@ -7,31 +7,40 @@ import {colors, radius} from '../theme/tokens';
 export default function CopyableOutput({
   value,
   placeholder,
+  testID,
+  showCopyButton = true,
 }: {
   value: string;
   placeholder?: string;
+  testID?: string;
+  showCopyButton?: boolean;
 }): JSX.Element {
   const hasValue = value.trim().length > 0;
 
   return (
     <View style={styles.wrap}>
+      {showCopyButton ? (
+        <AppButton
+          title="Copy"
+          testID={testID ? `${testID}-copy` : undefined}
+          variant="secondary"
+          disabled={!hasValue}
+          onPress={() => {
+            if (hasValue) {
+              Clipboard.setString(value);
+            }
+          }}
+        />
+      ) : null}
       <TextInput
+        testID={testID}
         style={[styles.input, !hasValue && styles.inputEmpty]}
         value={value}
         editable={false}
         multiline
+        scrollEnabled
         placeholder={placeholder}
         placeholderTextColor={hasValue ? undefined : colors.muted}
-      />
-      <AppButton
-        title="Copy"
-        variant="secondary"
-        disabled={!hasValue}
-        onPress={() => {
-          if (hasValue) {
-            Clipboard.setString(value);
-          }
-        }}
       />
     </View>
   );
@@ -44,11 +53,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.sm,
     minHeight: 110,
+    maxHeight: 200,
     textAlignVertical: 'top',
     padding: 10,
     color: colors.text,
     backgroundColor: colors.surface,
-    marginBottom: 8,
+    marginTop: 8,
   },
   inputEmpty: {
     backgroundColor: colors.page,
