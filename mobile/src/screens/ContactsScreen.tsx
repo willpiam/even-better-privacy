@@ -94,6 +94,7 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
           {contacts.map(item => (
             <ContactListRow
               key={item.name}
+              testID={`contact-row-${item.name}`}
               contact={storedContactToLike(item)}
               onPress={() =>
                 navigation.navigate('ContactDetail', {name: item.name})

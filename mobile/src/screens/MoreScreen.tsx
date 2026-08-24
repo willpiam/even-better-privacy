@@ -80,6 +80,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
       <SectionTitle>Developer</SectionTitle>
       <Card>
         <ListRow
+          testID="more-self-test"
           title="Core self-test"
           subtitle="Run crypto parity checks"
           onPress={() => {
@@ -90,11 +91,13 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           }}
         />
         <ListRow
+          testID="more-mail-trace"
           title="Mail trace"
           subtitle="Protocol stubs"
           onPress={() => navigation.navigate('MailTrace')}
         />
         <ListRow
+          testID="more-diagnostics"
           title="Diagnostics"
           subtitle="Parity checks, paths"
           onPress={() => navigation.navigate('Diagnostics')}

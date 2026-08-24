@@ -50,12 +50,14 @@ export default function MailTraceScreen(_props: Props): JSX.Element {
       <View style={styles.row}>
         <AppButton
           title="Refresh"
+          testID="mail-trace-refresh"
           variant="secondary"
           onPress={() => void refresh()}
           style={styles.halfBtn}
         />
         <AppButton
           title="Clear"
+          testID="mail-trace-clear"
           variant="danger"
           onPress={() => void onClear()}
           style={styles.halfBtn}

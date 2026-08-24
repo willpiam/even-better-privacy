@@ -28,7 +28,7 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
       </Card>
 
       <Card padded>
-        <Text style={styles.p}>
+        <Text style={styles.p} testID="project-info-body">
           EBP (Even Better Privacy) is a post-quantum cryptographic identity and
           messaging system using Dilithium/SPHINCS+ for signatures and Kyber for
           encryption.

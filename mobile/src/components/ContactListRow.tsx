@@ -13,6 +13,7 @@ export default function ContactListRow({
   right,
   showAvatar = true,
   subtitleExtra,
+  testID,
 }: {
   contact: ContactLike;
   onPress?: () => void;
@@ -22,6 +23,7 @@ export default function ContactListRow({
   showAvatar?: boolean;
   /** Appended after secondary with ` · ` (e.g. browse key types · created). */
   subtitleExtra?: string;
+  testID?: string;
 }): JSX.Element {
   const {primary, secondary} = resolveContactLabels(contact);
   const subtitle = subtitleExtra
@@ -30,6 +32,7 @@ export default function ContactListRow({
 
   return (
     <ListRow
+      testID={testID}
       title={primary}
       subtitle={subtitle}
       avatarText={showAvatar ? primary : undefined}

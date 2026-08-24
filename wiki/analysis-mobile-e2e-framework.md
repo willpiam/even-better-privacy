@@ -87,9 +87,10 @@ directory (`helpers/` are subflows, not tests).
 
 | Flow | Coverage |
 |------|----------|
-| `mobile/e2e/smoke.yaml` | Launch, Identities tab, More → Settings |
+| `mobile/e2e/smoke.yaml` | Launch, Identities tab, More (About, Mail trace, Diagnostics, core self-test, Activity log, Settings toggles) |
 | `mobile/e2e/identity.yaml` | HD create, set server, wrong-password publish, successful publish |
 | `mobile/e2e/details.yaml` | HD create + publish, push detail, Contacts browse/search |
+| `mobile/e2e/contacts-lifecycle.yaml` | HD create + publish, export public JSON, emergency cert, fetch contact, local notes, delete contact + identity |
 | `mobile/e2e/sign-verify.yaml` | Sign attached message, paste payload, verify |
 | `mobile/e2e/hierarchy.yaml` | Two HD identities, propose/accept, Load Tree |
 | `mobile/e2e/helpers/*` | clear-and-launch, set-server, create-hd-identity, dismiss-autofill |
@@ -97,15 +98,34 @@ directory (`helpers/` are subflows, not tests).
 Identity creation is **HD-only** via `HdCreateScreen` (Generate mnemonic
 auto-fills confirm for the in-app generate path).
 
-Default suite order: smoke → identity → details → sign-verify → hierarchy
-(details/sign-verify fail before the ~4m HD hierarchy keygen).
+Default suite order: smoke → identity → details → contacts-lifecycle →
+sign-verify → hierarchy (details/sign-verify fail before the ~4m HD hierarchy
+keygen).
+
+### contacts-lifecycle pitfalls
+
+- Prefer **emergency cert before export public JSON** so the huge JSON field
+  does not push controls off-screen.
+- Assert via `identity-emergency-output` / `identity-export-public-output`
+  (`scrollUntilVisible`), not status-banner text (Maestro often misses long
+  banner strings).
+- After Contacts work, Identities tab returns to Identity Detail; fingerprint
+  may be scrolled away — scroll to `identity-delete` instead of looking for
+  `identity-row-*`. Contact delete already `goBack()`s; do not press Back again.
+
+### Metro Node version
+
+System `/usr/bin/node` on Ubuntu 22.04 may be too old for RN 0.84 (`??`
+syntax). Start Metro with Node 22 (`nvm use 22`) and set
+`MOBILE_E2E_SKIP_METRO=1`, or ensure the runner's PATH prefers a modern Node.
 
 ## App instrumentation
 
 Stable `testID`s on `AppButton`, `TextField`, `PasswordModal`, `ListRow`,
 `ContactPicker`, `Card`, `StatusBanner`, tab bar (`tabBarButtonTestID`),
-Identities / Settings / Certificates, Identity details, Crypto hub,
-Sign/Verify, and Contacts fetch/browse. Maestro targets `id: …`.
+Identities / Settings / More / Diagnostics / Activity log / Project Info,
+Identity details, Crypto hub, Sign/Verify, and Contacts fetch/browse/detail.
+Maestro targets `id: …`.
 Sign/verify copies the signed JSON to the clipboard on sign, then Paste
 on Verify (`pasteText` cannot type ML-DSA JSON). Verify reads embedded
 `identity` from the payload when no contact exists.

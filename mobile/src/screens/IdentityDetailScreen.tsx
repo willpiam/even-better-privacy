@@ -381,20 +381,29 @@ export default function IdentityDetailScreen({
       />
       <AppButton
         title="Emergency certificate"
+        testID="identity-emergency-cert"
         variant="secondary"
         onPress={onEmergencyCert}
       />
       <AppButton
         title="Export public JSON"
+        testID="identity-export-public"
         variant="secondary"
         onPress={onExportPublic}
       />
       {exportOutput ? (
-        <TextField label="Public JSON" value={exportOutput} editable={false} multiline />
+        <TextField
+          label="Public JSON"
+          testID="identity-export-public-output"
+          value={exportOutput}
+          editable={false}
+          multiline
+        />
       ) : null}
       {emergencyOutput ? (
         <TextField
           label="Emergency certificate"
+          testID="identity-emergency-output"
           value={emergencyOutput}
           editable={false}
           multiline
@@ -418,7 +427,12 @@ export default function IdentityDetailScreen({
       </View>
       <AppButton title="Revoke detail" variant="secondary" onPress={onRevokeDetail} />
       <AppButton title="Revoke identity" variant="danger" onPress={onRevokeIdentity} />
-      <AppButton title="Delete from device" variant="danger" onPress={onDelete} />
+      <AppButton
+        title="Delete from device"
+        testID="identity-delete"
+        variant="danger"
+        onPress={onDelete}
+      />
     </Screen>
   );
 }

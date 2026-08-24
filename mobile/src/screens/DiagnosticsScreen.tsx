@@ -26,6 +26,7 @@ export default function DiagnosticsScreen(_props: Props): JSX.Element {
       <SectionTitle>Parity checks</SectionTitle>
       <AppButton
         title="Verify Argon2 parity"
+        testID="diagnostics-argon2"
         variant="secondary"
         disabled={loading}
         onPress={async () => {
@@ -46,6 +47,7 @@ export default function DiagnosticsScreen(_props: Props): JSX.Element {
       />
       <AppButton
         title="Verify mail PBKDF2 parity"
+        testID="diagnostics-pbkdf2"
         variant="secondary"
         disabled={loading}
         onPress={async () => {

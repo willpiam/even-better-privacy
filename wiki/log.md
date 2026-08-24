@@ -1,5 +1,44 @@
 # Wiki Log
 
+## [2026-08-24] implement | cheap mobile Maestro E2E passing
+
+- `smoke.yaml` (expanded) and `contacts-lifecycle.yaml` passed on Android USB.
+- Lifecycle pitfalls: emergency before export JSON; wait on output testIDs;
+  delete from Detail (`identity-delete`) after Contacts tab return; no extra
+  Back after contact delete.
+- Metro needs Node 22+ on this host (`nvm use 22` + `MOBILE_E2E_SKIP_METRO=1`).
+- Updated: [[analysis-mobile-e2e-framework]], [[analysis-mobile-testing-and-gui-gaps]],
+  `mobile/e2e/README.md`.
+
+## [2026-08-24] implement | cheap mobile Maestro E2E (ranks 1–12)
+
+- Expanded `mobile/e2e/smoke.yaml` (About, Mail trace, Diagnostics, core
+  self-test, Activity log, Settings toggles).
+- Added `mobile/e2e/contacts-lifecycle.yaml` (export public JSON, emergency
+  cert, fetch contact, local notes, delete contact + identity).
+- Stamped testIDs on More/Settings/Diagnostics/Project Info/Identity/Contacts.
+- Default suite now 7 flows; updated README + wiki.
+
+## [2026-08-24] query | rank untested mobile features by Maestro difficulty
+
+- Answered: 30 existing untested features ranked easiest→hardest (smoke
+  screens first; file picker/Share and live mail last).
+- Updated: [[analysis-mobile-testing-and-gui-gaps]].
+
+## [2026-08-24] query | existing mobile features still needing tests
+
+- Answered: 18 of 28 mobile screens have no Maestro flow; ~30 existing
+  user operations still need E2E (identity/contacts/crypto/mail/more).
+- Updated: [[analysis-mobile-testing-and-gui-gaps]].
+
+## [2026-08-24] query | mobile testing status and GUI missing features
+
+- Answered: 5/5 Maestro flows have passed independently (full 5-flow suite not
+  re-run in one sitting); ~17 GUI Playwright cases plus mail still untested on
+  mobile; listed GUI surfaces with no mobile control.
+- Updated: [[analysis-mobile-testing-and-gui-gaps]] (sign-verify now green;
+  GUI active count 23).
+
 ## [2026-08-24] implement | mobile Maestro sign-verify E2E passing
 
 - `mobile/e2e/sign-verify.yaml` passed on Android USB (~2m 19s): HD create,

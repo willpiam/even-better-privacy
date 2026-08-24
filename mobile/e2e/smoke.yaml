@@ -9,11 +9,89 @@ appId: com.mobile
 - assertVisible:
     id: "tab-identities"
 - assertVisible: "Identities"
+
+# More hub + About EBP
 - tapOn: "More"
 - extendedWaitUntil:
     visible:
-      id: "more-settings"
+      id: "more-about"
     timeout: 15000
+- tapOn:
+    id: "more-about"
+- extendedWaitUntil:
+    visible:
+      id: "project-info-body"
+    timeout: 10000
+- assertVisible: "How It Works"
+- back
+
+# Mail trace
+- extendedWaitUntil:
+    visible:
+      id: "more-mail-trace"
+    timeout: 10000
+- tapOn:
+    id: "more-mail-trace"
+- extendedWaitUntil:
+    visible: "No mail stubs recorded yet."
+    timeout: 10000
+- tapOn:
+    id: "mail-trace-refresh"
+- back
+
+# Diagnostics parity checks
+- extendedWaitUntil:
+    visible:
+      id: "more-diagnostics"
+    timeout: 10000
+- tapOn:
+    id: "more-diagnostics"
+- extendedWaitUntil:
+    visible:
+      id: "diagnostics-argon2"
+    timeout: 10000
+- tapOn:
+    id: "diagnostics-argon2"
+- extendedWaitUntil:
+    visible: "Argon2 parity OK"
+    timeout: 60000
+- tapOn:
+    id: "diagnostics-pbkdf2"
+- extendedWaitUntil:
+    visible: "Mail PBKDF2 parity OK"
+    timeout: 60000
+- back
+
+# Core self-test (generates in-memory identity; may take up to ~2 min)
+- scrollUntilVisible:
+    element:
+      id: "more-self-test"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "more-self-test"
+- tapOn:
+    text: "^Run$"
+- extendedWaitUntil:
+    visible: "Core OK.*"
+    timeout: 120000
+
+# Activity log should show diagnostics entries
+- extendedWaitUntil:
+    visible:
+      id: "more-activity-log"
+    timeout: 10000
+- tapOn:
+    id: "more-activity-log"
+- extendedWaitUntil:
+    visible:
+      id: "activity-log-list"
+    timeout: 15000
+- assertVisible:
+    id: "activity-log-entry"
+- back
+
+# Settings toggles + save
 - tapOn:
     id: "more-settings"
 - extendedWaitUntil:
@@ -21,5 +99,14 @@ appId: com.mobile
       id: "settings-server-url"
     timeout: 10000
 - assertVisible: "Settings"
-- assertVisible:
+- tapOn:
+    id: "settings-enforce-password-policy"
+- tapOn:
+    id: "settings-mail-render-html"
+- tapOn:
+    id: "settings-mail-include-public-keys"
+- tapOn:
     id: "settings-save"
+- extendedWaitUntil:
+    visible: "Saved"
+    timeout: 10000

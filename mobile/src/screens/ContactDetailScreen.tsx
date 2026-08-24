@@ -273,6 +273,7 @@ export default function ContactDetailScreen({
       <SectionTitle>Local notes</SectionTitle>
       <TextField
         label="Alias"
+        testID="contact-notes-alias"
         value={localAlias}
         onChangeText={setLocalAlias}
       />
@@ -289,7 +290,11 @@ export default function ContactDetailScreen({
         autoCapitalize="none"
         keyboardType="email-address"
       />
-      <AppButton title="Save notes" onPress={onSaveNotes} />
+      <AppButton
+        title="Save notes"
+        testID="contact-notes-save"
+        onPress={onSaveNotes}
+      />
 
       <Text style={styles.meta}>
         {`${serverUrl}/api/v1/identity/${contact.fingerprint}`}
@@ -311,6 +316,7 @@ export default function ContactDetailScreen({
       </View>
       <AppButton
         title="Delete"
+        testID="contact-delete"
         variant="danger"
         onPress={onDelete}
         disabled={syncing}

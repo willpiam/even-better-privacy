@@ -103,6 +103,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Enforce password policy</Text>
         <Switch
+          testID="settings-enforce-password-policy"
           value={enforcePasswordPolicy}
           onValueChange={async value => {
             setEnforcePasswordPolicyValue(value);
@@ -115,6 +116,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Render HTML mail bodies</Text>
         <Switch
+          testID="settings-mail-render-html"
           value={mailRenderHtml}
           onValueChange={async value => {
             setMailRenderHtmlValue(value);
@@ -125,6 +127,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Include public keys in EBP mail</Text>
         <Switch
+          testID="settings-mail-include-public-keys"
           value={mailIncludePublicKeys}
           onValueChange={async value => {
             setMailIncludePublicKeysValue(value);

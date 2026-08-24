@@ -56,6 +56,7 @@ export default function FetchContactModal({
           />
           <TextField
             label="Save as (optional)"
+            testID="contacts-fetch-save-as"
             value={saveAs}
             onChangeText={setSaveAs}
             autoCapitalize="none"

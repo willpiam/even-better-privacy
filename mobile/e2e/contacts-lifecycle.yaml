@@ -1,0 +1,136 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-mobile-lifecycle
+  IDENTITY_PASSWORD: Smoke-test-password1
+  CONTACT_NAME: e2e-fetched
+---
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 60000
+- copyTextFrom:
+    id: "identity-fingerprint"
+- evalScript: ${output.fp = maestro.copiedText}
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "identity-publish"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible:
+    text: "Published.*"
+
+# Emergency certificate before export (avoids a huge JSON field pushing UI around)
+- scrollUntilVisible:
+    element:
+      id: "identity-emergency-cert"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "identity-emergency-cert"
+- scrollUntilVisible:
+    element:
+      id: "identity-emergency-output"
+    direction: DOWN
+    timeout: 180000
+
+# Export public JSON
+- scrollUntilVisible:
+    element:
+      id: "identity-export-public"
+    direction: UP
+    timeout: 15000
+- tapOn:
+    id: "identity-export-public"
+- scrollUntilVisible:
+    element:
+      id: "identity-export-public-output"
+    direction: DOWN
+    timeout: 30000
+
+# Fetch contact by fingerprint
+- tapOn:
+    id: "tab-contacts"
+- extendedWaitUntil:
+    visible:
+      id: "contacts-fetch"
+    timeout: 15000
+- tapOn:
+    id: "contacts-fetch"
+- extendedWaitUntil:
+    visible:
+      id: "contacts-fetch-fingerprint"
+    timeout: 10000
+- tapOn:
+    id: "contacts-fetch-fingerprint"
+- inputText: ${output.fp}
+- hideKeyboard
+- tapOn:
+    id: "contacts-fetch-save-as"
+- inputText: ${CONTACT_NAME}
+- hideKeyboard
+- tapOn:
+    id: "contacts-fetch-submit"
+- extendedWaitUntil:
+    visible: "Contact fetched"
+    timeout: 30000
+
+# Local notes on contact detail
+- tapOn:
+    id: "contact-row-${CONTACT_NAME}"
+- extendedWaitUntil:
+    visible:
+      id: "contact-notes-alias"
+    timeout: 15000
+- tapOn:
+    id: "contact-notes-alias"
+- inputText: e2e-alias
+- hideKeyboard
+- tapOn:
+    id: "contact-notes-save"
+- extendedWaitUntil:
+    visible: "Local notes saved"
+    timeout: 10000
+
+# Delete contact (screen already goBack()s to the list)
+- scrollUntilVisible:
+    element:
+      id: "contact-delete"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "contact-delete"
+- extendedWaitUntil:
+    visible: "No contacts yet."
+    timeout: 10000
+
+# Delete identity (Identities stack stays on Detail; fingerprint may be scrolled off)
+- tapOn:
+    id: "tab-identities"
+- scrollUntilVisible:
+    element:
+      id: "identity-delete"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "identity-delete"
+- tapOn:
+    text: "^Delete$"
+- extendedWaitUntil:
+    visible:
+      id: "identities-empty"
+    timeout: 15000

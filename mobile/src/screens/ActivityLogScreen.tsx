@@ -30,18 +30,22 @@ export default function ActivityLogScreen(_props: Props): JSX.Element {
     <Screen scroll>
       <AppButton
         title="Clear log"
+        testID="activity-log-clear"
         variant="danger"
         onPress={async () => {
           await clearActivityLog();
           setLogs([]);
         }}
       />
-      <Card padded>
+      <Card padded testID={logs.length === 0 ? 'activity-log-empty' : 'activity-log-list'}>
         {logs.length === 0 ? (
           <Text style={styles.logLine}>No activity yet.</Text>
         ) : (
           logs.map(entry => (
-            <Text style={styles.logLine} key={`${entry.at}-${entry.message}`}>
+            <Text
+              style={styles.logLine}
+              key={`${entry.at}-${entry.message}`}
+              testID="activity-log-entry">
               [{entry.kind}] {new Date(entry.at).toLocaleString()} —{' '}
               {entry.message}
             </Text>
