@@ -1,5 +1,12 @@
 # Wiki Log
 
+## [2026-08-24] query | GUI features missing from mobile
+
+- Answered: 18 GUI surfaces with no mobile control (identity, crypto, mail),
+  plus desktop-only packaging/storage.
+- Filed/updated: [[analysis-mobile-testing-and-gui-gaps]] (added Sign File
+  salt toggle and inbox fetch-limit).
+
 ## [2026-08-24] implement | cheap mobile Maestro E2E passing
 
 - `smoke.yaml` (expanded) and `contacts-lifecycle.yaml` passed on Android USB.

@@ -155,24 +155,28 @@ have no equivalent mobile control**, not the June 2026 interop bugs.
 
 7. **Include-salt toggle on Sign Message** — GUI `#sign-include-salt`. Mobile
    always salts (`includeSalt` defaults true, no switch).
-8. **Verify with pasted/imported public keys** — GUI
+8. **Include-salt toggle on Sign File** — GUI `#sign-file-include-salt`. Mobile
+   `SignFileScreen` always calls `includeSalt: true` with no switch.
+9. **Verify with pasted/imported public keys** — GUI
    `#verify-use-public-keys` + file import. Mobile verify has payload +
    optional detached message only (`FingerprintToolScreen` is separate).
-9. **Save JSON to `~/Downloads`** — GUI `POST /api/v1/save-file`. Mobile uses
-   the Share sheet.
+10. **Save JSON to `~/Downloads`** — GUI `POST /api/v1/save-file`. Mobile uses
+    the Share sheet.
 
 ### Mail
 
-10. **Folder picker** — GUI Sent/Drafts/Trash/Spam/custom. Mobile inbox is
+11. **Folder picker** — GUI Sent/Drafts/Trash/Spam/custom. Mobile inbox is
     INBOX only (`listInboxMessages`, limit 40).
-11. **Inbox search** — GUI `#mail-search`.
-12. **Inbox pagination** — GUI `#mail-pagination`.
-13. **Compose attachments** — GUI `#mail-compose-attachments`. Mobile compose
+12. **Inbox search** — GUI `#mail-search`.
+13. **Inbox pagination** — GUI `#mail-pagination`.
+14. **Inbox fetch limit** — GUI `#mail-limit` (1–100, default 20). Mobile
+    hardcodes 40.
+15. **Compose attachments** — GUI `#mail-compose-attachments`. Mobile compose
     has no attachment picker.
-14. **Multi-recipient compose** — GUI `#mail-compose-add-recipient`. Mobile
+16. **Multi-recipient compose** — GUI `#mail-compose-add-recipient`. Mobile
     is a single To field.
-15. **“How to Connect Your Email” help tab** — GUI mail help panel.
-16. **Sandboxed HTML iframe preview** — GUI `#mail-message-html-frame`.
+17. **“How to Connect Your Email” help tab** — GUI mail help panel.
+18. **Sandboxed HTML iframe preview** — GUI `#mail-message-html-frame`.
     Mobile has a “Render HTML mail bodies” setting, not the same reader.
 
 ### Desktop-only (not expected on phone)
