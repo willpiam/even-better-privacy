@@ -56,10 +56,14 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
     await refresh();
   };
 
-  const onFetch = async (fingerprint: string, name?: string) => {
+  const onFetch = async (
+    fingerprint: string,
+    name?: string,
+    server?: string,
+  ) => {
     setFetching(true);
     try {
-      await fetchContactFromServer({fingerprint, name});
+      await fetchContactFromServer({fingerprint, name, server});
       setStatus('Contact fetched');
       setFetchVisible(false);
       await refresh();
@@ -96,6 +100,8 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
               key={item.name}
               testID={`contact-row-${item.name}`}
               contact={storedContactToLike(item)}
+              badge={item.contact.revoked ? 'REVOKED' : undefined}
+              badgeVariant={item.contact.revoked ? 'danger' : 'default'}
               onPress={() =>
                 navigation.navigate('ContactDetail', {name: item.name})
               }

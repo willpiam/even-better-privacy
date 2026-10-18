@@ -1,5 +1,55 @@
 # Wiki Log
 
+## [2026-09-09] implement | finish-line wave4 proof progress
+
+- Maestro: added `mobile/e2e/verify-public-keys.yaml` (detached +
+  include-identity OFF, verify with pasted public export) and
+  `mobile/e2e/mail-help.yaml` (Mail → Help, no mailbox); wired into
+  `scripts/mobile-e2e.sh` default suite (10 flows).
+- Wiki closeout: [[analysis-gui-mobile-parity-deltas]] marks Android
+  identity/crypto/mail parity done (OAuth out of scope; Downloads
+  desktop-only); [[analysis-mobile-testing-and-gui-gaps]] refreshed for
+  new flows and remaining file-picker gaps; [[component-mobile]],
+  [[index.md]] updated. Chrome extension remains removed (not a live
+  component).
+
+## [2026-09-09] implement | mobile mail reliability + inbox/compose parity
+
+- Honor `imapSecure`/`smtpSecure` with implicit TLS vs plain+STARTTLS;
+  inbox empty-vs-error + unlock affordance; test-connection step labels +
+  overall timeout.
+- Inbox: `listMailboxMessages` folder/search/page/limit; Mail help screen;
+  sandboxed HTML WebView; compose attachments + multi To/RCPT +
+  `signAndEncryptForMany`.
+- Jest: `mailMailbox-test.ts`, `mailSmtp-test.ts` (mocked IMAP/SMTP/MIME).
+- Checked off gaps 11–18 in [[analysis-mobile-testing-and-gui-gaps]].
+  Live mailbox Maestro / Playwright still need credentials.
+
+## [2026-09-09] implement | mobile identity feature parity
+
+- Random-key create (`createRandomIdentity` + `RandomCreateScreen`); HD
+  change/overwrite UI; selective public export; opaque add-detail; per-action
+  server override on publish/fetch/browse.
+- Jest `identity-create-test.ts`; Deno HD change + `toPublicExport` in
+  `test/mobile-parity_test.ts`; Maestro `create-random.yaml` wired after
+  identity in `scripts/mobile-e2e.sh`.
+- Checked off gaps 1–6 in [[analysis-mobile-testing-and-gui-gaps]].
+
+## [2026-09-09] implement | mobile crypto feature parity
+
+- Sign Message/File: include-salt switches; Verify: public-keys paste/import;
+  Decrypt Message + Fingerprint: paste; Decrypt File: Share of file bytes.
+- Extracted Deno-testable `signVerifyLogic.ts`; tests in
+  `test/mobile-signVerify_parity_test.ts` (salt off, file salt off, public keys).
+- Checked off gaps 7–9 in [[analysis-mobile-testing-and-gui-gaps]]; item 10
+  remains desktop-only (Share). Updated [[component-mobile]],
+  [[analysis-gui-mobile-parity-deltas]].
+
+## [2026-09-09] ingest | chrome-extension-removed
+
+- Deleted Chrome email extension (`email/chrome-extension/`, build script) per finish-line scope.
+- Removed [[component-email-extension]] and stripped references from overview/index/ReadMe.
+
 ## [2026-08-24] query | GUI features missing from mobile
 
 - Answered: 18 GUI surfaces with no mobile control (identity, crypto, mail),

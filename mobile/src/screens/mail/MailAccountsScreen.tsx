@@ -300,6 +300,11 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         variant="secondary"
         onPress={() => navigation.navigate('MailInbox')}
       />
+      <AppButton
+        title="Mail help"
+        variant="secondary"
+        onPress={() => navigation.navigate('MailHelp')}
+      />
     </Screen>
   );
 }

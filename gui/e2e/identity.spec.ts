@@ -54,6 +54,12 @@ async function publishIdentity(
   await page.fill("#publish-server", serverUrl);
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await submitPassword(page, password);
+  // loadAll() may replace "Published" with "Ready" before the next assertion;
+  // treat either success status as publish completion.
+  await expect(page.locator("#status")).toHaveAttribute("data-kind", "success", {
+    timeout: 60_000,
+  });
+  await expect(page.locator("#status")).toContainText(/Published|Ready/i);
 }
 
 async function addDetail(
@@ -82,7 +88,10 @@ async function addLocalDetail(
   await page.locator("#detail-push").setChecked(push);
   await page.getByRole("button", { name: "Add Detail", exact: true }).click();
   await submitPassword(page, password);
-  await expect(page.locator("#identity-details-list")).toContainText(detail);
+  // PQ detail attach regularly exceeds Playwright's default 5s expect timeout.
+  await expect(page.locator("#identity-details-list")).toContainText(detail, {
+    timeout: 60_000,
+  });
 }
 
 async function expectStatus(page: Page, expectedText: RegExp, kind?: string) {

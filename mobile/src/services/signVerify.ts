@@ -4,30 +4,25 @@ import {
   Identity,
   toHex,
   base64ToBytes,
-  buildDetachedSignaturePayload,
-  buildSignedMessagePayload,
-  randomHex,
   buildFileSignMessage,
   type ExternalIdentity,
+  type IdentityPublicExport,
+  type IdentityPublicExportOptions,
   externalIdentityFromEmbeddedRecord,
 } from '../ebpCore';
 import {loadContact} from './contacts';
-import {loadIdentity, readIdentityRaw} from './storage';
+import {loadIdentity} from './storage';
+import {
+  type SignMessageOptions,
+  signMessageWithIdentity,
+  signFileBytesWithIdentity,
+} from './signVerifyLogic';
 
-function hashTextSha256Hex(value: string): string {
-  return toHex(sha256(new TextEncoder().encode(value)));
-}
+export type {SignMessageOptions};
 
 function normalizeFileUri(uri: string): string {
   return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
 }
-
-export type SignMessageOptions = {
-  detached?: boolean;
-  includeIdentity?: boolean;
-  includeSalt?: boolean;
-  salt?: string;
-};
 
 export async function signMessage(params: {
   identityName: string;
@@ -35,44 +30,8 @@ export async function signMessage(params: {
   message: string;
   options?: SignMessageOptions;
 }): Promise<Record<string, unknown>> {
-  if (!params.message) {
-    throw new Error('Message is required');
-  }
   const identity = await loadIdentity(params.identityName, params.password);
-  const includeSalt = params.options?.includeSalt ?? true;
-  const salt =
-    params.options?.salt ?? (includeSalt ? randomHex(16) : '');
-  const signature = identity.signMessage(params.message, salt);
-  const messageHash = hashTextSha256Hex(params.message);
-  const summary = identity.summary;
-  const identityPayload = params.options?.includeIdentity
-    ? {
-        fingerprint: summary.fingerprint,
-        signingKeyType: summary.signingKeyType,
-        encryptionKeyType: summary.encryptionKeyType,
-        signingKey: summary.signingKey,
-        encryptionKey: summary.encryptionKey,
-        signingKeyDetails: summary.signingKeyDetails,
-        encryptionKeyDetails: summary.encryptionKeyDetails,
-      }
-    : undefined;
-  if (params.options?.detached) {
-    return buildDetachedSignaturePayload({
-      fingerprint: identity.toFingerprint(),
-      messageHash,
-      salt,
-      signature,
-      identity: identityPayload,
-    }) as Record<string, unknown>;
-  }
-  return buildSignedMessagePayload({
-    fingerprint: identity.toFingerprint(),
-    message: params.message,
-    messageHash,
-    salt,
-    signature,
-    identity: identityPayload,
-  }) as Record<string, unknown>;
+  return signMessageWithIdentity(identity, params.message, params.options);
 }
 
 export async function verifyMessage(params: {
@@ -105,7 +64,7 @@ export async function verifyMessage(params: {
   if (!message || !messageHash || !signature) {
     throw new Error('Payload missing required fields');
   }
-  if (hashTextSha256Hex(message) !== messageHash) {
+  if (toHex(sha256(new TextEncoder().encode(message))) !== messageHash) {
     throw new Error('Message hash mismatch');
   }
   const embedded =
@@ -140,25 +99,13 @@ export async function signFile(params: {
   const path = normalizeFileUri(params.fileUri);
   const base64 = await RNFS.readFile(path, 'base64');
   const bytes = base64ToBytes(base64);
-  const fileHash = toHex(sha256(bytes));
-  const salt = params.includeSalt === false ? '' : randomHex(16);
-  const signedMessage = buildFileSignMessage(
-    fileHash,
-    salt,
-    params.contextMessage ?? '',
-  );
-  const signature = identity.signMessage(signedMessage);
-  const payload = {
-    type: 'ebp-signed-file',
-    fingerprint: identity.toFingerprint(),
+  return signFileBytesWithIdentity({
+    identity,
+    fileBytes: bytes,
     fileName: params.fileName ?? params.fileUri.split('/').pop() ?? 'file',
-    fileHash,
-    salt,
-    contextMessage: params.contextMessage ?? '',
-    signature,
-    identity: identity.summary,
-  };
-  return {payload, fileHash, signedMessage, salt};
+    contextMessage: params.contextMessage,
+    includeSalt: params.includeSalt,
+  });
 }
 
 export async function verifyFileSignature(params: {
@@ -203,22 +150,20 @@ export async function verifyFileSignature(params: {
   };
 }
 
-export async function exportPublicIdentity(identityName: string): Promise<ExternalIdentity> {
-  const raw = await readIdentityRaw(identityName);
-  const publicData = Identity.readPublicData(raw);
-  if (!publicData) {
-    throw new Error('Unable to read public identity');
+export async function exportPublicIdentity(
+  identityName: string,
+  password: string,
+  options: IdentityPublicExportOptions = {},
+): Promise<IdentityPublicExport> {
+  const includeSigningKey = options.includeSigningKey ?? true;
+  const includeEncryptionKey = options.includeEncryptionKey ?? true;
+  if (!includeSigningKey && !includeEncryptionKey) {
+    throw new Error('Public export must include at least one public key');
   }
-  return {
-    fingerprint: publicData.fingerprint,
-    signingKeyType: publicData.signingKeyType,
-    encryptionKeyType: publicData.encryptionKeyType,
-    signingKey: publicData.signingKey,
-    encryptionKey: publicData.encryptionKey,
-    signingKeyDetails: publicData.signingKeyDetails,
-    encryptionKeyDetails: publicData.encryptionKeyDetails,
-    details: publicData.details,
-    revoked: Boolean(publicData.revocationCertificate),
-    revokedDetails: Object.keys(publicData.revokedDetails ?? {}),
-  };
+  const identity = await loadIdentity(identityName, password);
+  return identity.toPublicExport({
+    includeSigningKey,
+    includeEncryptionKey,
+    includeDetails: options.includeDetails ?? true,
+  });
 }

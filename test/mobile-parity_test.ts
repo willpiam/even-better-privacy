@@ -55,6 +55,49 @@ Deno.test("mobile parity: HD mnemonic derives deterministic fingerprint", () => 
   assertEquals(a.toFingerprint(), b.toFingerprint());
 });
 
+Deno.test("mobile parity: HD internal vs external differ at same index", () => {
+  const mnemonic = generateMnemonic(256);
+  const seed = mnemonicToSeed(mnemonic, "");
+  const external = Identity.fromAccount(seed, {
+    profile: "dilithium",
+    account: 0,
+    change: "external",
+    index: 0,
+  });
+  const internal = Identity.fromAccount(seed, {
+    profile: "dilithium",
+    account: 0,
+    change: "internal",
+    index: 0,
+  });
+  assert(external.toFingerprint() !== internal.toFingerprint());
+});
+
+Deno.test("mobile parity: toPublicExport options and both-keys-off reject", () => {
+  const identity = new Identity("dilithium", "kyber");
+  identity.attachDetail("email", "a@example.com");
+  const noDetails = identity.toPublicExport({ includeDetails: false });
+  assertEquals(noDetails.details, undefined);
+  const noSigning = identity.toPublicExport({ includeSigningKey: false });
+  assert(typeof noSigning.signingKeyHash === "string");
+  assertEquals(noSigning.signingKey, undefined);
+  assert(typeof noSigning.encryptionKey === "string");
+  let threw = false;
+  try {
+    identity.toPublicExport({
+      includeSigningKey: false,
+      includeEncryptionKey: false,
+    });
+  } catch (error) {
+    threw = true;
+    assert(
+      error instanceof Error &&
+        error.message.includes("at least one public key"),
+    );
+  }
+  assert(threw);
+});
+
 Deno.test("mobile parity: hierarchy tree builder merges edges", () => {
   const master = "fp_master_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
   const child = "fp_child_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";

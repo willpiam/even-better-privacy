@@ -46,6 +46,7 @@ export default function BrowseContactsModal({
   importingFingerprint: string | null;
 }): JSX.Element {
   const [browseQuery, setBrowseQuery] = useState('');
+  const [browseServer, setBrowseServer] = useState('');
   const [serverResults, setServerResults] = useState<ServerIdentitySummary[]>(
     [],
   );
@@ -63,6 +64,7 @@ export default function BrowseContactsModal({
       return;
     }
     setBrowseQuery('');
+    setBrowseServer('');
     setServerResults([]);
     setBrowsePage(1);
     setBrowsePagination({total: 0, totalPages: 0});
@@ -76,6 +78,7 @@ export default function BrowseContactsModal({
       const result = await browseServerIdentities({
         query: browseQuery || undefined,
         page,
+        server: browseServer.trim() || undefined,
       });
       setServerResults(result.identities);
       setBrowsePage(result.page);
@@ -155,6 +158,15 @@ export default function BrowseContactsModal({
                 style={styles.browseBtn}
               />
             </View>
+            <TextField
+              label="Server override (optional)"
+              testID="contacts-browse-server"
+              value={browseServer}
+              onChangeText={setBrowseServer}
+              placeholder="Uses Settings URL when empty"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
 
             {browsingLoading ? <InlineBusy message="Fetching directory…" /> : null}
 

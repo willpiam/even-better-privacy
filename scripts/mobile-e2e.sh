@@ -8,10 +8,12 @@ cd "$ROOT"
 APP_ID="${MOBILE_E2E_APP_ID:-com.mobile}"
 SERVER_PORT="${MOBILE_E2E_SERVER_PORT:-8788}"
 SERVER_HEALTH="http://localhost:${SERVER_PORT}/api/v1/health"
-DB_PATH="${MOBILE_E2E_DB_PATH:-${ROOT}/test-results/mobile-e2e-server.sqlite}"
-RESULTS_DIR="${ROOT}/test-results"
-SERVER_LOG="${RESULTS_DIR}/mobile-e2e-server.log"
-METRO_LOG="${RESULTS_DIR}/mobile-e2e-metro.log"
+# Isolate under test-results/mobile-e2e/ so Playwright's default/outputDir
+# cleanup cannot unlink this process's live SQLite while Maestro is running.
+RESULTS_DIR="${ROOT}/test-results/mobile-e2e"
+DB_PATH="${MOBILE_E2E_DB_PATH:-${RESULTS_DIR}/server.sqlite}"
+SERVER_LOG="${RESULTS_DIR}/server.log"
+METRO_LOG="${RESULTS_DIR}/metro.log"
 SERVER_PID=""
 METRO_PID=""
 
@@ -184,10 +186,13 @@ if [[ ${#FLOW_ARGS[@]} -eq 0 ]]; then
   # Do not pass the e2e directory: helpers/*.yaml are subflows only.
   FLOW_ARGS=(
     "${ROOT}/mobile/e2e/smoke.yaml"
+    "${ROOT}/mobile/e2e/mail-help.yaml"
     "${ROOT}/mobile/e2e/identity.yaml"
+    "${ROOT}/mobile/e2e/create-random.yaml"
     "${ROOT}/mobile/e2e/details.yaml"
     "${ROOT}/mobile/e2e/contacts-lifecycle.yaml"
     "${ROOT}/mobile/e2e/sign-verify.yaml"
+    "${ROOT}/mobile/e2e/verify-public-keys.yaml"
     "${ROOT}/mobile/e2e/hierarchy.yaml"
   )
 fi

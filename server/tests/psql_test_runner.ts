@@ -6,6 +6,7 @@ const testsArgs = [
   "--allow-write",
   "--allow-env",
   "--allow-net",
+  "--allow-ffi",
   "./server/tests",
 ];
 
@@ -266,8 +267,31 @@ async function runTests(env: Record<string, string>): Promise<number> {
   return status.code;
 }
 
+function resolveSystemSqlitePath(): string | undefined {
+  for (const candidate of [
+    "/usr/lib/x86_64-linux-gnu/libsqlite3.so",
+    "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    "/usr/lib64/libsqlite3.so",
+    "/usr/lib/libsqlite3.so",
+  ]) {
+    try {
+      Deno.statSync(candidate);
+      return candidate;
+    } catch {
+      // try next
+    }
+  }
+  return undefined;
+}
+
 loadEnvOnce();
 const baseEnv = Deno.env.toObject();
+const systemSqlite = resolveSystemSqlitePath();
+if (systemSqlite && !baseEnv.DENO_SQLITE_PATH) {
+  baseEnv.DENO_SQLITE_PATH = systemSqlite;
+  Deno.env.set("DENO_SQLITE_PATH", systemSqlite);
+  log(`using system SQLite at ${systemSqlite}`);
+}
 
 if (!isPsqlMode()) {
   log("psql mode not detected; running tests without provisioning");

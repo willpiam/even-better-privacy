@@ -1,11 +1,16 @@
 import React from 'react';
 import {Text, StyleSheet} from 'react-native';
-import {NavigationContainer, DefaultTheme} from '@react-navigation/native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  type NavigatorScreenParams,
+} from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {colors} from '../theme/tokens';
 import IdentitiesHomeScreen from '../screens/IdentitiesHomeScreen';
 import HdCreateScreen from '../screens/HdCreateScreen';
+import RandomCreateScreen from '../screens/RandomCreateScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ContactDetailScreen from '../screens/ContactDetailScreen';
@@ -21,6 +26,7 @@ import EncryptFileScreen from '../screens/crypto/EncryptFileScreen';
 import DecryptFileScreen from '../screens/crypto/DecryptFileScreen';
 import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
 import MailAccountSetupScreen from '../screens/mail/MailAccountSetupScreen';
+import MailHelpScreen from '../screens/mail/MailHelpScreen';
 import MailInboxScreen from '../screens/mail/MailInboxScreen';
 import MailMessageScreen from '../screens/mail/MailMessageScreen';
 import MailSenderAuthenticityScreen from '../screens/mail/MailSenderAuthenticityScreen';
@@ -37,6 +43,7 @@ import MailTraceScreen from '../screens/mail/MailTraceScreen';
 export type IdentitiesStackParamList = {
   IdentitiesHome: undefined;
   HdCreate: undefined;
+  RandomCreate: undefined;
   IdentityDetail: {identityName: string};
 };
 
@@ -61,8 +68,9 @@ export type CryptoStackParamList = {
 export type MailStackParamList = {
   MailAccounts: undefined;
   MailAccountSetup: {accountId?: string};
+  MailHelp: undefined;
   MailInbox: undefined;
-  MailMessage: {uid: number};
+  MailMessage: {uid: number; folder?: string};
   MailSenderAuthenticity: {summary: MailAuthenticitySummary};
   MailCompose:
     | {
@@ -82,7 +90,7 @@ export type MoreStackParamList = {
   Settings: undefined;
   ActivityLog: undefined;
   Diagnostics: undefined;
-  Certificates: undefined;
+  Certificates: {fingerprint?: string} | undefined;
   ProjectInfo: undefined;
   MailTrace: undefined;
 };
@@ -92,7 +100,7 @@ export type RootTabParamList = {
   ContactsTab: undefined;
   CryptoTab: undefined;
   MailTab: undefined;
-  MoreTab: undefined;
+  MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
 /** @deprecated Use stack-specific param lists */
@@ -148,6 +156,11 @@ function IdentitiesNavigator(): JSX.Element {
         name="HdCreate"
         component={HdCreateScreen}
         options={{title: 'Create Identity'}}
+      />
+      <IdentitiesStack.Screen
+        name="RandomCreate"
+        component={RandomCreateScreen}
+        options={{title: 'Create Random Identity'}}
       />
       <IdentitiesStack.Screen
         name="IdentityDetail"
@@ -246,6 +259,11 @@ function MailNavigator(): JSX.Element {
         options={({route}) => ({
           title: route.params?.accountId ? 'Edit Account' : 'Add Account',
         })}
+      />
+      <MailStack.Screen
+        name="MailHelp"
+        component={MailHelpScreen}
+        options={{title: 'Mail help'}}
       />
       <MailStack.Screen
         name="MailInbox"

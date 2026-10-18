@@ -2,7 +2,7 @@
 title: Message Payload Formats
 type: concept
 status: active
-last_updated: 2026-05-11
+last_updated: 2026-09-09
 source_count: 9
 contradiction_log:
   - 2026-04-28: Earlier revisions of this page described `signature` and signing-key fields as "hex-encoded". They are base64-encoded per `core/Dilithium.ts::sign`/`verify` and `core/Sphincs.ts::sign`/`verify`. The website verifier was silently failing because of this; see [[log]] entry "2026-04-28 fix | website verifier signature decoding".
@@ -17,7 +17,7 @@ imjp:
 
 # Message Payload Formats
 
-EBP defines a family of JSON payload types for signed and encrypted messages. These payloads are used by the [[component-gui|GUI's native email system]], the [[component-cli|CLI]], and the [[component-email-extension|Chrome extension]]. This page documents their structure, what they contain, and what they deliberately omit.
+EBP defines a family of JSON payload types for signed and encrypted messages. These payloads are used by the [[component-gui|GUI's native email system]] and the [[component-cli|CLI]]. This page documents their structure, what they contain, and what they deliberately omit.
 
 ## Armor Wrapping
 

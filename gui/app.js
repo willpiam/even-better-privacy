@@ -611,6 +611,176 @@ if (hdForm) {
   });
 }
 
+const hdDiscoverBtn = document.getElementById("hd-discover");
+if (hdDiscoverBtn) {
+  hdDiscoverBtn.addEventListener("click", async () => {
+    await withLoading(hdDiscoverBtn, async () => {
+      try {
+        const mnemonic = document.getElementById("hd-mnemonic").value.trim();
+        if (!mnemonic) {
+          setStatus("Mnemonic is required for discovery", "error");
+          return;
+        }
+        const res = await api("/hd/discover", {
+          method: "POST",
+          body: JSON.stringify({
+            mnemonic,
+            passphrase: document.getElementById("hd-passphrase").value,
+            profile: document.getElementById("hd-profile").value,
+            account: Number(document.getElementById("hd-account").value || "0"),
+          }),
+        });
+        const output = document.getElementById("hd-discover-output");
+        if (output) {
+          output.value = JSON.stringify(res.matches ?? [], null, 2);
+        }
+        setStatus(
+          `Discovery found ${(res.matches ?? []).length} match(es)`,
+          "success",
+        );
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
+}
+
+const identityFileExportForm = document.getElementById(
+  "identity-file-export-form",
+);
+if (identityFileExportForm) {
+  identityFileExportForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const name = document.getElementById("identity-file-export-name")?.value
+      ?.trim();
+    if (!name) {
+      setStatus("Select an identity to export", "error");
+      return;
+    }
+    await withLoading(btn, async () => {
+      try {
+        const res = await api("/identity/export-file", {
+          method: "POST",
+          body: JSON.stringify({ name }),
+        });
+        const output = document.getElementById("identity-file-export-output");
+        if (output) output.value = res.content ?? "";
+        setStatus(`Exported ${res.filename ?? name}`, "success");
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
+}
+
+const identityFileSaveBtn = document.getElementById("identity-file-save-btn");
+if (identityFileSaveBtn) {
+  identityFileSaveBtn.addEventListener("click", async () => {
+    await withLoading(identityFileSaveBtn, async () => {
+      try {
+        const output = document.getElementById("identity-file-export-output");
+        const name = document.getElementById("identity-file-export-name")?.value
+          ?.trim() || "identity";
+        if (!output?.value) {
+          setStatus("Export an identity file first", "error");
+          return;
+        }
+        const filename = `${name}.identity.json`;
+        const res = await api("/save-file", {
+          method: "POST",
+          body: JSON.stringify({ content: output.value, filename }),
+        });
+        setStatus(`Saved to ~/Downloads/${res.filename}`, "success");
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
+}
+
+const identityFileImportForm = document.getElementById(
+  "identity-file-import-form",
+);
+if (identityFileImportForm) {
+  identityFileImportForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const fileInput = document.getElementById("identity-file-import-input");
+    const file = fileInput?.files?.[0];
+    if (!file) {
+      setStatus("Choose an identity file to import", "error");
+      return;
+    }
+    await withLoading(btn, async () => {
+      try {
+        const content = await file.text();
+        const name = document.getElementById("identity-file-import-name").value
+          .trim();
+        const res = await api("/identity/import-file", {
+          method: "POST",
+          body: JSON.stringify({
+            content,
+            name: name || undefined,
+            force: document.getElementById("identity-file-import-force")
+              .checked,
+            setCurrent: document.getElementById(
+              "identity-file-import-set-current",
+            ).checked,
+          }),
+        });
+        setStatus(`Imported identity ${res.identity.name}`, "success");
+        fileInput.value = "";
+        document.getElementById("identity-file-import-name").value = "";
+        document.getElementById("identity-file-import-force").checked = false;
+        await loadAll();
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
+}
+
+const identityFileDeleteForm = document.getElementById(
+  "identity-file-delete-form",
+);
+if (identityFileDeleteForm) {
+  identityFileDeleteForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = e.target.querySelector('button[type="submit"]');
+    const name = document.getElementById("identity-file-delete-name")?.value
+      ?.trim();
+    if (!name) {
+      setStatus("Select an identity to delete", "error");
+      return;
+    }
+    const confirmed = await showConfirmModal(
+      "Delete Identity",
+      `Permanently delete "${name}" from this device? The encrypted identity file will be removed.`,
+      "Delete",
+    );
+    if (!confirmed) return;
+    const doubleConfirmed = await showConfirmModal(
+      "Confirm delete",
+      `This cannot be undone. Delete "${name}" from this device?`,
+      "Delete permanently",
+    );
+    if (!doubleConfirmed) return;
+    await withLoading(btn, async () => {
+      try {
+        await api("/identity/delete", {
+          method: "POST",
+          body: JSON.stringify({ name }),
+        });
+        setStatus(`Deleted ${name} from device`, "success");
+        await loadAll();
+      } catch (err) {
+        setStatus(err.message, "error");
+      }
+    });
+  });
+}
+
 const exportIncludeSigningKey = document.getElementById(
   "export-include-signing-key",
 );

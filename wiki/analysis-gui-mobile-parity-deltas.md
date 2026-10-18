@@ -2,7 +2,7 @@
 title: "GUI vs Mobile Parity Deltas"
 type: analysis
 status: active
-last_updated: 2026-06-04
+last_updated: 2026-09-09
 source_count: 8
 tags:
   - analysis
@@ -15,6 +15,18 @@ tags:
 # GUI vs Mobile Parity Deltas
 
 Comparison of [[component-gui]] (Deno local backend + web/Tauri frontend) and [[component-mobile]] (React Native). **Interop drift** was remediated in June 2026 via shared `core/` modules. **Parity v1** feature gaps were closed in June 2026 per [[analysis-mobile-parity-roadmap]].
+
+## Finish-line closeout (2026-09-09)
+
+**Android parity features for identity, crypto, and mail are done.** Remaining intentional non-parity:
+
+| Item | Status |
+|------|--------|
+| Identity / crypto / mail GUI controls that belong on phone | **done** (see checklist below; Waves 1–2) |
+| OAuth email (Gmail/Outlook browser) on mobile | **out of scope** — manual IMAP/SMTP only |
+| GUI `save-file` → `~/Downloads` | **desktop-only** — mobile uses Share |
+| Shared `~/.ebp/` / Tauri shell | **desktop-only** |
+| Chrome email extension | **removed** (not a live component) |
 
 ## Interop drift — remediated (2026-06-02)
 
@@ -46,12 +58,14 @@ Shared modules: `core/PayloadInput.ts`, `core/SenderResolution.ts`, `core/Crypto
 | Settings (server, password policy, mail prefs, log) | must-have | done |
 | Hierarchy tree (local + server merge) | must-have | done |
 | EBP-HD mnemonic/derive/discover | must-have | done |
-| Native email IMAP/SMTP/OAuth | must-have | done |
+| Native email IMAP/SMTP (no OAuth) | must-have | done (OAuth out of scope) |
 | Mail armor compose + attachments | must-have | done |
 | Fingerprint-from-public on verify | must-have | done |
 | Shared `~/.ebp/` on device | intentional gap | export/import |
-| Tauri / Chrome extension | desktop-only | N/A |
+| Tauri desktop shell | desktop-only | N/A |
 | GUI `save-file` → Downloads | desktop-only | Share API |
+| Include-salt / verify public keys | must-have | done (2026-09-09) |
+| Mail help / inbox folder-search-page | must-have | done (2026-09-09) |
 | April 2026 audit GUI scope | governance | mobile scope doc added |
 
 ## Historical gaps (pre–Parity v1)

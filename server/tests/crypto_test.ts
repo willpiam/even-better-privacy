@@ -15,6 +15,7 @@ import {
   computeStateHash,
   stableStringify,
   concatBytes,
+  hexToBytes,
   toHex,
 } from "../crypto.ts";
 import type { IdentityState } from "../types.ts";
@@ -36,7 +37,8 @@ Deno.test("computeIdentityFingerprint hashes signing and encryption keys in orde
   const encryptionKey = "feedc0de";
 
   const signingRaw = sha256(base64ToBytes(signingKey));
-  const encryptionRaw = sha256(new TextEncoder().encode(encryptionKey));
+  // Encryption leaves are hashed from hex-decoded public key bytes (not UTF-8).
+  const encryptionRaw = sha256(hexToBytes(encryptionKey));
   const expectedRootHex = toHex(sha256(concatBytes(signingRaw, encryptionRaw)));
   const expected = computeIdentityFingerprintCore({
     signingKeyType: "sphincs",

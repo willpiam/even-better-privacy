@@ -237,7 +237,19 @@ export function buildSimpleMimeMessage(params: {
   body: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: MailAttachmentPart[];
 }): string {
+  if (params.attachments && params.attachments.length > 0) {
+    return buildMultipartMimeMessage({
+      from: params.from,
+      to: params.to,
+      subject: params.subject,
+      plainBody: params.body,
+      inReplyTo: params.inReplyTo,
+      references: params.references,
+      attachments: params.attachments,
+    });
+  }
   const headers = [
     `From: ${params.from}`,
     `To: ${params.to}`,
@@ -250,6 +262,13 @@ export function buildSimpleMimeMessage(params: {
   return `${headers.join('\r\n')}${params.body}`;
 }
 
+export type MailAttachmentPart = {
+  filename: string;
+  contentType?: string;
+  /** Raw bytes as a Buffer or base64 string. */
+  contentBase64: string;
+};
+
 export function buildMultipartMimeMessage(params: {
   from: string;
   to: string;
@@ -258,6 +277,7 @@ export function buildMultipartMimeMessage(params: {
   ebpArmor?: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: MailAttachmentPart[];
 }): string {
   const boundary = `ebp_${Date.now().toString(36)}`;
   const lines = [
@@ -280,6 +300,22 @@ export function buildMultipartMimeMessage(params: {
       'Content-Disposition: inline',
       '',
       params.ebpArmor,
+      '',
+    );
+  }
+  for (const attachment of params.attachments ?? []) {
+    const filename = attachment.filename.replace(/"/g, '');
+    const contentType =
+      attachment.contentType?.trim() || 'application/octet-stream';
+    const b64 = attachment.contentBase64.replace(/\s+/g, '');
+    const wrapped = b64.match(/.{1,76}/g)?.join('\r\n') ?? b64;
+    lines.push(
+      `--${boundary}`,
+      `Content-Type: ${contentType}; name="${filename}"`,
+      'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${filename}"`,
+      '',
+      wrapped,
       '',
     );
   }

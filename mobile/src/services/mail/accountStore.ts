@@ -7,48 +7,37 @@ import {
   MAIL_SECRETS_KDF_ITERATIONS,
 } from './pbkdf2Native';
 import {
-  DEFAULT_MAIL_ACCOUNT,
-  type MailAccountConfig,
   type MailAccountRecord,
   type MailAccountStore,
   type MailAuthSecrets,
 } from './types';
 import {ensureIdentityMailDir, mailAccountPath, mailSecretsPath} from './paths';
+import {
+  DEFAULT_MAIL_STORE,
+  deleteAccountFromStore,
+  filterPersistableSecrets,
+  isEncryptedSecretsEnvelope,
+  mailSecretsStoreKey,
+  mergeMailAccountRecord,
+  parseMailAccountStore,
+  resolveSelectedAccountId,
+  upsertAccountInStore,
+} from './accountStoreLogic';
 
-const DEFAULT_STORE: MailAccountStore = {selectedAccountId: null, accounts: []};
+export {
+  DEFAULT_MAIL_STORE,
+  deleteAccountFromStore,
+  filterPersistableSecrets,
+  isEncryptedSecretsEnvelope,
+  mailSecretsStoreKey,
+  mergeMailAccountRecord,
+  parseMailAccountStore,
+  resolveSelectedAccountId,
+  upsertAccountInStore,
+} from './accountStoreLogic';
 
 const secretsMemory = new Map<string, MailAuthSecrets>();
 const pinMemory = new Map<string, string>();
-
-function storeKey(identityName: string, accountId: string): string {
-  return `${identityName}:${accountId}`;
-}
-
-type EncryptedMailSecretsEnvelope = {
-  version: number;
-  algorithm: string;
-  kdf: string;
-  iterations: number;
-  salt: string;
-  iv: string;
-  ciphertext: string;
-};
-
-function isEncryptedSecretsEnvelope(value: unknown): value is EncryptedMailSecretsEnvelope {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const v = value as Record<string, unknown>;
-  return (
-    v.version === 1 &&
-    v.algorithm === 'AES-GCM' &&
-    v.kdf === 'PBKDF2-SHA-256' &&
-    typeof v.iterations === 'number' &&
-    typeof v.salt === 'string' &&
-    typeof v.iv === 'string' &&
-    typeof v.ciphertext === 'string'
-  );
-}
 
 function getSecretsStoreInMemory(
   identityName: string,
@@ -75,7 +64,7 @@ function setSecretsStoreInMemory(
     }
   }
   for (const [accountId, secrets] of Object.entries(store)) {
-    secretsMemory.set(storeKey(identityName, accountId), secrets);
+    secretsMemory.set(mailSecretsStoreKey(identityName, accountId), secrets);
   }
   if (pin) {
     pinMemory.set(identityName, pin);
@@ -150,17 +139,10 @@ export async function persistMailSecretsStore(
 ): Promise<void> {
   const pin = pinMemory.get(identityName);
   const store = await readMailStore(identityName);
-  const secretStore: Record<string, MailAuthSecrets> = {};
-  const inMemory = getSecretsStoreInMemory(identityName);
-  for (const account of store.accounts) {
-    if (!account.config.persistSecrets) {
-      continue;
-    }
-    const secrets = inMemory[account.id];
-    if (secrets) {
-      secretStore[account.id] = secrets;
-    }
-  }
+  const secretStore = filterPersistableSecrets(
+    store.accounts,
+    getSecretsStoreInMemory(identityName),
+  );
   const secretsPath = mailSecretsPath(identityName);
   if (Object.keys(secretStore).length === 0) {
     if (await RNFS.exists(secretsPath)) {
@@ -228,18 +210,10 @@ export async function readMailStore(
   await ensureIdentityMailDir(identityName);
   const path = mailAccountPath(identityName);
   if (!(await RNFS.exists(path))) {
-    return {...DEFAULT_STORE, accounts: []};
+    return {...DEFAULT_MAIL_STORE, accounts: []};
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  try {
-    const parsed = JSON.parse(raw) as MailAccountStore;
-    return {
-      selectedAccountId: parsed.selectedAccountId ?? null,
-      accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
-    };
-  } catch {
-    return {...DEFAULT_STORE, accounts: []};
-  }
+  return parseMailAccountStore(raw);
 }
 
 export async function writeMailStore(
@@ -262,20 +236,9 @@ export async function upsertMailAccount(
   },
 ): Promise<MailAccountRecord> {
   const store = await readMailStore(identityName);
-  const now = Date.now();
   const existing = store.accounts.find(a => a.id === record.id);
-  const next: MailAccountRecord = {
-    ...record,
-    config: {...DEFAULT_MAIL_ACCOUNT, ...record.config},
-    createdAt: existing?.createdAt ?? record.createdAt ?? now,
-    updatedAt: now,
-  };
-  store.accounts = store.accounts.filter(a => a.id !== record.id);
-  store.accounts.push(next);
-  if (!store.selectedAccountId) {
-    store.selectedAccountId = next.id;
-  }
-  await writeMailStore(identityName, store);
+  const next = mergeMailAccountRecord(existing, record, Date.now());
+  await writeMailStore(identityName, upsertAccountInStore(store, next));
   return next;
 }
 
@@ -284,12 +247,8 @@ export async function deleteMailAccount(
   accountId: string,
 ): Promise<void> {
   const store = await readMailStore(identityName);
-  store.accounts = store.accounts.filter(a => a.id !== accountId);
-  if (store.selectedAccountId === accountId) {
-    store.selectedAccountId = store.accounts[0]?.id ?? null;
-  }
-  await writeMailStore(identityName, store);
-  secretsMemory.delete(storeKey(identityName, accountId));
+  await writeMailStore(identityName, deleteAccountFromStore(store, accountId));
+  secretsMemory.delete(mailSecretsStoreKey(identityName, accountId));
   if (pinMemory.has(identityName)) {
     await persistMailSecretsStore(identityName);
   }
@@ -313,7 +272,7 @@ export function setMailSecretsInMemory(
   secrets: MailAuthSecrets,
   pin?: string,
 ): void {
-  secretsMemory.set(storeKey(identityName, accountId), secrets);
+  secretsMemory.set(mailSecretsStoreKey(identityName, accountId), secrets);
   if (pin) {
     pinMemory.set(identityName, pin);
   }
@@ -323,7 +282,7 @@ export function getMailSecretsInMemory(
   identityName: string,
   accountId: string,
 ): MailAuthSecrets | null {
-  return secretsMemory.get(storeKey(identityName, accountId)) ?? null;
+  return secretsMemory.get(mailSecretsStoreKey(identityName, accountId)) ?? null;
 }
 
 export async function encryptSecretsStore(
@@ -398,7 +357,7 @@ export async function resolveSelectedAccount(
   identityName: string,
 ): Promise<{account: MailAccountRecord; secrets: MailAuthSecrets} | null> {
   const store = await readMailStore(identityName);
-  const id = store.selectedAccountId ?? store.accounts[0]?.id;
+  const id = resolveSelectedAccountId(store);
   if (!id) {
     return null;
   }

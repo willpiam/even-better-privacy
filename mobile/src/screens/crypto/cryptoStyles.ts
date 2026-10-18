@@ -19,6 +19,12 @@ export const cryptoStyles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.body,
   },
+  helpText: {
+    fontSize: typography.caption,
+    color: colors.muted,
+    marginBottom: 8,
+    lineHeight: 16,
+  },
   output: {
     fontSize: typography.body,
     color: colors.text,

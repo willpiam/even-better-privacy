@@ -126,36 +126,6 @@ TEST_EMAIL_TWO_IMAP_PORT="993"
 TEST_EMAIL_TWO_IMAP_HOST=""
 ```
 
-## Email Chrome Extension
-
-EBP includes a Chrome extension that adds sign/encrypt and decrypt/verify
-controls to webmail using the local GUI backend API.
-
-Supported email clients (web):
-
-- Gmail
-- Outlook (Outlook on the web)
-- Proton Mail
-
-### Install The Extension
-
-This extension will work on any chromium based browser.
-
-#### Install The Extension From Source
-
-1. Open `chrome://extensions` or
-2. Enable Developer Mode.
-3. Click **Load unpacked** and select this folder:
-   `/even-better-privacy/email/chrome-extension`
-
-~~See the extension guide in
-[`email/chrome-extension/README.md`](email/chrome-extension/README.md)~~
-
-#### Install The Extension from the Chrome Webstore
-
-I have not yet published the extension to the webstore. I intend to do this
-soon.
-
 ## Environment Configuration
 
 If you intend to run your own key server you will need to create a `.env` file
@@ -495,7 +465,6 @@ MIT — see [LICENSE](LICENSE) for details.
   - this will allow us to have different SQL for the sqlite and psql
     implementations. It would also allow use to easily implement non-sql
     connections.
-- end to end tests for the email plugin
 - email: enable ebp interface when a user directly replies to an email
 - email: select multiple recipients. Encrypt with same AES key. Send json object
   with one encrypted message and an object mapping the recipients fingerprint to
@@ -512,8 +481,6 @@ MIT — see [LICENSE](LICENSE) for details.
 
 - Support expiry dates for identities
 - Endorse other EBP identities as your own (two-way binding)
-- plugin: Make it harder to accidentally send email without first encrypting
-- plugin: hide password inputs
 - hashed details
   - hashed email endorsement
     - take hash of your email address

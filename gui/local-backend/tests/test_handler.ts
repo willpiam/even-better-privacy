@@ -25,6 +25,10 @@ import {
   MAX_ENCRYPTED_FILE_BYTES,
   parseFileCleartextEnvelope,
 } from "../../../core/FilePayload.ts";
+import {
+  parseEmailAttachmentCleartextEnvelope,
+  parseEncryptedEmailAttachmentPayload,
+} from "../../../core/EmailAttachmentPayload.ts";
 import { validatePassword } from "../../../core/PasswordPolicy.ts";
 import {
   apiUrl,
@@ -567,6 +571,119 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
         includeEncryptionKey,
         includeDetails,
       }));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/export-file") {
+      const body = await readJson<{
+        name?: unknown;
+        home?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const name = typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : undefined;
+      const ctx = await getContext(home, name);
+      let storageData: string;
+      try {
+        storageData = await Deno.readTextFile(ctx.identityPath);
+      } catch (e) {
+        if (e instanceof Deno.errors.NotFound) {
+          throw new HttpError(STATUS.NotFound, "identity not found");
+        }
+        throw e;
+      }
+      return json({
+        ok: true,
+        name: ctx.currentIdentity,
+        filename: `${ctx.currentIdentity}.identity.json`,
+        content: storageData,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/import-file") {
+      const body = await readJson<{
+        content?: unknown;
+        name?: unknown;
+        force?: unknown;
+        home?: unknown;
+        setCurrent?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const content = typeof body.content === "string" ? body.content : "";
+      if (!content.trim()) {
+        throw new HttpError(STATUS.BadRequest, "identity file content is required");
+      }
+      const publicData = Identity.readPublicData(content);
+      if (!publicData?.fingerprint) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "invalid identity file: missing public data",
+        );
+      }
+      const name = typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : publicData.fingerprint.slice(0, 16);
+      const force = Boolean(body.force);
+      const setCurrent = body.setCurrent !== false;
+      const ctx = await getContext(home, name);
+      try {
+        await Deno.stat(ctx.identityPath);
+        if (!force) {
+          throw new HttpError(
+            STATUS.Conflict,
+            "identity already exists; pass force to overwrite",
+          );
+        }
+      } catch (e) {
+        if (!(e instanceof Deno.errors.NotFound)) throw e;
+      }
+      await ensureDir(ctx.identityDir);
+      await ensureDir(ctx.contactsDir);
+      await Deno.writeTextFile(ctx.identityPath, content, { mode: 0o600 });
+      if (setCurrent) {
+        await updateState(ctx.identityDir, { currentIdentity: name });
+      }
+      return json({
+        ok: true,
+        identity: {
+          name,
+          fingerprint: publicData.fingerprint,
+          signingKeyType: publicData.signingKeyType,
+          encryptionKeyType: publicData.encryptionKeyType,
+          identityPath: ctx.identityPath,
+        },
+      }, STATUS.Created);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/delete") {
+      const body = await readJson<{
+        name?: unknown;
+        home?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) {
+        throw new HttpError(STATUS.BadRequest, "name is required");
+      }
+      const ctx = await getContext(home, name);
+      try {
+        await Deno.remove(ctx.identityPath);
+      } catch (e) {
+        if (e instanceof Deno.errors.NotFound) {
+          throw new HttpError(STATUS.NotFound, "identity not found");
+        }
+        throw e;
+      }
+      const state = await readState(ctx.identityDir);
+      if (state?.currentIdentity === name) {
+        const remaining = (await listIdentityNames(ctx.identityDir)).filter(
+          (n) => n !== name,
+        );
+        await updateState(ctx.identityDir, {
+          currentIdentity: remaining[0] ?? "identity",
+        });
+      }
+      return json({ ok: true, deleted: name });
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/contacts") {
@@ -1362,6 +1479,129 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
         fileDataBase64,
         verified,
         verifyStatus,
+      });
+    }
+
+    if (
+      req.method === "POST" &&
+      url.pathname === "/api/v1/mail/decrypt-attachment"
+    ) {
+      const body = await readJson<{
+        payload?: unknown;
+        password?: unknown;
+        sender?: unknown;
+        home?: unknown;
+        identity?: unknown;
+        expectedBodyPayloadHash?: unknown;
+        expectedAttachmentHash?: unknown;
+      }>(req);
+      const payloadInput = body.payload;
+      const password = typeof body.password === "string"
+        ? body.password
+        : undefined;
+      const sender = typeof body.sender === "string" ? body.sender : undefined;
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const identityName = typeof body.identity === "string"
+        ? body.identity
+        : undefined;
+      const expectedBodyPayloadHash =
+        typeof body.expectedBodyPayloadHash === "string"
+          ? body.expectedBodyPayloadHash
+          : undefined;
+      const expectedAttachmentHash =
+        typeof body.expectedAttachmentHash === "string"
+          ? body.expectedAttachmentHash
+          : undefined;
+      if (!payloadInput) {
+        throw new HttpError(STATUS.BadRequest, "payload is required");
+      }
+      if (!password) {
+        throw new HttpError(STATUS.BadRequest, "password is required");
+      }
+      const payload = parseEncryptedEmailAttachmentPayload(payloadInput);
+
+      const ctx = await getContext(home, identityName);
+      const identity = await loadIdentity(ctx, password);
+      let cleartextEnvelopeRaw = "";
+      let verified: boolean | null = null;
+      let verifyStatus = "unsigned";
+
+      if (payload.type === "ebp-encrypted-email-attachment") {
+        try {
+          cleartextEnvelopeRaw = identity.encryptionKey.decrypt(
+            payload.ciphertext,
+          );
+        } catch {
+          throw new HttpError(
+            STATUS.BadRequest,
+            "decryption failed - attachment may be corrupted or not intended for this identity",
+          );
+        }
+      } else if (payload.type === "ebp-encrypted-signed-email-attachment") {
+        let contact: ExternalIdentity;
+        if (sender) {
+          contact = await loadContact(ctx, sender);
+        } else {
+          contact = await loadContact(
+            ctx,
+            payload.senderFingerprint.substring(0, 16),
+          );
+        }
+        let result: {
+          message: string;
+          verified: boolean;
+          verifyStatus: string;
+        };
+        try {
+          result = identity.decryptAndVerify(payload.ciphertext, contact);
+        } catch {
+          throw new HttpError(
+            STATUS.BadRequest,
+            "decryption failed - attachment may be corrupted or not intended for this identity",
+          );
+        }
+        cleartextEnvelopeRaw = result.message;
+        verified = result.verified;
+        verifyStatus = result.verifyStatus;
+      } else {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "unsupported encrypted email attachment payload type",
+        );
+      }
+
+      const envelope = parseEmailAttachmentCleartextEnvelope(
+        cleartextEnvelopeRaw,
+      );
+      if (envelope.fileSize > MAX_ENCRYPTED_FILE_BYTES) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          `decrypted attachment exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`,
+        );
+      }
+      const manifestMatched = expectedBodyPayloadHash
+        ? envelope.bodyPayloadHash === expectedBodyPayloadHash
+        : null;
+      if (manifestMatched === false) {
+        verifyStatus = "manifest_mismatch";
+      }
+      if (
+        expectedAttachmentHash &&
+        expectedAttachmentHash !== sha256Hex(payload.ciphertext)
+      ) {
+        verifyStatus = "manifest_mismatch";
+      }
+      const fileDataBase64 = bytesToBase64(envelope.fileBytes);
+      return json({
+        attachmentId: envelope.attachmentId,
+        fileName: safeFileName(envelope.fileName),
+        mimeType: envelope.mimeType || "application/octet-stream",
+        fileSize: envelope.fileSize,
+        fileDataBase64,
+        verified,
+        verifyStatus,
+        bodyPayloadHash: envelope.bodyPayloadHash ?? null,
+        manifestMatched,
       });
     }
 

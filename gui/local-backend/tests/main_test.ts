@@ -520,6 +520,63 @@ Deno.test({
 });
 
 Deno.test({
+  name: "identity export-file / import-file / delete round-trip",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      await createTestIdentity(home, "alice", "password123");
+      await writeState(`${home}/.ebp`, { currentIdentity: "alice" });
+
+      const exported = await makeRequest(
+        handler,
+        "/api/v1/identity/export-file",
+        jsonPost({ name: "alice", home }),
+      );
+      assertEquals(exported.status, STATUS.OK);
+      const exportBody = exported.body as {
+        content: string;
+        filename: string;
+        name: string;
+      };
+      assertEquals(exportBody.name, "alice");
+      assertStringIncludes(exportBody.filename, "alice");
+      assertStringIncludes(exportBody.content, "encrypted");
+
+      const imported = await makeRequest(
+        handler,
+        "/api/v1/identity/import-file",
+        jsonPost({
+          content: exportBody.content,
+          name: "alice-copy",
+          home,
+          setCurrent: true,
+        }),
+      );
+      assertEquals(imported.status, STATUS.Created);
+      assertEquals(
+        (imported.body as { identity: { name: string } }).identity.name,
+        "alice-copy",
+      );
+
+      const deleted = await makeRequest(
+        handler,
+        "/api/v1/identity/delete",
+        jsonPost({ name: "alice-copy", home }),
+      );
+      assertEquals(deleted.status, STATUS.OK);
+      assertEquals((deleted.body as { deleted: string }).deleted, "alice-copy");
+
+      try {
+        await Deno.stat(`${home}/.ebp/alice-copy.identity.json`);
+        throw new Error("expected deleted identity file to be gone");
+      } catch (e) {
+        assert(e instanceof Deno.errors.NotFound);
+      }
+    });
+  },
+});
+
+Deno.test({
   name: "GET /api/v1/contacts lists contacts",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {

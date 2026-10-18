@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import {Switch, Text, View} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import Share from 'react-native-share';
 import {signFile} from '../../services/signVerify';
@@ -11,13 +12,17 @@ import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
+import {cryptoStyles} from './cryptoStyles';
 
 export default function SignFileScreen(): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
   const [fileUri, setFileUri] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileContext, setFileContext] = useState('');
+  const [includeSalt, setIncludeSalt] = useState(true);
+  const [generatedSalt, setGeneratedSalt] = useState('');
   const [fileSignOutput, setFileSignOutput] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
@@ -58,11 +63,13 @@ export default function SignFileScreen(): JSX.Element {
         fileUri,
         fileName: fileName || undefined,
         contextMessage: fileContext || undefined,
-        includeSalt: true,
+        includeSalt,
       });
+      setGeneratedSalt(result.salt);
       setFileSignOutput(JSON.stringify(result.payload, null, 2));
       setStatus('File signed');
     } catch (error) {
+      setGeneratedSalt('');
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyMessage(null);
@@ -76,14 +83,28 @@ export default function SignFileScreen(): JSX.Element {
       {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
-        label="File URI"
-        value={fileUri}
-        onChangeText={setFileUri}
-        placeholder="file:///..."
-        autoCapitalize="none"
+      <AppButton title="Pick File" onPress={pickSignFile} />
+      {fileName ? (
+        <Text style={cryptoStyles.helpText} testID="sign-file-name">
+          Selected: {fileName}
+        </Text>
+      ) : (
+        <Text style={cryptoStyles.helpText}>No file selected.</Text>
+      )}
+      <AppButton
+        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
+        variant="secondary"
+        onPress={() => setShowAdvanced(value => !value)}
       />
-      <AppButton title="Pick File" variant="secondary" onPress={pickSignFile} />
+      {showAdvanced ? (
+        <TextField
+          label="File URI (advanced)"
+          value={fileUri}
+          onChangeText={setFileUri}
+          placeholder="file:///..."
+          autoCapitalize="none"
+        />
+      ) : null}
       <TextField
         label="Context message"
         value={fileContext}
@@ -91,6 +112,27 @@ export default function SignFileScreen(): JSX.Element {
         placeholder="Optional context message"
         multiline
       />
+      <View style={cryptoStyles.switchRow}>
+        <Text style={cryptoStyles.switchLabel}>Include random salt</Text>
+        <Switch
+          testID="sign-file-include-salt"
+          value={includeSalt}
+          onValueChange={setIncludeSalt}
+        />
+      </View>
+      <Text style={cryptoStyles.helpText}>
+        Signed message format: ebp::filehash::&lt;hash&gt;::&lt;optional
+        salt&gt;::&lt;optional context&gt;
+      </Text>
+      {fileSignOutput ? (
+        <TextField
+          label="Generated salt"
+          testID="sign-file-salt"
+          value={generatedSalt}
+          editable={false}
+          placeholder="(none — salt disabled)"
+        />
+      ) : null}
       <AppButton
         title={busy ? 'Signing…' : 'Sign File'}
         onPress={onSignFile}

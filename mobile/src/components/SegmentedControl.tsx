@@ -6,18 +6,21 @@ export default function SegmentedControl({
   options,
   value,
   onChange,
+  testID,
 }: {
   options: {label: string; value: string}[];
   value: string;
   onChange: (value: string) => void;
+  testID?: string;
 }): JSX.Element {
   return (
-    <View style={styles.track}>
+    <View style={styles.track} testID={testID}>
       {options.map(option => {
         const active = option.value === value;
         return (
           <Pressable
             key={option.value}
+            testID={testID ? `${testID}-${option.value}` : undefined}
             onPress={() => onChange(option.value)}
             style={[styles.item, active && styles.itemActive]}>
             <Text style={[styles.label, active && styles.labelActive]}>

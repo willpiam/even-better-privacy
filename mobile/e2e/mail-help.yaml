@@ -1,0 +1,17 @@
+appId: com.mobile
+---
+# Mail accounts → Help only (no live mailbox / IMAP).
+- runFlow: helpers/clear-and-launch.yaml
+- tapOn:
+    id: "tab-mail"
+- extendedWaitUntil:
+    visible: "Mail help"
+    timeout: 15000
+- tapOn: "Mail help"
+- extendedWaitUntil:
+    visible:
+      id: "mail-help-body"
+    timeout: 10000
+- assertVisible:
+    id: "mail-help-body"
+- assertVisible: "How to Connect Your Email"

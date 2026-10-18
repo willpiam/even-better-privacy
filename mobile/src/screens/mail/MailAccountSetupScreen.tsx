@@ -160,13 +160,15 @@ export default function MailAccountSetupScreen({
       return;
     }
     setLoading(true);
-    setBusyMessage('Testing mail connection…');
+    setBusyMessage('Connecting IMAP…');
     setStatus('');
     try {
       await clearMailTrace();
       const config = buildConfig();
       const secrets = resolveSecretsForAction();
-      await testMailConnection(config, secrets);
+      await testMailConnection(config, secrets, {
+        onProgress: step => setBusyMessage(step),
+      });
       setStatus('Mail connection test passed');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

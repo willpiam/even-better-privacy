@@ -13,16 +13,22 @@ export default function FetchContactModal({
   visible: boolean;
   busy?: boolean;
   onCancel: () => void;
-  onFetch: (fingerprint: string, name?: string) => void | Promise<void>;
+  onFetch: (
+    fingerprint: string,
+    name?: string,
+    server?: string,
+  ) => void | Promise<void>;
 }): JSX.Element {
   const [fingerprint, setFingerprint] = useState('');
   const [saveAs, setSaveAs] = useState('');
+  const [server, setServer] = useState('');
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (visible) {
       setFingerprint('');
       setSaveAs('');
+      setServer('');
       setError('');
     }
   }, [visible]);
@@ -30,7 +36,11 @@ export default function FetchContactModal({
   const submit = async () => {
     setError('');
     try {
-      await onFetch(fingerprint, saveAs.trim() || undefined);
+      await onFetch(
+        fingerprint,
+        saveAs.trim() || undefined,
+        server.trim() || undefined,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -60,6 +70,15 @@ export default function FetchContactModal({
             value={saveAs}
             onChangeText={setSaveAs}
             autoCapitalize="none"
+          />
+          <TextField
+            label="Server override (optional)"
+            testID="contacts-fetch-server"
+            value={server}
+            onChangeText={setServer}
+            placeholder="Uses Settings URL when empty"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <View style={styles.row}>
             <AppButton

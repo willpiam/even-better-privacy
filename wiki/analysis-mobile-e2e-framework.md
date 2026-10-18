@@ -32,7 +32,7 @@ coverage (see [[analysis-hierarchy-gui-e2e-coverage]]).
 - **Driver:** Maestro YAML (`mobile/e2e/`).
 - **Runner:** [`scripts/mobile-e2e.sh`](../scripts/mobile-e2e.sh) — starts key
   server on `:8788` with throwaway SQLite
-  (`test-results/mobile-e2e-server.sqlite`), `RATE_LIMIT_DISABLED=true`,
+  (`test-results/mobile-e2e/server.sqlite`), `RATE_LIMIT_DISABLED=true`,
   requires `adb` device, `adb shell pm clear com.mobile`, then `maestro test`.
 - **Physical phone (USB):** runner runs `adb reverse` for Metro (`8081`) and
   the key server (`8788`), then passes

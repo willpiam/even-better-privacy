@@ -1,11 +1,22 @@
 import {armorPayload, parseEbpPayloadInput} from '../../ebpCore';
-import {decryptMessage, encryptMessage} from '../encryptDecrypt';
-import {listContacts, getDetailValue} from '../contacts';
+import {
+  buildEncryptedSignedMessageMultiPayload,
+  buildEncryptedSignedMessagePayload,
+  buildEncryptedMessagePayload,
+  Identity,
+} from '../../ebpCore';
+import {decryptMessage} from '../encryptDecrypt';
+import {publicIdentityBlock} from '../encryptDecryptLogic';
+import {listContacts, getDetailValue, loadContact} from '../contacts';
 import {loadIdentity} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
 import {fetchMessageDetail} from './imap';
-import {buildMultipartMimeMessage, buildSimpleMimeMessage} from './mime';
+import {
+  buildMultipartMimeMessage,
+  buildSimpleMimeMessage,
+  type MailAttachmentPart,
+} from './mime';
 import {sendMimeMessage} from './smtp';
 import {
   getDetailMeta,
@@ -13,19 +24,39 @@ import {
   type MailAuthenticitySummary,
   type MailVerifyStatus,
 } from './mailAuthenticity';
+import {
+  ebpMailPlainIntro,
+  elevateUnknownSignerVerifyStatus,
+  formatFromHeader,
+  resolveEbpMailRecipients,
+  resolvePlainMailRecipients,
+  sourceLooksLikeEbpArmor,
+  type EbpMailRecipient,
+} from './ebpMailLogic';
 
-export type {MailAuthenticitySummary};
+export type {MailAuthenticitySummary, EbpMailRecipient};
+export {
+  ebpMailPlainIntro,
+  elevateUnknownSignerVerifyStatus,
+  formatFromHeader,
+  resolveEbpMailRecipients,
+  resolvePlainMailRecipients,
+  sourceLooksLikeEbpArmor,
+} from './ebpMailLogic';
 
 export async function sendEbpMail(params: {
   identityName: string;
   password: string;
-  to: string;
+  to?: string;
   subject: string;
   message: string;
-  recipientContact: string;
+  recipientContact?: string;
+  /** Multi-recipient: each row needs email + contact name. */
+  recipients?: EbpMailRecipient[];
   sign?: boolean;
   inReplyTo?: string;
   references?: string;
+  attachments?: MailAttachmentPart[];
 }): Promise<void> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
@@ -33,29 +64,69 @@ export async function sendEbpMail(params: {
   }
   const identity = await loadIdentity(params.identityName, params.password);
   const includePublicKeys = await getMailIncludePublicKeys();
-  const encrypted = await encryptMessage({
-    identityName: params.identityName,
-    password: params.password,
-    message: params.message,
-    recipient: params.recipientContact,
-    sign: params.sign ?? true,
-  });
-  const armor = armorPayload(encrypted);
+  const recipientRows = resolveEbpMailRecipients(params);
+  if (recipientRows.length === 0) {
+    throw new Error('At least one EBP recipient is required');
+  }
+
+  let armor: string;
+  if (recipientRows.length === 1 && (params.sign ?? true)) {
+    const contact = await loadContact(recipientRows[0].contact);
+    const ciphertext = identity.signAndEncryptFor(params.message, contact);
+    const payload = buildEncryptedSignedMessagePayload({
+      recipientFingerprint: contact.fingerprint,
+      senderFingerprint: identity.toFingerprint(),
+      ciphertext,
+      senderIdentity: publicIdentityBlock(identity),
+    });
+    armor = armorPayload(payload);
+  } else if (recipientRows.length === 1) {
+    const contact = await loadContact(recipientRows[0].contact);
+    const ciphertext = Identity.EncryptFor(contact, params.message);
+    const payload = buildEncryptedMessagePayload({
+      recipientFingerprint: contact.fingerprint,
+      ciphertext,
+    });
+    armor = armorPayload(payload);
+  } else {
+    if (!(params.sign ?? true)) {
+      throw new Error('Multi-recipient EBP mail requires signing');
+    }
+    const contacts = [];
+    for (const row of recipientRows) {
+      contacts.push(await loadContact(row.contact));
+    }
+    const encrypted = identity.signAndEncryptForMany(params.message, contacts);
+    const payload = buildEncryptedSignedMessageMultiPayload({
+      senderFingerprint: identity.toFingerprint(),
+      recipients: encrypted.recipients,
+      contentNonce: encrypted.contentNonce,
+      ciphertext: encrypted.ciphertext,
+      senderIdentity: publicIdentityBlock(identity),
+    });
+    armor = armorPayload(payload);
+  }
+
   const fromName = resolved.account.config.fromName || identity.toShortFingerprint();
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
+  const toHeader = recipientRows.map(r => r.email.trim()).join(', ');
   const mime = buildMultipartMimeMessage({
-    from: `${fromName} <${fromEmail}>`,
-    to: params.to,
+    from: formatFromHeader(fromName, fromEmail),
+    to: toHeader,
     subject: params.subject,
-    plainBody: includePublicKeys
-      ? 'This message is encrypted with Even Better Privacy. Open the EBP block below.'
-      : 'Encrypted with Even Better Privacy.',
+    plainBody: ebpMailPlainIntro(includePublicKeys),
     ebpArmor: armor,
     inReplyTo: params.inReplyTo,
     references: params.references,
+    attachments: params.attachments,
   });
-  await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
+  await sendMimeMessage(
+    resolved.account.config,
+    resolved.secrets,
+    mime,
+    recipientRows.map(r => r.email.trim()),
+  );
 }
 
 /** Send a plaintext (non-EBP) MIME message via the selected mail account. */
@@ -66,6 +137,8 @@ export async function sendPlainMail(params: {
   message: string;
   inReplyTo?: string;
   references?: string;
+  attachments?: MailAttachmentPart[];
+  recipients?: string[];
 }): Promise<void> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
@@ -74,20 +147,21 @@ export async function sendPlainMail(params: {
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
   const fromName = resolved.account.config.fromName || fromEmail;
+  const rcpts = resolvePlainMailRecipients(params);
   const mime = buildSimpleMimeMessage({
-    from: `${fromName} <${fromEmail}>`,
-    to: params.to,
+    from: formatFromHeader(fromName, fromEmail),
+    to: rcpts.join(', '),
     subject: params.subject,
     body: params.message,
     inReplyTo: params.inReplyTo,
     references: params.references,
+    attachments: params.attachments,
   });
-  await sendMimeMessage(resolved.account.config, resolved.secrets, mime);
-}
-
-function sourceLooksLikeEbpArmor(source: string): boolean {
-  return (
-    source.includes('-----BEGIN EBP') && source.includes('-----END EBP')
+  await sendMimeMessage(
+    resolved.account.config,
+    resolved.secrets,
+    mime,
+    rcpts,
   );
 }
 
@@ -95,6 +169,7 @@ export async function decryptMailBody(params: {
   identityName: string;
   password: string;
   uid: number;
+  folder?: string;
 }): Promise<MailAuthenticitySummary> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
@@ -104,6 +179,7 @@ export async function decryptMailBody(params: {
     resolved.account.config,
     resolved.secrets,
     params.uid,
+    params.folder ?? 'INBOX',
   );
   if (!detail.ebpPayload) {
     if (
@@ -124,12 +200,11 @@ export async function decryptMailBody(params: {
     payload,
   });
 
-  let verifyStatus: MailVerifyStatus = result.verifyStatus;
-  if (result.verified === true && !result.isKnownContact) {
-    if (result.verifyStatus === 'valid' || result.verifyStatus === 'valid_unbound') {
-      verifyStatus = 'valid_unknown_signer';
-    }
-  }
+  let verifyStatus: MailVerifyStatus = elevateUnknownSignerVerifyStatus(
+    result.verified,
+    result.isKnownContact,
+    result.verifyStatus,
+  ) as MailVerifyStatus;
 
   const messageFrom = detail.from ?? '';
   let signerEmail: string | null = null;

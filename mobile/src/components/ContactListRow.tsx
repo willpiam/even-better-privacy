@@ -10,6 +10,7 @@ export default function ContactListRow({
   onPress,
   showChevron = true,
   badge,
+  badgeVariant = 'default',
   right,
   showAvatar = true,
   subtitleExtra,
@@ -19,6 +20,7 @@ export default function ContactListRow({
   onPress?: () => void;
   showChevron?: boolean;
   badge?: string;
+  badgeVariant?: 'default' | 'danger';
   right?: React.ReactNode;
   showAvatar?: boolean;
   /** Appended after secondary with ` · ` (e.g. browse key types · created). */
@@ -39,6 +41,7 @@ export default function ContactListRow({
       onPress={onPress}
       showChevron={showChevron}
       badge={badge}
+      badgeVariant={badgeVariant}
       right={right}
     />
   );

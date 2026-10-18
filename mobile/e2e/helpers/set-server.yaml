@@ -16,17 +16,21 @@ appId: com.mobile
 # selectTextOnFocus highlights the default URL; one Backspace removes it.
 # eraseText then covers leftover characters if selection did not apply.
 - pressKey: Backspace
-- eraseText: 80
+- eraseText: 120
 - inputText: ${SERVER_URL}
-- hideKeyboard
+# Prefer Save over hideKeyboard: with some IMEs hideKeyboard fails hard
+# when the keyboard is already dismissed after inputText.
 - tapOn:
     id: "settings-save"
 - extendedWaitUntil:
     visible: "Saved"
     timeout: 10000
 - back
-- tapOn:
-    id: "tab-identities"
+# Prefer visible tab label — resource-id can miss after Settings pops the stack.
+- extendedWaitUntil:
+    visible: "Identities"
+    timeout: 15000
+- tapOn: "Identities"
 - extendedWaitUntil:
     visible:
       id: "tab-identities"

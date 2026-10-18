@@ -2,7 +2,7 @@
 title: "Google Cloud: Unverified apps (OAuth)"
 type: source-summary
 status: active
-last_updated: 2026-05-07
+last_updated: 2026-09-09
 source_count: 1
 tags:
   - source
@@ -34,7 +34,7 @@ Changing the client, **redirect URLs**, **JavaScript origins**, **product name**
 
 ## EBP relevance
 
-EBP's [[component-gui]] Gmail integration and [[component-server]] mail OAuth proxy endpoints depend on Google OAuth clients registered in Google Cloud. Operators and integrators should expect **unverified-app UX and the 100-user cap** until verification completes for the scopes in use. The [[component-email-extension]] path also depends on provider OAuth when end users connect Google accounts; published Chrome Web Store extensions have their own distribution and verification expectations that intersect with Google's OAuth program.
+EBP's [[component-gui]] Gmail integration and [[component-server]] mail OAuth proxy endpoints depend on Google OAuth clients registered in Google Cloud. Operators and integrators should expect **unverified-app UX and the 100-user cap** until verification completes for the scopes in use.
 
 ## Sources
 
@@ -46,5 +46,4 @@ EBP's [[component-gui]] Gmail integration and [[component-server]] mail OAuth pr
 - [[source-google-cross-account-protection-risc]]
 - [[component-server]]
 - [[component-gui]]
-- [[component-email-extension]]
 - [[email-transport]]

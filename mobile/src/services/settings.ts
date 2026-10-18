@@ -1,5 +1,22 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {DEFAULT_SERVER_URL} from '../config/constants';
+import {
+  booleanPrefToStorage,
+  normalizeOptionalPref,
+  parseEnforcePasswordPolicy,
+  parseStoredBoolean,
+  requireNonEmptyServerUrl,
+  resolveServerUrl,
+} from './settingsLogic';
+
+export {
+  booleanPrefToStorage,
+  normalizeOptionalPref,
+  parseEnforcePasswordPolicy,
+  parseStoredBoolean,
+  requireNonEmptyServerUrl,
+  resolveServerUrl,
+} from './settingsLogic';
 
 const SERVER_URL_KEY = 'ebp.server_url';
 /** Matches GUI localStorage key `ebp.identity.enforcePasswordPolicy`. */
@@ -9,14 +26,11 @@ export const MAIL_INCLUDE_PUBLIC_KEYS_KEY = 'ebp.mail.includePublicKeys';
 
 async function getBooleanPref(key: string, fallback: boolean): Promise<boolean> {
   const value = await AsyncStorage.getItem(key);
-  if (value === null) {
-    return fallback;
-  }
-  return value === 'true';
+  return parseStoredBoolean(value, fallback);
 }
 
 async function setBooleanPref(key: string, value: boolean): Promise<void> {
-  await AsyncStorage.setItem(key, value ? 'true' : 'false');
+  await AsyncStorage.setItem(key, booleanPrefToStorage(value));
 }
 
 export const MAIL_OAUTH_GMAIL_CLIENT_ID_OVERRIDE_KEY =
@@ -26,11 +40,11 @@ export const MAIL_OAUTH_OUTLOOK_CLIENT_ID_OVERRIDE_KEY =
 
 async function getOptionalStringPref(key: string): Promise<string> {
   const value = await AsyncStorage.getItem(key);
-  return value?.trim() ?? '';
+  return normalizeOptionalPref(value);
 }
 
 async function setOptionalStringPref(key: string, value: string): Promise<void> {
-  const clean = value.trim();
+  const clean = normalizeOptionalPref(value);
   if (clean) {
     await AsyncStorage.setItem(key, clean);
   } else {
@@ -56,23 +70,17 @@ export async function setMailOauthOutlookClientIdOverride(value: string): Promis
 
 export async function getServerUrl(): Promise<string> {
   const value = await AsyncStorage.getItem(SERVER_URL_KEY);
-  return value && value.trim().length > 0 ? value.trim() : DEFAULT_SERVER_URL;
+  return resolveServerUrl(value, DEFAULT_SERVER_URL);
 }
 
 export async function setServerUrl(next: string): Promise<void> {
-  const clean = next.trim();
-  if (!clean) {
-    throw new Error('Server URL cannot be empty');
-  }
+  const clean = requireNonEmptyServerUrl(next);
   await AsyncStorage.setItem(SERVER_URL_KEY, clean);
 }
 
 export async function getEnforcePasswordPolicy(): Promise<boolean> {
   const value = await AsyncStorage.getItem(ENFORCE_PASSWORD_POLICY_KEY);
-  if (value === null) {
-    return true;
-  }
-  return value === 'true';
+  return parseEnforcePasswordPolicy(value);
 }
 
 export async function setEnforcePasswordPolicy(enforce: boolean): Promise<void> {

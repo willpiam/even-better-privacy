@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {ScrollView, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -63,20 +63,53 @@ type PendingProposal = {
   createdAt: number;
 };
 
-export default function CertificatesScreen(_props: Props): JSX.Element {
+/** Parse YYYY-MM-DD (or datetime) into unix ms; empty → 0 (no expiry). */
+export function parseCertificateExpiryInput(raw: string): number {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return 0;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    const parsed = Date.parse(trimmed.includes('T') ? trimmed : `${trimmed}T23:59:59`);
+    if (Number.isNaN(parsed)) {
+      throw new Error('Invalid expiry date (use YYYY-MM-DD)');
+    }
+    return parsed;
+  }
+  const asNumber = Number(trimmed);
+  if (Number.isFinite(asNumber) && asNumber >= 0) {
+    return asNumber;
+  }
+  throw new Error('Expiry must be YYYY-MM-DD (or empty for none)');
+}
+
+export default function CertificatesScreen({route}: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
   const [active, setActive] = useState<ActiveCert[]>([]);
   const [pending, setPending] = useState<PendingProposal[]>([]);
   const [iAmMaster, setIAmMaster] = useState(true);
-  const [otherParty, setOtherParty] = useState('');
+  const [otherParty, setOtherParty] = useState(
+    () => route.params?.fingerprint ?? '',
+  );
   const [context, setContext] = useState('');
   const [expiry, setExpiry] = useState('');
-  const [treeFingerprint, setTreeFingerprint] = useState('');
+  const [treeFingerprint, setTreeFingerprint] = useState(
+    () => route.params?.fingerprint ?? '',
+  );
   const [treeDiagram, setTreeDiagram] = useState<HierarchyDiagram | null>(null);
   const [treeDetail, setTreeDetail] = useState<HierarchyDiagramDetail>(null);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [selectedCert, setSelectedCert] = useState<ActiveCert | null>(null);
+
+  useEffect(() => {
+    const fingerprint = route.params?.fingerprint?.trim();
+    if (!fingerprint) {
+      return;
+    }
+    setOtherParty(fingerprint);
+    setTreeFingerprint(fingerprint);
+  }, [route.params?.fingerprint]);
 
   const refresh = useCallback(async () => {
     const current = await getCurrentIdentity();
@@ -140,13 +173,14 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
       const identityName = await getCurrentIdentityRequired();
       const masterFingerprint = iAmMaster ? myFingerprint : otherFingerprint;
       const childFingerprint = iAmMaster ? otherFingerprint : myFingerprint;
+      const expiryMs = parseCertificateExpiryInput(expiry);
       await proposeHierarchy({
         identityName,
         password,
         masterFingerprint,
         childFingerprint,
         context: context || undefined,
-        expiry: expiry ? Number(expiry) : 0,
+        expiry: expiryMs,
       });
       setStatus('Proposal created');
       setOtherParty('');
@@ -299,12 +333,13 @@ export default function CertificatesScreen(_props: Props): JSX.Element {
             placeholder="Context (optional)"
           />
           <TextField
-            label="Expiry"
+            label="Expiry date"
             testID="cert-expiry"
             value={expiry}
             onChangeText={setExpiry}
-            placeholder="Expiry ms unix timestamp (0 for none)"
-            keyboardType="number-pad"
+            placeholder="YYYY-MM-DD (empty = none)"
+            autoCapitalize="none"
+            autoCorrect={false}
           />
           <AppButton
             title="Create Proposal"

@@ -1,4 +1,7 @@
 import React, {useState} from 'react';
+import {Text} from 'react-native';
+import Share from 'react-native-share';
+import RNFS from 'react-native-fs';
 import {decryptFile} from '../../services/encryptDecrypt';
 import {parseEbpPayloadInput} from '../../ebpCore';
 import {getCurrentIdentityRequired} from '../../services/storage';
@@ -6,16 +9,34 @@ import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import BusyOverlay from '../../components/BusyOverlay';
-import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
+import {cryptoStyles} from './cryptoStyles';
+
+type DecryptedFile = {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+  fileDataBase64: string;
+  verifyStatus: string;
+};
+
+function formatBytes(n: number): string {
+  if (n < 1024) {
+    return `${n} B`;
+  }
+  if (n < 1024 * 1024) {
+    return `${(n / 1024).toFixed(1)} KB`;
+  }
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function DecryptFileScreen(): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
   const [decryptFilePayload, setDecryptFilePayload] = useState('');
   const [decryptFileSender, setDecryptFileSender] = useState('');
-  const [decryptFileOutput, setDecryptFileOutput] = useState('');
+  const [decrypted, setDecrypted] = useState<DecryptedFile | null>(null);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
@@ -39,19 +60,46 @@ export default function DecryptFileScreen(): JSX.Element {
         payload,
         sender: decryptFileSender || undefined,
       });
-      setDecryptFileOutput(
-        `Verify: ${result.verifyStatus}\nName: ${result.fileName}\nType: ${result.mimeType}\nSize: ${result.fileSize}\n\nBase64:\n${result.fileDataBase64}`,
-      );
+      setDecrypted({
+        fileName: result.fileName,
+        mimeType: result.mimeType,
+        fileSize: result.fileSize,
+        fileDataBase64: result.fileDataBase64,
+        verifyStatus: result.verifyStatus,
+      });
       setStatus('File decrypted');
     } catch (error) {
-      setDecryptFileOutput('');
+      setDecrypted(null);
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyMessage(null);
     }
   };
 
+  const onShareFile = async () => {
+    if (!decrypted) {
+      return;
+    }
+    try {
+      const safeName = decrypted.fileName.replace(/[/\\]/g, '_') || 'decrypted-file';
+      const path = `${RNFS.CachesDirectoryPath}/${safeName}`;
+      await RNFS.writeFile(path, decrypted.fileDataBase64, 'base64');
+      await Share.open({
+        url: `file://${path}`,
+        type: decrypted.mimeType || 'application/octet-stream',
+        filename: safeName,
+        failOnCancel: false,
+      });
+      setStatus('Shared decrypted file');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  };
+
   const busy = busyMessage !== null;
+  const preview =
+    decrypted &&
+    `Verify: ${decrypted.verifyStatus}\nName: ${decrypted.fileName}\nType: ${decrypted.mimeType}\nSize: ${formatBytes(decrypted.fileSize)}`;
 
   return (
     <Screen scroll>
@@ -76,10 +124,14 @@ export default function DecryptFileScreen(): JSX.Element {
         onPress={onDecryptFile}
         disabled={busy}
       />
-      <CopyableOutput
-        value={decryptFileOutput}
-        placeholder="Decrypted file info…"
-      />
+      {preview ? (
+        <>
+          <Text style={cryptoStyles.output} selectable>
+            {preview}
+          </Text>
+          <AppButton title="Share / save file" onPress={onShareFile} />
+        </>
+      ) : null}
     </Screen>
   );
 }

@@ -2,7 +2,7 @@
 title: "RFC 5321: Simple Mail Transfer Protocol"
 type: source-summary
 status: active
-last_updated: 2026-04-27
+last_updated: 2026-09-09
 source_count: 1
 tags:
   - source
@@ -50,7 +50,6 @@ RFC 5321 does not define the full syntax of message headers or MIME bodies; it p
 
 - [[email-transport]]
 - [[component-gui]]
-- [[component-email-extension]]
 - [[message-payload-formats]]
 - [[overview]]
 

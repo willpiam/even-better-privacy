@@ -2,7 +2,7 @@
 title: "Source Summary: NIST SP 800-57 Part 3 Rev. 1"
 type: source-summary
 status: active
-last_updated: 2026-04-25
+last_updated: 2026-09-09
 source_count: 1
 tags:
   - source
@@ -32,13 +32,13 @@ Because this revision is from 2015, concrete cipher-suite and protocol recommend
 
 ## EBP Relevance
 
-Part 3 provides context for [[key-management]], [[component-email-extension]], and [[component-server]] when comparing EBP to conventional application protocols. It should be cited with an explicit staleness caution for modern TLS, S/MIME, and SSH choices.
+Part 3 provides context for [[key-management]], [[component-gui]], and [[component-server]] when comparing EBP to conventional application protocols. It should be cited with an explicit staleness caution for modern TLS, S/MIME, and SSH choices.
 
 ## Related Pages
 
 - [[key-management]]
 - [[x509-pki]]
-- [[component-email-extension]]
+- [[component-gui]]
 - [[source-sp-800-57-part-1-r5]]
 - [[source-sp-800-57-part-2-r1]]
 

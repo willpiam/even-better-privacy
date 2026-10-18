@@ -36,7 +36,8 @@
     "react-native-screens": "^4.24.0",
     "react-native-share": "^12.2.0",
     "react-native-svg": "^15.15.5",
-    "react-native-tcp-socket": "^6.4.1"
+    "react-native-tcp-socket": "^6.4.1",
+    "react-native-webview": "^14.0.1"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

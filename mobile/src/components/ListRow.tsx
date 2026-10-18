@@ -7,6 +7,7 @@ export default function ListRow({
   subtitle,
   avatarText,
   badge,
+  badgeVariant = 'default',
   onPress,
   showChevron = true,
   right,
@@ -17,6 +18,7 @@ export default function ListRow({
   subtitle?: string;
   avatarText?: string;
   badge?: string;
+  badgeVariant?: 'default' | 'danger';
   onPress?: () => void;
   showChevron?: boolean;
   right?: React.ReactNode;
@@ -42,8 +44,18 @@ export default function ListRow({
         ) : null}
       </View>
       {badge ? (
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{badge}</Text>
+        <View
+          style={[
+            styles.badge,
+            badgeVariant === 'danger' && styles.badgeDanger,
+          ]}>
+          <Text
+            style={[
+              styles.badgeText,
+              badgeVariant === 'danger' && styles.badgeTextDanger,
+            ]}>
+            {badge}
+          </Text>
         </View>
       ) : null}
       {right}
@@ -112,13 +124,22 @@ const styles = StyleSheet.create({
   badge: {
     backgroundColor: colors.accentSoft,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 4,
     borderRadius: 10,
+  },
+  badgeDanger: {
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: colors.danger,
   },
   badgeText: {
     fontSize: 11,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.accent,
+    letterSpacing: 0.3,
+  },
+  badgeTextDanger: {
+    color: colors.danger,
   },
   chevron: {
     color: '#ccc',

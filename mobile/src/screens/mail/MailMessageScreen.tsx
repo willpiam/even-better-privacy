@@ -1,5 +1,6 @@
 import React, {useEffect, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
+import {WebView} from 'react-native-webview';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
@@ -9,6 +10,7 @@ import {
   decryptMailBody,
   type MailAuthenticitySummary,
 } from '../../services/mail/ebpMail';
+import {buildSandboxedEmailSrcDoc} from '../../services/mail/sandboxedHtml';
 import {
   extractEmailAddress,
   formatQuotedBody,
@@ -16,6 +18,7 @@ import {
   parseMessageId,
   resolveReplyRecipientContact,
 } from '../../services/mail/mailReply';
+import {getMailRenderHtml} from '../../services/settings';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
 import StatusBanner from '../../components/StatusBanner';
@@ -33,10 +36,13 @@ export default function MailMessageScreen({
   navigation,
 }: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
+  const folder = route.params.folder ?? 'INBOX';
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
   const [date, setDate] = useState('');
   const [body, setBody] = useState('');
+  const [bodyHtml, setBodyHtml] = useState('');
+  const [renderHtml, setRenderHtml] = useState(false);
   const [rawSource, setRawSource] = useState('');
   const [hasEbp, setHasEbp] = useState(false);
   const [showTechnical, setShowTechnical] = useState(false);
@@ -55,6 +61,7 @@ export default function MailMessageScreen({
       setFrom('');
       setDate('');
       setBody('');
+      setBodyHtml('');
       setRawSource('');
       setHasEbp(false);
       setShowTechnical(false);
@@ -65,11 +72,15 @@ export default function MailMessageScreen({
         if (!resolved) {
           throw new Error('No mail account');
         }
-        const detail = await fetchMessageDetail(
-          resolved.account.config,
-          resolved.secrets,
-          route.params.uid,
-        );
+        const [detail, htmlSetting] = await Promise.all([
+          fetchMessageDetail(
+            resolved.account.config,
+            resolved.secrets,
+            route.params.uid,
+            folder,
+          ),
+          getMailRenderHtml(),
+        ]);
         if (cancelled) {
           return;
         }
@@ -77,6 +88,8 @@ export default function MailMessageScreen({
         setFrom(detail.from || '');
         setDate(detail.date || '');
         setBody(detail.bodyText || detail.bodyHtml || '');
+        setBodyHtml(detail.bodyHtml || '');
+        setRenderHtml(htmlSetting);
         setRawSource(detail.rawSource || '');
         const ebp = Boolean(detail.ebpPayload);
         setHasEbp(ebp);
@@ -95,7 +108,7 @@ export default function MailMessageScreen({
     return () => {
       cancelled = true;
     };
-  }, [route.params.uid]);
+  }, [route.params.uid, folder]);
 
   const onDecrypt = async () => {
     const password = await promptSecret({
@@ -113,6 +126,7 @@ export default function MailMessageScreen({
         identityName,
         password,
         uid: route.params.uid,
+        folder,
       });
       setAuthenticity(result);
       setStatus(
@@ -165,6 +179,8 @@ export default function MailMessageScreen({
   const locked = hasEbp && !decrypted;
   const canReply =
     loaded && !locked && (Boolean(body) || Boolean(decrypted) || !hasEbp);
+  const showHtml =
+    !hasEbp && renderHtml && Boolean(bodyHtml.trim());
 
   return (
     <Screen scroll>
@@ -211,7 +227,20 @@ export default function MailMessageScreen({
         <AppButton title="Reply" onPress={() => void onReply()} />
       ) : null}
 
-      {!hasEbp && body ? (
+      {showHtml ? (
+        <Card padded style={styles.htmlCard}>
+          <WebView
+            originWhitelist={['*']}
+            source={{html: buildSandboxedEmailSrcDoc(bodyHtml)}}
+            javaScriptEnabled={false}
+            style={styles.webview}
+            nestedScrollEnabled
+            testID="mail-html-webview"
+          />
+        </Card>
+      ) : null}
+
+      {!hasEbp && !showHtml && body ? (
         <Card padded>
           <Text style={styles.body}>{body}</Text>
         </Card>
@@ -298,5 +327,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontFamily: 'monospace',
+  },
+  htmlCard: {
+    minHeight: 220,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  webview: {
+    height: 280,
+    backgroundColor: colors.surface,
   },
 });

@@ -1,0 +1,40 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-random-id
+  IDENTITY_PASSWORD: Smoke-test-password1
+---
+- runFlow: helpers/clear-and-launch.yaml
+- tapOn:
+    id: "tab-identities"
+- extendedWaitUntil:
+    visible:
+      id: "identities-create-random"
+    timeout: 15000
+- tapOn:
+    id: "identities-create-random"
+- extendedWaitUntil:
+    visible:
+      id: "random-identity-name"
+    timeout: 15000
+- tapOn:
+    id: "random-identity-name"
+- inputText: ${IDENTITY_NAME}
+- hideKeyboard
+- tapOn:
+    id: "random-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "random-create-submit"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "random-create-submit"
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 180000
+- assertVisible:
+    id: "identity-name"
+- assertVisible: ${IDENTITY_NAME}

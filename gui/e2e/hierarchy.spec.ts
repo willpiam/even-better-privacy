@@ -44,6 +44,9 @@ async function publishIdentity(page: Page, serverUrl = testServerUrl, password =
   await page.fill("#publish-server", serverUrl);
   await page.getByRole("button", { name: "Publish", exact: true }).click();
   await submitPassword(page, password);
+  await expect(page.locator("#status")).toHaveAttribute("data-kind", "success", {
+    timeout: 60_000,
+  });
 }
 
 async function ensureIdentitySelected(page: Page, identityName: string) {

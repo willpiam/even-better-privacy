@@ -23,6 +23,7 @@ export default function EncryptFileScreen(): JSX.Element {
   const [fileRecipient, setFileRecipient] = useState('');
   const [fileSign, setFileSign] = useState(false);
   const [encryptFileOutput, setEncryptFileOutput] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
@@ -86,27 +87,43 @@ export default function EncryptFileScreen(): JSX.Element {
       {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
-        label="File URI"
-        value={fileUri}
-        onChangeText={setFileUri}
-        placeholder="file:///..."
-        autoCapitalize="none"
+      <AppButton title="Pick File" onPress={pickEncryptFile} />
+      {fileName ? (
+        <Text style={cryptoStyles.helpText} testID="encrypt-file-name">
+          Selected: {fileName}
+        </Text>
+      ) : (
+        <Text style={cryptoStyles.helpText}>No file selected.</Text>
+      )}
+      <AppButton
+        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
+        variant="secondary"
+        onPress={() => setShowAdvanced(value => !value)}
       />
-      <AppButton title="Pick File" variant="secondary" onPress={pickEncryptFile} />
-      <TextField
-        label="File name"
-        value={fileName}
-        onChangeText={setFileName}
-        placeholder="File name"
-      />
-      <TextField
-        label="MIME type"
-        value={fileMime}
-        onChangeText={setFileMime}
-        placeholder="MIME type"
-        autoCapitalize="none"
-      />
+      {showAdvanced ? (
+        <>
+          <TextField
+            label="File URI (advanced)"
+            value={fileUri}
+            onChangeText={setFileUri}
+            placeholder="file:///..."
+            autoCapitalize="none"
+          />
+          <TextField
+            label="File name"
+            value={fileName}
+            onChangeText={setFileName}
+            placeholder="File name"
+          />
+          <TextField
+            label="MIME type"
+            value={fileMime}
+            onChangeText={setFileMime}
+            placeholder="MIME type"
+            autoCapitalize="none"
+          />
+        </>
+      ) : null}
       <ContactPicker
         value={fileRecipient}
         onChange={setFileRecipient}

@@ -121,19 +121,32 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           style={styles.flexBtn}
         />
       </View>
+      <AppButton
+        title="Create random"
+        testID="identities-create-random"
+        variant="secondary"
+        onPress={() => navigation.navigate('RandomCreate')}
+      />
       <SectionTitle>Local identities</SectionTitle>
       {identities.length === 0 ? (
         <View style={styles.empty} testID="identities-empty">
           <Text style={styles.emptyIcon}>◎</Text>
           <Text style={styles.emptyTitle}>No identities yet</Text>
           <Text style={styles.emptySub}>
-            Create an identity from a mnemonic, or import an existing identity
-            file.
+            Create an identity from a mnemonic, generate random keys, or import
+            an existing identity file.
           </Text>
           <AppButton
             title="Create identity"
             testID="identities-create-empty"
             onPress={() => navigation.navigate('HdCreate')}
+            style={styles.fullBtn}
+          />
+          <AppButton
+            title="Create random identity"
+            testID="identities-create-random-empty"
+            variant="secondary"
+            onPress={() => navigation.navigate('RandomCreate')}
             style={styles.fullBtn}
           />
           <AppButton

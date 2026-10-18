@@ -1,6 +1,14 @@
 import React, {useEffect, useState} from 'react';
-import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
+import {
+  Alert,
+  Pressable,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import Share from 'react-native-share';
+import Clipboard from '@react-native-clipboard/clipboard';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
@@ -12,6 +20,10 @@ import {requestVerifyEmail} from '../services/contacts';
 import {publishIdentity} from '../services/publish';
 import {getServerUrl} from '../services/settings';
 import {addDetail, listDetails} from '../services/details';
+import {
+  enforceAtLeastOneExportKey,
+  resolveOpaqueDetailPath,
+} from '../services/identity';
 import {
   generateEmergencyCert,
   revokeDetail,
@@ -26,6 +38,7 @@ import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import BusyOverlay from '../components/BusyOverlay';
 import Card from '../components/Card';
+import CopyableOutput from '../components/CopyableOutput';
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
@@ -40,6 +53,7 @@ export default function IdentityDetailScreen({
   const [identity, setIdentity] = useState<StoredIdentityMeta | null>(null);
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('');
+  const [publishServer, setPublishServer] = useState('');
   const [status, setStatus] = useState('');
   const [details, setDetails] = useState<
     Array<{path: string; detail: string; proof: string}>
@@ -47,9 +61,14 @@ export default function IdentityDetailScreen({
   const [detailPath, setDetailPath] = useState('');
   const [detailValue, setDetailValue] = useState('');
   const [detailPush, setDetailPush] = useState(false);
+  const [detailOpaque, setDetailOpaque] = useState(false);
   const [revokePath, setRevokePath] = useState('');
+  const [revokePathOpen, setRevokePathOpen] = useState(false);
   const [revokeReason, setRevokeReason] = useState('');
   const [revokePush, setRevokePush] = useState(false);
+  const [includeSigningKey, setIncludeSigningKey] = useState(true);
+  const [includeEncryptionKey, setIncludeEncryptionKey] = useState(true);
+  const [includeDetails, setIncludeDetails] = useState(true);
   const [exportOutput, setExportOutput] = useState('');
   const [emergencyOutput, setEmergencyOutput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -99,7 +118,7 @@ export default function IdentityDetailScreen({
       const fingerprint = await publishIdentity({
         identityName: identity.name,
         password,
-        server: serverUrl,
+        server: publishServer.trim() || serverUrl,
       });
       setStatus(`Published: ${fingerprint}`);
     } catch (error) {
@@ -114,16 +133,18 @@ export default function IdentityDetailScreen({
       if (!identity) {
         throw new Error('Identity not found');
       }
+      const path = resolveOpaqueDetailPath(detailPath, detailOpaque);
       await addDetail({
         identityName: identity.name,
         password,
-        path: detailPath,
+        path,
         detail: detailValue,
         push: detailPush,
       });
       setStatus('Detail added');
       setDetailPath('');
       setDetailValue('');
+      setDetailOpaque(false);
       setDetails(
         await listDetails({
           identityName: identity.name,
@@ -135,13 +156,43 @@ export default function IdentityDetailScreen({
     }
   };
 
+  const onExportKeyToggle = (
+    changed: 'signing' | 'encryption',
+    next: boolean,
+  ) => {
+    const signing =
+      changed === 'signing' ? next : includeSigningKey;
+    const encryption =
+      changed === 'encryption' ? next : includeEncryptionKey;
+    const enforced = enforceAtLeastOneExportKey(signing, encryption, changed);
+    if (
+      enforced.includeSigningKey !== signing ||
+      enforced.includeEncryptionKey !== encryption
+    ) {
+      setStatus('Export must include at least one public key');
+    }
+    setIncludeSigningKey(enforced.includeSigningKey);
+    setIncludeEncryptionKey(enforced.includeEncryptionKey);
+  };
+
   const onExportPublic = async () => {
     try {
       if (!identity) {
         throw new Error('Identity not found');
       }
-      const publicIdentity = await exportPublicIdentity(identity.name);
+      if (!password) {
+        throw new Error('Password is required');
+      }
+      if (!includeSigningKey && !includeEncryptionKey) {
+        throw new Error('Public export must include at least one public key');
+      }
+      const publicIdentity = await exportPublicIdentity(identity.name, password, {
+        includeSigningKey,
+        includeEncryptionKey,
+        includeDetails,
+      });
       setExportOutput(JSON.stringify(publicIdentity, null, 2));
+      Clipboard.setString(JSON.stringify(publicIdentity));
       setStatus('Public identity exported');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -152,6 +203,9 @@ export default function IdentityDetailScreen({
     try {
       if (!identity) {
         throw new Error('Identity not found');
+      }
+      if (!revokePath.trim()) {
+        throw new Error('Select a detail path to revoke');
       }
       await revokeDetail({
         identityName: identity.name,
@@ -174,7 +228,7 @@ export default function IdentityDetailScreen({
     }
   };
 
-  const onRevokeIdentity = async () => {
+  const runRevokeIdentity = async () => {
     try {
       if (!identity) {
         throw new Error('Identity not found');
@@ -189,6 +243,37 @@ export default function IdentityDetailScreen({
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
+  };
+
+  const onRevokeIdentity = () => {
+    if (!identity) {
+      return;
+    }
+    Alert.alert(
+      'Revoke identity?',
+      `This permanently revokes "${identity.name}". Continue?`,
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Confirm revoke',
+              'This cannot be undone. Revoke this identity?',
+              [
+                {text: 'Cancel', style: 'cancel'},
+                {
+                  text: 'Revoke identity',
+                  style: 'destructive',
+                  onPress: () => void runRevokeIdentity(),
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
   };
 
   const onExportFile = async () => {
@@ -298,6 +383,7 @@ export default function IdentityDetailScreen({
 
   const signingLabel =
     identity.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA';
+  const detailPaths = details.map(item => item.path);
 
   return (
     <Screen scroll>
@@ -316,6 +402,8 @@ export default function IdentityDetailScreen({
         <Text style={styles.meta}>Server: {serverUrl || '—'}</Text>
       </Card>
       <StatusBanner message={status} kind={statusKind(status)} />
+
+      <SectionTitle>Unlock</SectionTitle>
       <TextField
         label="Password"
         testID="identity-password"
@@ -323,6 +411,20 @@ export default function IdentityDetailScreen({
         onChangeText={setPassword}
         secureTextEntry
         autoCapitalize="none"
+      />
+      <Text style={styles.hint}>
+        Enter the password to load details and run protected actions.
+      </Text>
+
+      <SectionTitle>Publish</SectionTitle>
+      <TextField
+        label="Server override (optional)"
+        testID="identity-publish-server"
+        value={publishServer}
+        onChangeText={setPublishServer}
+        placeholder={serverUrl || 'Uses Settings URL when empty'}
+        autoCapitalize="none"
+        autoCorrect={false}
       />
       <AppButton
         title="Publish to server"
@@ -332,26 +434,30 @@ export default function IdentityDetailScreen({
       />
 
       <SectionTitle>Identity details</SectionTitle>
-      <AppButton
-        title="Add detail"
-        testID="identity-add-detail"
-        variant="secondary"
-        onPress={onAddDetail}
-      />
-      {details.map(item => (
-        <Card key={item.path} padded style={styles.detailCard}>
-          <Text style={styles.detail}>
-            {item.path}: {item.detail}
-          </Text>
-          {item.path === 'email' || item.path === 'opaque::email' ? (
-            <AppButton
-              title="Verify email"
-              variant="secondary"
-              onPress={() => onVerifyEmail(item.path, item.detail)}
-            />
-          ) : null}
-        </Card>
-      ))}
+      {details.length === 0 ? (
+        <Text style={styles.hint}>
+          {password
+            ? 'No details yet. Add one below.'
+            : 'Unlock with password to load details.'}
+        </Text>
+      ) : (
+        details.map(item => (
+          <Card key={item.path} padded style={styles.detailCard}>
+            <Text style={styles.detail}>
+              {item.path}: {item.detail}
+            </Text>
+            {item.path === 'email' || item.path === 'opaque::email' ? (
+              <AppButton
+                title="Verify email"
+                variant="secondary"
+                onPress={() => onVerifyEmail(item.path, item.detail)}
+              />
+            ) : null}
+          </Card>
+        ))
+      )}
+
+      <Text style={styles.fieldLabel}>Add detail</Text>
       <TextField
         label="Detail path"
         testID="identity-detail-path"
@@ -365,15 +471,42 @@ export default function IdentityDetailScreen({
         value={detailValue}
         onChangeText={setDetailValue}
       />
-      <View style={styles.switchRow}>
+      <Pressable
+        testID="identity-detail-opaque"
+        accessibilityRole="switch"
+        accessibilityState={{checked: detailOpaque}}
+        accessibilityLabel="Opaque (hash value)"
+        onPress={() => setDetailOpaque(value => !value)}
+        style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Opaque (hash value)</Text>
+        <Switch
+          value={detailOpaque}
+          onValueChange={setDetailOpaque}
+          pointerEvents="none"
+        />
+      </Pressable>
+      <Pressable
+        testID="identity-detail-push"
+        accessibilityRole="switch"
+        accessibilityState={{checked: detailPush}}
+        accessibilityLabel="Push detail to server"
+        onPress={() => setDetailPush(value => !value)}
+        style={styles.switchRow}>
         <Text style={styles.switchLabel}>Push to server</Text>
         <Switch
-          testID="identity-detail-push"
           value={detailPush}
           onValueChange={setDetailPush}
+          pointerEvents="none"
         />
-      </View>
+      </Pressable>
+      <AppButton
+        title="Add detail"
+        testID="identity-add-detail"
+        variant="secondary"
+        onPress={onAddDetail}
+      />
 
+      <SectionTitle>Device file</SectionTitle>
       <AppButton
         title="Export identity file"
         variant="secondary"
@@ -385,6 +518,31 @@ export default function IdentityDetailScreen({
         variant="secondary"
         onPress={onEmergencyCert}
       />
+      <SectionTitle>Public export</SectionTitle>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Include signing key</Text>
+        <Switch
+          testID="identity-export-signing"
+          value={includeSigningKey}
+          onValueChange={next => onExportKeyToggle('signing', next)}
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Include encryption key</Text>
+        <Switch
+          testID="identity-export-encryption"
+          value={includeEncryptionKey}
+          onValueChange={next => onExportKeyToggle('encryption', next)}
+        />
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Include details</Text>
+        <Switch
+          testID="identity-export-details"
+          value={includeDetails}
+          onValueChange={setIncludeDetails}
+        />
+      </View>
       <AppButton
         title="Export public JSON"
         testID="identity-export-public"
@@ -392,12 +550,9 @@ export default function IdentityDetailScreen({
         onPress={onExportPublic}
       />
       {exportOutput ? (
-        <TextField
-          label="Public JSON"
+        <CopyableOutput
           testID="identity-export-public-output"
           value={exportOutput}
-          editable={false}
-          multiline
         />
       ) : null}
       {emergencyOutput ? (
@@ -411,11 +566,45 @@ export default function IdentityDetailScreen({
       ) : null}
 
       <SectionTitle>Revocation</SectionTitle>
-      <TextField
-        label="Detail path to revoke"
-        value={revokePath}
-        onChangeText={setRevokePath}
-      />
+      <Text style={styles.fieldLabel}>Detail path to revoke</Text>
+      <Pressable
+        testID="identity-revoke-path-picker"
+        accessibilityRole="button"
+        accessibilityState={{expanded: revokePathOpen}}
+        onPress={() => setRevokePathOpen(open => !open)}
+        style={styles.pickerTrigger}>
+        <Text
+          style={revokePath ? styles.pickerValue : styles.pickerPlaceholder}>
+          {revokePath || 'Select a detail path…'}
+        </Text>
+        <Text style={styles.pickerChevron}>{revokePathOpen ? '▲' : '▼'}</Text>
+      </Pressable>
+      {revokePathOpen ? (
+        <View style={styles.pickerList}>
+          {detailPaths.length === 0 ? (
+            <Text style={styles.hint}>
+              No loaded details. Unlock with password first.
+            </Text>
+          ) : (
+            detailPaths.map((path, index) => (
+              <Pressable
+                key={path}
+                testID={`identity-revoke-path-${path}`}
+                onPress={() => {
+                  setRevokePath(path);
+                  setRevokePathOpen(false);
+                }}
+                style={[
+                  styles.pickerItem,
+                  index < detailPaths.length - 1 && styles.pickerItemDivider,
+                  path === revokePath && styles.pickerItemSelected,
+                ]}>
+                <Text style={styles.pickerItemText}>{path}</Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+      ) : null}
       <TextField
         label="Reason (optional)"
         value={revokeReason}
@@ -425,8 +614,16 @@ export default function IdentityDetailScreen({
         <Text style={styles.switchLabel}>Push to server</Text>
         <Switch value={revokePush} onValueChange={setRevokePush} />
       </View>
-      <AppButton title="Revoke detail" variant="secondary" onPress={onRevokeDetail} />
-      <AppButton title="Revoke identity" variant="danger" onPress={onRevokeIdentity} />
+      <AppButton
+        title="Revoke detail"
+        variant="secondary"
+        onPress={onRevokeDetail}
+      />
+      <AppButton
+        title="Revoke identity"
+        variant="danger"
+        onPress={onRevokeIdentity}
+      />
       <AppButton
         title="Delete from device"
         testID="identity-delete"
@@ -447,6 +644,14 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 16,
   },
+  hint: {fontSize: 13, color: colors.muted, lineHeight: 18},
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
   detailCard: {gap: 8},
   detail: {color: colors.text, marginBottom: 4},
   switchRow: {
@@ -461,4 +666,32 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   switchLabel: {flex: 1, marginRight: 12, color: colors.text},
+  pickerTrigger: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: colors.surface,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerValue: {flex: 1, color: colors.text, fontSize: 15},
+  pickerPlaceholder: {flex: 1, color: '#999', fontSize: 15},
+  pickerChevron: {color: colors.muted, fontSize: 12, marginLeft: 8},
+  pickerList: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  pickerItem: {paddingHorizontal: 14, paddingVertical: 12},
+  pickerItemDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  pickerItemSelected: {backgroundColor: colors.accentSoft},
+  pickerItemText: {color: colors.text, fontSize: 15},
 });

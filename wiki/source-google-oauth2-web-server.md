@@ -2,7 +2,7 @@
 title: "Google OAuth 2.0 for Web Server Applications"
 type: source-summary
 status: active
-last_updated: 2026-05-17
+last_updated: 2026-09-09
 source_count: 1
 tags:
   - source
@@ -75,6 +75,5 @@ EBP's Gmail mail integration follows this web-server pattern:
 - [[source-google-cross-account-protection-risc]]
 - [[component-server]]
 - [[component-gui]]
-- [[component-email-extension]]
 - [[uri-syntax]]
 - [[email-transport]]

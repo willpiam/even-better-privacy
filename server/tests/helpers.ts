@@ -135,13 +135,15 @@ export function createRevocationCertificate(
     timestamp: data.timestamp,
     reason: data.reason,
     target: data.target,
-    signature: null,
+    signature: null as string | null,
   };
 
-  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
+  const signature = signingKey.sign(
+    buildPurposeHashEnvelope("revocation", canonicalJsonStringify(payload)),
+  );
   const signedCert = { ...payload, signature };
 
-  return toHex(textEncoder.encode(JSON.stringify(signedCert)));
+  return stringToHex(canonicalJsonStringify(signedCert));
 }
 
 export function signHashedMessage(

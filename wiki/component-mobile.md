@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-08-10
+last_updated: 2026-09-09
 source_count: 5
 tags:
   - component
@@ -16,7 +16,15 @@ EBP includes a mobile application built with React Native (`mobile/`). The goal 
 
 ## Current Status
 
-The mobile app implements **Parity v1** with the GUI (wallet, HD, native mail, hierarchy). See [[analysis-mobile-parity-roadmap]] and [[analysis-gui-mobile-parity-deltas]].
+The mobile app implements **Parity v1** with the GUI (wallet, HD, native mail, hierarchy). Finish-line Waves 1–2 closed remaining identity/crypto/mail control gaps on Android (2026-09-09). See [[analysis-mobile-parity-roadmap]] and [[analysis-gui-mobile-parity-deltas]].
+
+**Intentional non-parity:** OAuth email out of scope (manual IMAP/SMTP); Downloads/`~/Downloads` desktop-only (Share on device). Chrome email extension removed (not a live component).
+
+Crypto UI parity (2026-09-09): include-salt on Sign Message/File, verify-with-public-keys, decrypt/fingerprint paste, decrypt-file Share. Pure helpers in `mobile/src/services/signVerifyLogic.ts`; Deno tests in `test/mobile-signVerify_parity_test.ts`. Maestro: `sign-verify.yaml`, `verify-public-keys.yaml`.
+
+Identity UI parity (2026-09-09): random-key create, HD change/overwrite, selective public export, opaque add-detail, per-action server override. Helpers in `mobile/src/services/identity.ts`; Maestro `create-random.yaml`.
+
+Mail UI parity (2026-09-09): folder/search/page/limit, help screen, HTML WebView, attachments, multi-recipient. Maestro: `mail-help.yaml` (no live mailbox). Remaining untested paths (file pickers, live IMAP): [[analysis-mobile-testing-and-gui-gaps]].
 
 ## Architecture
 

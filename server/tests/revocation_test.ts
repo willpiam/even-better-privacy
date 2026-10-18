@@ -2,13 +2,9 @@ import { assertEquals, assertFalse, assert } from "jsr:@std/assert@^1.0.6";
 import { verifyRevocationCertificate } from "../revocation.ts";
 import { createSphincsIdentity, encodeProof } from "./helpers.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
-import { buildMessageHashEnvelope } from "../../core/MessageHash.ts";
-
-const textEncoder = new TextEncoder();
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { buildPurposeHashEnvelope } from "../../core/MessageHash.ts";
+import { canonicalJsonStringify } from "../../core/CanonicalJson.ts";
+import { stringToHex } from "../../core/Hex.ts";
 
 function createSignedRevocationCertificate(
   signingKey: SphincsSigningKey,
@@ -28,13 +24,15 @@ function createSignedRevocationCertificate(
     timestamp: data.timestamp,
     reason: data.reason,
     target: data.target,
-    signature: null,
+    signature: null as string | null,
   };
 
-  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
+  const signature = signingKey.sign(
+    buildPurposeHashEnvelope("revocation", canonicalJsonStringify(payload)),
+  );
   const signedCert = { ...payload, signature };
 
-  return toHex(textEncoder.encode(JSON.stringify(signedCert)));
+  return stringToHex(canonicalJsonStringify(signedCert));
 }
 
 Deno.test("verifyRevocationCertificate accepts a valid detail revocation", () => {
@@ -154,7 +152,7 @@ Deno.test("verifyRevocationCertificate rejects invalid signature", () => {
     signature: "not-a-valid-signature",
   };
 
-  const encoded = toHex(textEncoder.encode(JSON.stringify(invalidCert)));
+  const encoded = stringToHex(JSON.stringify(invalidCert));
   const result = verifyRevocationCertificate(identity, encoded, "identity");
   
   assertFalse(result.ok);
@@ -190,9 +188,11 @@ Deno.test("verifyRevocationCertificate rejects detail revocation without target"
     signature: null,
   };
 
-  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
+  const signature = signingKey.sign(
+    buildPurposeHashEnvelope("revocation", canonicalJsonStringify(payload)),
+  );
   const signedCert = { ...payload, signature };
-  const encoded = toHex(textEncoder.encode(JSON.stringify(signedCert)));
+  const encoded = stringToHex(canonicalJsonStringify(signedCert));
 
   const result = verifyRevocationCertificate(identity, encoded, "detail");
   
@@ -213,9 +213,11 @@ Deno.test("verifyRevocationCertificate rejects invalid nonce", () => {
     signature: null as string | null,
   };
 
-  const signature = signingKey.sign(buildMessageHashEnvelope(JSON.stringify(payload)));
+  const signature = signingKey.sign(
+    buildPurposeHashEnvelope("revocation", canonicalJsonStringify(payload)),
+  );
   const signedCert = { ...payload, signature };
-  const encoded = toHex(textEncoder.encode(JSON.stringify(signedCert)));
+  const encoded = stringToHex(canonicalJsonStringify(signedCert));
 
   const result = verifyRevocationCertificate(identity, encoded, "identity");
   

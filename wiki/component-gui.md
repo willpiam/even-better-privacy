@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-05-24
+last_updated: 2026-09-09
 source_count: 8
 tags:
   - component
@@ -80,7 +80,6 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 
 - [[component-cli]]
 - [[component-desktop]]
-- [[component-email-extension]]
 - [[component-server]]
 - [[analysis-linux-build]]
 - [[email-transport]]

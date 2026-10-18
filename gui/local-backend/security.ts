@@ -8,7 +8,7 @@
 // This module:
 //   - generates a 256-bit per-launch CSRF token and persists it to
 //     ~/.ebp/gui-backend.token at mode 0600 (Unix) for in-process clients
-//     (Tauri webview, email extension) to read.
+//     (Tauri webview) to read.
 //   - validates the Host header on every request (blocks DNS rebinding).
 //   - validates the Origin header against an allow-list (blocks reading
 //     responses cross-origin) and rejects early with 403 for requests
@@ -63,7 +63,6 @@ export interface InitSecurityOptions {
 	home?: string;
 	host?: string;
 	port?: number;
-	extensionOrigin?: string;
 	persist?: boolean;
 }
 
@@ -72,13 +71,6 @@ export async function initSecurity(opts: InitSecurityOptions = {}): Promise<stri
 	extraAllowedOrigins = new Set();
 	allowedHosts = new Set(DEFAULT_ALLOWED_HOSTS);
 	tokenPersistPath = null;
-
-	const envExt = opts.extensionOrigin ?? Deno.env.get("EBP_GUI_BACKEND_EXTENSION_ORIGIN");
-	if (envExt) {
-		for (const origin of envExt.split(",").map((s) => s.trim()).filter(Boolean)) {
-			extraAllowedOrigins.add(origin);
-		}
-	}
 
 	if (opts.host && opts.port !== undefined) {
 		allowedHosts.add(`${opts.host}:${opts.port}`.toLowerCase());

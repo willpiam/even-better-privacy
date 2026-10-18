@@ -118,14 +118,25 @@ env:
     visible: "No contacts yet."
     timeout: 10000
 
-# Delete identity (Identities stack stays on Detail; fingerprint may be scrolled off)
+# Delete identity — pop to list and reopen so huge export/cert fields unmount
 - tapOn:
     id: "tab-identities"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "identity-row-${IDENTITY_NAME}"
+    timeout: 15000
+- tapOn:
+    id: "identity-row-${IDENTITY_NAME}"
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 15000
 - scrollUntilVisible:
     element:
       id: "identity-delete"
     direction: DOWN
-    timeout: 20000
+    timeout: 60000
 - tapOn:
     id: "identity-delete"
 - tapOn:

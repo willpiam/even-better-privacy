@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
@@ -8,7 +8,7 @@ import {
   discoverHdIdentities,
   verifyHdMnemonic,
 } from '../services/hd';
-import type {HdProfile} from '../ebpCore';
+import type {HdChange, HdProfile} from '../ebpCore';
 import Screen from '../components/Screen';
 import TextField from '../components/TextField';
 import AppButton from '../components/AppButton';
@@ -29,6 +29,8 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
   const [confirmMnemonic, setConfirmMnemonic] = useState('');
   const [passphrase, setPassphrase] = useState('');
   const [profile, setProfile] = useState<HdProfile>('dilithium');
+  const [change, setChange] = useState<HdChange>('external');
+  const [overwrite, setOverwrite] = useState(false);
   const [account, setAccount] = useState('0');
   const [index, setIndex] = useState('0');
   const [discoverOutput, setDiscoverOutput] = useState('');
@@ -43,7 +45,7 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     setStatus('Mnemonic generated — write it down before continuing');
   };
 
-  const onCreate = async () => {
+  const runCreate = async () => {
     setBusy(true);
     setBusyMessage('Creating HD identity…');
     setStatus('');
@@ -61,7 +63,9 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
         password,
         profile,
         account: Number(account) || 0,
+        change,
         index: Number(index) || 0,
+        overwrite,
       });
       setStatus(`Created HD identity ${created.name}`);
       navigation.replace('IdentityDetail', {identityName: created.name});
@@ -70,6 +74,25 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onCreate = () => {
+    if (overwrite) {
+      Alert.alert(
+        'Overwrite identity?',
+        `Replace any existing identity named "${name.trim()}"?`,
+        [
+          {text: 'Cancel', style: 'cancel'},
+          {
+            text: 'Overwrite',
+            style: 'destructive',
+            onPress: () => void runCreate(),
+          },
+        ],
+      );
+      return;
+    }
+    void runCreate();
   };
 
   const onDiscover = async () => {
@@ -164,6 +187,20 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
           {label: 'SLH-DSA', value: 'sphincs'},
         ]}
       />
+      <SectionTitle>Change chain</SectionTitle>
+      <Text style={styles.changeHint}>
+        Internal/recovery identities are not for publication. Discover uses the
+        external chain.
+      </Text>
+      <SegmentedControl
+        testID="hd-change"
+        value={change}
+        onChange={v => setChange(v as HdChange)}
+        options={[
+          {label: 'External', value: 'external'},
+          {label: 'Internal', value: 'internal'},
+        ]}
+      />
       <View style={styles.row}>
         <View style={styles.flex}>
           <TextField label="Account" value={account} onChangeText={setAccount} keyboardType="number-pad" />
@@ -171,6 +208,14 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
         <View style={styles.flex}>
           <TextField label="Index" value={index} onChangeText={setIndex} keyboardType="number-pad" />
         </View>
+      </View>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Overwrite if exists</Text>
+        <Switch
+          testID="hd-overwrite"
+          value={overwrite}
+          onValueChange={setOverwrite}
+        />
       </View>
       <AppButton
         title="Create HD identity"
@@ -188,8 +233,26 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
 
 const styles = StyleSheet.create({
   hint: {fontSize: 13, color: colors.accent, marginBottom: 10, lineHeight: 18},
+  changeHint: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 8,
+    lineHeight: 17,
+  },
   wordGrid: {flexDirection: 'row', flexWrap: 'wrap', gap: 8},
   word: {width: '47%', fontSize: 13, color: colors.text},
   row: {flexDirection: 'row', gap: 8},
   flex: {flex: 1},
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  switchLabel: {flex: 1, marginRight: 12, color: colors.text},
 });

@@ -250,6 +250,37 @@ export function renderContext() {
 
 export function renderIdentities() {
   identityList.innerHTML = "";
+  const exportSelect = document.getElementById("identity-file-export-name");
+  const deleteSelect = document.getElementById("identity-file-delete-name");
+  const fillIdentitySelect = (select) => {
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = "";
+    if (!state.identities.length) {
+      const option = document.createElement("option");
+      option.value = "";
+      option.textContent = "(no identities)";
+      select.appendChild(option);
+      return;
+    }
+    for (const identity of state.identities) {
+      const option = document.createElement("option");
+      option.value = identity.name;
+      option.textContent =
+        identity.name === state.currentIdentity
+          ? `${identity.name} (current)`
+          : identity.name;
+      select.appendChild(option);
+    }
+    if (previous && [...select.options].some((o) => o.value === previous)) {
+      select.value = previous;
+    } else if (state.currentIdentity) {
+      select.value = state.currentIdentity;
+    }
+  };
+  fillIdentitySelect(exportSelect);
+  fillIdentitySelect(deleteSelect);
+
   if (!state.identities.length) {
     identityList.innerHTML = "<li class='muted'>(no identities yet)</li>";
     return;

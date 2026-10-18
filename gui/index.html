@@ -2371,8 +2371,87 @@
             </label>
             <label class="inline"><input id="hd-force" type="checkbox" />
               Overwrite if exists</label>
-            <div>
+            <div class="row">
               <button type="submit">Derive HD Identity</button>
+              <button type="button" id="hd-discover" class="secondary">
+                Discover on Server
+              </button>
+            </div>
+            <label>Discovery output
+              <textarea
+                id="hd-discover-output"
+                readonly
+                placeholder="Published / local HD index matches appear here..."
+              ></textarea>
+            </label>
+          </form>
+        </section>
+
+        <section>
+          <h3>Import / Export Identity File</h3>
+          <p class="small muted">
+            Move a full encrypted identity file between devices. This is the
+            private storage file (not a public export). Delete only removes the
+            identity from this device.
+          </p>
+          <form id="identity-file-export-form" class="stack">
+            <label>Identity to export
+              <select id="identity-file-export-name"></select>
+            </label>
+            <div>
+              <button type="submit">Export Identity File</button>
+            </div>
+            <label>Exported file
+              <div class="output-wrapper">
+                <textarea
+                  id="identity-file-export-output"
+                  readonly
+                  placeholder="Identity file JSON will appear here..."
+                ></textarea>
+                <button
+                  type="button"
+                  class="copy-btn"
+                  data-target="identity-file-export-output"
+                >
+                  Copy
+                </button>
+              </div>
+            </label>
+            <div>
+              <button
+                type="button"
+                class="secondary"
+                id="identity-file-save-btn"
+              >
+                Save to Downloads
+              </button>
+            </div>
+          </form>
+          <form id="identity-file-import-form" class="stack" style="margin-top: 1rem">
+            <label>Import identity file
+              <input id="identity-file-import-input" type="file" accept=".json,application/json" />
+            </label>
+            <label>Name (optional)
+              <input
+                id="identity-file-import-name"
+                type="text"
+                placeholder="Uses fingerprint prefix when empty"
+              />
+            </label>
+            <label class="inline"><input id="identity-file-import-force" type="checkbox" />
+              Overwrite if exists</label>
+            <label class="inline"><input id="identity-file-import-set-current" type="checkbox" checked />
+              Switch to imported identity</label>
+            <div>
+              <button type="submit">Import Identity File</button>
+            </div>
+          </form>
+          <form id="identity-file-delete-form" class="stack" style="margin-top: 1rem">
+            <label>Identity to delete from device
+              <select id="identity-file-delete-name"></select>
+            </label>
+            <div>
+              <button type="submit" class="danger">Delete From Device</button>
             </div>
           </form>
         </section>

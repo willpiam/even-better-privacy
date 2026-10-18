@@ -264,6 +264,9 @@ async function addDetail(
   await page.locator("#detail-push").setChecked(push);
   await page.getByRole("button", { name: "Add Detail", exact: true }).click();
   await submitIdentityPassword(page, password);
+  await expect(page.locator("#identity-details-list")).toContainText(detail, {
+    timeout: 60_000,
+  });
 }
 
 async function currentFingerprint(page: Page): Promise<string> {
@@ -364,7 +367,7 @@ async function waitForMessageDetailBySubject(
   throw new Error(`Timed out waiting for inbox message with subject containing: ${subject}`);
 }
 
-test.skip("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
+test("mail reader defaults to plaintext and can render HTML from settings", async ({ page }) => {
   const now = Date.now();
   const messageUid = 101;
   const htmlBody = `<h1>Rendered ${now}</h1><p>This is an html email body.</p><script>window.__mailScriptExecuted = true;</script>`;
@@ -498,7 +501,7 @@ test.skip("mail reader defaults to plaintext and can render HTML from settings",
   await expect(page.locator("#settings-mail-render-html")).toBeChecked();
 });
 
-test.skip("mail message load timeout surfaces error and later selection still loads", async ({ page }) => {
+test("mail message load timeout surfaces error and later selection still loads", async ({ page }) => {
   await page.addInitScript(() => {
     const originalSetTimeout = window.setTimeout.bind(window);
     window.setTimeout = ((handler: any, timeout?: number, ...args: any[]) => {
@@ -641,7 +644,7 @@ test.skip("mail message load timeout surfaces error and later selection still lo
   await expect(page.locator("#mail-message-body")).toHaveValue("fast body");
 });
 
-test.skip("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
+test("adds two mail accounts, sends encrypted mail between identities, decrypts, and removes test accounts", async ({
   page,
   request,
 }) => {
@@ -736,7 +739,7 @@ test.skip("adds two mail accounts, sends encrypted mail between identities, decr
   }
 });
 
-test.skip("inbox search passes search param and filters displayed messages", async ({ page }) => {
+test("inbox search passes search param and filters displayed messages", async ({ page }) => {
   const now = Date.now();
   const allMessages = [
     { uid: 1, subject: "Meeting notes", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 3000, seen: true, size: 200 },
@@ -866,7 +869,7 @@ test.skip("inbox search passes search param and filters displayed messages", asy
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
 });
 
-test.skip("inbox pagination navigates between pages", async ({ page }) => {
+test("inbox pagination navigates between pages", async ({ page }) => {
   const now = Date.now();
   const page1Messages = [
     { uid: 3, subject: "Newest msg", from: "Alice <alice@example.com>", to: "Me <me@example.com>", date: now - 1000, seen: false, size: 100 },

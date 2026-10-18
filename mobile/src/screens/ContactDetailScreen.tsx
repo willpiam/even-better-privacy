@@ -201,12 +201,29 @@ export default function ContactDetailScreen({
         {contact.localAlias ? (
           <Text style={styles.meta}>Alias: {contact.localAlias}</Text>
         ) : null}
+        {contact.revoked ? (
+          <View style={styles.revokedBanner} testID="contact-revoked-banner">
+            <Text style={styles.revokedBannerText}>REVOKED</Text>
+          </View>
+        ) : null}
         <Text style={styles.fp}>{contact.fingerprint}</Text>
         <Text style={styles.meta}>
           {contact.signingKeyType}/{contact.encryptionKeyType}
         </Text>
       </Card>
       <StatusBanner message={status} kind={statusKind(status)} />
+
+      <AppButton
+        title="View hierarchy / certificates"
+        testID="contact-open-certificates"
+        variant="secondary"
+        onPress={() => {
+          navigation.getParent()?.navigate('MoreTab', {
+            screen: 'Certificates',
+            params: {fingerprint: contact.fingerprint},
+          });
+        }}
+      />
 
       <SectionTitle>Details</SectionTitle>
       {Object.keys(contact.details).length === 0 ? (
@@ -330,6 +347,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 18,
     color: colors.text,
+  },
+  revokedBanner: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    backgroundColor: colors.dangerSoft,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  revokedBannerText: {
+    color: colors.danger,
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.6,
   },
   fp: {
     marginTop: 8,

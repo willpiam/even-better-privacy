@@ -25,14 +25,20 @@ async function withServer(fn: (mod: MainModule) => Promise<void>): Promise<void>
 
 function buildIdentityRegistration(identity: Identity): Record<string, unknown> {
 	const fingerprint = identity.toFingerprint();
+	const signingKeyDetails = {
+		variant: (identity.signingKey as unknown as { variant: string }).variant,
+	};
+	const encryptionKeyDetails = {
+		variant: (identity.encryptionKey as unknown as { variant: string }).variant,
+	};
 	const toState = computeStateHash({
 		fingerprint,
 		signingKeyType: identity.signingKeyType,
 		encryptionKeyType: identity.encryptionKeyType,
 		signingKey: identity.signingKey.publicKey,
 		encryptionKey: identity.encryptionKey.publicKey,
-		signingKeyDetails: { variant: identity.signingKey.variant },
-		encryptionKeyDetails: { variant: identity.encryptionKey.variant },
+		signingKeyDetails,
+		encryptionKeyDetails,
 		details: {},
 	});
 	const transitionMessage = stableStringify({ fromState: null, toState });
@@ -42,8 +48,8 @@ function buildIdentityRegistration(identity: Identity): Record<string, unknown> 
 		encryptionKeyType: identity.encryptionKeyType,
 		signingKey: identity.signingKey.publicKey,
 		encryptionKey: identity.encryptionKey.publicKey,
-		signingKeyDetails: { variant: identity.signingKey.variant },
-		encryptionKeyDetails: { variant: identity.encryptionKey.variant },
+		signingKeyDetails,
+		encryptionKeyDetails,
 		toState,
 		fromState: null,
 		stateSignature,

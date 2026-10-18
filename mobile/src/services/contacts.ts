@@ -3,6 +3,25 @@ import type {ExternalIdentity} from '../ebpCore';
 import {sha256Hex} from '../../../core/MessageHash.ts';
 import {getServerUrl} from './settings';
 import {ensureAppDirs, getContactsDir} from './storage';
+import {
+  apiUrl,
+  contactMatchesEmail,
+  emailsEqualIgnoreCase,
+  getDetailValue,
+  normalizeContactName,
+  normalizeExternalIdentity,
+} from './contactsLogic';
+
+export {
+  apiUrl,
+  contactMatchesEmail,
+  emailsEqualIgnoreCase,
+  getDetailValue,
+  normalizeContactName,
+  normalizeExternalIdentity,
+  normalizeServerIdentity,
+  stripRevokedDetails,
+} from './contactsLogic';
 
 export type StoredContact = {
   name: string;
@@ -29,91 +48,8 @@ export type BrowseServerIdentitiesResult = {
   hasNextPage: boolean;
 };
 
-export function getDetailValue(
-  details: Record<string, [string, string]> | undefined,
-  path: string,
-): string | null {
-  if (!details) {
-    return null;
-  }
-  const val = details[path];
-  if (Array.isArray(val)) {
-    return val[0] || null;
-  }
-  return typeof val === 'string' ? val : null;
-}
-
-function normalizeContactName(name: string): string {
-  const value = name.trim();
-  if (!value) {
-    throw new Error('Contact name is required');
-  }
-  if (!/^[a-zA-Z0-9_-]+$/.test(value)) {
-    throw new Error(
-      'Contact name must use only letters, numbers, dash, underscore',
-    );
-  }
-  return value;
-}
-
 function contactPath(name: string): string {
   return `${getContactsDir()}/${name}.json`;
-}
-
-function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
-  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
-function normalizeExternalIdentity(
-  source: Record<string, unknown>,
-  fallbackFingerprint?: string,
-): ExternalIdentity {
-  const signingKeyType =
-    source.signingKeyType === 'sphincs' ? 'sphincs' : 'dilithium';
-  const fingerprint =
-    typeof source.fingerprint === 'string' && source.fingerprint
-      ? source.fingerprint
-      : fallbackFingerprint ?? '';
-  const signingKey =
-    typeof source.signingKey === 'string' ? source.signingKey : '';
-  const encryptionKey =
-    typeof source.encryptionKey === 'string' ? source.encryptionKey : '';
-  if (!fingerprint || !signingKey || !encryptionKey) {
-    throw new Error('Invalid public identity payload');
-  }
-  const revokedDetails = Array.isArray(source.revokedDetails)
-    ? (source.revokedDetails as string[])
-    : [];
-
-  // Strip revoked details from the details and detailsMeta maps
-  const details = { ...((source.details as ExternalIdentity['details']) ?? {}) };
-  const detailsMeta = { ...((source.detailsMeta as ExternalIdentity['detailsMeta']) ?? {}) };
-  for (const path of revokedDetails) {
-    delete details[path];
-    delete detailsMeta[path];
-  }
-
-  return {
-    fingerprint,
-    signingKeyType,
-    encryptionKeyType: 'kyber',
-    signingKey,
-    encryptionKey,
-    signingKeyDetails:
-      (source.signingKeyDetails as ExternalIdentity['signingKeyDetails']) ?? {
-        variant: 'ml_dsa87',
-      },
-    encryptionKeyDetails:
-      (source.encryptionKeyDetails as ExternalIdentity['encryptionKeyDetails']) ??
-      {
-        variant: 'ml_kem1024',
-      },
-    details,
-    detailsMeta,
-    revoked: Boolean(source.revoked),
-    revokedDetails,
-  };
 }
 
 export async function listContacts(): Promise<StoredContact[]> {
@@ -135,36 +71,6 @@ export async function listContacts(): Promise<StoredContact[]> {
   }
   contacts.sort((a, b) => a.name.localeCompare(b.name));
   return contacts;
-}
-
-/** Cleartext compare helper (trim + lowercase). */
-function emailsEqualIgnoreCase(a: string, b: string): boolean {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-
-/**
- * Match a typed address against published `email` detail or `opaque::email`
- * (resolved cleartext or SHA-256 hash of the trimmed typed value). Does not
- * match local-only `localEmail` notes.
- */
-function contactMatchesEmail(
-  contact: ExternalIdentity,
-  trimmedEmail: string,
-  normalizedEmail: string,
-): boolean {
-  const detailEmail = getDetailValue(contact.details, 'email');
-  if (detailEmail && emailsEqualIgnoreCase(detailEmail, normalizedEmail)) {
-    return true;
-  }
-  const resolved = contact.resolvedOpaqueDetails?.['opaque::email'];
-  if (resolved && emailsEqualIgnoreCase(resolved, normalizedEmail)) {
-    return true;
-  }
-  const opaqueHash = getDetailValue(contact.details, 'opaque::email');
-  if (opaqueHash && sha256Hex(trimmedEmail) === opaqueHash) {
-    return true;
-  }
-  return false;
 }
 
 /**

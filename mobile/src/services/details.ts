@@ -1,11 +1,9 @@
 import {loadIdentity, saveIdentity} from './storage';
 import {getServerUrl} from './settings';
-import {sha256Hex} from '../../../core/MessageHash.ts';
+import {apiUrl} from './contactsLogic';
+import {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
 
-function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
-  return `${base}${path.startsWith('/') ? path : `/${path}`}`;
-}
+export {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
 
 export async function listDetails(params: {
   identityName: string;
@@ -27,12 +25,8 @@ export async function addDetail(params: {
   push?: boolean;
   server?: string;
 }): Promise<void> {
-  if (!params.path || !params.detail) {
-    throw new Error('Path and detail are required');
-  }
-  const detailToAttach = params.path.startsWith('opaque::')
-    ? sha256Hex(params.detail)
-    : params.detail;
+  requirePathAndDetail(params.path, params.detail);
+  const detailToAttach = prepareDetailValue(params.path, params.detail);
   const identity = await loadIdentity(params.identityName, params.password);
   identity.attachDetail(params.path, detailToAttach);
   await saveIdentity(params.identityName, params.password, identity);

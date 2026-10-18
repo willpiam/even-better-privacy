@@ -2,7 +2,7 @@
 title: "BIP HD Patterns Applied to EBP"
 type: analysis
 status: active
-last_updated: 2026-05-24
+last_updated: 2026-09-09
 source_count: 6
 tags:
   - bip-32
@@ -99,7 +99,7 @@ Natural mappings:
 
 - **One backup, many identities** instead of N separate `~/.ebp/*.identity.json`
   files and N independent recovery flows.
-- **Least-privilege deployment** — GUI, [[component-email-extension]], or server
+- **Least-privilege deployment** — GUI or server
   sync could hold derive-public-only capability while signing keys stay on a
   cold device ([[key-management]]).
 - **Operational rotation** — derive a new hot identity, publish it, revoke the

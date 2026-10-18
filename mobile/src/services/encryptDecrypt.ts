@@ -14,23 +14,24 @@ import {
 import {loadContact} from './contacts';
 import {loadIdentity} from './storage';
 import {resolveSenderForDecrypt} from './senderContext';
+import {
+  isEncryptedFileType,
+  isEncryptedMessageType,
+  isEncryptedSignedFileType,
+  isEncryptedSignedMessageMultiType,
+  isEncryptedSignedMessageType,
+  normalizeFileUri,
+  publicIdentityBlock,
+  requireCiphertext,
+  senderFieldsFromPayload,
+} from './encryptDecryptLogic';
 
-function normalizeFileUri(uri: string): string {
-  return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
-}
-
-function publicIdentityBlock(identity: Identity): Record<string, unknown> {
-  const summary = identity.summary;
-  return {
-    fingerprint: summary.fingerprint,
-    signingKeyType: summary.signingKeyType,
-    encryptionKeyType: summary.encryptionKeyType,
-    signingKey: summary.signingKey,
-    encryptionKey: summary.encryptionKey,
-    signingKeyDetails: summary.signingKeyDetails,
-    encryptionKeyDetails: summary.encryptionKeyDetails,
-  };
-}
+export {
+  normalizeFileUri,
+  publicIdentityBlock,
+  requireCiphertext,
+  senderFieldsFromPayload,
+} from './encryptDecryptLogic';
 
 export async function encryptMessage(params: {
   identityName: string;
@@ -81,11 +82,8 @@ export async function decryptMessage(params: {
 }> {
   const identity = await loadIdentity(params.identityName, params.password);
   const type = params.payload.type;
-  const ciphertext = String(params.payload.ciphertext ?? '');
-  if (!ciphertext) {
-    throw new Error('Payload missing ciphertext');
-  }
-  if (type === 'ebp-encrypted-message') {
+  const ciphertext = requireCiphertext(params.payload);
+  if (isEncryptedMessageType(type)) {
     return {
       message: identity.encryptionKey.decrypt(ciphertext),
       verified: null,
@@ -95,21 +93,14 @@ export async function decryptMessage(params: {
       contact: null,
     };
   }
-  if (type === 'ebp-encrypted-signed-message-multi') {
+  if (isEncryptedSignedMessageMultiType(type)) {
     const contentNonce = String(params.payload.contentNonce ?? '');
     const recipients = parseMultiRecipientEntries(params.payload.recipients);
     if (!contentNonce || recipients.length === 0) {
       throw new Error('Invalid multi-recipient payload');
     }
-    const senderFp =
-      typeof params.payload.senderFingerprint === 'string'
-        ? params.payload.senderFingerprint
-        : undefined;
-    const embedded =
-      params.payload.senderIdentity &&
-      typeof params.payload.senderIdentity === 'object'
-        ? (params.payload.senderIdentity as Record<string, unknown>)
-        : undefined;
+    const {senderFingerprint: senderFp, embeddedIdentity: embedded} =
+      senderFieldsFromPayload(params.payload);
     const {contact, isKnownContact} = await resolveSenderForDecrypt({
       senderHint: params.sender,
       senderFingerprint: senderFp,
@@ -128,16 +119,9 @@ export async function decryptMessage(params: {
       contact,
     };
   }
-  if (type === 'ebp-encrypted-signed-message') {
-    const senderFp =
-      typeof params.payload.senderFingerprint === 'string'
-        ? params.payload.senderFingerprint
-        : undefined;
-    const embedded =
-      params.payload.senderIdentity &&
-      typeof params.payload.senderIdentity === 'object'
-        ? (params.payload.senderIdentity as Record<string, unknown>)
-        : undefined;
+  if (isEncryptedSignedMessageType(type)) {
+    const {senderFingerprint: senderFp, embeddedIdentity: embedded} =
+      senderFieldsFromPayload(params.payload);
     const {contact, isKnownContact} = await resolveSenderForDecrypt({
       senderHint: params.sender,
       senderFingerprint: senderFp,
@@ -215,25 +199,15 @@ export async function decryptFile(params: {
 }> {
   const identity = await loadIdentity(params.identityName, params.password);
   const type = params.payload.type;
-  const ciphertext = String(params.payload.ciphertext ?? '');
-  if (!ciphertext) {
-    throw new Error('Payload missing ciphertext');
-  }
+  const ciphertext = requireCiphertext(params.payload);
   let cleartext = '';
   let verified: boolean | null = null;
   let verifyStatus: 'unsigned' | 'valid' | 'invalid' = 'unsigned';
-  if (type === 'ebp-encrypted-file') {
+  if (isEncryptedFileType(type)) {
     cleartext = identity.encryptionKey.decrypt(ciphertext);
-  } else if (type === 'ebp-encrypted-signed-file') {
-    const senderFp =
-      typeof params.payload.senderFingerprint === 'string'
-        ? params.payload.senderFingerprint
-        : undefined;
-    const embedded =
-      params.payload.senderIdentity &&
-      typeof params.payload.senderIdentity === 'object'
-        ? (params.payload.senderIdentity as Record<string, unknown>)
-        : undefined;
+  } else if (isEncryptedSignedFileType(type)) {
+    const {senderFingerprint: senderFp, embeddedIdentity: embedded} =
+      senderFieldsFromPayload(params.payload);
     const {contact} = await resolveSenderForDecrypt({
       senderHint: params.sender,
       senderFingerprint: senderFp,

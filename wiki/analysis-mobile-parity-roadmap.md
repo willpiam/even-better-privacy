@@ -2,7 +2,7 @@
 title: "Mobile Parity Roadmap"
 type: analysis
 status: active
-last_updated: 2026-06-04
+last_updated: 2026-09-09
 source_count: 4
 tags:
   - analysis
@@ -54,7 +54,6 @@ are complete; this page tracks feature delivery.
 ## Out of scope (Parity v1)
 
 - Tauri desktop shell ([[component-desktop]])
-- Chrome extension localhost API ([[component-email-extension]])
 - Shared `~/.ebp/` path on device (export/import instead)
 
 ## Sources

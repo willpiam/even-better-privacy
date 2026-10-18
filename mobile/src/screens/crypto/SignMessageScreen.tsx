@@ -19,6 +19,7 @@ export default function SignMessageScreen(): JSX.Element {
   const [message, setMessage] = useState('');
   const [detached, setDetached] = useState(false);
   const [includeIdentity, setIncludeIdentity] = useState(true);
+  const [includeSalt, setIncludeSalt] = useState(true);
   const [signOutput, setSignOutput] = useState('');
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -32,7 +33,7 @@ export default function SignMessageScreen(): JSX.Element {
         identityName,
         password,
         message,
-        options: {detached, includeIdentity},
+        options: {detached, includeIdentity, includeSalt},
       });
       const serialized = JSON.stringify(payload, null, 2);
       Clipboard.setString(serialized);
@@ -100,6 +101,18 @@ export default function SignMessageScreen(): JSX.Element {
           onValueChange={setIncludeIdentity}
         />
       </View>
+      <View style={cryptoStyles.switchRow}>
+        <Text style={cryptoStyles.switchLabel}>Include random salt</Text>
+        <Switch
+          testID="sign-include-salt"
+          value={includeSalt}
+          onValueChange={setIncludeSalt}
+        />
+      </View>
+      <Text style={cryptoStyles.helpText}>
+        Signs ebp::messagehash::&lt;sha256&gt;::&lt;optional salt&gt; rather than
+        the raw message body.
+      </Text>
       <View style={cryptoStyles.signActions}>
         <AppButton
           title={busy ? 'Signing…' : 'Sign Message'}

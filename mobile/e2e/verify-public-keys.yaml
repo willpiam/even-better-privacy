@@ -1,0 +1,165 @@
+appId: com.mobile
+env:
+  IDENTITY_NAME: e2e-mobile-pubkey-verify
+  IDENTITY_PASSWORD: Smoke-test-password1
+  SIGN_MESSAGE: e2e mobile detached public-keys message
+---
+# Detached sign (include-identity OFF) + verify with public export.
+# Avoid Maestro pasteText/inputText of multi-KB ML-DSA JSON — use app Clipboard paste.
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "identity-fingerprint"
+    timeout: 60000
+
+# Export public JSON (also copies compact JSON onto the Android clipboard)
+- tapOn:
+    id: "identity-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "identity-export-public"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "identity-export-public"
+- scrollUntilVisible:
+    element:
+      id: "identity-export-public-output"
+    direction: DOWN
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "identity-export-public-output-copy"
+    timeout: 10000
+
+# Sign: detached ON, include-identity OFF (overwrites Android clipboard with signature)
+- tapOn:
+    id: "tab-crypto"
+- extendedWaitUntil:
+    visible:
+      id: "crypto-sign-message"
+    timeout: 15000
+- tapOn:
+    id: "crypto-sign-message"
+- extendedWaitUntil:
+    visible:
+      id: "sign-message-input"
+    timeout: 15000
+- tapOn:
+    id: "sign-message-input"
+- inputText: ${SIGN_MESSAGE}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "sign-detached"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "sign-detached"
+- tapOn:
+    id: "sign-include-identity"
+- assertVisible:
+    id: "sign-include-salt"
+- scrollUntilVisible:
+    element:
+      id: "sign-message-submit"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "sign-message-submit"
+- extendedWaitUntil:
+    visible: "Confirm sign"
+    timeout: 15000
+- tapOn:
+    text: "^Sign$"
+- runFlow: helpers/dismiss-autofill.yaml
+- extendedWaitUntil:
+    visible:
+      id: "password-modal-input"
+    timeout: 15000
+- tapOn:
+    id: "password-modal-input"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "password-modal-submit"
+- extendedWaitUntil:
+    visible:
+      id: "status-banner-text"
+    timeout: 120000
+- assertVisible: "Message signed"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "crypto-verify-message"
+    timeout: 15000
+- tapOn:
+    id: "crypto-verify-message"
+- extendedWaitUntil:
+    visible:
+      id: "verify-paste-clipboard"
+    timeout: 15000
+- tapOn:
+    id: "verify-paste-clipboard"
+- extendedWaitUntil:
+    visible: "Pasted payload"
+    timeout: 15000
+- scrollUntilVisible:
+    element: "Detached message"
+    direction: DOWN
+    timeout: 10000
+- tapOn: "Detached message"
+- inputText: ${SIGN_MESSAGE}
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "verify-use-public-keys"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "verify-use-public-keys"
+- extendedWaitUntil:
+    visible:
+      id: "verify-public-keys-paste"
+    timeout: 10000
+
+# Restore public JSON onto Android clipboard from the still-mounted identity detail
+- tapOn:
+    id: "tab-identities"
+- scrollUntilVisible:
+    element:
+      id: "identity-export-public-output-copy"
+    direction: DOWN
+    timeout: 30000
+- tapOn:
+    id: "identity-export-public-output-copy"
+- tapOn:
+    id: "tab-crypto"
+- extendedWaitUntil:
+    visible:
+      id: "verify-public-keys-paste"
+    timeout: 15000
+- tapOn:
+    id: "verify-public-keys-paste"
+- extendedWaitUntil:
+    visible: "Pasted public keys"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      id: "verify-submit"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "verify-submit"
+- extendedWaitUntil:
+    visible: "Verification complete"
+    timeout: 60000
+- assertVisible:
+    id: "verify-result"
+- assertVisible: "Valid signature"

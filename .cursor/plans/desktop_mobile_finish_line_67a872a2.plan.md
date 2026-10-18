@@ -4,28 +4,28 @@ overview: Bring Android mobile to desktop-feature parity (no OAuth-on-mobile, no
 todos:
   - id: wave0-delete-extension
     content: Delete Chrome extension and strip extension-origin wiring from GUI backend, deno.json, ReadMe, and wiki
-    status: pending
+    status: completed
   - id: wave0-fix-test-runners
     content: Fix test:core allow-read, test:cli-utils permission pledges, decrypt-attachment 404, add test:mobile; run server + Jest
-    status: pending
+    status: completed
   - id: wave1-identity-parity
     content: "Mobile: random create, HD change/overwrite, selective export, opaque toggle, per-action server override + Jest/Maestro"
-    status: pending
+    status: completed
   - id: wave1-crypto-parity
     content: "Mobile: include-salt toggles, verify-with-public-keys, decrypt-file Share, paste buttons + Deno/Maestro"
-    status: pending
+    status: completed
   - id: wave2-mail-reliability
     content: Honor TLS flags, STARTTLS, inbox empty-vs-error, test-connection UX
-    status: pending
+    status: completed
   - id: wave2-mail-parity
     content: Folders/search/pagination/limit, help, HTML WebView, attachments, multi-recipient + mocked Jest
-    status: pending
+    status: completed
   - id: wave3-ux-polish
     content: Identity Detail order, revoke UX, cert expiry date, contact-hierarchy, revoked badges; GUI Discover + import/export/delete
-    status: pending
+    status: completed
   - id: wave4-proof
     content: Unit-test remaining mobile/GUI services; un-skip Playwright mail if creds exist; Maestro on Medium_Phone_API_36.0; update wiki matrix
-    status: pending
+    status: in_progress
 isProject: false
 ---
 

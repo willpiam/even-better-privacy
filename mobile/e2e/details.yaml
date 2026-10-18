@@ -43,18 +43,27 @@ env:
     id: "identity-detail-value"
 - inputText: ${DETAIL_EMAIL}
 - hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "identity-detail-push"
+    direction: DOWN
+    timeout: 20000
 - tapOn:
     id: "identity-detail-push"
 - scrollUntilVisible:
     element:
       id: "identity-add-detail"
-    direction: UP
+    direction: DOWN
     timeout: 15000
 - tapOn:
     id: "identity-add-detail"
-- extendedWaitUntil:
-    visible: "Detail added"
-    timeout: 120000
+# Status banner lives at the top of the ScrollView; after adding a detail the
+# viewport is still near the form, so assert the new row instead of the banner.
+- scrollUntilVisible:
+    element: ${DETAIL_EMAIL}
+    direction: UP
+    timeout: 30000
+- assertVisible: ${DETAIL_EMAIL}
 - tapOn:
     id: "tab-contacts"
 - extendedWaitUntil:

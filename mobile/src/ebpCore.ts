@@ -1,5 +1,9 @@
 export {Identity} from '../../core/Identity';
-export type {IdentityPublicData} from '../../core/Identity';
+export type {
+  IdentityPublicData,
+  IdentityPublicExport,
+  IdentityPublicExportOptions,
+} from '../../core/Identity';
 export type {ExternalIdentity} from '../../core/ExternalIdentity';
 export {
   computeStateHash,
@@ -10,6 +14,7 @@ export {
   buildDetachedSignaturePayload,
   buildEncryptedMessagePayload,
   buildEncryptedSignedMessagePayload,
+  buildEncryptedSignedMessageMultiPayload,
   buildSignedMessagePayload,
   extractArmoredPayload,
   armorPayload,

@@ -2,7 +2,7 @@
 title: "EBP Website"
 type: component
 status: active
-last_updated: 2026-04-28
+last_updated: 2026-09-09
 source_count: 6
 tags:
   - component
@@ -29,7 +29,7 @@ The public website (`website/`) is a static, framework-free mini-site serving as
 Presents EBP as a "practical successor to PGP, built for the next era of cryptography." Content sections:
 
 - **Why EBP** — three cards covering post-quantum design ([[ml-dsa]], [[slh-dsa]], [[ml-kem]]), [[identity-model|identity-centered security]], and [[revocation-system|revocation controls]].
-- **How It Works** — five-step workflow: generate identity, share fingerprint, import contacts + sign/verify/encrypt/decrypt, [[component-email-extension|Chromium email plugin]], revocation.
+- **How It Works** — five-step workflow: generate identity, share fingerprint, import contacts + sign/verify/encrypt/decrypt, native email, revocation.
 - **How to Get It** — links to GitHub releases (desktop), `deno task gui` ([[component-gui]]), and `deno task cli` ([[component-cli]]).
 - **CTA** — standards convergence and collaboration pitch; links to GitHub.
 
@@ -110,7 +110,6 @@ Warm, minimal aesthetic using CSS custom properties (`--brand: #d36f2f`, `--bg: 
 - [[component-server]] — hosts the verify-signature API the verifier calls
 - [[component-cli]] — referenced in "How to Get It"
 - [[component-gui]] — referenced in "How to Get It"
-- [[component-email-extension]] — referenced in "How It Works"
 - [[uri-syntax]]
 - [[identity-model]] — landing page describes fingerprint-based identity
 - [[revocation-system]] — landing page describes revocation support

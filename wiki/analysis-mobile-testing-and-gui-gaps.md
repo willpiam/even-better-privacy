@@ -2,7 +2,7 @@
 title: "Mobile Testing Status and GUI Feature Gaps"
 type: analysis
 status: active
-last_updated: 2026-08-24
+last_updated: 2026-09-09
 source_count: 6
 tags:
   - analysis
@@ -19,28 +19,31 @@ tags:
 Snapshot of [[component-mobile]] Maestro E2E vs [[component-gui]] Playwright,
 plus GUI capabilities that still have no mobile UI. Complements
 [[analysis-mobile-e2e-framework]] (harness) and
-[[analysis-gui-mobile-parity-deltas]] (Parity v1 checklist, last updated
-2026-06-04).
+[[analysis-gui-mobile-parity-deltas]] (finish-line Android parity closed
+2026-09-09; OAuth and Downloads remain out of scope / desktop-only).
 
 ## Mobile E2E: how many pass
 
-Default suite is **7 Maestro flows** (`deno task test:e2e:mobile`):
+Default suite is **10 Maestro flows** (`deno task test:e2e:mobile`):
 
 | Flow | Coverage | Last known result |
 |------|----------|-------------------|
 | `smoke.yaml` | Launch, More (About, Mail trace, Diagnostics, self-test, Activity log, Settings) | **Passed** (2026-08-24) |
+| `mail-help.yaml` | Mail tab → accounts → Help (`mail-help-body`); no live mailbox | Added 2026-09-09 (Wave 4) |
 | `identity.yaml` | HD create, set server, wrong-password publish, successful publish | **Passed** (2026-08-17) |
+| `create-random.yaml` | Random-key create → fingerprint on detail | Not yet re-run on device |
 | `details.yaml` | HD create + publish, push email detail, Contacts browse/search | **Passed** (2026-08-17) |
 | `contacts-lifecycle.yaml` | Export public JSON, emergency cert, fetch, notes, delete contact + identity | **Passed** (2026-08-24, ~3m 30s) |
 | `sign-verify.yaml` | Sign attached message, paste payload, verify | **Passed** (2026-08-24) |
+| `verify-public-keys.yaml` | HD create, export public JSON, detached + include-identity OFF, verify with pasted public keys | Added 2026-09-09 (Wave 4; large-JSON paste best-effort) |
 | `hierarchy.yaml` | Two HD identities, propose/accept, Load Tree | **Passed** (2026-08-17) |
 
 Smoke and contacts-lifecycle cover cheap ranks 1–12 (Project Info through
-delete contact/identity). Default suite is 7 flows (smoke listed once above);
-full suite not yet re-run in one sitting after the new flows.
+delete contact/identity). Full 10-flow suite not yet re-run in one sitting
+after Wave 4 YAML additions.
 
-No iOS Maestro, no CI emulator job, no mail E2E, no GUI↔mobile interop
-([[analysis-hierarchy-gui-e2e-coverage]]).
+No iOS Maestro, no CI emulator job, no live-mailbox mail E2E, no GUI↔mobile
+interop ([[analysis-hierarchy-gui-e2e-coverage]]).
 
 ## Features that still need mobile tests
 
@@ -50,11 +53,13 @@ Mapped against GUI Playwright (`gui/e2e/`). GUI mail specs are all
 ### Covered (or attempted) on mobile
 
 - Shell smoke (Identities + More: About, Mail trace, Diagnostics, self-test, Activity log, Settings)
+- Mail help screen (no mailbox)
 - HD create + publish
 - Wrong-password publish
 - Push detail + Contacts search
 - Export public JSON, emergency cert, fetch contact, local notes, delete contact + identity
 - Attached sign + verify
+- Detached sign (include-identity OFF) + verify with pasted public keys (`verify-public-keys.yaml`)
 - Same-client hierarchy propose/accept/Load Tree
 
 ### Still untested on mobile (GUI has the test, or the feature exists)
@@ -62,8 +67,8 @@ Mapped against GUI Playwright (`gui/e2e/`). GUI mail specs are all
 | Feature | GUI spec | Mobile |
 |---------|----------|--------|
 | Navigate Project Info / Contacts / Sign / Encrypt | `smoke.spec.ts` | Project Info in smoke; Contacts/Crypto tabs not in smoke |
-| Non-HD “Generate Identity” | `creates and publishes a new identity` | N/A — no such UI |
-| Detached verify with provided public keys | `verifies detached signature with provided public keys` | not ported |
+| Non-HD “Generate Identity” | `creates and publishes a new identity` | `create-random.yaml` (create only; publish covered by identity flow) |
+| Detached verify with provided public keys | `verifies detached signature with provided public keys` | `verify-public-keys.yaml` (Wave 4; not yet device-proven) |
 | Tampered detached payload | `rejects tampered detached signature payload` | not ported |
 | Wrong-sender decrypt | `shows sender validation failure…` | not ported |
 | Two-party encrypt/decrypt messages | serial “multi-user encrypted messaging flow” | not ported |
@@ -72,23 +77,24 @@ Mapped against GUI Playwright (`gui/e2e/`). GUI mail specs are all
 | Revoked identity hidden from search | `revoked identitiy is removed from search results` | not ported |
 | Revoked identity blocked from import | `revoked identity is blocked from browse/import…` | not ported |
 | Hierarchy loop reject | `rejects a loop when attempting reverse hierarchy` | not ported |
-| Mail account/send/decrypt/search/pagination | `mail.spec.ts` (all skipped) | no device E2E |
+| Mail account/send/decrypt/search/pagination | `mail.spec.ts` (all skipped) | help only (`mail-help.yaml`); no live mailbox |
 | GUI ↔ mobile hierarchy | none | none |
 
 **Count:** GUI Playwright has **23 active tests** (6 smoke + 15 identity
 including a 5-test serial encrypt/file flow + 2 hierarchy) and **5 skipped
-mail tests**. Mobile has a counterpart for about **6** (partial smoke, HD
-publish, details search, wrong-password, attached sign/verify, hierarchy happy
-path). **~17 GUI cases plus all mail paths have no mobile E2E.** Crypto hub
-screens that exist on device (encrypt/decrypt message+file, sign/verify file,
-fingerprint tool) also have no Maestro flow.
+mail tests**. Mobile default suite is **10 flows**; counterpart coverage is
+still partial vs GUI (no tamper/encrypt-file/revoke/live-mail). **Hardest
+remaining gaps are file pickers / Share** (ranks 25–28) and live mailbox
+(29–30). Crypto hub encrypt/decrypt message+file, sign/verify file, and
+fingerprint tool still lack Maestro beyond sign/verify message paths.
 
 ### Existing mobile features without tests
 
-Of **28** mobile screens, **16** are hit by Maestro and **12** have no flow.
-Counting distinct user operations, **~18 existing mobile features still need
-E2E** (ranks 13+ below). Ranks 1–12 covered by expanded smoke and
-contacts-lifecycle (2026-08-24).
+Of mobile screens, smoke + mail-help + identity/crypto/contacts/hierarchy
+flows hit most hubs; **file-picker and Share paths remain untested**.
+Counting distinct user operations, ranks 13+ below still need E2E. Ranks
+1–12 covered by expanded smoke and contacts-lifecycle (2026-08-24). Mail
+help covered by `mail-help.yaml` (2026-09-09).
 
 | Rank | Feature | Why this difficulty |
 |------|---------|---------------------|
@@ -136,53 +142,55 @@ have no equivalent mobile control**, not the June 2026 interop bugs.
 
 ### Identity
 
-1. **Non-HD “Create New Identity”** — GUI `#generate-form` (random keys +
-   Dilithium/SPHINCS+). Mobile **Create** only opens `HdCreateScreen`.
-2. **HD change chain** — GUI `#hd-change` (external vs internal/recovery).
-   Mobile always derives `change: 'external'`.
-3. **HD overwrite-if-exists** — GUI checkbox; mobile service supports
-   `overwrite` but the screen does not expose it.
-4. **Selective public export** — GUI checkboxes for signing key / KEM key /
-   details. Mobile export is a single public JSON + Share of the full wallet
-   file.
-5. **Opaque toggle on add-detail** — GUI `#detail-opaque`. Mobile hashes if
-   the path starts with `opaque::` but has no checkbox.
-6. **Per-publish / per-fetch server override** — GUI `#publish-server`,
-   `#fetch-server`, `#server-identities-override`. Mobile uses Settings server
-   URL only (browse pagination itself exists).
+1. ~~**Non-HD “Create New Identity”**~~ — **Done** (`RandomCreateScreen` +
+   `createRandomIdentity`; Create remains HD; Create random is explicit).
+2. ~~**HD change chain**~~ — **Done** (`hd-change` external|internal on
+   `HdCreateScreen`).
+3. ~~**HD overwrite-if-exists**~~ — **Done** (`hd-overwrite` + Alert confirm).
+4. ~~**Selective public export**~~ — **Done** (signing / encryption / details
+   switches; password required; both-keys-off blocked).
+5. ~~**Opaque toggle on add-detail**~~ — **Done** (`identity-detail-opaque`).
+6. ~~**Per-publish / per-fetch server override**~~ — **Done** (publish,
+   fetch, and browse optional server fields; empty = Settings URL).
 
 ### Crypto
 
-7. **Include-salt toggle on Sign Message** — GUI `#sign-include-salt`. Mobile
-   always salts (`includeSalt` defaults true, no switch).
-8. **Include-salt toggle on Sign File** — GUI `#sign-file-include-salt`. Mobile
-   `SignFileScreen` always calls `includeSalt: true` with no switch.
-9. **Verify with pasted/imported public keys** — GUI
-   `#verify-use-public-keys` + file import. Mobile verify has payload +
-   optional detached message only (`FingerprintToolScreen` is separate).
+7. ~~**Include-salt toggle on Sign Message**~~ — **done** (2026-09-09):
+   `SignMessageScreen` `testID="sign-include-salt"` → `includeSalt`.
+8. ~~**Include-salt toggle on Sign File**~~ — **done** (2026-09-09):
+   `SignFileScreen` `testID="sign-file-include-salt"` + salt display.
+9. ~~**Verify with pasted/imported public keys**~~ — **done** (2026-09-09):
+   `VerifyMessageScreen` `verify-use-public-keys` / `verify-public-keys`
+   (paste + file import). Deno: `test/mobile-signVerify_parity_test.ts`.
 10. **Save JSON to `~/Downloads`** — GUI `POST /api/v1/save-file`. Mobile uses
-    the Share sheet.
+    the Share sheet (**desktop-only**; intentional).
 
 ### Mail
 
-11. **Folder picker** — GUI Sent/Drafts/Trash/Spam/custom. Mobile inbox is
-    INBOX only (`listInboxMessages`, limit 40).
-12. **Inbox search** — GUI `#mail-search`.
-13. **Inbox pagination** — GUI `#mail-pagination`.
-14. **Inbox fetch limit** — GUI `#mail-limit` (1–100, default 20). Mobile
-    hardcodes 40.
-15. **Compose attachments** — GUI `#mail-compose-attachments`. Mobile compose
-    has no attachment picker.
-16. **Multi-recipient compose** — GUI `#mail-compose-add-recipient`. Mobile
-    is a single To field.
-17. **“How to Connect Your Email” help tab** — GUI mail help panel.
-18. **Sandboxed HTML iframe preview** — GUI `#mail-message-html-frame`.
-    Mobile has a “Render HTML mail bodies” setting, not the same reader.
+11. ~~**Folder picker**~~ — **done** (2026-09-09): `MailInboxScreen` presets
+    (INBOX/Sent/Drafts/Trash/Spam/Custom) + `listMailboxMessages({ folder })`.
+    Provider-specific names (e.g. Gmail `[Gmail]/Sent Mail`) use Custom.
+12. ~~**Inbox search**~~ — **done** (2026-09-09): IMAP `UID SEARCH TEXT`.
+13. ~~**Inbox pagination**~~ — **done** (2026-09-09): Prev/Next with
+    `paginateUids` matching GUI math.
+14. ~~**Inbox fetch limit**~~ — **done** (2026-09-09): limit 1–100, default 20.
+15. ~~**Compose attachments**~~ — **done** (2026-09-09): document picker +
+    `multipart/mixed` (plain attachments; encrypted EBP attachments follow-up).
+16. ~~**Multi-recipient compose**~~ — **done** (2026-09-09): multi To rows,
+    SMTP `RCPT TO` loop, EBP via `signAndEncryptForMany`.
+17. ~~**“How to Connect Your Email” help tab**~~ — **done** (2026-09-09):
+    `MailHelpScreen` (`testID="mail-help-body"`).
+18. ~~**Sandboxed HTML preview**~~ — **done** (2026-09-09): Settings “Render
+    HTML” → `react-native-webview` with CSP (`javaScriptEnabled={false}`).
+    Encrypted EBP mail stays on the locked reader.
 
-### Desktop-only (not expected on phone)
+### Desktop-only / out of scope (not expected on phone)
 
 - Shared `~/.ebp/` with the CLI (export/import instead)
-- Tauri desktop shell and Chrome extension localhost API
+- Tauri desktop shell
+- GUI `save-file` → `~/Downloads` (mobile Share)
+- OAuth email on mobile (manual IMAP/SMTP only)
+- Chrome email extension (removed; not a live component)
 - iOS Maestro / signed IPA (Android release APK exists;
   [[analysis-mobile-standalone-install]])
 
@@ -202,7 +210,8 @@ Fingerprint tool screen exist on mobile and not as matching GUI pages.
 
 ## Sources
 
-- `mobile/e2e/` (smoke, identity, details, sign-verify, hierarchy)
+- `mobile/e2e/` (smoke, mail-help, identity, create-random, details,
+  contacts-lifecycle, sign-verify, verify-public-keys, hierarchy)
 - `scripts/mobile-e2e.sh`
 - `gui/e2e/{smoke,identity,hierarchy,mail}.spec.ts`
 - `gui/index.html` (page sections)

@@ -26,7 +26,7 @@ Keep `adb reverse tcp:8081 tcp:8081` so the debug app can reach Metro.
 From the repo root:
 
 ```bash
-# Full suite (smoke + identity + details + contacts-lifecycle + sign-verify + hierarchy)
+# Full suite (smoke + identity + create-random + details + contacts-lifecycle + sign-verify + hierarchy)
 deno task test:e2e:mobile
 
 # Smoke only
@@ -55,7 +55,7 @@ On Ubuntu 22.04 the runner sets `DENO_SQLITE_PATH` to the system
 The runner:
 
 1. Starts the key server on `http://localhost:8788` with a throwaway SQLite DB
-   under `test-results/mobile-e2e-server.sqlite` and `RATE_LIMIT_DISABLED=true`.
+   under `test-results/mobile-e2e/server.sqlite` and `RATE_LIMIT_DISABLED=true`.
 2. Installs the debug APK when found.
 3. Runs `adb shell pm clear com.mobile`.
 4. Executes Maestro against the given flow(s).

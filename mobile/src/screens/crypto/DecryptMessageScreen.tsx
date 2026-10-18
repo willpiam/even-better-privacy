@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import Clipboard from '@react-native-clipboard/clipboard';
 import {decryptMessage} from '../../services/encryptDecrypt';
 import {parseEbpPayloadInput} from '../../ebpCore';
 import {getCurrentIdentityRequired} from '../../services/storage';
@@ -61,6 +62,20 @@ export default function DecryptMessageScreen(): JSX.Element {
         onChangeText={setDecryptPayload}
         placeholder="Encrypted payload JSON"
         multiline
+      />
+      <AppButton
+        title="Paste from clipboard"
+        variant="secondary"
+        onPress={() => {
+          void Clipboard.getString().then(text => {
+            if (text.trim()) {
+              setDecryptPayload(text);
+              setStatus('Pasted payload');
+            } else {
+              setStatus('Clipboard is empty');
+            }
+          });
+        }}
       />
       <TextField
         label="Sender"

@@ -2082,6 +2082,119 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }));
     }
 
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/export-file") {
+      const body = await readJson<{
+        name?: unknown;
+        home?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const name = typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : undefined;
+      const ctx = await getContext(home, name);
+      let storageData: string;
+      try {
+        storageData = await Deno.readTextFile(ctx.identityPath);
+      } catch (e) {
+        if (e instanceof Deno.errors.NotFound) {
+          throw new HttpError(STATUS.NotFound, "identity not found");
+        }
+        throw e;
+      }
+      return json({
+        ok: true,
+        name: ctx.currentIdentity,
+        filename: `${ctx.currentIdentity}.identity.json`,
+        content: storageData,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/import-file") {
+      const body = await readJson<{
+        content?: unknown;
+        name?: unknown;
+        force?: unknown;
+        home?: unknown;
+        setCurrent?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const content = typeof body.content === "string" ? body.content : "";
+      if (!content.trim()) {
+        throw new HttpError(STATUS.BadRequest, "identity file content is required");
+      }
+      const publicData = Identity.readPublicData(content);
+      if (!publicData?.fingerprint) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "invalid identity file: missing public data",
+        );
+      }
+      const name = typeof body.name === "string" && body.name.trim()
+        ? body.name.trim()
+        : publicData.fingerprint.slice(0, 16);
+      const force = Boolean(body.force);
+      const setCurrent = body.setCurrent !== false;
+      const ctx = await getContext(home, name);
+      try {
+        await Deno.stat(ctx.identityPath);
+        if (!force) {
+          throw new HttpError(
+            STATUS.Conflict,
+            "identity already exists; pass force to overwrite",
+          );
+        }
+      } catch (e) {
+        if (!(e instanceof Deno.errors.NotFound)) throw e;
+      }
+      await ensurePrivateDir(ctx.identityDir);
+      await ensurePrivateDir(ctx.contactsDir);
+      await Deno.writeTextFile(ctx.identityPath, content, { mode: 0o600 });
+      if (setCurrent) {
+        await updateState(ctx.identityDir, { currentIdentity: name });
+      }
+      return json({
+        ok: true,
+        identity: {
+          name,
+          fingerprint: publicData.fingerprint,
+          signingKeyType: publicData.signingKeyType,
+          encryptionKeyType: publicData.encryptionKeyType,
+          identityPath: ctx.identityPath,
+        },
+      }, STATUS.Created);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/delete") {
+      const body = await readJson<{
+        name?: unknown;
+        home?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const name = typeof body.name === "string" ? body.name.trim() : "";
+      if (!name) {
+        throw new HttpError(STATUS.BadRequest, "name is required");
+      }
+      const ctx = await getContext(home, name);
+      try {
+        await Deno.remove(ctx.identityPath);
+      } catch (e) {
+        if (e instanceof Deno.errors.NotFound) {
+          throw new HttpError(STATUS.NotFound, "identity not found");
+        }
+        throw e;
+      }
+      const state = await readState(ctx.identityDir);
+      if (state?.currentIdentity === name) {
+        const remaining = (await listIdentityNames(ctx.identityDir)).filter(
+          (n) => n !== name,
+        );
+        await updateState(ctx.identityDir, {
+          currentIdentity: remaining[0] ?? "identity",
+        });
+      }
+      return json({ ok: true, deleted: name });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/v1/contacts") {
       const home = url.searchParams.get("home") ?? undefined;
       const ctx = await getContext(home ?? undefined);

@@ -27,6 +27,14 @@ function loadDotEnv(): void {
 
 loadDotEnv();
 
+const systemSqlitePath = [
+  "/usr/lib/x86_64-linux-gnu/libsqlite3.so",
+  "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+  "/usr/lib64/libsqlite3.so",
+  "/usr/lib/libsqlite3.so",
+].find((candidate) => fs.existsSync(candidate));
+const denoSqlitePath = process.env.DENO_SQLITE_PATH ?? systemSqlitePath;
+
 const dbType = (process.env.DB_TYPE ?? process.env.DB_BACKEND ?? "sqlite").toLowerCase();
 const usePostgres = dbType === "psql" || dbType === "postgres" || dbType === "postgresql";
 
@@ -44,6 +52,9 @@ const pgConfig = {
 export default defineConfig({
   testDir: "./gui/e2e",
   testIgnore: ["**/global.setup.ts"],
+  // Keep artifacts out of the shared test-results root so a Playwright run
+  // does not wipe mobile-e2e SQLite/logs (or other runners) mid-flight.
+  outputDir: "./test-results/playwright",
   workers: 1,
   timeout: 30_000,
   expect: {
@@ -62,6 +73,7 @@ export default defineConfig({
       timeout: 30_000,
       env: {
         HOME: e2eHome,
+        ...(denoSqlitePath ? { DENO_SQLITE_PATH: denoSqlitePath } : {}),
       },
     },
     {
@@ -73,6 +85,7 @@ export default defineConfig({
         PORT: "8788",
         DB_PATH: e2eServerDb,
         RATE_LIMIT_DISABLED: "true",
+        ...(denoSqlitePath ? { DENO_SQLITE_PATH: denoSqlitePath } : {}),
         ...(usePostgres
           ? {
             DB_TYPE: "psql",
@@ -83,7 +96,9 @@ export default defineConfig({
             PG_DATABASE: pgConfig.database,
             PG_POOL_SIZE: pgConfig.poolSize,
           }
-          : {}),
+          : {
+            DB_TYPE: "sqlite",
+          }),
       },
     },
   ],

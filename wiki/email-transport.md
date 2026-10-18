@@ -2,7 +2,7 @@
 title: "Email Transport and Access"
 type: concept
 status: active
-last_updated: 2026-05-11
+last_updated: 2026-09-09
 source_count: 3
 tags:
   - email
@@ -41,7 +41,6 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 ## Related Pages
 
 - [[component-gui]]
-- [[component-email-extension]]
 - [[component-mobile]]
 - [[analysis-mobile-imap-smtp-inbox-empty]]
 - [[analysis-email-backed-chat]]

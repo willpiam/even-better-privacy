@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-08-24
+last_updated: 2026-09-09
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-08-24 (mobile testing status + GUI gaps)
+Last updated: 2026-09-09 (finish-line Wave 4 Maestro + parity closeout)
 
 ## Wiki Operations
 
@@ -87,8 +87,6 @@ Last updated: 2026-08-24 (mobile testing status + GUI gaps)
 - [[component-desktop]] - Tauri desktop shell and sidecar packaging for the GUI.
 - [[component-server]] - Publish/discovery API with identity, detail,
   revocation, hierarchy, and OAuth endpoints.
-- [[component-email-extension]] - Chrome extension for sign/encrypt in Gmail,
-  Outlook, Proton Mail webmail.
 - [[component-mobile]] - React Native mobile app (under development).
 - [[component-website]] - Static public site with marketing landing page and
   browser-based signature verifier.
@@ -107,8 +105,8 @@ Last updated: 2026-08-24 (mobile testing status + GUI gaps)
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
 - [[analysis-mobile-e2e-framework]] - Android Maestro E2E (smoke / identity /
   details / sign-verify / hierarchy) via `deno task test:e2e:mobile`.
-- [[analysis-mobile-testing-and-gui-gaps]] - Pass/fail of the 5 Maestro flows,
-  GUI E2E cases still unported, and GUI features missing from mobile.
+- [[analysis-mobile-testing-and-gui-gaps]] - Default 10 Maestro flows, GUI E2E
+  cases still unported, file-picker gaps, and finish-line Android parity status.
 - [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
   hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).
 - [[analysis-key-encoding-rationale]] - Clarifies Base64 vs hex key/material
@@ -147,8 +145,8 @@ Last updated: 2026-08-24 (mobile testing status + GUI gaps)
 - [[analysis-reimplementation-building-blocks]] - Reimplementation checklist of
   required crypto primitives, runtime operations, encodings, and deterministic
   mappings needed for cross-language compatibility.
-- [[analysis-gui-mobile-parity-deltas]] - GUI vs mobile capability matrix and
-  Parity v1 checklist (interop drift + feature gaps).
+- [[analysis-gui-mobile-parity-deltas]] - GUI vs mobile capability matrix;
+  Android identity/crypto/mail parity done; OAuth/Downloads out of scope.
 - [[analysis-mobile-parity-roadmap]] - Phased mobile–GUI parity implementation
   roadmap (wallet, HD, mail, hardening).
 - [[analysis-mobile-imap-smtp-inbox-empty]] - Mobile manual IMAP/SMTP: empty inbox

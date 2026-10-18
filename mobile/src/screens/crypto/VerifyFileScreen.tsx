@@ -1,4 +1,5 @@
 import React, {useState} from 'react';
+import {Text} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import {verifyFileSignature} from '../../services/signVerify';
 import {parseEbpPayloadInput} from '../../ebpCore';
@@ -9,11 +10,14 @@ import BusyOverlay from '../../components/BusyOverlay';
 import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
 import {statusKind} from '../../theme/statusKind';
+import {cryptoStyles} from './cryptoStyles';
 
 export default function VerifyFileScreen(): JSX.Element {
   const [verifyFileUri, setVerifyFileUri] = useState('');
+  const [verifyFileName, setVerifyFileName] = useState('');
   const [verifyFilePayload, setVerifyFilePayload] = useState('');
   const [verifyFileOutput, setVerifyFileOutput] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
@@ -26,6 +30,7 @@ export default function VerifyFileScreen(): JSX.Element {
       });
       if (copyResult.status === 'success') {
         setVerifyFileUri(copyResult.localUri);
+        setVerifyFileName(file.name ?? 'picked-file');
       } else {
         throw new Error(copyResult.copyError);
       }
@@ -61,14 +66,28 @@ export default function VerifyFileScreen(): JSX.Element {
     <Screen scroll>
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
-        label="File URI"
-        value={verifyFileUri}
-        onChangeText={setVerifyFileUri}
-        placeholder="file:///..."
-        autoCapitalize="none"
+      <AppButton title="Pick File" onPress={pickVerifyFile} />
+      {verifyFileName ? (
+        <Text style={cryptoStyles.helpText} testID="verify-file-name">
+          Selected: {verifyFileName}
+        </Text>
+      ) : (
+        <Text style={cryptoStyles.helpText}>No file selected.</Text>
+      )}
+      <AppButton
+        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
+        variant="secondary"
+        onPress={() => setShowAdvanced(value => !value)}
       />
-      <AppButton title="Pick File" variant="secondary" onPress={pickVerifyFile} />
+      {showAdvanced ? (
+        <TextField
+          label="File URI (advanced)"
+          value={verifyFileUri}
+          onChangeText={setVerifyFileUri}
+          placeholder="file:///..."
+          autoCapitalize="none"
+        />
+      ) : null}
       <TextField
         label="Signed file payload"
         value={verifyFilePayload}

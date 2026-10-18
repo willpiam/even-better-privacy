@@ -2,8 +2,8 @@
 title: "Mobile IMAP/SMTP Inbox Empty and Send Failures"
 type: analysis
 status: active
-last_updated: 2026-07-17
-source_count: 9
+last_updated: 2026-09-09
+source_count: 10
 tags:
   - analysis
   - mobile
@@ -17,9 +17,10 @@ tags:
 
 ## Summary
 
-On [[component-mobile]], an empty inbox list and failed sends over manual IMAP/SMTP usually share one of three causes: **mail secrets still locked after process restart**, **TLS mode mismatch** (mobile always opens implicit TLS and ignores `imapSecure`/`smtpSecure`), or **account/credential misconfiguration**. The inbox UI always shows “No messages loaded.” for both a true empty mailbox and a failed load; the status line under Refresh/Compose carries the real error.
+On [[component-mobile]], an empty inbox list and failed sends over manual IMAP/SMTP usually share one of three causes: **mail secrets still locked after process restart**, **TLS mode mismatch** (wrong secure flag / port), or **account/credential misconfiguration**. As of 2026-09-09, mobile honors `imapSecure`/`smtpSecure`: secure=true uses implicit TLS (993/465); secure=false uses plain TCP then STARTTLS (143/587). The inbox UI distinguishes load errors from an empty mailbox and offers unlock when secrets are locked.
 
-**Test IMAP + SMTP** should finish in a few seconds when hosts/ports/credentials match the client. It can hang **indefinitely** with no failure message because only the TCP connect step has a timeout (~30s); IMAP/SMTP `readLine` waits have none.
+**Test IMAP + SMTP** shows step labels (`Connecting IMAP…`, `Connecting SMTP…`, …) and fails after an overall ~60s timeout if a step hangs.
+
 
 ## Field observation (2026-07-17) — hang at `imap.greeting.wait`
 
