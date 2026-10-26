@@ -1,5 +1,28 @@
 # Wiki Log
 
+## [2026-10-25] note | post-quantum DKIM later
+
+- Recorded in [[analysis-ebp-managed-email-onboarding]] and
+  `mail-server/README.md`: Stalwart's classical DKIM key is the deliverability
+  stopgap. EBP should later own DKIM signing and switch to a post-quantum
+  algorithm once receivers can verify it.
+
+## [2026-10-20] update | pqpost.com registered
+
+- Verisign RDAP shows `pqpost.com` registered 2026-10-20 via Cloudflare.
+  [[analysis-ebp-managed-email-onboarding]] now records that as the production
+  `MAIL_DOMAIN`. Signup remains disabled until the VPS mail host exists.
+
+## [2026-10-20] implement | ebp managed email onboarding
+
+- Documented the Get started wizard: Render key server provisions Stalwart on
+  a VPS; GUI and Android create an HD identity plus `username@domain`.
+- New [[analysis-ebp-managed-email-onboarding]]. Updated [[email-transport]],
+  [[component-server]], [[component-gui]], [[component-mobile]],
+  [[analysis-email-backed-chat]] (related; fingerprint local-parts stay a
+  brainstorm), [[analysis-mobile-testing-and-gui-gaps]] (11th flow
+  `onboarding.yaml`), and [[index]].
+
 ## [2026-09-09] implement | finish-line wave4 proof progress
 
 - Maestro: added `mobile/e2e/verify-public-keys.yaml` (detached +

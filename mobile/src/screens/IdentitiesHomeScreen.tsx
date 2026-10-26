@@ -133,12 +133,19 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           <Text style={styles.emptyIcon}>◎</Text>
           <Text style={styles.emptyTitle}>No identities yet</Text>
           <Text style={styles.emptySub}>
-            Create an identity from a mnemonic, generate random keys, or import
-            an existing identity file.
+            New here? Get a quantum-secure email address and keys in one step,
+            or create, generate, or import an identity yourself.
           </Text>
+          <AppButton
+            title="Get started with EBP email"
+            testID="identities-onboarding-empty"
+            onPress={() => navigation.navigate('OnboardingWizard')}
+            style={styles.fullBtn}
+          />
           <AppButton
             title="Create identity"
             testID="identities-create-empty"
+            variant="secondary"
             onPress={() => navigation.navigate('HdCreate')}
             style={styles.fullBtn}
           />

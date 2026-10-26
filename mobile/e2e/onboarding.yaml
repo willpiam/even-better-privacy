@@ -1,0 +1,476 @@
+appId: com.mobile
+env:
+  MAIL_USERNAME: e2e-onboard
+  IDENTITY_PASSWORD: Smoke-test-password1
+---
+# Onboarding wizard: address -> password -> recovery phrase -> confirm -> create.
+# The runner's key server has MAIL_SIGNUP_ENABLED with an unreachable Stalwart,
+# so keys + publish succeed and the mailbox step reports a mail-server error.
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+- extendedWaitUntil:
+    visible:
+      id: "identities-onboarding-empty"
+    timeout: 15000
+- tapOn:
+    id: "identities-onboarding-empty"
+- extendedWaitUntil:
+    visible: "Get a quantum-secure email address"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-start"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "onboarding-start"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-username"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-username"
+- inputText: "ab"
+- extendedWaitUntil:
+    visible: ".*at least 3.*"
+    timeout: 10000
+- eraseText: 10
+- inputText: ${MAIL_USERNAME}
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*is available"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-address-next"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-password"
+    timeout: 10000
+- tapOn:
+    id: "onboarding-password"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "onboarding-password-confirm"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "onboarding-password-next"
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-1"
+    direction: DOWN
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-1"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-1"
+- evalScript: ${output.w1 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-2"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-2"
+- evalScript: ${output.w2 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-3"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-3"
+- evalScript: ${output.w3 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-4"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-4"
+- evalScript: ${output.w4 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-5"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-5"
+- evalScript: ${output.w5 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-6"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-6"
+- evalScript: ${output.w6 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-7"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-7"
+- evalScript: ${output.w7 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-8"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-8"
+- evalScript: ${output.w8 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-9"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-9"
+- evalScript: ${output.w9 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-10"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-10"
+- evalScript: ${output.w10 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-11"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-11"
+- evalScript: ${output.w11 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-12"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-12"
+- evalScript: ${output.w12 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-13"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-13"
+- evalScript: ${output.w13 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-14"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-14"
+- evalScript: ${output.w14 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-15"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-15"
+- evalScript: ${output.w15 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-16"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-16"
+- evalScript: ${output.w16 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-17"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-17"
+- evalScript: ${output.w17 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-18"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-18"
+- evalScript: ${output.w18 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-19"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-19"
+- evalScript: ${output.w19 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-20"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-20"
+- evalScript: ${output.w20 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-21"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-21"
+- evalScript: ${output.w21 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-22"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-22"
+- evalScript: ${output.w22 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-23"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-23"
+- evalScript: ${output.w23 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-word-24"
+    direction: DOWN
+    timeout: 10000
+- copyTextFrom:
+    id: "onboarding-word-24"
+- evalScript: ${output.w24 = maestro.copiedText.replace(/^\d+\.\s*/, '').trim()}
+- scrollUntilVisible:
+    element:
+      id: "onboarding-phrase-next"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "onboarding-phrase-next"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-create"
+    timeout: 10000
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-1"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-1"
+      - inputText: ${output.w1}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-2"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-2"
+      - inputText: ${output.w2}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-3"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-3"
+      - inputText: ${output.w3}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-4"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-4"
+      - inputText: ${output.w4}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-5"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-5"
+      - inputText: ${output.w5}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-6"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-6"
+      - inputText: ${output.w6}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-7"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-7"
+      - inputText: ${output.w7}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-8"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-8"
+      - inputText: ${output.w8}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-9"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-9"
+      - inputText: ${output.w9}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-10"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-10"
+      - inputText: ${output.w10}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-11"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-11"
+      - inputText: ${output.w11}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-12"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-12"
+      - inputText: ${output.w12}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-13"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-13"
+      - inputText: ${output.w13}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-14"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-14"
+      - inputText: ${output.w14}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-15"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-15"
+      - inputText: ${output.w15}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-16"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-16"
+      - inputText: ${output.w16}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-17"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-17"
+      - inputText: ${output.w17}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-18"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-18"
+      - inputText: ${output.w18}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-19"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-19"
+      - inputText: ${output.w19}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-20"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-20"
+      - inputText: ${output.w20}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-21"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-21"
+      - inputText: ${output.w21}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-22"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-22"
+      - inputText: ${output.w22}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-23"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-23"
+      - inputText: ${output.w23}
+- runFlow:
+    when:
+      visible:
+        id: "onboarding-quiz-24"
+    commands:
+      - tapOn:
+          id: "onboarding-quiz-24"
+      - inputText: ${output.w24}
+- hideKeyboard
+- tapOn:
+    id: "onboarding-create"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-task-keys"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "✓ Publishing your public keys"
+    timeout: 180000
+- assertVisible: "✓ Creating your post-quantum keys"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-retry"
+    timeout: 60000
+- assertVisible: ".*mail server.*"

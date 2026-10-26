@@ -770,6 +770,130 @@ export async function deletePendingProposal(
   await db.query("DELETE FROM pending_hierarchy_proposals WHERE id = ?", [id]);
 }
 
+export type MailboxRow = {
+  username: string;
+  domain: string;
+  fingerprint: string;
+  stalwartId: string | null;
+  active: boolean;
+  createdAt: number;
+};
+
+function toMailboxRow(
+  row: [
+    string,
+    string,
+    string,
+    string | null,
+    number | string | bigint | boolean,
+    number | string | bigint,
+  ],
+): MailboxRow {
+  const [username, domain, fingerprint, stalwartId, active, createdAt] = row;
+  return {
+    username,
+    domain,
+    fingerprint,
+    stalwartId,
+    active: active === true || coerceNumber(active as number) === 1,
+    createdAt: coerceNumber(createdAt) ?? 0,
+  };
+}
+
+const MAILBOX_COLUMNS =
+  "username, domain, identity_fingerprint, stalwart_id, active, created_at";
+
+export async function insertMailbox(db: DatabaseAdapter, record: {
+  username: string;
+  domain: string;
+  fingerprint: string;
+  stalwartId: string | null;
+  createdAt: number;
+}): Promise<void> {
+  await db.query(
+    `INSERT INTO mailboxes (username, domain, identity_fingerprint, stalwart_id, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      record.username,
+      record.domain,
+      record.fingerprint,
+      record.stalwartId,
+      record.createdAt,
+    ],
+  );
+}
+
+export async function setMailboxStalwartId(
+  db: DatabaseAdapter,
+  username: string,
+  domain: string,
+  stalwartId: string,
+): Promise<void> {
+  await db.query(
+    "UPDATE mailboxes SET stalwart_id = ? WHERE username = ? AND domain = ?",
+    [stalwartId, username, domain],
+  );
+}
+
+export async function deleteMailbox(
+  db: DatabaseAdapter,
+  username: string,
+  domain: string,
+): Promise<void> {
+  await db.query("DELETE FROM mailboxes WHERE username = ? AND domain = ?", [
+    username,
+    domain,
+  ]);
+}
+
+export async function getMailboxByUsername(
+  db: DatabaseAdapter,
+  username: string,
+  domain: string,
+): Promise<MailboxRow | null> {
+  const rows = await db.query<Parameters<typeof toMailboxRow>[0]>(
+    `SELECT ${MAILBOX_COLUMNS} FROM mailboxes WHERE username = ? AND domain = ?`,
+    [username, domain],
+  );
+  return rows.length ? toMailboxRow(rows[0]) : null;
+}
+
+export async function getMailboxByFingerprint(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<MailboxRow | null> {
+  const rows = await db.query<Parameters<typeof toMailboxRow>[0]>(
+    `SELECT ${MAILBOX_COLUMNS} FROM mailboxes WHERE identity_fingerprint = ?`,
+    [fingerprint],
+  );
+  return rows.length ? toMailboxRow(rows[0]) : null;
+}
+
+export async function isMailboxUsernameTaken(
+  db: DatabaseAdapter,
+  username: string,
+  domain: string,
+): Promise<boolean> {
+  return (await getMailboxByUsername(db, username, domain)) !== null;
+}
+
+export async function markDetailVerified(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  path: string,
+  verifiedAt: number,
+): Promise<void> {
+  await updateDetailVerification(db, {
+    fingerprint,
+    path,
+    verifiedAt,
+    verificationToken: null,
+    verificationTokenHash: null,
+    verificationExpiresAt: null,
+    verificationSentAt: null,
+  });
+}
+
 export type SearchResult = {
   fingerprint: string;
   signing_key_type: "dilithium" | "sphincs";

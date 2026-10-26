@@ -37,6 +37,11 @@ import {
 } from "../../core/EmailAttachmentPayload.ts";
 import { validatePassword } from "../../core/PasswordPolicy.ts";
 import {
+  buildMailPasswordResetDetail,
+  MAIL_PASSWORD_RESET_PATH,
+  validateMailUsername,
+} from "../../core/MailUsername.ts";
+import {
   generateMnemonic,
   mnemonicToSeed,
   validateMnemonic,
@@ -287,6 +292,34 @@ function parseNonNegativeInteger(value: unknown, fallback: number): number {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+type EbpMailConfig = {
+  enabled: boolean;
+  domain?: string;
+  imap?: { host: string; port: number; secure: boolean };
+  smtp?: { host: string; port: number; secure: boolean };
+};
+
+async function fetchEbpMailConfig(server: string): Promise<EbpMailConfig> {
+  let res: Response;
+  try {
+    res = await fetch(apiUrl(server, "/api/v1/mail/signup/config"));
+  } catch (e) {
+    throw new HttpError(
+      STATUS.BadGateway,
+      `key server unreachable: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  if (res.status === 404) {
+    await res.body?.cancel();
+    return { enabled: false };
+  }
+  if (!res.ok) {
+    await res.body?.cancel();
+    throw new HttpError(STATUS.BadGateway, `mail sign-up config failed: HTTP ${res.status}`);
+  }
+  return await res.json() as EbpMailConfig;
+}
+
 async function nextHdIdentityIndex(
   ctx: CLIContext,
   seed: Uint8Array,
@@ -350,6 +383,14 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
     if (req.method === "GET" && url.pathname === "/api/v1/csrf-token") {
       return json({ token: getCsrfToken() });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/password/check") {
+      const body = await readJson<{ password?: unknown; enforcePasswordPolicy?: unknown }>(req);
+      return json(validatePassword(
+        typeof body.password === "string" ? body.password : "",
+        { enforcePolicy: body.enforcePasswordPolicy !== false },
+      ));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/context") {
@@ -4364,6 +4405,226 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         verifyStatus,
         bodyPayloadHash: envelope.bodyPayloadHash ?? null,
         manifestMatched,
+      });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/ebp-signup/config") {
+      const ctx = await getContext(
+        url.searchParams.get("home") ?? undefined,
+        url.searchParams.get("identity") ?? undefined,
+      );
+      const server = resolveServer(ctx, url.searchParams.get("server") ?? undefined);
+      return json({ server, ...(await fetchEbpMailConfig(server)) });
+    }
+
+    if (
+      req.method === "GET" && url.pathname === "/api/v1/mail/ebp-signup/username"
+    ) {
+      const ctx = await getContext(
+        url.searchParams.get("home") ?? undefined,
+        url.searchParams.get("identity") ?? undefined,
+      );
+      const server = resolveServer(ctx, url.searchParams.get("server") ?? undefined);
+      const check = validateMailUsername(url.searchParams.get("u") ?? "");
+      if (!check.ok) {
+        return json({ available: false, username: check.username, reason: check.reason });
+      }
+      const res = await fetch(
+        apiUrl(server, `/api/v1/mail/username-available?u=${encodeURIComponent(check.username)}`),
+      );
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new HttpError(
+          STATUS.BadGateway,
+          `username check failed: ${payload?.error ?? `HTTP ${res.status}`}`,
+        );
+      }
+      return json(payload);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-signup") {
+      const body = await readJson<{
+        home?: unknown;
+        identity?: unknown;
+        password?: unknown;
+        username?: unknown;
+        server?: unknown;
+        pin?: unknown;
+        fromName?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const identityName = typeof body.identity === "string" ? body.identity : undefined;
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+      const check = validateMailUsername(typeof body.username === "string" ? body.username : "");
+      if (!check.ok) throw new HttpError(STATUS.BadRequest, check.reason);
+
+      const ctx = await getContext(home, identityName);
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const identity = await loadIdentity(ctx, password);
+
+      // Resolve the mail PIN before provisioning so the mailbox password can
+      // always be stored locally once the server has created the account.
+      const pinInput = typeof body.pin === "string" && body.pin ? body.pin : "";
+      const secretsStatus = await getMailSecretsStatus(ctx.identityDir);
+      if (secretsStatus.locked) {
+        const candidate = pinInput || mailPinCache.get(ctx.identityDir) || password;
+        try {
+          await unlockMailSecretsWithPin(ctx.identityDir, candidate);
+        } catch {
+          throw new HttpError(STATUS.Unauthorized, "email pin required");
+        }
+      } else if (!mailPinCache.get(ctx.identityDir)) {
+        mailPinCache.set(ctx.identityDir, pinInput || password);
+      }
+
+      const config = await fetchEbpMailConfig(server);
+      if (!config.enabled || !config.domain || !config.imap || !config.smtp) {
+        throw new HttpError(
+          STATUS.ServiceUnavailable,
+          "this key server does not offer EBP email sign-up",
+        );
+      }
+      const email = `${check.username}@${config.domain}`;
+      identity.attachDetail("email", email);
+      const entry = identity.details.get("email");
+      if (!entry) {
+        throw new HttpError(STATUS.InternalServerError, "failed to sign email detail");
+      }
+      const mailPassword = randomHex(16);
+
+      const res = await fetch(apiUrl(server, "/api/v1/mail/signup"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fingerprint: identity.toFingerprint(),
+          username: check.username,
+          mailPassword,
+          detailProof: entry[1],
+        }),
+      });
+      const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) {
+        const reason = typeof result.error === "string" ? result.error : `HTTP ${res.status}`;
+        throw new HttpError(
+          res.status === 409 ? STATUS.Conflict : STATUS.BadGateway,
+          reason,
+        );
+      }
+      await saveIdentity(ctx, password, identity);
+
+      const imap = result.imap as { host: string; port: number; secure: boolean };
+      const smtp = result.smtp as { host: string; port: number; secure: boolean };
+      const login = typeof result.login === "string" ? result.login : email;
+      const accountConfig = normalizeMailConfig(DEFAULT_MAIL_ACCOUNT, {
+        authType: "password",
+        imapHost: imap.host,
+        imapPort: imap.port,
+        imapSecure: imap.secure,
+        smtpHost: smtp.host,
+        smtpPort: smtp.port,
+        smtpSecure: smtp.secure,
+        username: login,
+        fromEmail: email,
+        fromName: toSafeString(body.fromName, 128),
+        persistSecrets: true,
+      });
+      const store = await getMailStore(ctx.identityDir);
+      const accountId = `mail-${randomHex(8)}`;
+      const now = Date.now();
+      store.accounts.push({
+        id: accountId,
+        name: "EBP Mail",
+        config: accountConfig,
+        createdAt: now,
+        updatedAt: now,
+      });
+      store.selectedAccountId = accountId;
+      await saveMailStore(ctx.identityDir, store);
+      const secretStore = await getMailSecretsStore(ctx.identityDir);
+      secretStore[accountId] = { imapPassword: mailPassword, smtpPassword: mailPassword };
+      await saveMailSecretsStore(ctx.identityDir, secretStore);
+
+      return json({
+        ok: true,
+        email,
+        fingerprint: identity.toFingerprint(),
+        accountId,
+        account: accountConfig,
+        connection: { imap, smtp, login, password: mailPassword },
+      });
+    }
+
+    if (
+      req.method === "POST" && url.pathname === "/api/v1/mail/ebp-reset-password"
+    ) {
+      const body = await readJson<{
+        home?: unknown;
+        identity?: unknown;
+        password?: unknown;
+        server?: unknown;
+        accountId?: unknown;
+      }>(req);
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+      const ctx = await getContext(
+        typeof body.home === "string" ? body.home : undefined,
+        typeof body.identity === "string" ? body.identity : undefined,
+      );
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const identity = await loadIdentity(ctx, password);
+      const email = identity.getDetail("email");
+      if (!email) throw new HttpError(STATUS.BadRequest, "identity has no email detail");
+      const mailPassword = randomHex(16);
+      // Sign on a throwaway copy so the reset proof never lands in saved details.
+      const signer = await loadIdentity(ctx, password);
+      signer.attachDetail(
+        MAIL_PASSWORD_RESET_PATH,
+        buildMailPasswordResetDetail(email, sha256Hex(mailPassword)),
+      );
+      const proof = signer.details.get(MAIL_PASSWORD_RESET_PATH)?.[1];
+      const res = await fetch(apiUrl(server, "/api/v1/mail/reset-password"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fingerprint: identity.toFingerprint(), mailPassword, proof }),
+      });
+      const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new HttpError(
+          STATUS.BadGateway,
+          typeof result.error === "string" ? result.error : `HTTP ${res.status}`,
+        );
+      }
+      const store = await getMailStore(ctx.identityDir);
+      const requestedId = toSafeString(body.accountId, 128);
+      const account = store.accounts.find((a) =>
+        requestedId ? a.id === requestedId : a.config.fromEmail.toLowerCase() === email.toLowerCase()
+      );
+      let savedLocally = false;
+      if (account) {
+        try {
+          if (!mailPinCache.get(ctx.identityDir)) {
+            const status = await getMailSecretsStatus(ctx.identityDir);
+            if (status.locked) {
+              await unlockMailSecretsWithPin(ctx.identityDir, password);
+            } else {
+              mailPinCache.set(ctx.identityDir, password);
+            }
+          }
+          const secretStore = await getMailSecretsStore(ctx.identityDir);
+          secretStore[account.id] = { imapPassword: mailPassword, smtpPassword: mailPassword };
+          await saveMailSecretsStore(ctx.identityDir, secretStore);
+          savedLocally = true;
+        } catch {
+          // Mail secrets are locked with a different PIN; caller shows the password.
+        }
+      }
+      return json({
+        ok: true,
+        email,
+        accountId: account?.id ?? null,
+        savedLocally,
+        password: mailPassword,
       });
     }
 

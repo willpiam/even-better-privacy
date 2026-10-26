@@ -1,0 +1,25 @@
+# Stalwart mail server for EBP managed mailboxes.
+# Runs on a VPS with public TCP 25 (the EBP key server stays on Render and
+# provisions accounts through Stalwart's JMAP management API on 443).
+# See mail-server/README.md for DNS, rDNS, and admin-token setup.
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16
+    container_name: stalwart
+    restart: unless-stopped
+    environment:
+      STALWART_PUBLIC_URL: "https://${MAIL_HOST:?set MAIL_HOST in mail-server/.env}"
+    ports:
+      - "25:25"     # inbound MX delivery
+      - "465:465"   # SMTP submission, implicit TLS (EBP clients)
+      - "587:587"   # SMTP submission, STARTTLS (third-party clients)
+      - "993:993"   # IMAPS
+      - "443:443"   # HTTPS: ACME, JMAP management API, web admin
+      - "127.0.0.1:8080:8080" # first-run web admin; reach via SSH tunnel only
+    volumes:
+      - stalwart-etc:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+
+volumes:
+  stalwart-etc:
+  stalwart-data:

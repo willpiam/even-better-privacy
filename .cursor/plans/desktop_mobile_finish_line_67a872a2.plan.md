@@ -37,7 +37,7 @@ isProject: false
 - **Parity = every desktop GUI capability that belongs on a phone**, except documented desktop-only items (Tauri, `~/.ebp/` shared with CLI, save-to-`~/Downloads`, OAuth email). Manual IMAP/SMTP on mobile is enough.
 - **Delete the Chrome extension** (`email/chrome-extension/`, `build_chrome_extension.sh`, ReadMe/wiki/component pages). Native mail on GUI + mobile replaces it.
 - **Out of scope:** FN-DSA, ENS, identity expiry, Google RISC, Outlook OAuth, DB/core refactors, CI/GitHub Actions, production Android signing.
-- **Help channel:** Phonebox SMS from `+12362438512` to contact **William (iPhone)** (`+13825776267`). Do not text `+15196701426` — that handset will be USB-attached for Android testing.
+- **Help channel:** Phonebox SMS to contact **William (iPhone)**. Do not text the handset that will be USB-attached for Android testing.
 
 ## What already works
 
@@ -181,5 +181,5 @@ Success test: the same user jobs (create identity, publish, add contact, sign/ve
 ## Notes for execution
 
 - Do not launch the emulator until Wave 4 / Maestro work (or Wave 1 if a screen needs a screenshot).
-- If the USB phone is missing, KVM/display fails, or `TEST_EMAIL_*` is unset, SMS **William (iPhone)** via Phonebox (`POST /send` to `+13825776267`).
+- If the USB phone is missing, KVM/display fails, or `TEST_EMAIL_*` is unset, SMS **William (iPhone)** via Phonebox.
 - Wiki updates: incrementally update [analysis-gui-mobile-parity-deltas.md](wiki/analysis-gui-mobile-parity-deltas.md), [analysis-mobile-testing-and-gui-gaps.md](wiki/analysis-mobile-testing-and-gui-gaps.md), [component-mobile.md](wiki/component-mobile.md), [index.md](wiki/index.md), [log.md](wiki/log.md).

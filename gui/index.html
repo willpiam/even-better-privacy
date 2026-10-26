@@ -1543,6 +1543,158 @@
         flex-direction: column;
       }
 
+      /* Onboarding wizard */
+      #onboarding-modal {
+        z-index: 205;
+      }
+
+      .onboarding-modal {
+        max-width: 560px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+
+      .onboarding-progress {
+        display: flex;
+        gap: 6px;
+        margin-bottom: 18px;
+      }
+
+      .onboarding-progress span {
+        flex: 1;
+        height: 4px;
+        border-radius: 2px;
+        background: var(--border);
+      }
+
+      .onboarding-progress span.done {
+        background: var(--accent);
+      }
+
+      .onboarding-step {
+        display: none;
+      }
+
+      .onboarding-step.active {
+        display: block;
+      }
+
+      .onboarding-address {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .onboarding-address input {
+        flex: 1;
+      }
+
+      .onboarding-domain {
+        font-family: var(--font-mono);
+        color: var(--text-secondary);
+        white-space: nowrap;
+      }
+
+      .onboarding-hint {
+        min-height: 1.4em;
+        margin-top: 6px;
+        font-size: 0.85rem;
+      }
+
+      .onboarding-hint[data-kind="ok"] {
+        color: var(--success);
+      }
+
+      .onboarding-hint[data-kind="error"] {
+        color: var(--error);
+      }
+
+      .onboarding-words {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+        margin: 12px 0;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+      }
+
+      .onboarding-words li {
+        list-style: none;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-input);
+      }
+
+      .onboarding-words li span {
+        color: var(--text-muted);
+        margin-right: 4px;
+      }
+
+      .onboarding-tasks {
+        list-style: none;
+        padding: 0;
+        margin: 12px 0;
+      }
+
+      .onboarding-tasks li {
+        padding: 6px 0;
+        color: var(--text-muted);
+      }
+
+      .onboarding-tasks li::before {
+        content: "○ ";
+      }
+
+      .onboarding-tasks li[data-state="running"] {
+        color: var(--text-primary);
+      }
+
+      .onboarding-tasks li[data-state="running"]::before {
+        content: "◌ ";
+      }
+
+      .onboarding-tasks li[data-state="done"] {
+        color: var(--success);
+      }
+
+      .onboarding-tasks li[data-state="done"]::before {
+        content: "✓ ";
+      }
+
+      .onboarding-tasks li[data-state="error"] {
+        color: var(--error);
+      }
+
+      .onboarding-tasks li[data-state="error"]::before {
+        content: "✗ ";
+      }
+
+      .onboarding-result {
+        font-family: var(--font-mono);
+        font-size: 1.05rem;
+        word-break: break-all;
+        color: var(--text-primary);
+      }
+
+      .onboarding-connection dl {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 4px 12px;
+        font-size: 0.85rem;
+      }
+
+      .onboarding-connection dd {
+        margin: 0;
+        font-family: var(--font-mono);
+        word-break: break-all;
+      }
+
+      .onboarding-cta {
+        border: 1px solid var(--accent);
+        background: var(--accent-bg);
+      }
+
       /* Certificate detail modal */
       .modal-certificate-detail {
         width: min(92vw, 980px);
@@ -2284,6 +2436,17 @@
           <h2>Identities</h2>
           <p>Manage your cryptographic identities</p>
         </div>
+
+        <section class="onboarding-cta">
+          <h3>New here? Get a quantum-secure email address</h3>
+          <p class="small muted" style="margin-bottom: 12px">
+            One short wizard creates your keys, a recovery phrase, and a
+            ready-to-use email address.
+          </p>
+          <button type="button" data-open-onboarding id="identities-open-onboarding">
+            Get started
+          </button>
+        </section>
 
         <section>
           <h3>Your Identities</h3>
@@ -3461,6 +3624,15 @@
             Connect your existing mailbox locally (IMAP/SMTP) and send
             EBP-secured mail.
           </p>
+          <button
+            type="button"
+            class="secondary"
+            data-open-onboarding
+            id="mail-open-onboarding"
+            style="margin-top: 8px"
+          >
+            Create an EBP email address
+          </button>
         </div>
         <div
           class="mail-tabs"
@@ -4403,6 +4575,124 @@
             Establish Hierarchy
           </button>
           <button id="contact-detail-sync-btn">Sync from Server</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Onboarding wizard: EBP email address + HD key set -->
+    <div class="modal-overlay" id="onboarding-modal">
+      <div class="modal onboarding-modal" role="dialog" aria-labelledby="onboarding-title">
+        <div class="onboarding-progress" id="onboarding-progress">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+
+        <div class="onboarding-step active" data-step="welcome">
+          <h3 id="onboarding-title">Get a quantum-secure email address</h3>
+          <p>
+            In about a minute you'll have a new email address and a set of
+            post-quantum keys that sign and encrypt your mail end to end.
+          </p>
+          <div class="input-warning" id="onboarding-unavailable"></div>
+          <div class="modal-actions">
+            <button class="secondary" type="button" id="onboarding-skip">
+              Set up manually
+            </button>
+            <button type="button" id="onboarding-start">Get started</button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="address">
+          <h3>Choose your address</h3>
+          <p class="small muted">3–30 characters: letters, numbers, dots, hyphens.</p>
+          <div class="onboarding-address">
+            <input
+              id="onboarding-username"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="yourname"
+            />
+            <span class="onboarding-domain" id="onboarding-domain">@…</span>
+          </div>
+          <div class="onboarding-hint" id="onboarding-username-hint"></div>
+          <div class="modal-actions">
+            <button class="secondary" type="button" data-onboarding-back>Back</button>
+            <button type="button" id="onboarding-address-next" disabled>Next</button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="password">
+          <h3>Set a password</h3>
+          <p class="small muted">
+            This password unlocks your keys and mail on this device. It never
+            leaves your computer.
+          </p>
+          <label>Password
+            <input id="onboarding-password" type="password" autocomplete="new-password" />
+          </label>
+          <label>Confirm password
+            <input id="onboarding-password-confirm" type="password" autocomplete="new-password" />
+          </label>
+          <div class="onboarding-hint" id="onboarding-password-hint"></div>
+          <div class="modal-actions">
+            <button class="secondary" type="button" data-onboarding-back>Back</button>
+            <button type="button" id="onboarding-password-next">Next</button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="phrase">
+          <h3>Save your recovery phrase</h3>
+          <p class="small muted">
+            Write these 24 words down in order and keep them somewhere safe.
+            They are the only way to recover your keys and reset your mailbox
+            password on a new device.
+          </p>
+          <ol class="onboarding-words" id="onboarding-words"></ol>
+          <div class="modal-actions">
+            <button class="secondary" type="button" data-onboarding-back>Back</button>
+            <button type="button" id="onboarding-phrase-next">I wrote it down</button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="confirm">
+          <h3>Confirm your recovery phrase</h3>
+          <p class="small muted">Enter the requested words from your phrase.</p>
+          <div class="stack" id="onboarding-quiz"></div>
+          <div class="onboarding-hint" id="onboarding-quiz-hint"></div>
+          <div class="modal-actions">
+            <button class="secondary" type="button" data-onboarding-back>Back</button>
+            <button type="button" id="onboarding-create">Create my address</button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="create">
+          <h3>Setting things up</h3>
+          <ul class="onboarding-tasks" id="onboarding-tasks">
+            <li data-task="keys">Creating your post-quantum keys</li>
+            <li data-task="publish">Publishing your public keys</li>
+            <li data-task="mailbox">Creating your mailbox</li>
+          </ul>
+          <div class="input-warning" id="onboarding-create-error"></div>
+          <div class="modal-actions">
+            <button class="secondary" type="button" id="onboarding-retry" style="display: none">
+              Try again
+            </button>
+          </div>
+        </div>
+
+        <div class="onboarding-step" data-step="done">
+          <h3>You're all set</h3>
+          <p class="small muted">Your new address</p>
+          <p class="onboarding-result" id="onboarding-result-email"></p>
+          <p class="small muted">Your identity fingerprint</p>
+          <p class="onboarding-result small" id="onboarding-result-fingerprint"></p>
+          <details class="onboarding-connection">
+            <summary class="small">Use in other mail apps</summary>
+            <dl id="onboarding-connection"></dl>
+          </details>
+          <div class="modal-actions">
+            <button type="button" id="onboarding-open-inbox">Open inbox</button>
+          </div>
         </div>
       </div>
     </div>

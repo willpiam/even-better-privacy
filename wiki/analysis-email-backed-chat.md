@@ -2,7 +2,7 @@
 title: "Email-Backed Chat (Brainstorm)"
 type: analysis
 status: seed
-last_updated: 2026-07-27
+last_updated: 2026-10-20
 source_count: 0
 tags:
   - brainstorm
@@ -135,8 +135,13 @@ EBP).
 - Claiming chat-grade latency or presence.
 - Committing to a domain name or mailbox ops model.
 
+Managed first-run mailboxes (`username@<MAIL_DOMAIN>`, one principal per
+identity) are specified separately in [[analysis-ebp-managed-email-onboarding]].
+That path does not use fingerprint local-parts.
+
 ## Related
 
+- [[analysis-ebp-managed-email-onboarding]]
 - [[email-transport]]
 - [[identity-model]]
 - [[message-payload-formats]]

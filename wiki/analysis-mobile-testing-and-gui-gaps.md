@@ -2,7 +2,7 @@
 title: "Mobile Testing Status and GUI Feature Gaps"
 type: analysis
 status: active
-last_updated: 2026-09-09
+last_updated: 2026-10-20
 source_count: 6
 tags:
   - analysis
@@ -24,7 +24,7 @@ plus GUI capabilities that still have no mobile UI. Complements
 
 ## Mobile E2E: how many pass
 
-Default suite is **10 Maestro flows** (`deno task test:e2e:mobile`):
+Default suite is **11 Maestro flows** (`deno task test:e2e:mobile`):
 
 | Flow | Coverage | Last known result |
 |------|----------|-------------------|
@@ -32,6 +32,7 @@ Default suite is **10 Maestro flows** (`deno task test:e2e:mobile`):
 | `mail-help.yaml` | Mail tab → accounts → Help (`mail-help-body`); no live mailbox | Added 2026-09-09 (Wave 4) |
 | `identity.yaml` | HD create, set server, wrong-password publish, successful publish | **Passed** (2026-08-17) |
 | `create-random.yaml` | Random-key create → fingerprint on detail | Not yet re-run on device |
+| `onboarding.yaml` | Get started: address, password, 24-word quiz, create through mailbox error when Stalwart is unreachable | **Passed** (2026-10-20, moto g 5G, ~3m 40s) |
 | `details.yaml` | HD create + publish, push email detail, Contacts browse/search | **Passed** (2026-08-17) |
 | `contacts-lifecycle.yaml` | Export public JSON, emergency cert, fetch, notes, delete contact + identity | **Passed** (2026-08-24, ~3m 30s) |
 | `sign-verify.yaml` | Sign attached message, paste payload, verify | **Passed** (2026-08-24) |
@@ -82,7 +83,7 @@ Mapped against GUI Playwright (`gui/e2e/`). GUI mail specs are all
 
 **Count:** GUI Playwright has **23 active tests** (6 smoke + 15 identity
 including a 5-test serial encrypt/file flow + 2 hierarchy) and **5 skipped
-mail tests**. Mobile default suite is **10 flows**; counterpart coverage is
+mail tests**. Mobile default suite is **11 flows**; counterpart coverage is
 still partial vs GUI (no tamper/encrypt-file/revoke/live-mail). **Hardest
 remaining gaps are file pickers / Share** (ranks 25–28) and live mailbox
 (29–30). Crypto hub encrypt/decrypt message+file, sign/verify file, and

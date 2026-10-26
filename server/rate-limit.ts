@@ -11,6 +11,9 @@ export const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number
   "GET /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
   "POST /api/v1/mail/oauth/exchange": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/mail/oauth/refresh": { windowMs: 60_000, maxRequests: 20 },
+  "POST /api/v1/mail/signup": { windowMs: 3_600_000, maxRequests: 3 },
+  "POST /api/v1/mail/reset-password": { windowMs: 3_600_000, maxRequests: 5 },
+  "GET /api/v1/mail/username-available": { windowMs: 60_000, maxRequests: 60 },
   "GET *": { windowMs: 60_000, maxRequests: 200 },
 };
 
@@ -26,7 +29,8 @@ export const RATE_LIMIT_CLEANUP = setInterval(() => {
   const now = Date.now();
   for (const [ip, endpoints] of rateLimitStore) {
     for (const [endpoint, data] of endpoints) {
-      if (now - data.windowStart > 300_000) { // 5 minutes
+      const windowMs = RATE_LIMITS[endpoint]?.windowMs ?? 0;
+      if (now - data.windowStart > Math.max(300_000, windowMs)) {
         endpoints.delete(endpoint);
       }
     }

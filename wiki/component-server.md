@@ -2,8 +2,8 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-05-17
-source_count: 7
+last_updated: 2026-10-20
+source_count: 8
 tags:
   - component
   - server
@@ -77,6 +77,24 @@ Google Cloud OAuth clients that request **sensitive or restricted** Gmail (or ot
 
 **Cross-Account Protection (RISC):** Google recommends subscribing to signed security-event JWTs when users sign in with Google (session/token revocation, account disabled, etc.). EBP does not document a RISC receiver today; see [[source-google-cross-account-protection-risc]] for setup and event-response guidance.
 
+### Managed mail signup
+
+Off unless `MAIL_SIGNUP_ENABLED` is set and Stalwart admin credentials are
+present. The server coordinates mailbox creation; it does not accept SMTP or
+IMAP itself. See [[analysis-ebp-managed-email-onboarding]].
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/api/v1/mail/signup/config` | `{ enabled, domain, imap, smtp }` |
+| `GET` | `/api/v1/mail/username-available` | Local-part availability (`?u=`) |
+| `POST` | `/api/v1/mail/signup` | Signed `email` proof, Stalwart principal, verified detail |
+| `POST` | `/api/v1/mail/reset-password` | Identity-signed mailbox secret reset |
+
+`mailboxes` (SQLite and Postgres) stores `username`, `domain`, fingerprint,
+Stalwart id, and `active`. Unique on `(username, domain)` and one row per
+fingerprint. No password hash. Stalwart is called from `server/stalwart.ts`
+(JMAP `x:Account/set`).
+
 ### Health
 
 | Method | Path | Description |
@@ -111,6 +129,7 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 
 - [[component-cli]]
 - [[component-gui]]
+- [[analysis-ebp-managed-email-onboarding]]
 - [[component-website]] — hosts a browser-based verifier that calls `POST /api/v1/verify-signature`
 - [[uri-syntax]]
 - [[decentralized-identifiers]]
@@ -126,6 +145,7 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - `ReadMe.md`
 - `server/main.ts`, `server/handlers/`, `server/db/`
 - `server/mail-oauth.ts`
+- `server/handlers/mail-signup.ts`, `server/stalwart.ts`
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]

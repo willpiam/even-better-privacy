@@ -2,8 +2,8 @@
 title: "Email Transport and Access"
 type: concept
 status: active
-last_updated: 2026-09-09
-source_count: 3
+last_updated: 2026-10-20
+source_count: 4
 tags:
   - email
   - smtp
@@ -30,6 +30,15 @@ IMAP4rev2 lets a client access and manipulate messages stored on a mail server. 
 
 For EBP, IMAP is the mailbox access layer. The GUI may fetch the RFC 5322/MIME message through IMAP, then extract and process the EBP armored JSON described in [[message-payload-formats]].
 
+## Managed mailbox
+
+[[analysis-ebp-managed-email-onboarding]] is the product path that creates
+`username@<MAIL_DOMAIN>` during first-run setup. The [[component-server|key
+server]] provisions the mailbox on a VPS-hosted Stalwart instance; the GUI and
+mobile app then use ordinary IMAP and SMTP against that host. Transport
+authentication and TLS still do not replace EBP signatures and encryption
+inside the message.
+
 ## EBP Security Boundary
 
 SMTP and IMAP can use transport security and provider authentication, but those mechanisms are separate from EBP end-to-end security:
@@ -43,6 +52,7 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 - [[component-gui]]
 - [[component-mobile]]
 - [[analysis-mobile-imap-smtp-inbox-empty]]
+- [[analysis-ebp-managed-email-onboarding]]
 - [[analysis-email-backed-chat]]
 - [[message-payload-formats]]
 - [[openpgp-pqc]]
@@ -54,3 +64,4 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
 - `wiki/raw/hashcash.pdf` → [[source-hashcash-adam-back-2002]]
+- `mail-server/README.md`, `server/handlers/mail-signup.ts`

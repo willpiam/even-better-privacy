@@ -276,7 +276,13 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       )}
 
       <AppButton
+        title="Create an EBP email address"
+        testID="mail-onboarding"
+        onPress={() => navigation.navigate('OnboardingWizard')}
+      />
+      <AppButton
         title="Add account"
+        variant="secondary"
         onPress={() => setAddAccountVisible(true)}
       />
       <AddAccountModal

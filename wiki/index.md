@@ -99,13 +99,16 @@ Last updated: 2026-09-09 (finish-line Wave 4 Maestro + parity closeout)
   counterparty proposals only; creators do not see their own pending rows.
 - [[analysis-querying-live-key-server-db]] - Workstation path to run SQL against
   live Render Postgres via `scripts/postgres/` and `query:prod:*` tasks.
+- [[analysis-ebp-managed-email-onboarding]] - Get-started wizard: HD identity
+  plus `username@domain` on Stalwart, provisioned by the key server.
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
+  Related to managed signup above; fingerprint local-parts are not that design.
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
 - [[analysis-mobile-e2e-framework]] - Android Maestro E2E (smoke / identity /
   details / sign-verify / hierarchy) via `deno task test:e2e:mobile`.
-- [[analysis-mobile-testing-and-gui-gaps]] - Default 10 Maestro flows, GUI E2E
+- [[analysis-mobile-testing-and-gui-gaps]] - Default 11 Maestro flows, GUI E2E
   cases still unported, file-picker gaps, and finish-line Android parity status.
 - [[analysis-mobile-certificates-ux]] - Certificates: password popup, ContactPicker
   hierarchy propose, Card/ListRow section boundaries (Crypto/More parity).

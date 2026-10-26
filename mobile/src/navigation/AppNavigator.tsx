@@ -11,6 +11,7 @@ import {colors} from '../theme/tokens';
 import IdentitiesHomeScreen from '../screens/IdentitiesHomeScreen';
 import HdCreateScreen from '../screens/HdCreateScreen';
 import RandomCreateScreen from '../screens/RandomCreateScreen';
+import OnboardingWizardScreen from '../screens/OnboardingWizardScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ContactDetailScreen from '../screens/ContactDetailScreen';
@@ -44,6 +45,7 @@ export type IdentitiesStackParamList = {
   IdentitiesHome: undefined;
   HdCreate: undefined;
   RandomCreate: undefined;
+  OnboardingWizard: undefined;
   IdentityDetail: {identityName: string};
 };
 
@@ -69,6 +71,7 @@ export type MailStackParamList = {
   MailAccounts: undefined;
   MailAccountSetup: {accountId?: string};
   MailHelp: undefined;
+  OnboardingWizard: undefined;
   MailInbox: undefined;
   MailMessage: {uid: number; folder?: string};
   MailSenderAuthenticity: {summary: MailAuthenticitySummary};
@@ -96,10 +99,10 @@ export type MoreStackParamList = {
 };
 
 export type RootTabParamList = {
-  IdentitiesTab: undefined;
+  IdentitiesTab: NavigatorScreenParams<IdentitiesStackParamList> | undefined;
   ContactsTab: undefined;
   CryptoTab: undefined;
-  MailTab: undefined;
+  MailTab: NavigatorScreenParams<MailStackParamList> | undefined;
   MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
@@ -161,6 +164,11 @@ function IdentitiesNavigator(): JSX.Element {
         name="RandomCreate"
         component={RandomCreateScreen}
         options={{title: 'Create Random Identity'}}
+      />
+      <IdentitiesStack.Screen
+        name="OnboardingWizard"
+        component={OnboardingWizardScreen}
+        options={{title: 'Get started'}}
       />
       <IdentitiesStack.Screen
         name="IdentityDetail"
@@ -264,6 +272,11 @@ function MailNavigator(): JSX.Element {
         name="MailHelp"
         component={MailHelpScreen}
         options={{title: 'Mail help'}}
+      />
+      <MailStack.Screen
+        name="OnboardingWizard"
+        component={OnboardingWizardScreen}
+        options={{title: 'Create EBP email'}}
       />
       <MailStack.Screen
         name="MailInbox"

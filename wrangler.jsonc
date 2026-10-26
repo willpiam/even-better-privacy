@@ -1,0 +1,13 @@
+{
+  // pqpost.com and www.pqpost.com are attached to this Worker in the dashboard.
+  // Leave routes unset. Wrangler replaces a routes list on deploy.
+  "name": "misty-bonus-b0ce",
+  "compatibility_date": "2026-10-26",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./website",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}

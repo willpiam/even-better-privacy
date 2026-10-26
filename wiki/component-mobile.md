@@ -2,8 +2,8 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-09-09
-source_count: 5
+last_updated: 2026-10-20
+source_count: 6
 tags:
   - component
   - mobile
@@ -25,6 +25,8 @@ Crypto UI parity (2026-09-09): include-salt on Sign Message/File, verify-with-pu
 Identity UI parity (2026-09-09): random-key create, HD change/overwrite, selective public export, opaque add-detail, per-action server override. Helpers in `mobile/src/services/identity.ts`; Maestro `create-random.yaml`.
 
 Mail UI parity (2026-09-09): folder/search/page/limit, help screen, HTML WebView, attachments, multi-recipient. Maestro: `mail-help.yaml` (no live mailbox). Remaining untested paths (file pickers, live IMAP): [[analysis-mobile-testing-and-gui-gaps]].
+
+**Get started** (2026-10-20): `OnboardingWizardScreen` from the empty Identities home and from Mail accounts. It creates an [[ebp-hd]] identity and a managed mailbox via `services/mail/ebpSignup.ts`. Maestro: `mobile/e2e/onboarding.yaml` (through the create step; mailbox provisioning expects a mail-server error when Stalwart is unreachable). See [[analysis-ebp-managed-email-onboarding]].
 
 ## Architecture
 
@@ -48,6 +50,7 @@ See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-pari
 - [[analysis-mobile-compose-recipient-resolve]]
 - [[analysis-mobile-encrypted-mail-reader-ux]]
 - [[analysis-mobile-mail-reply]]
+- [[analysis-ebp-managed-email-onboarding]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

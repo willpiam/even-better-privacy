@@ -100,6 +100,11 @@ env \
   DB_PATH="${DB_PATH}" \
   RATE_LIMIT_DISABLED=true \
   DB_TYPE=sqlite \
+  MAIL_SIGNUP_ENABLED=true \
+  MAIL_DOMAIN=pqpost.test \
+  MAIL_HOST=mail.pqpost.test \
+  STALWART_ADMIN_URL="${MOBILE_E2E_STALWART_URL:-http://127.0.0.1:9}" \
+  STALWART_ADMIN_TOKEN="${MOBILE_E2E_STALWART_TOKEN:-e2e-unused}" \
   deno task server >"${SERVER_LOG}" 2>&1 &
 SERVER_PID=$!
 
@@ -189,6 +194,7 @@ if [[ ${#FLOW_ARGS[@]} -eq 0 ]]; then
     "${ROOT}/mobile/e2e/mail-help.yaml"
     "${ROOT}/mobile/e2e/identity.yaml"
     "${ROOT}/mobile/e2e/create-random.yaml"
+    "${ROOT}/mobile/e2e/onboarding.yaml"
     "${ROOT}/mobile/e2e/details.yaml"
     "${ROOT}/mobile/e2e/contacts-lifecycle.yaml"
     "${ROOT}/mobile/e2e/sign-verify.yaml"

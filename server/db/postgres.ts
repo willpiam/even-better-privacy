@@ -147,6 +147,20 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
       )
     `);
 
+    await this.execute(`
+      CREATE TABLE IF NOT EXISTS mailboxes (
+        id BIGSERIAL PRIMARY KEY,
+        username TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        identity_fingerprint TEXT NOT NULL UNIQUE,
+        stalwart_id TEXT,
+        active BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at BIGINT NOT NULL,
+        FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
+        UNIQUE(username, domain)
+      )
+    `);
+
     await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
     await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
     await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);

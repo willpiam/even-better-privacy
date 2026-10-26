@@ -1,0 +1,43 @@
+; BIND zone for pqpost.com, generated from Stalwart on 2026-10-25.
+; Cloudflare: DNS → Records → Import and Export.
+; Uncheck "Proxy imported DNS records" as well. The cf-proxied tags below
+; keep every mail hostname DNS-only even if that box stays checked.
+;
+; Before importing, delete these if they already exist, or the import will
+; add a second copy or refuse the CNAME:
+;   TXT  _dmarc          (the current one says p=quarantine)
+;   A    autoconfig, autodiscover, mta-sts, ua-auto-config
+; Leave the existing A record for mail.pqpost.com in place.
+
+$ORIGIN pqpost.com.
+
+; DKIM
+v1-ed25519-20261025._domainkey 300 IN TXT "v=DKIM1; k=ed25519; h=sha256; p=KYDercpgCTnxtdYApWdll07m0kG5yZ5vppTcy3H/oFg="
+v1-rsa-20261025._domainkey 300 IN TXT "v=DKIM1; k=rsa; h=sha256; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAvpbv0jLCnto0A06HirH0Fz6oXKdBiZuR6+k3bYtgKuqqdA/Ed2rOVCiQlFQSn8GDtGs3ASaeWlXGPlFcqBbPpp6EXAEPBRkWV+MGkFpRG94aEo/xm9O/sc8FlYJf4+slq/U9CuSDZCoxof7JbsIDCxKPnxw6qqqUINTuTgp8cRtG0t5nY+Eu4B9uKFUTZ8fYLzW9iGf6tA+UoHBvzB2PnYp/gz6ECzdr9/MOD6fjHgPgQikUO3wNl/V/n82bVe+VU5lgYG7fu8SqQ9CwTOPow1KkWxAV0yOBuyPkTzhPucQEQpIdT7i5i4OB4iSiz19uaZ4GKbGul5m8T8q7PRn0lwIDAQAB"
+
+; SPF, DMARC, TLS reporting
+mail 300 IN TXT "v=spf1 a -all"
+@ 300 IN TXT "v=spf1 mx -all"
+_dmarc 300 IN TXT "v=DMARC1; p=reject; rua=mailto:postmaster@pqpost.com"
+_mta-sts 300 IN TXT "v=STSv1; id=9118765013942214326"
+_smtp._tls 300 IN TXT "v=TLSRPTv1; rua=mailto:postmaster@pqpost.com"
+_validation-persist 300 IN TXT "letsencrypt.org; accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/3910628882; policy=wildcard"
+_ua-auto-config 300 IN TXT "v=UAAC1; a=sha256; d=M9jrVjaE9aa8hILul7LdmShb1jQ1yS3gnIMJmftCb+Y="
+
+; Hostnames that must resolve to the mail server
+autoconfig 300 IN CNAME mail.pqpost.com. ; cf_tags=cf-proxied:false
+autodiscover 300 IN CNAME mail.pqpost.com. ; cf_tags=cf-proxied:false
+mta-sts 300 IN CNAME mail.pqpost.com. ; cf_tags=cf-proxied:false
+ua-auto-config 300 IN CNAME mail.pqpost.com. ; cf_tags=cf-proxied:false
+
+; Service discovery
+_caldavs._tcp 300 IN SRV 0 1 443 mail.pqpost.com.
+_carddavs._tcp 300 IN SRV 0 1 443 mail.pqpost.com.
+_imaps._tcp 300 IN SRV 0 1 993 mail.pqpost.com.
+_jmap._tcp 300 IN SRV 0 1 443 mail.pqpost.com.
+_pop3s._tcp 300 IN SRV 0 1 995 mail.pqpost.com.
+_submissions._tcp 300 IN SRV 0 1 465 mail.pqpost.com.
+
+; Certificate authority
+@ 300 IN CAA 0 issue "letsencrypt.org;accounturi=https://acme-v02.api.letsencrypt.org/acme/acct/3910628882"
+@ 300 IN CAA 0 iodef "mailto:postmaster@pqpost.com"

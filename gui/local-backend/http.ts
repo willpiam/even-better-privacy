@@ -13,6 +13,7 @@ export const STATUS = {
   PayloadTooLarge: 413,
   TooManyRequests: 429,
   BadGateway: 502,
+  ServiceUnavailable: 503,
   InternalServerError: 500,
 } as const;
 export type StatusCode = (typeof STATUS)[keyof typeof STATUS];

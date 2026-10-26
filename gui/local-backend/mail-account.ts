@@ -66,7 +66,9 @@ export const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
 
 const MAIL_ACCOUNT_FILE = "mail-account.json";
 const MAIL_SECRET_FILE = "mail-account.secrets.json";
-const DEFAULT_MAIL_STORE: MailAccountStore = { selectedAccountId: null, accounts: [] };
+function emptyMailStore(): MailAccountStore {
+	return { selectedAccountId: null, accounts: [] };
+}
 const MAIL_SECRETS_KDF_ITERATIONS = 210_000;
 
 export const mailSecretCache = new Map<string, MailSecretsStore>();
@@ -161,7 +163,7 @@ export function normalizeMailConfig(
 
 export async function getMailStore(identityDir: string): Promise<MailAccountStore> {
 	const raw = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_ACCOUNT_FILE));
-	if (!raw) return { ...DEFAULT_MAIL_STORE };
+	if (!raw) return emptyMailStore();
 	if (isMailAccountConfig(raw)) {
 		const now = Date.now();
 		return {
@@ -185,7 +187,7 @@ export async function getMailStore(identityDir: string): Promise<MailAccountStor
 		const selectedAccountId = typeof parsed.selectedAccountId === "string" ? parsed.selectedAccountId : null;
 		return { selectedAccountId, accounts };
 	}
-	return { ...DEFAULT_MAIL_STORE };
+	return emptyMailStore();
 }
 
 export async function saveMailStore(identityDir: string, store: MailAccountStore): Promise<void> {

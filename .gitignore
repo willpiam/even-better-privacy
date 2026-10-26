@@ -31,6 +31,10 @@ env.desktop.build
 .env.local
 .env.*.local
 
+# Website deploy. The state file records FTP host and content hashes.
+.deploy-ftp-state.json
+.wrangler/
+
 # Test artifacts
 coverage/
 playwright-report/
@@ -66,6 +70,10 @@ final_builds/
 
 # Scripts
 /scripts/postgres/backups/
+
+# Python
+__pycache__/
+*.py[cod]
 
 # Wiki assets
 /wiki/raw/assets/

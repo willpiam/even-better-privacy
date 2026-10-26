@@ -30,6 +30,13 @@ export {parseEbpPayloadInput, parseMultiRecipientEntries} from '../../core/Paylo
 export {randomHex, buildFileSignMessage} from '../../core/CryptoUtils';
 export {validatePassword} from '../../core/PasswordPolicy';
 export {
+  MAIL_PASSWORD_RESET_PATH,
+  buildMailPasswordResetDetail,
+  normalizeMailUsername,
+  validateMailUsername,
+  type MailUsernameCheck,
+} from '../../core/MailUsername';
+export {
   resolveSenderIdentity,
   tryResolveSenderIdentity,
   externalIdentityFromEmbeddedRecord,

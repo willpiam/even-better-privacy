@@ -2,7 +2,7 @@
 title: "Mobile E2E Framework"
 type: analysis
 status: active
-last_updated: 2026-08-24
+last_updated: 2026-10-20
 source_count: 8
 tags:
   - analysis
@@ -33,7 +33,10 @@ coverage (see [[analysis-hierarchy-gui-e2e-coverage]]).
 - **Runner:** [`scripts/mobile-e2e.sh`](../scripts/mobile-e2e.sh) — starts key
   server on `:8788` with throwaway SQLite
   (`test-results/mobile-e2e/server.sqlite`), `RATE_LIMIT_DISABLED=true`,
-  requires `adb` device, `adb shell pm clear com.mobile`, then `maestro test`.
+  `MAIL_SIGNUP_ENABLED=true` with `MAIL_DOMAIN=pqpost.test` and an unreachable
+  Stalwart URL (so `onboarding.yaml` can pass availability and fail closed at
+  mailbox create), requires `adb` device, `adb shell pm clear com.mobile`,
+  then `maestro test`.
 - **Physical phone (USB):** runner runs `adb reverse` for Metro (`8081`) and
   the key server (`8788`), then passes
   `SERVER_URL=http://127.0.0.1:8788`. Do not hardcode `10.0.2.2` for USB.

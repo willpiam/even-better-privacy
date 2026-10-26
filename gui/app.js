@@ -53,6 +53,7 @@ import {
   renderStoredMailCredentials,
 } from "./js/mail.js";
 import { updateRevokeDetailPathOptions } from "./js/revocation.js";
+import { initOnboarding, maybeOpenOnboardingOnFirstRun } from "./js/onboarding.js";
 
 // Wire late-bound mail loaders into render.js to break the circular dependency
 setMailLoaders({
@@ -190,7 +191,7 @@ function makeSectionCollapsible(section) {
 }
 
 function initCollapsibleSections() {
-  document.querySelectorAll(".page section").forEach((section) => {
+  document.querySelectorAll(".page section:not(.onboarding-cta)").forEach((section) => {
     makeSectionCollapsible(section);
   });
 }
@@ -1871,5 +1872,6 @@ initNavigation();
 initCollapsibleSections();
 initContactSearch();
 initMailPage();
+initOnboarding({ navigateTo });
 renderToastLogs();
-loadAll();
+loadAll().then(maybeOpenOnboardingOnFirstRun);

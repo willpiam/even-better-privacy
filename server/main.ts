@@ -27,6 +27,12 @@ import {
   handleGetHierarchyCertificate,
 } from "./handlers/hierarchy.ts";
 import { handleListIdentities, handleSearchIdentities } from "./handlers/discovery.ts";
+import {
+  handleMailResetPassword,
+  handleMailSignup,
+  handleMailSignupConfig,
+  handleMailUsernameAvailable,
+} from "./handlers/mail-signup.ts";
 
 // =============================================================================
 // Configuration
@@ -153,7 +159,23 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
       return respond(attachCors(handleOAuthConfig(), corsHeaders));
     }
 
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/signup/config") {
+      return respond(attachCors(handleMailSignupConfig(), corsHeaders));
+    }
+
     const db = await getDb();
+
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/username-available") {
+      return respond(attachCors(await handleMailUsernameAvailable(url, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/signup") {
+      return respond(attachCors(await handleMailSignup(req, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/reset-password") {
+      return respond(attachCors(await handleMailResetPassword(req, db), corsHeaders));
+    }
 
     if (req.method === "GET" && url.pathname === "/api/v1/identities") {
       return respond(attachCors(await handleListIdentities(url, db), corsHeaders));

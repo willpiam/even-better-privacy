@@ -2,8 +2,8 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-09-09
-source_count: 8
+last_updated: 2026-10-20
+source_count: 9
 tags:
   - component
   - gui
@@ -47,6 +47,8 @@ The GUI includes a built-in email interface:
 
 SMTP and IMAP do not provide EBP's end-to-end message security. The GUI uses them to send and fetch mail, then applies EBP payload encryption and signature verification at the application layer; see [[email-transport]] for the standards boundary.
 
+**Get started** (`gui/js/onboarding.js`) runs on first launch when no identities exist, and from the Mail page. It creates an [[ebp-hd]] identity, publishes it, and asks the key server for a managed mailbox (`POST /api/v1/mail/ebp-signup` on the local backend). Connection settings stay collapsed. See [[analysis-ebp-managed-email-onboarding]]. Manual account setup remains available.
+
 ## Key Features
 
 - All CLI features in a graphical format.
@@ -83,6 +85,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[component-server]]
 - [[analysis-linux-build]]
 - [[email-transport]]
+- [[analysis-ebp-managed-email-onboarding]]
 - [[identity-model]]
 - [[password-policy]]
 - [[message-payload-formats]]
@@ -95,7 +98,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 
 - `ReadMe.md`
 - `gui/local-backend/main.ts`, `gui/local-backend/routes.ts`, `gui/local-backend/mail-oauth.ts`
-- `gui/index.html`, `gui/app.js`, `gui/js/`
+- `gui/index.html`, `gui/app.js`, `gui/js/` (including `gui/js/onboarding.js`)
 - `wiki/raw/rfc5321.txt` → [[source-rfc-5321]]
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]
