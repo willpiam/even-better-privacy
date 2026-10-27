@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-10-27] fix | website verifier matches core
+
+- `website/crypto.js` now tries `ebp::message::v1::` before the legacy `ebp::messagehash::` envelope, and hashes the Kyber public key from decoded hex bytes.
+- CLI, GUI, mobile, and core → website tests pass. Updated: [[component-website]], [[analysis-cross-client-compatibility-tests]].
+
 ## [2026-10-27] test | core and mobile payload compatibility
 
 - Added `test/core-mobile_compat_test.ts`. Passed (~10s): signatures and encrypt/decrypt both ways, Dilithium and SPHINCS+ signatures.

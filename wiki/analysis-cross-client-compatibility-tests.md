@@ -22,13 +22,13 @@ Whether automated tests confirm that [[component-mobile|the app]],
 
 ## Verdict
 
-**CLI, GUI, mobile, and core payload handoffs pass. The website verifier still fails.**
+**CLI, GUI, mobile, core, and website payload checks pass.**
 `cli/tests/gui_compat_test.ts`, `cli/tests/mobile_compat_test.ts`, and
 `cli/tests/core_compat_test.ts` sign, verify, encrypt, and decrypt across the
-CLI, the GUI local backend, the mobile helpers, and `core/`. `cli/tests/website_verify_test.ts`,
-`cli/tests/gui_website_verify_test.ts`,
-`test/mobile-website_verify_test.ts`, and
-`test/core-website_verify_test.ts` still reject current signatures.
+CLI, the GUI local backend, the mobile helpers, and `core/`.
+`cli/tests/website_verify_test.ts`, `cli/tests/gui_website_verify_test.ts`,
+`test/mobile-website_verify_test.ts`, and `test/core-website_verify_test.ts`
+pass after `website/crypto.js` was aligned with `core/` on 2026-10-27.
 
 The CLI is still a supported interface. `ReadMe.md` documents `deno task cli`
 as sharing `~/.ebp/` with the GUI, and `deno.json` still defines the `cli`
@@ -45,11 +45,11 @@ landing page plus `verify.html`, which locally checks
 
 | Surface | Automated tests | Cross-surface? |
 |---|---|---|
-| Shared `core/` | `deno task test:core`, including `test/MessageExchange_test.ts`, `test/core-website_verify_test.ts`, and `test/core-mobile_compat_test.ts`. `cli/tests/core_compat_test.ts` checks CLI and GUI payloads with `Identity` directly. | CLI ↔ core, GUI ↔ core, and core ↔ mobile **pass** (2026-10-27). Core → website **fails**. |
-| CLI | `deno task test:cli-utils` → `cli/tests/`. Utils, permissions, password prompt, revocation, plus `cli_roundtrip_test.ts`, `gui_compat_test.ts`, `mobile_compat_test.ts`, `core_compat_test.ts`, `website_verify_test.ts`, and `gui_website_verify_test.ts`. | Same CLI **passes**. CLI ↔ GUI, CLI ↔ mobile, and CLI ↔ core **pass**. CLI → website **fails**. |
-| GUI | `deno task test:gui-backend` plus Playwright `deno task test:e2e` (`gui/e2e/`). Identity spec covers detached verify, tamper reject, two-identity encrypt, and signed file encrypt/decrypt inside one GUI. `cli/tests/gui_mobile_compat_test.ts` calls `handleRequest`. | Same GUI session, plus CLI ↔ GUI, GUI ↔ mobile, and GUI ↔ core. GUI → website **fails**. |
-| Mobile app | Jest (`deno task test:mobile`) and Android Maestro (`deno task test:e2e:mobile`). Maestro `sign-verify.yaml` signs and verifies inside the app. Deno `test/mobile-signVerify_parity_test.ts` and `test/mobile-encryptDecrypt_parity_test.ts` call mobile logic and `core/` in one process. `test/mobile-website_verify_test.ts` calls `website/crypto.js`. `cli/tests/mobile_compat_test.ts`, `cli/tests/gui_mobile_compat_test.ts`, and `test/core-mobile_compat_test.ts` call `signVerifyLogic.ts` and `encryptDecryptLogic.ts`. | CLI ↔ mobile, GUI ↔ mobile, and core ↔ mobile **pass** (2026-10-27). Mobile → website **fails**. Not a device run. |
-| Website verifier | `deno task lint:website-csp` checks CSP meta tags and `_headers` only. `cli/tests/website_verify_test.ts`, `cli/tests/gui_website_verify_test.ts`, `test/mobile-website_verify_test.ts`, and `test/core-website_verify_test.ts` import `website/crypto.js`. | CLI, GUI, mobile, and core → website all **fail**. `website/crypto.js` is still a separate browser copy. |
+| Shared `core/` | `deno task test:core`, including `test/MessageExchange_test.ts`, `test/core-website_verify_test.ts`, and `test/core-mobile_compat_test.ts`. `cli/tests/core_compat_test.ts` checks CLI and GUI payloads with `Identity` directly. | CLI ↔ core, GUI ↔ core, core ↔ mobile, and core → website **pass** (2026-10-27). |
+| CLI | `deno task test:cli-utils` → `cli/tests/`. Utils, permissions, password prompt, revocation, plus `cli_roundtrip_test.ts`, `gui_compat_test.ts`, `mobile_compat_test.ts`, `core_compat_test.ts`, `website_verify_test.ts`, and `gui_website_verify_test.ts`. | Same CLI, CLI ↔ GUI, CLI ↔ mobile, CLI ↔ core, and CLI → website **pass**. |
+| GUI | `deno task test:gui-backend` plus Playwright `deno task test:e2e` (`gui/e2e/`). Identity spec covers detached verify, tamper reject, two-identity encrypt, and signed file encrypt/decrypt inside one GUI. `cli/tests/gui_mobile_compat_test.ts` calls `handleRequest`. | Same GUI session, plus CLI ↔ GUI, GUI ↔ mobile, GUI ↔ core, and GUI → website **pass**. |
+| Mobile app | Jest (`deno task test:mobile`) and Android Maestro (`deno task test:e2e:mobile`). Maestro `sign-verify.yaml` signs and verifies inside the app. Deno `test/mobile-signVerify_parity_test.ts` and `test/mobile-encryptDecrypt_parity_test.ts` call mobile logic and `core/` in one process. `test/mobile-website_verify_test.ts` calls `website/crypto.js`. `cli/tests/mobile_compat_test.ts`, `cli/tests/gui_mobile_compat_test.ts`, and `test/core-mobile_compat_test.ts` call `signVerifyLogic.ts` and `encryptDecryptLogic.ts`. | CLI ↔ mobile, GUI ↔ mobile, core ↔ mobile, and mobile → website **pass** (2026-10-27). Not a device run. |
+| Website verifier | `deno task lint:website-csp` checks CSP meta tags and `_headers`. `cli/tests/website_verify_test.ts`, `cli/tests/gui_website_verify_test.ts`, `test/mobile-website_verify_test.ts`, and `test/core-website_verify_test.ts` import `website/crypto.js`. | CLI, GUI, mobile, and core → website all **pass** (2026-10-27). `website/crypto.js` remains a separate browser copy of the verifier. |
 
 ## GUI ↔ mobile (2026-10-27)
 
@@ -109,6 +109,8 @@ fails `VerifySignature`. CLI and GUI public exports match the keys loaded by
 
 ## core → website (2026-10-27)
 
+Resolved later the same day in `website/crypto.js`. The notes below describe the failure before that fix.
+
 `test/core-website_verify_test.ts` builds Dilithium and SPHINCS+ identities
 with `new Identity`, signs with `Identity.signMessage`, and wraps the
 results in `buildSignedMessagePayload` and `buildDetachedSignaturePayload`.
@@ -161,6 +163,8 @@ identity. File encrypt and decrypt are not in this test.
 
 ## GUI → website (2026-10-27)
 
+Resolved later the same day in `website/crypto.js`. The notes below describe the failure before that fix.
+
 `cli/tests/gui_website_verify_test.ts` creates Dilithium and SPHINCS+
 identities through `POST /api/v1/identity/generate`, signs through
 `POST /api/v1/sign`, and checks the results with `website/crypto.js`.
@@ -182,6 +186,8 @@ helper still hashes the Kyber public key as hex text.
 
 ## CLI → website (2026-10-26)
 
+Resolved on 2026-10-27 in `website/crypto.js`. The notes below describe the failure before that fix.
+
 `cli/tests/website_verify_test.ts` runs the CLI in a temp `--home`, generates
 a Dilithium identity and a SPHINCS+ identity, exports the public identity,
 and signs one message three ways (salted attached, `--no-salt`, `--detached`).
@@ -201,6 +207,8 @@ Both steps failed:
 covers the module that page calls.
 
 ## Mobile → website (2026-10-27)
+
+Resolved later the same day in `website/crypto.js`. The notes below describe the failure before that fix.
 
 `test/mobile-website_verify_test.ts` signs with
 `mobile/src/services/signVerifyLogic.ts` (the helpers the app screens call)
@@ -247,8 +255,10 @@ between CLI and GUI and export/import between the phone and desktop. Storage
 roots stay intentionally separate for mobile
 ([[analysis-gui-mobile-parity-deltas]]).
 
-CLI, GUI, mobile, and core signatures are now checked against the website,
-and those checks fail. CLI ↔ GUI, CLI ↔ mobile, GUI ↔ mobile, and CLI, GUI,
+CLI, GUI, mobile, and core signatures are checked against the website, and
+those checks pass. `website/crypto.js` now tries `ebp::message::v1::` before
+the legacy `ebp::messagehash::` envelope, and it hashes the Kyber public key
+from decoded hex bytes. CLI ↔ GUI, CLI ↔ mobile, GUI ↔ mobile, and CLI, GUI,
 and mobile against `core/` are automated and pass. Phone ↔ desktop
 export/import is still not automated.
 

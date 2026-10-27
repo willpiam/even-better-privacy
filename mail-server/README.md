@@ -2,7 +2,7 @@
 
 This directory runs the mail server behind EBP's "Get started" onboarding
 wizard. Users pick `username@<MAIL_DOMAIN>`; the EBP key server (on Render)
-creates the mailbox here through Stalwart's JMAP management API.
+creates the mailbox here through Stalwart's JMAP management API (`POST /jmap`).
 
 Render cannot host this part: Render exposes only one HTTPS port to the
 internet (no inbound 25/465/587/993) and blocks outbound port 25 on every plan.

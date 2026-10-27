@@ -32,12 +32,25 @@ function sha256Hex(message) {
 	return bytesToHex(sha256(encoder.encode(message)));
 }
 
-// Same envelope format as `core/MessageHash.ts::buildMessageHashEnvelope`.
-function buildMessageHashEnvelope(message, salt) {
-	return `ebp::messagehash::${sha256Hex(message)}::${salt ?? ""}`;
+function hexToBytes(hex) {
+	if (typeof hex !== "string" || hex.length % 2 !== 0 || !/^[0-9a-fA-F]*$/.test(hex)) {
+		throw new Error("invalid hex");
+	}
+	const out = new Uint8Array(hex.length / 2);
+	for (let i = 0; i < hex.length; i += 2) {
+		out[i / 2] = parseInt(hex.slice(i, i + 2), 16);
+	}
+	return out;
 }
 
-function buildMessageHashEnvelopeFromHash(messageHash, salt) {
+// Current envelope matches `core/MessageHash.ts::buildPurposeHashEnvelope`
+// for purpose "message". The legacy envelope is still accepted, matching
+// `Identity.VerifySignature`.
+function buildCurrentEnvelopeFromHash(messageHash, salt) {
+	return `ebp::message::v1::${messageHash}::${salt ?? ""}`;
+}
+
+function buildLegacyEnvelopeFromHash(messageHash, salt) {
 	return `ebp::messagehash::${messageHash}::${salt ?? ""}`;
 }
 
@@ -76,13 +89,12 @@ function getFingerprintHrp(signingKeyType, encryptionKeyType) {
 }
 
 // Mirrors `core/Fingerprint.ts::computeIdentityMerkleRootRaw`. The signing
-// leaf hashes the base64-decoded public key bytes; the encryption leaf
-// hashes the UTF-8 bytes of the hex-string public key (preserving the
-// project's existing Kyber fingerprint behavior). The fingerprint is the
+// leaf hashes the base64-decoded public key bytes. The encryption leaf
+// hashes the hex-decoded Kyber public key bytes. The fingerprint is the
 // SHA-256 of the two leaves concatenated.
 function computeIdentityMerkleRootRaw(input) {
 	const signingLeaf = sha256(base64ToBytes(input.signingKey));
-	const encryptionLeaf = sha256(encoder.encode(input.encryptionKey));
+	const encryptionLeaf = sha256(hexToBytes(input.encryptionKey));
 	return sha256(concatBytes(signingLeaf, encryptionLeaf));
 }
 
@@ -142,11 +154,12 @@ export function verifySignature(publicIdentity, input) {
 		throw new Error("signature is required");
 	}
 
-	let envelopeBytes;
-	if (typeof input.messageHash === "string" && input.messageHash.length > 0) {
-		envelopeBytes = encoder.encode(buildMessageHashEnvelopeFromHash(input.messageHash, input.salt ?? ""));
-	} else if (typeof input.message === "string") {
-		envelopeBytes = encoder.encode(buildMessageHashEnvelope(input.message, input.salt ?? ""));
+	const salt = input.salt ?? "";
+	let messageHash = "";
+	if (typeof input.message === "string") {
+		messageHash = sha256Hex(input.message);
+	} else if (typeof input.messageHash === "string" && input.messageHash.length > 0) {
+		messageHash = input.messageHash;
 	} else {
 		throw new Error("either message or messageHash is required");
 	}
@@ -154,12 +167,20 @@ export function verifySignature(publicIdentity, input) {
 	const signer = selectSigner(signingKeyType);
 	const publicKeyBytes = base64ToBytes(signingKey);
 	const signatureBytes = base64ToBytes(input.signature);
-
-	try {
-		return signer.verify(signatureBytes, envelopeBytes, publicKeyBytes);
-	} catch {
-		return false;
+	const envelopes = [
+		buildCurrentEnvelopeFromHash(messageHash, salt),
+		buildLegacyEnvelopeFromHash(messageHash, salt),
+	];
+	for (const envelope of envelopes) {
+		try {
+			if (signer.verify(signatureBytes, encoder.encode(envelope), publicKeyBytes)) {
+				return true;
+			}
+		} catch {
+			// A malformed signature fails closed. The legacy envelope is still tried.
+		}
 	}
+	return false;
 }
 
 export { sha256Hex };

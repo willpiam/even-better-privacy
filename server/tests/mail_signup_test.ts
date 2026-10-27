@@ -25,7 +25,8 @@ type FakeStalwart = {
 function installFakeStalwart(): FakeStalwart {
   const state: FakeStalwart = { calls: [], failCreate: false, accounts: new Map() };
   let nextId = 1;
-  const fakeFetch = (_url: string, init: RequestInit): Promise<Response> => {
+  const fakeFetch = (url: string, init: RequestInit): Promise<Response> => {
+    assertEquals(url, "https://stalwart.test/jmap");
     const body = JSON.parse(String(init.body));
     const [method, args] = body.methodCalls[0];
     state.calls.push({ method, args });

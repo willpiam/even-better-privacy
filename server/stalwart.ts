@@ -3,8 +3,10 @@
 // =============================================================================
 //
 // Accounts are managed over JMAP (`x:Account/*`, `x:Domain/*` under the
-// `urn:stalwart:jmap` capability) at `${STALWART_ADMIN_URL}/api`. List-valued
-// fields such as `credentials` are maps keyed by integer strings ("0", "1").
+// `urn:stalwart:jmap` capability) at `${STALWART_ADMIN_URL}/jmap`. Stalwart
+// v0.16 retired the old `/api` management routes; `/api` is now only sign-in
+// and schema. List-valued fields such as `credentials` are maps keyed by
+// integer strings ("0", "1").
 
 export type StalwartConfig = {
   baseUrl: string;
@@ -52,7 +54,7 @@ export class StalwartClient {
   ): Promise<Record<string, unknown>> {
     let res: Response;
     try {
-      res = await this.fetchImpl(`${this.config.baseUrl}/api`, {
+      res = await this.fetchImpl(`${this.config.baseUrl}/jmap`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${this.config.token}`,
