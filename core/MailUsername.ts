@@ -10,6 +10,9 @@ export const MAIL_PASSWORD_MAX = 128;
 /** Path signed (but never stored) when resetting a managed mailbox password. */
 export const MAIL_PASSWORD_RESET_PATH = "ebp-mail::password-reset";
 
+/** Live end-to-end tests use `e2e` plus digits. People cannot register these. */
+export const E2E_MAIL_USERNAME = /^e2e[0-9]+$/;
+
 export const RESERVED_MAIL_USERNAMES: ReadonlySet<string> = new Set([
   "abuse",
   "admin",
@@ -38,6 +41,10 @@ export function normalizeMailUsername(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
+export function isE2eMailUsername(username: string): boolean {
+  return E2E_MAIL_USERNAME.test(normalizeMailUsername(username));
+}
+
 export type MailUsernameCheck =
   | { ok: true; username: string }
   | { ok: false; username: string; reason: string };
@@ -59,7 +66,7 @@ export function validateMailUsername(raw: string): MailUsernameCheck {
   if (/[.-]{2}/.test(username)) {
     return { ok: false, username, reason: "Don't put two dots or hyphens in a row." };
   }
-  if (RESERVED_MAIL_USERNAMES.has(username)) {
+  if (RESERVED_MAIL_USERNAMES.has(username) || isE2eMailUsername(username)) {
     return { ok: false, username, reason: "That name is reserved." };
   }
   return { ok: true, username };

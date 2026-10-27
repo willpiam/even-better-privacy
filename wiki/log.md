@@ -1,5 +1,78 @@
 # Wiki Log
 
+## [2026-10-27] test | core and mobile payload compatibility
+
+- Added `test/core-mobile_compat_test.ts`. Passed (~10s): signatures and encrypt/decrypt both ways, Dilithium and SPHINCS+ signatures.
+- Core side uses `Identity` and `Payloads.ts`. Mobile side uses `signVerifyLogic.ts` and `encryptDecryptLogic.ts`. Not a device run.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | GUI and mobile payload compatibility
+
+- Added `cli/tests/gui_mobile_compat_test.ts`. Passed (~41s): signatures and encrypt/decrypt both ways, Dilithium and SPHINCS+ signatures.
+- GUI side uses `handleRequest`. Mobile side uses `signVerifyLogic.ts` and `encryptDecryptLogic.ts`. Not a device run.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | CLI verifies its own payloads
+
+- Added `cli/tests/cli_roundtrip_test.ts`. Passed (~30s): a second CLI process verifies and decrypts CLI signatures and ciphertext.
+- Dilithium attached, unsalted, detached, and SPHINCS+ signatures. Unsigned and signed encrypt. A tampered signature is rejected.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | CLI and mobile payload compatibility
+
+- Added `cli/tests/mobile_compat_test.ts`. Passed (~42s): signatures and encrypt/decrypt both ways, Dilithium and SPHINCS+ signatures.
+- Mobile side uses `signVerifyLogic.ts` and `encryptDecryptLogic.ts`. Not a device run.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | core signatures vs website verifier
+
+- Added `test/core-website_verify_test.ts`. Dilithium, SPHINCS+, signed file, and fingerprint checks all fail (~4s).
+- Same website drift: `ebp::messagehash::` and hex-text Kyber leaf. Core signs with `Identity.signMessage` and `core/Payloads.ts`.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | GUI signatures vs website verifier
+
+- Added `cli/tests/gui_website_verify_test.ts`. Dilithium, SPHINCS+, signed file, and fingerprint checks all fail (~24s).
+- Same website drift as CLI and mobile: `ebp::messagehash::` and hex-text Kyber leaf. GUI signs through `POST /api/v1/sign`; signed files follow `gui/app.js`.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | CLI and GUI payloads vs core
+
+- Added `cli/tests/core_compat_test.ts`. Both tests passed: CLI ↔ core (~51s) and GUI ↔ core (~48s).
+- Signatures, unsigned encrypt, and signed encrypt round-trip. Public exports match `Identity.fromStorageFormat`.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-27] test | mobile signatures vs website verifier
+
+- Added `test/mobile-website_verify_test.ts`. Dilithium, SPHINCS+, signed file, and fingerprint checks all fail.
+- Same website drift as the CLI: `ebp::messagehash::` and hex-text Kyber leaf. Mobile signs through `signVerifyLogic.ts` / `Identity.signMessage`.
+- `deno task test:core` now allows net. Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-26] test | CLI and GUI payload compatibility
+
+- Added `cli/tests/gui_compat_test.ts`. Passed: signatures and encrypt/decrypt both ways, Dilithium and SPHINCS+ signatures.
+- `deno task test:cli-utils` now allows `sys` hostname so the GUI backend can load.
+- Updated: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-26] test | CLI signatures vs website verifier
+
+- Added `cli/tests/website_verify_test.ts`. Dilithium and SPHINCS+ both fail.
+- Cause: website still checks `ebp::messagehash::` and hashes the Kyber key as hex text. CLI signs `ebp::message::v1::` and `core/Fingerprint.ts` hashes decoded key bytes.
+- Updated: [[analysis-cross-client-compatibility-tests]], [[component-website]].
+
+## [2026-10-26] query | cross-client compatibility tests
+
+- Answered: no suite confirms app, GUI, CLI, and website payload compatibility. CLI is still supported. Website verifier has CSP lint only, no crypto tests.
+- Filed: [[analysis-cross-client-compatibility-tests]].
+
+## [2026-10-26] update | pqpost mail end-to-end test
+
+- `e2e` plus digits is a reserved mailbox prefix. `deno task test:pqpost-mail`
+  creates two of those addresses, sends local mail, and deletes them through
+  `POST /api/v1/mail/e2e/cleanup` when `MAIL_E2E_SECRET` is set.
+- [[analysis-ebp-managed-email-onboarding]] notes signup is enabled and that
+  external delivery still waits on outbound port 25.
+
 ## [2026-10-25] note | post-quantum DKIM later
 
 - Recorded in [[analysis-ebp-managed-email-onboarding]] and

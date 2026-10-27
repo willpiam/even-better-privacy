@@ -2,7 +2,7 @@
 title: "Hierarchy GUI E2E Coverage"
 type: analysis
 status: active
-last_updated: 2026-08-10
+last_updated: 2026-10-26
 source_count: 5
 tags:
   - analysis
@@ -89,6 +89,7 @@ client’s pending-list sync.
 - [[analysis-mobile-certificates-ux]]
 - [[analysis-pending-hierarchy-proposer-visibility]]
 - [[analysis-mobile-e2e-framework]]
+- [[analysis-cross-client-compatibility-tests]]
 
 ## Sources
 

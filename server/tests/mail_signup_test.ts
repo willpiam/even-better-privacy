@@ -14,6 +14,7 @@ type MainModule = typeof import("../main.ts");
 
 const DOMAIN = "pqpost.test";
 const MAIL_PASSWORD = "x".repeat(32);
+const E2E_SECRET = "e2e-test-secret-value";
 
 type FakeStalwart = {
   calls: Array<{ method: string; args: Record<string, unknown> }>;
@@ -63,10 +64,12 @@ async function withServer(
   opts: { enabled?: boolean } = {},
 ): Promise<void> {
   const dbPath = await Deno.makeTempFile({ suffix: ".sqlite" });
+  Deno.env.set("DB_TYPE", "sqlite");
   Deno.env.set("DB_PATH", dbPath);
   Deno.env.set("MAIL_DOMAIN", DOMAIN);
   Deno.env.set("MAIL_HOST", `mail.${DOMAIN}`);
   Deno.env.set("MAIL_SIGNUP_ENABLED", opts.enabled === false ? "false" : "true");
+  Deno.env.set("MAIL_E2E_SECRET", E2E_SECRET);
   const stalwart = installFakeStalwart();
   rateLimitStore.clear();
   const mod: MainModule = await import(`../main.ts#${crypto.randomUUID()}`);
@@ -84,7 +87,7 @@ async function withServer(
       // ignore
     }
     setStalwartClientForTests(null);
-    for (const key of ["DB_PATH", "MAIL_DOMAIN", "MAIL_HOST", "MAIL_SIGNUP_ENABLED"]) {
+    for (const key of ["DB_PATH", "MAIL_DOMAIN", "MAIL_HOST", "MAIL_SIGNUP_ENABLED", "MAIL_E2E_SECRET"]) {
       Deno.env.delete(key);
     }
   }
@@ -104,15 +107,25 @@ async function registerIdentity(mod: MainModule) {
   return { fingerprint, signingKey };
 }
 
-function post(mod: MainModule, path: string, body: unknown): Promise<Response> {
-  rateLimitStore.clear();
+function post(
+  mod: MainModule,
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+  resetLimit = true,
+): Promise<Response> {
+  if (resetLimit) rateLimitStore.clear();
   return mod.handleRequest(
     new Request(`http://localhost${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
     }),
   );
+}
+
+function e2eHeaders(): Record<string, string> {
+  return { "x-ebp-e2e-secret": E2E_SECRET };
 }
 
 function get(mod: MainModule, path: string): Promise<Response> {
@@ -124,6 +137,8 @@ async function signup(
   identity: Awaited<ReturnType<typeof registerIdentity>>,
   username: string,
   nonce = 0,
+  headers: Record<string, string> = {},
+  resetLimit = true,
 ): Promise<Response> {
   const { proof } = createSignedProof(identity.signingKey, {
     nonce,
@@ -136,7 +151,7 @@ async function signup(
     username,
     mailPassword: MAIL_PASSWORD,
     detailProof: proof,
-  });
+  }, headers, resetLimit);
 }
 
 Deno.test("validateMailUsername enforces shape and reserved names", () => {
@@ -148,6 +163,8 @@ Deno.test("validateMailUsername enforces shape and reserved names", () => {
   assert(!validateMailUsername("al..ice").ok);
   assert(!validateMailUsername("al_ice").ok);
   assert(!validateMailUsername("postmaster").ok);
+  assert(!validateMailUsername("e2e123").ok);
+  assert(validateMailUsername("e2e").ok);
 });
 
 Deno.test("mail signup config reports disabled when flag is off", async () => {
@@ -313,5 +330,87 @@ Deno.test("reset-password requires a fresh identity-signed proof", async () => {
     });
     assertEquals(staleRes.status, 400);
     await staleRes.body?.cancel();
+  });
+});
+
+Deno.test("e2e addresses require the test secret and can be deleted", async () => {
+  await withServer(async (mod, stalwart) => {
+    const blocked = await (await get(mod, "/api/v1/mail/username-available?u=e2e42")).json();
+    assertEquals(blocked.available, false);
+
+    const identity = await registerIdentity(mod);
+    const denied = await signup(mod, identity, "e2e42");
+    assertEquals(denied.status, 400);
+    await denied.body?.cancel();
+    assertEquals(stalwart.accounts.size, 0);
+
+    const created = await signup(mod, identity, "e2e42", 0, e2eHeaders());
+    const createdBody = await created.json();
+    assertEquals(created.status, 200, JSON.stringify(createdBody));
+    assertEquals(createdBody.email, `e2e42@${DOMAIN}`);
+
+    const missing = await post(mod, "/api/v1/mail/e2e/cleanup", { usernames: ["e2e42"] });
+    assertEquals(missing.status, 404);
+    await missing.body?.cancel();
+
+    const wrongName = await post(mod, "/api/v1/mail/e2e/cleanup", { usernames: ["alice"] }, e2eHeaders());
+    assertEquals(wrongName.status, 400);
+    await wrongName.body?.cancel();
+    assertEquals(stalwart.accounts.size, 1);
+
+    const removed = await post(mod, "/api/v1/mail/e2e/cleanup", { usernames: ["e2e42"] }, e2eHeaders());
+    const removedBody = await removed.json();
+    assertEquals(removed.status, 200, JSON.stringify(removedBody));
+    assertEquals(removedBody.removed, ["e2e42"]);
+    assertEquals(stalwart.accounts.size, 0);
+
+    const idRes = await get(mod, `/api/v1/identity/${identity.fingerprint}`);
+    const idBody = await idRes.json();
+    assertEquals(idBody.details.email, undefined);
+    const avail = await (await get(mod, "/api/v1/mail/username-available?u=e2e42")).json();
+    assertEquals(avail.available, false);
+
+    const again = await signup(mod, identity, "e2e42", 1, e2eHeaders());
+    assertEquals(again.status, 200, await again.text());
+  });
+});
+
+Deno.test("e2e sweep deletes only old test mailboxes", async () => {
+  await withServer(async (mod, stalwart) => {
+    const oldIdentity = await registerIdentity(mod);
+    const recentIdentity = await registerIdentity(mod);
+    assertEquals((await signup(mod, oldIdentity, "e2e100", 0, e2eHeaders())).status, 200);
+    assertEquals((await signup(mod, recentIdentity, "e2e200", 0, e2eHeaders())).status, 200);
+
+    const db = await mod.getDbForTests();
+    await db.query("UPDATE mailboxes SET created_at = ? WHERE username = ?", [
+      Date.now() - 2 * 60 * 60_000,
+      "e2e100",
+    ]);
+
+    const swept = await post(
+      mod,
+      "/api/v1/mail/e2e/cleanup",
+      { sweepOlderThanHours: 1 },
+      e2eHeaders(),
+    );
+    const body = await swept.json();
+    assertEquals(swept.status, 200, JSON.stringify(body));
+    assertEquals(body.removed, ["e2e100"]);
+    assertEquals(stalwart.accounts.size, 1);
+
+    const kept = await post(mod, "/api/v1/mail/e2e/cleanup", { usernames: ["e2e200"] }, e2eHeaders());
+    assertEquals((await kept.json()).removed, ["e2e200"]);
+    assertEquals(stalwart.accounts.size, 0);
+  });
+});
+
+Deno.test("e2e signup is not capped by the public signup rate limit", async () => {
+  await withServer(async (mod) => {
+    for (let i = 0; i < 4; i++) {
+      const identity = await registerIdentity(mod);
+      const res = await signup(mod, identity, `e2e${1000 + i}`, 0, e2eHeaders(), false);
+      assertEquals(res.status, 200, await res.text());
+    }
   });
 });

@@ -2,7 +2,7 @@
 title: "EBP Website"
 type: component
 status: active
-last_updated: 2026-09-09
+last_updated: 2026-10-26
 source_count: 6
 tags:
   - component
@@ -54,8 +54,8 @@ The verifier performs the same set of cross-checks as the GUI's `verify-file-for
 1. **Format** — payload JSON parse; bech32 fingerprint format check on the payload's `fingerprint` field and (if pasted) the public identity's `fingerprint` field. Uses the same HRPs as `core/Fingerprint.ts` (`ebpdk`, `ebpsk`).
 2. **Cross-check fingerprints** — when both a payload `fingerprint` and an embedded `payload.identity.fingerprint` (or pasted public identity) are present, they must agree.
 3. **Resolve signer identity** — the verifier prefers a pasted public identity, then a payload-embedded `identity`, and finally a `GET /api/v1/identity/{fingerprint}` server lookup as a last resort.
-4. **Re-derive fingerprint from public keys** — recomputes the bech32 fingerprint from the resolved identity's `signingKey` + `encryptionKey` (mirroring `core/Fingerprint.ts::computeIdentityFingerprint`) and rejects the identity if the computed fingerprint does not match the claimed one. This closes the loophole where a hostile server (or a hostile pasted JSON blob) could pair a real fingerprint with a different `signingKey`, making an unrelated signature appear valid.
-5. **Cryptographic verify** — `verifySignature()` in `website/crypto.js` builds the same hash envelope used by `core/MessageHash.ts` (`ebp::messagehash::<hash>::<salt>`) and calls `ml_dsa87.verify` or `slh_dsa_sha2_256s.verify` from `@noble/post-quantum`.
+4. **Re-derive fingerprint from public keys** — recomputes the bech32 fingerprint from the resolved identity's `signingKey` + `encryptionKey` and rejects the identity if the computed fingerprint does not match the claimed one. `website/crypto.js` hashes the Kyber public key as the UTF-8 bytes of its hex string. `core/Fingerprint.ts` hashes the decoded hex bytes. A CLI `export-public` fingerprint therefore does not match the website's recomputation (`cli/tests/website_verify_test.ts`, 2026-10-26).
+5. **Cryptographic verify** — `verifySignature()` in `website/crypto.js` still builds the legacy envelope `ebp::messagehash::<hash>::<salt>`. The CLI signs `ebp::message::v1::<hash>::<salt>` (`core/MessageHash.ts`). Core's `Identity.VerifySignature` accepts the current envelope and falls back to the legacy one. The website does not, so current CLI signatures fail closed. The call still uses `ml_dsa87.verify` or `slh_dsa_sha2_256s.verify` from `@noble/post-quantum`.
 6. **Server advisory (optional)** — if reachable, `POST /api/v1/verify-signature` is called purely as a sanity-check; its `verified` boolean is reported alongside the local result as `serverAdvisory`/`serverConsistent`. The local result is authoritative.
 
 ### Inputs

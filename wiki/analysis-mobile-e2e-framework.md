@@ -2,7 +2,7 @@
 title: "Mobile E2E Framework"
 type: analysis
 status: active
-last_updated: 2026-10-20
+last_updated: 2026-10-26
 source_count: 8
 tags:
   - analysis
@@ -151,6 +151,7 @@ on Verify (`pasteText` cannot type ML-DSA JSON). Verify reads embedded
 - [[analysis-mobile-certificates-ux]]
 - [[analysis-gui-mobile-parity-deltas]]
 - [[analysis-mobile-testing-and-gui-gaps]]
+- [[analysis-cross-client-compatibility-tests]]
 
 ## Sources
 

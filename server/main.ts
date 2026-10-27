@@ -28,10 +28,12 @@ import {
 } from "./handlers/hierarchy.ts";
 import { handleListIdentities, handleSearchIdentities } from "./handlers/discovery.ts";
 import {
+  handleMailE2eCleanup,
   handleMailResetPassword,
   handleMailSignup,
   handleMailSignupConfig,
   handleMailUsernameAvailable,
+  isMailE2eAuthorized,
 } from "./handlers/mail-signup.ts";
 
 // =============================================================================
@@ -140,7 +142,9 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
       return respond(new Response(null, { status: 204, headers: corsHeaders }));
     }
 
-    if (!RATE_LIMIT_DISABLED && url.pathname !== "/api/v1/health") {
+    const e2eBypass = (url.pathname === "/api/v1/mail/signup" ||
+      url.pathname === "/api/v1/mail/e2e/cleanup") && isMailE2eAuthorized(req);
+    if (!RATE_LIMIT_DISABLED && url.pathname !== "/api/v1/health" && !e2eBypass) {
       const rateLimitError = checkRateLimit(clientIp, req.method, url.pathname);
       if (rateLimitError) {
         return jsonResponse({ error: rateLimitError }, 429);
@@ -171,6 +175,10 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/signup") {
       return respond(attachCors(await handleMailSignup(req, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/e2e/cleanup") {
+      return respond(attachCors(await handleMailE2eCleanup(req, db), corsHeaders));
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/reset-password") {

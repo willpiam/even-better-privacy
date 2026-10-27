@@ -846,6 +846,31 @@ export async function deleteMailbox(
   ]);
 }
 
+export async function deleteDetail(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  path: string,
+): Promise<void> {
+  await db.query(
+    "DELETE FROM details WHERE identity_fingerprint = ? AND path = ?",
+    [fingerprint, path],
+  );
+}
+
+/** `e2e…` mailboxes created at or before `olderThan`. Age is compared in SQL. */
+export async function listOldE2eMailboxes(
+  db: DatabaseAdapter,
+  domain: string,
+  olderThan: number,
+): Promise<MailboxRow[]> {
+  const rows = await db.query<Parameters<typeof toMailboxRow>[0]>(
+    `SELECT ${MAILBOX_COLUMNS} FROM mailboxes
+     WHERE domain = ? AND username LIKE 'e2e%' AND created_at <= ?`,
+    [domain, olderThan],
+  );
+  return rows.map(toMailboxRow);
+}
+
 export async function getMailboxByUsername(
   db: DatabaseAdapter,
   username: string,

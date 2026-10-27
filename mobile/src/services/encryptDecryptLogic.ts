@@ -1,7 +1,12 @@
 /**
  * Pure encrypt/decrypt helpers (Deno/Jest-testable; no RNFS / storage).
  */
-import type {Identity} from '../../../core/Identity.ts';
+import {Identity} from '../../../core/Identity.ts';
+import type {ExternalIdentity} from '../../../core/ExternalIdentity.ts';
+import {
+  buildEncryptedMessagePayload,
+  buildEncryptedSignedMessagePayload,
+} from '../../../core/Payloads.ts';
 
 export function normalizeFileUri(uri: string): string {
   return uri.startsWith('file://') ? uri.replace('file://', '') : uri;
@@ -65,4 +70,69 @@ export function isEncryptedFileType(type: unknown): boolean {
 
 export function isEncryptedSignedFileType(type: unknown): boolean {
   return type === 'ebp-encrypted-signed-file';
+}
+
+export function encryptMessageWithIdentity(params: {
+  message: string;
+  recipient: ExternalIdentity;
+  identity?: Identity;
+  sign?: boolean;
+}): Record<string, unknown> {
+  if (!params.message) {
+    throw new Error('Message is required');
+  }
+  if (!params.recipient?.fingerprint) {
+    throw new Error('Recipient is required');
+  }
+  if (params.sign) {
+    if (!params.identity) {
+      throw new Error('Password is required when signing');
+    }
+    const ciphertext = params.identity.signAndEncryptFor(
+      params.message,
+      params.recipient,
+    );
+    return buildEncryptedSignedMessagePayload({
+      recipientFingerprint: params.recipient.fingerprint,
+      senderFingerprint: params.identity.toFingerprint(),
+      ciphertext,
+      senderIdentity: publicIdentityBlock(params.identity),
+    }) as Record<string, unknown>;
+  }
+  const ciphertext = Identity.EncryptFor(params.recipient, params.message);
+  return buildEncryptedMessagePayload({
+    recipientFingerprint: params.recipient.fingerprint,
+    ciphertext,
+  }) as Record<string, unknown>;
+}
+
+export function decryptMessageWithIdentity(params: {
+  identity: Identity;
+  payload: Record<string, unknown>;
+  sender?: ExternalIdentity | null;
+}): {
+  message: string;
+  verified: boolean | null;
+  verifyStatus: 'unsigned' | 'valid' | 'valid_unbound' | 'invalid';
+} {
+  const ciphertext = requireCiphertext(params.payload);
+  if (isEncryptedMessageType(params.payload.type)) {
+    return {
+      message: params.identity.encryptionKey.decrypt(ciphertext),
+      verified: null,
+      verifyStatus: 'unsigned',
+    };
+  }
+  if (isEncryptedSignedMessageType(params.payload.type)) {
+    if (!params.sender) {
+      throw new Error('Sender required to verify signature');
+    }
+    const result = params.identity.decryptAndVerify(ciphertext, params.sender);
+    return {
+      message: result.message,
+      verified: result.verified,
+      verifyStatus: result.verifyStatus,
+    };
+  }
+  throw new Error('Unsupported payload type');
 }

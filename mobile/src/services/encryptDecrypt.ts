@@ -7,21 +7,20 @@ import {
   buildEncryptedSignedFilePayload,
   createFileCleartextEnvelope,
   parseFileCleartextEnvelope,
-  buildEncryptedMessagePayload,
-  buildEncryptedSignedMessagePayload,
   parseMultiRecipientEntries,
 } from '../ebpCore';
 import {loadContact} from './contacts';
 import {loadIdentity} from './storage';
 import {resolveSenderForDecrypt} from './senderContext';
 import {
+  decryptMessageWithIdentity,
+  encryptMessageWithIdentity,
   isEncryptedFileType,
   isEncryptedMessageType,
   isEncryptedSignedFileType,
   isEncryptedSignedMessageMultiType,
   isEncryptedSignedMessageType,
   normalizeFileUri,
-  publicIdentityBlock,
   requireCiphertext,
   senderFieldsFromPayload,
 } from './encryptDecryptLogic';
@@ -47,24 +46,19 @@ export async function encryptMessage(params: {
     throw new Error('Recipient is required');
   }
   const contact = await loadContact(params.recipient);
+  let identity: Identity | undefined;
   if (params.sign) {
     if (!params.password) {
       throw new Error('Password is required when signing');
     }
-    const identity = await loadIdentity(params.identityName, params.password);
-    const ciphertext = identity.signAndEncryptFor(params.message, contact);
-    return buildEncryptedSignedMessagePayload({
-      recipientFingerprint: contact.fingerprint,
-      senderFingerprint: identity.toFingerprint(),
-      ciphertext,
-      senderIdentity: publicIdentityBlock(identity),
-    }) as Record<string, unknown>;
+    identity = await loadIdentity(params.identityName, params.password);
   }
-  const ciphertext = Identity.EncryptFor(contact, params.message);
-  return buildEncryptedMessagePayload({
-    recipientFingerprint: contact.fingerprint,
-    ciphertext,
-  }) as Record<string, unknown>;
+  return encryptMessageWithIdentity({
+    message: params.message,
+    recipient: contact,
+    identity,
+    sign: params.sign,
+  });
 }
 
 export async function decryptMessage(params: {
@@ -84,8 +78,9 @@ export async function decryptMessage(params: {
   const type = params.payload.type;
   const ciphertext = requireCiphertext(params.payload);
   if (isEncryptedMessageType(type)) {
+    const result = decryptMessageWithIdentity({identity, payload: params.payload});
     return {
-      message: identity.encryptionKey.decrypt(ciphertext),
+      message: result.message,
       verified: null,
       verifyStatus: 'unsigned',
       isKnownContact: false,
@@ -127,7 +122,11 @@ export async function decryptMessage(params: {
       senderFingerprint: senderFp,
       embeddedIdentity: embedded,
     });
-    const result = identity.decryptAndVerify(ciphertext, contact);
+    const result = decryptMessageWithIdentity({
+      identity,
+      payload: params.payload,
+      sender: contact,
+    });
     return {
       message: result.message,
       verified: result.verified,

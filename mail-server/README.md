@@ -94,6 +94,7 @@ ssh -L 8080:127.0.0.1:8080 root@203.0.113.10
 | `STALWART_ADMIN_TOKEN` | `...` | API key from step 5.7 |
 | `STALWART_DOMAIN_ID` | `b` | JMAP id of the domain (looked up automatically when unset) |
 | `MAIL_QUOTA_BYTES` | `1073741824` | Per-mailbox disk quota (default 1 GiB) |
+| `MAIL_E2E_SECRET` | long random string | Lets `deno task test:pqpost-mail` create and delete only `e2e` plus digits addresses |
 
 Optionally point the existing verification mailer at Stalwart too:
 `SMTP_HOST=mail.pqpost.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`,

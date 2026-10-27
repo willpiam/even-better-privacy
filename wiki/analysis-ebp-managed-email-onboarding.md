@@ -2,7 +2,7 @@
 title: "EBP Managed Email Onboarding"
 type: analysis
 status: active
-last_updated: 2026-10-25
+last_updated: 2026-10-26
 source_count: 8
 tags:
   - analysis
@@ -50,8 +50,9 @@ Registry RDAP lookups on 2026-10-18 found `pqpost.com` (recommended),
 `pqmail.com`, `pqmail.net`, `pq.email`, and `ebp.email` were already taken.
 `pqpost.com` was registered on 2026-10-20 through Cloudflare (nameservers
 `holly.ns.cloudflare.com` and `johnny.ns.cloudflare.com`, expiration
-2027-10-20). That name is the production `MAIL_DOMAIN`. Signup stays off
-until Stalwart is running.
+2027-10-20). That name is the production `MAIL_DOMAIN`. Signup is enabled.
+Mail between `@pqpost.com` addresses works. Delivery to other providers still
+waits on Hetzner opening outbound port 25.
 
 ## Signup API
 
@@ -79,8 +80,14 @@ mailbox row are rolled back.
 
 Username rules live in `core/MailUsername.ts`: 3–30 characters, `[a-z0-9.-]`,
 no leading/trailing or doubled dots or hyphens, and a reserved list (`admin`,
-`postmaster`, `abuse`, and similar). The mailbox password is generated on the
-device (32 hex characters).
+`postmaster`, `abuse`, and similar). Names matching `e2e` plus digits are
+reserved too. `deno task test:pqpost-mail` is the only caller allowed to
+create them, and only while `MAIL_E2E_SECRET` is set. That test sends one
+message between two fresh addresses, then `POST /api/v1/mail/e2e/cleanup`
+removes the Stalwart account, the `mailboxes` row, and the email detail.
+A sweep in the same call deletes leftover `e2e` plus digits mailboxes older
+than six hours. The apps have no delete-mailbox control. The mailbox password
+is generated on the device (32 hex characters).
 
 Password reset takes a fresh identity-signed proof (nonce + timestamp) whose
 detail binds the address to a hash of the new secret, then calls Stalwart

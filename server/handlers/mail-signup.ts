@@ -2,27 +2,33 @@ import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
   buildMailPasswordResetDetail,
+  isE2eMailUsername,
   MAIL_PASSWORD_MAX,
   MAIL_PASSWORD_MIN,
   MAIL_PASSWORD_RESET_PATH,
+  normalizeMailUsername,
   validateMailUsername,
 } from "../../core/MailUsername.ts";
 import { LIMITS, readJsonBody, validateStringLength } from "../body.ts";
 import { json } from "../response.ts";
 import {
+  deleteDetail,
   deleteMailbox,
   ensureNewNonce,
   getDetailRecord,
   getIdentity,
   getMailboxByFingerprint,
+  getMailboxByUsername,
   insertDetail,
   insertMailbox,
   isIdentityRevoked,
   isMailboxUsernameTaken,
+  listOldE2eMailboxes,
   markDetailVerified,
   setMailboxStalwartId,
   updateDetail,
 } from "../db/index.ts";
+import { timingSafeEqual } from "node:crypto";
 import type { DatabaseAdapter } from "../db/index.ts";
 import { verifyDetailProof } from "../detail.ts";
 import {
@@ -35,6 +41,28 @@ import {
 const RESET_PROOF_MAX_AGE_MS = 10 * 60_000;
 const RESET_PROOF_MAX_SKEW_MS = 2 * 60_000;
 const DEFAULT_QUOTA_BYTES = 1024 * 1024 * 1024;
+const E2E_SECRET_HEADER = "x-ebp-e2e-secret";
+const E2E_SECRET_MIN = 16;
+const E2E_SWEEP_MIN_HOURS = 1;
+const E2E_SWEEP_DEFAULT_HOURS = 6;
+const E2E_CLEANUP_MAX = 10;
+
+function secretEquals(provided: string, expected: string): boolean {
+  const providedBytes = new TextEncoder().encode(provided);
+  const expectedBytes = new TextEncoder().encode(expected);
+  if (providedBytes.length !== expectedBytes.length) {
+    timingSafeEqual(expectedBytes, expectedBytes);
+    return false;
+  }
+  return timingSafeEqual(providedBytes, expectedBytes);
+}
+
+/** True when the request carries the test-only secret. Unset or short secrets never match. */
+export function isMailE2eAuthorized(req: Request): boolean {
+  const expected = (Deno.env.get("MAIL_E2E_SECRET") ?? "").trim();
+  if (expected.length < E2E_SECRET_MIN) return false;
+  return secretEquals(req.headers.get(E2E_SECRET_HEADER) ?? "", expected);
+}
 
 export type MailSignupSettings = {
   enabled: boolean;
@@ -141,8 +169,12 @@ export async function handleMailSignup(
   }
 
   const usernameCheck = validateMailUsername(String(payload.username ?? ""));
-  if (!usernameCheck.ok) return json({ error: usernameCheck.reason }, 400);
-  const username = usernameCheck.username;
+  const username = usernameCheck.ok
+    ? usernameCheck.username
+    : normalizeMailUsername(usernameCheck.username);
+  if (!usernameCheck.ok && !(isE2eMailUsername(username) && isMailE2eAuthorized(req))) {
+    return json({ error: usernameCheck.reason }, 400);
+  }
   const email = `${username}@${settings.domain}`;
 
   const mailPassword = validateMailPassword(payload.mailPassword);
@@ -309,4 +341,77 @@ export async function handleMailResetPassword(
     return json({ error: "mail server could not update the password" }, 502);
   }
   return json({ ok: true, email, ...connectionInfo(settings) });
+}
+
+async function removeE2eMailbox(
+  db: DatabaseAdapter,
+  stalwart: StalwartClient,
+  domain: string,
+  username: string,
+): Promise<void> {
+  const mailbox = await getMailboxByUsername(db, username, domain);
+  if (!mailbox) return;
+  if (mailbox.stalwartId) await stalwart.destroyUser(mailbox.stalwartId);
+  await deleteDetail(db, mailbox.fingerprint, "email");
+  await deleteMailbox(db, username, domain);
+}
+
+export async function handleMailE2eCleanup(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
+  if (!isMailE2eAuthorized(req)) return json({ error: "not found" }, 404);
+  const settings = readMailSignupSettings();
+  const stalwart = getStalwartClient();
+  if (!settings.enabled || !stalwart) return disabled();
+
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) return json({ error: bodyResult.error }, bodyResult.status);
+  const payload = bodyResult.data;
+
+  const requested: string[] = [];
+  if (payload.usernames !== undefined) {
+    if (!Array.isArray(payload.usernames) || payload.usernames.length > E2E_CLEANUP_MAX) {
+      return json({ error: `usernames must be a list of at most ${E2E_CLEANUP_MAX}` }, 400);
+    }
+    for (const raw of payload.usernames) {
+      const username = normalizeMailUsername(String(raw ?? ""));
+      if (!isE2eMailUsername(username)) {
+        return json({ error: "only e2e test addresses can be deleted" }, 400);
+      }
+      requested.push(username);
+    }
+  }
+
+  let sweepHours: number | null = null;
+  if (payload.sweepOlderThanHours !== undefined) {
+    const hours = Number(payload.sweepOlderThanHours);
+    if (!Number.isFinite(hours) || hours < E2E_SWEEP_MIN_HOURS) {
+      return json({ error: `sweepOlderThanHours must be at least ${E2E_SWEEP_MIN_HOURS}` }, 400);
+    }
+    sweepHours = hours;
+  } else if (requested.length === 0) {
+    sweepHours = E2E_SWEEP_DEFAULT_HOURS;
+  }
+
+  const targets = new Set(requested);
+  if (sweepHours !== null) {
+    const olderThan = Date.now() - sweepHours * 60 * 60_000;
+    const rows = await listOldE2eMailboxes(db, settings.domain, olderThan);
+    for (const row of rows) {
+      if (isE2eMailUsername(row.username)) targets.add(row.username);
+    }
+  }
+
+  const removed: string[] = [];
+  try {
+    for (const username of targets) {
+      await removeE2eMailbox(db, stalwart, settings.domain, username);
+      removed.push(username);
+    }
+  } catch (err) {
+    console.error("e2e mailbox cleanup failed:", err);
+    return json({ error: "mail server could not delete the mailbox", removed }, 502);
+  }
+  return json({ ok: true, removed });
 }

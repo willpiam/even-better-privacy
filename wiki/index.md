@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-09-09
+last_updated: 2026-10-27
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-09-09 (finish-line Wave 4 Maestro + parity closeout)
+Last updated: 2026-10-27 (core and mobile payload compatibility)
 
 ## Wiki Operations
 
@@ -106,6 +106,8 @@ Last updated: 2026-09-09 (finish-line Wave 4 Maestro + parity closeout)
   Related to managed signup above; fingerprint local-parts are not that design.
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
+- [[analysis-cross-client-compatibility-tests]] - CLI, GUI, mobile, and core
+  payload handoffs pass. CLI, GUI, mobile, and core → website signature tests fail.
 - [[analysis-mobile-e2e-framework]] - Android Maestro E2E (smoke / identity /
   details / sign-verify / hierarchy) via `deno task test:e2e:mobile`.
 - [[analysis-mobile-testing-and-gui-gaps]] - Default 11 Maestro flows, GUI E2E

@@ -157,6 +157,12 @@ export class StalwartClient {
   }
 
   async destroyUser(accountId: string): Promise<void> {
-    await this.call("x:Account/set", { destroy: [accountId] });
+    const result = await this.call("x:Account/set", { destroy: [accountId] });
+    const notDestroyed = (result.notDestroyed ?? {}) as Record<string, { type?: string }>;
+    const err = notDestroyed[accountId];
+    if (!err) return;
+    const type = err.type ?? "";
+    if (type === "notFound" || type === "not_found") return;
+    throw new StalwartError(`mailbox not destroyed: ${type || "unknown"}`, type || "not_destroyed");
   }
 }
