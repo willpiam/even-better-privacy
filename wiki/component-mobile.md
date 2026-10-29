@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-10-20
+last_updated: 2026-10-28
 source_count: 6
 tags:
   - component
@@ -34,7 +34,9 @@ Mail UI parity (2026-09-09): folder/search/page/limit, help screen, HTML WebView
 - Imports shared crypto/wire helpers from `core/` via `mobile/src/ebpCore.ts` (payload parsing, sender resolution, file payload builders, password policy).
 - App-local storage under `DocumentDirectory/ebp/` (not `~/.ebp/`); see [[analysis-gui-mobile-parity-deltas]].
 - Contact normalization (`mobile/src/services/contacts.ts`) strips revoked details from server responses ([[analysis-sync-revoked-details-bug]]).
-- Compose resolves To addresses against contact `email` / `opaque::email` details ([[analysis-mobile-compose-recipient-resolve]]).
+- Compose resolves To addresses against saved contacts first, then the key
+  server when exactly one verified `email` detail matches
+  ([[analysis-mobile-compose-recipient-resolve]], [[analysis-pqpost-recipient-identity]]).
 - Reply from message view prefills compose and, for EBP mail after decrypt, encrypts to the signer identity ([[analysis-mobile-mail-reply]]).
 
 ## Parity

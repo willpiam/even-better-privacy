@@ -2,7 +2,7 @@ import type { ExternalIdentity } from "../../core/Identity.ts";
 import { computeExternalFingerprint } from "../../core/Fingerprint.ts";
 
 export { computeExternalFingerprint };
-import type { CLIContext } from "../../cli/utils.ts";
+import { type CLIContext, ensurePrivateDir } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 
 export async function loadContact(
@@ -131,5 +131,42 @@ export async function deleteContact(
   }
 
   throw new HttpError(STATUS.NotFound, "contact not found");
+}
+
+export async function saveExternalContact(
+  ctx: CLIContext,
+  external: ExternalIdentity,
+  name?: string,
+): Promise<{ name: string; fingerprint: string }> {
+  if (!external.fingerprint || !external.signingKey || !external.encryptionKey) {
+    throw new HttpError(STATUS.BadGateway, "invalid identity payload from server");
+  }
+  await ensurePrivateDir(ctx.contactsDir);
+  const contactName = name?.trim() || external.fingerprint.substring(0, 16);
+  const contactPath = `${ctx.contactsDir}/${contactName}.json`;
+  try {
+    const existingRaw = await Deno.readTextFile(contactPath);
+    const existing = JSON.parse(existingRaw) as ExternalIdentity & Record<string, unknown>;
+    const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {})
+      .filter((entry): entry is [string, string] =>
+        typeof entry[1] === "string" && external.details[entry[0]] !== undefined
+      );
+    if (preservedEntries.length > 0) {
+      external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
+    }
+    for (const key of ["localAlias", "localDescription", "localEmail"] as const) {
+      if (typeof existing[key] === "string" && existing[key]) {
+        (external as Record<string, unknown>)[key] = existing[key];
+      }
+    }
+  } catch (e) {
+    if (!(e instanceof Deno.errors.NotFound)) {
+      console.warn("failed to preserve local data during fetch sync", e);
+    }
+  }
+  await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), {
+    mode: 0o600,
+  });
+  return { name: contactName, fingerprint: external.fingerprint };
 }
 

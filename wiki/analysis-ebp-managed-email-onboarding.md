@@ -2,7 +2,7 @@
 title: "EBP Managed Email Onboarding"
 type: analysis
 status: active
-last_updated: 2026-10-26
+last_updated: 2026-10-28
 source_count: 8
 tags:
   - analysis
@@ -109,6 +109,11 @@ Same steps on [[component-gui]] (`gui/js/onboarding.js`) and
 5. Create: HD identity, publish, sign the `email` proof, `POST /api/v1/mail/signup`, save the local mail account.
 6. Done: address, fingerprint, Open inbox. Host, ports, and mailbox password stay behind "Use in other mail apps".
 
+On the GUI welcome step, **Use this identity** appears only when an
+identity is already selected. That path keeps the username step, asks for the
+existing identity password, and skips key generation and the recovery phrase.
+It still publishes the selected identity and provisions the mailbox.
+
 GUI entry: first run with no identities, and a Mail-page button. The local
 backend route `POST /api/v1/mail/ebp-signup` unlocks the identity, signs the
 proof, forwards to the key server, and saves the account. Mobile entry: empty
@@ -150,6 +155,8 @@ deliverable.
 - [[component-server]]
 - [[component-gui]]
 - [[component-mobile]]
+- [[analysis-mobile-pqpost-readiness]]
+- [[analysis-pqpost-recipient-identity]]
 - [[ebp-hd]]
 - [[password-policy]]
 - [[identity-model]]

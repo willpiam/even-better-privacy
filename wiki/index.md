@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-10-27
+last_updated: 2026-10-28
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-10-27 (website verifier matches core)
+Last updated: 2026-10-28 (compose verified-email autofill)
 
 ## Wiki Operations
 
@@ -101,6 +101,12 @@ Last updated: 2026-10-27 (website verifier matches core)
   live Render Postgres via `scripts/postgres/` and `query:prod:*` tasks.
 - [[analysis-ebp-managed-email-onboarding]] - Get-started wizard: HD identity
   plus `username@domain` on Stalwart, provisioned by the key server.
+- [[analysis-mobile-pqpost-readiness]] - Android can sign up and use
+  `@pqpost.com` mail; existing-identity signup, mailbox restore, and live
+  device proof are still open.
+- [[analysis-pqpost-recipient-identity]] - Signup binds a mailbox to one
+  identity. Compose auto-fills the recipient only for one exact, verified,
+  unrevoked email match on the key server; a saved contact stays pinned.
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
   Related to managed signup above; fingerprint local-parts are not that design.

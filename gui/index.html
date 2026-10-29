@@ -1695,6 +1695,18 @@
         background: var(--accent-bg);
       }
 
+      .onboarding-welcome-actions:has(#onboarding-use-current:not([hidden])) button {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-left: 10px;
+        padding-right: 10px;
+        white-space: nowrap;
+      }
+
+      #onboarding-use-current[hidden] {
+        display: none !important;
+      }
+
       /* Certificate detail modal */
       .modal-certificate-detail {
         width: min(92vw, 980px);
@@ -4593,7 +4605,15 @@
             post-quantum keys that sign and encrypt your mail end to end.
           </p>
           <div class="input-warning" id="onboarding-unavailable"></div>
-          <div class="modal-actions">
+          <div class="modal-actions onboarding-welcome-actions">
+            <button
+              class="secondary"
+              type="button"
+              id="onboarding-use-current"
+              hidden
+            >
+              Use this identity
+            </button>
             <button class="secondary" type="button" id="onboarding-skip">
               Set up manually
             </button>

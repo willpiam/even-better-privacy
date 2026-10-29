@@ -94,7 +94,9 @@ import {
   findContactRecord,
   listContacts,
   loadContact,
+  saveExternalContact,
 } from "./contacts.ts";
+import { resolveVerifiedEmailContact } from "./resolve-verified-email.ts";
 import { tryResolveSenderForCtx } from "./sender-context.ts";
 import {
   buildSmtpAuth,
@@ -5002,54 +5004,20 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         detailsMeta,
       };
 
-      if (!external.signingKey || !external.encryptionKey) {
-        throw new HttpError(
-          STATUS.BadGateway,
-          "invalid identity payload from server",
-        );
-      }
-
-      await ensurePrivateDir(ctx.contactsDir);
-      const contactName = name ?? external.fingerprint.substring(0, 16);
-      const contactPath = `${ctx.contactsDir}/${contactName}.json`;
-      try {
-        const existingRaw = await Deno.readTextFile(contactPath);
-        const existing = JSON.parse(existingRaw) as
-          & ExternalIdentity
-          & Record<string, unknown>;
-        const preservedEntries = Object.entries(
-          existing.resolvedOpaqueDetails ?? {},
-        ).filter(
-          ([path, value]) =>
-            typeof value === "string" && details[path] !== undefined,
-        );
-        if (preservedEntries.length > 0) {
-          external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
-        }
-        const localFields = [
-          "localAlias",
-          "localDescription",
-          "localEmail",
-        ] as const;
-        for (const key of localFields) {
-          if (typeof existing[key] === "string" && existing[key]) {
-            (external as Record<string, unknown>)[key] = existing[key];
-          }
-        }
-      } catch (e) {
-        if (!(e instanceof Deno.errors.NotFound)) {
-          console.warn("failed to preserve local data during fetch sync", e);
-        }
-      }
-      await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), {
-        mode: 0o600,
-      });
-
+      const saved = await saveExternalContact(ctx, external, name);
       return json({
         ok: true,
-        name: contactName,
-        fingerprint: external.fingerprint,
+        name: saved.name,
+        fingerprint: saved.fingerprint,
       });
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/contacts/resolve-verified-email") {
+      const home = url.searchParams.get("home") ?? undefined;
+      const serverOverride = url.searchParams.get("server") ?? undefined;
+      const email = url.searchParams.get("email") ?? "";
+      const ctx = await getContext(home);
+      return await resolveVerifiedEmailContact(ctx, email, serverOverride ?? undefined);
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/server") {

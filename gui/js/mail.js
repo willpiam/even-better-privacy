@@ -641,6 +641,52 @@ function updateComposeRecipientRowMeta(row) {
   updateMailComposeSendState();
 }
 
+function composeRecipientAddress(row) {
+  const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+  const emailInput = row.querySelector("input[data-mail-recipient-email='true']");
+  if (!contactInput || !emailInput) return "";
+  if (findContactForComposeRecipient(contactInput.value)) return "";
+  const typedEmail = emailInput.value.trim();
+  if (typedEmail.includes("@")) return typedEmail;
+  const typedContact = contactInput.value.trim();
+  return typedContact.includes("@") ? typedContact : "";
+}
+
+async function resolveComposeEmailFromServer(row) {
+  const address = composeRecipientAddress(row);
+  if (!address) return;
+  const contactInput = row.querySelector("input[data-mail-recipient-contact='true']");
+  const emailInput = row.querySelector("input[data-mail-recipient-email='true']");
+  const fingerprintEl = row.querySelector("[data-mail-recipient-fingerprint='true']");
+  const warningEl = row.querySelector("[data-mail-recipient-warning='true']");
+  if (!contactInput || !emailInput) return;
+  const seq = Number(row.dataset.mailResolveSeq || "0") + 1;
+  row.dataset.mailResolveSeq = String(seq);
+  if (fingerprintEl) fingerprintEl.textContent = "Fingerprint: (looking up identity…)";
+  const stale = () => row.dataset.mailResolveSeq !== String(seq);
+  try {
+    const result = await api(`/contacts/resolve-verified-email?email=${encodeURIComponent(address)}`);
+    if (stale()) return;
+    if (result?.status === "unique" && result.name) {
+      if (result.imported) await loadAll();
+      if (stale()) return;
+      contactInput.value = result.name;
+      if (!emailInput.value.trim()) emailInput.value = address;
+      updateComposeRecipientRowMeta(row);
+      return;
+    }
+    updateComposeRecipientRowMeta(row);
+    if (stale()) return;
+    if (result?.status === "ambiguous" && warningEl && !findContactForComposeRecipient(contactInput.value)) {
+      warningEl.textContent = "More than one verified identity publishes this address.";
+    }
+  } catch (err) {
+    if (stale()) return;
+    updateComposeRecipientRowMeta(row);
+    if (warningEl) warningEl.textContent = err?.message || "Identity lookup failed";
+  }
+}
+
 function addComposeRecipientRow(prefill = {}) {
   const list = document.getElementById("mail-compose-recipients");
   if (!list) return;
@@ -704,6 +750,12 @@ function addComposeRecipientRow(prefill = {}) {
     }
   });
   emailInput?.addEventListener("input", () => updateComposeRecipientRowMeta(row));
+  emailInput?.addEventListener("blur", () => {
+    void resolveComposeEmailFromServer(row);
+  });
+  contactInput?.addEventListener("blur", () => {
+    void resolveComposeEmailFromServer(row);
+  });
   const clearBtn = row.querySelector("button[data-mail-recipient-clear='true']");
   clearBtn?.addEventListener("click", () => {
     if (contactInput) contactInput.value = "";
@@ -716,6 +768,7 @@ function addComposeRecipientRow(prefill = {}) {
     updateMailComposeSendState();
   });
   updateComposeRecipientRowMeta(row);
+  void resolveComposeEmailFromServer(row);
 }
 
 function getComposeRecipientsPayload() {

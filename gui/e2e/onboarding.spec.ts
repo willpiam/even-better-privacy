@@ -91,6 +91,14 @@ test("onboarding wizard creates keys, publishes, and provisions an EBP mailbox",
   const modal = page.locator("#onboarding-modal");
   await expect(modal).toBeVisible();
   await expect(page.locator("#onboarding-start")).toBeEnabled();
+  const currentIdentity = (await page.locator("#ctx-current").innerText()).trim();
+  const useCurrent = page.locator("#onboarding-use-current");
+  if (currentIdentity && currentIdentity !== "-") {
+    await expect(useCurrent).toBeVisible();
+    await expect(useCurrent).toBeEnabled();
+  } else {
+    await expect(useCurrent).toBeHidden();
+  }
   await page.locator("#onboarding-start").click();
 
   await expect(page.locator("#onboarding-domain")).toHaveText(`@${DOMAIN}`);
@@ -144,4 +152,83 @@ test("onboarding wizard creates keys, publishes, and provisions an EBP mailbox",
   await expect(modal).toBeHidden();
   await expect(page.locator("#page-mail")).toHaveClass(/active/);
   await expect(page.locator("#identity-list")).toContainText(username);
+});
+
+test("onboarding provisions a mailbox for the selected identity", async ({ page }) => {
+  test.setTimeout(120_000);
+  const identityName = `cur${generateHumanName().toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 16)}`;
+  const username = generateHumanName().toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 20) || "currentid";
+  let signupBody: Record<string, unknown> | null = null;
+
+  const created = await page.request.post("/api/v1/identity/generate", {
+    data: {
+      name: identityName,
+      signingType: "dilithium",
+      encryptionType: "kyber",
+      password: testPassword,
+      enforcePasswordPolicy: true,
+    },
+  });
+  expect(created.ok()).toBeTruthy();
+
+  await page.route("**/api/v1/mail/ebp-signup/config**", (route) =>
+    fulfillJson(route, {
+      server: testServerUrl,
+      enabled: true,
+      domain: DOMAIN,
+      imap: { host: `mail.${DOMAIN}`, port: 993, secure: true },
+      smtp: { host: `mail.${DOMAIN}`, port: 465, secure: true },
+    }));
+  await page.route("**/api/v1/mail/ebp-signup/username**", (route) => {
+    const u = new URL(route.request().url()).searchParams.get("u") ?? "";
+    return fulfillJson(route, { available: true, username: u, email: `${u}@${DOMAIN}` });
+  });
+  await page.route("**/api/v1/mail/ebp-signup", async (route) => {
+    if (route.request().method() === "OPTIONS") return fulfillJson(route, {});
+    signupBody = route.request().postDataJSON();
+    return fulfillJson(route, {
+      ok: true,
+      email: `${username}@${DOMAIN}`,
+      fingerprint: "ebpdk1mockedfingerprint",
+      accountId: "mail-mock",
+      connection: {
+        imap: { host: `mail.${DOMAIN}`, port: 993, secure: true },
+        smtp: { host: `mail.${DOMAIN}`, port: 465, secure: true },
+        login: `${username}@${DOMAIN}`,
+        password: "0123456789abcdef0123456789abcdef",
+      },
+    });
+  });
+
+  await page.goto("/");
+  await setServer(page);
+  await expect(page.locator("#ctx-current")).toHaveText(identityName);
+  await page.locator(".nav-item", { hasText: "Identities" }).click();
+  await page.locator("#identities-open-onboarding").click();
+
+  const modal = page.locator("#onboarding-modal");
+  await expect(modal).toBeVisible();
+  const useCurrent = page.locator("#onboarding-use-current");
+  await expect(useCurrent).toBeVisible();
+  await expect(useCurrent).toBeEnabled();
+  await expect(useCurrent).toHaveText("Use this identity");
+  await useCurrent.click();
+
+  await expect(page.locator('[data-step="address"]')).toBeVisible();
+  await expect(page.locator('[data-step="password"]')).toBeHidden();
+  await page.fill("#onboarding-username", username);
+  await expect(page.locator("#onboarding-username-hint")).toContainText("is available");
+  await page.locator("#onboarding-address-next").click();
+
+  await expect(page.locator("#password-modal")).toBeVisible();
+  await expect(page.locator("#password-modal-title")).toContainText(identityName);
+  await expect(page.locator('[data-step="phrase"]')).toBeHidden();
+  await page.fill("#password-modal-input", testPassword);
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
+
+  await expect(page.locator('[data-step="done"]')).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator("#onboarding-words li")).toHaveCount(0);
+  expect(signupBody).not.toBeNull();
+  expect(signupBody!.identity).toBe(identityName);
+  expect(signupBody!.username).toBe(username);
 });

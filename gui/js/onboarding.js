@@ -21,6 +21,7 @@ const wizard = {
   quiz: [],
   identityName: "",
   identityCreated: false,
+  useExistingIdentity: false,
   published: false,
   checkTimer: null,
   checkSeq: 0,
@@ -53,6 +54,23 @@ function setHint(id, text, kind = "") {
   el.dataset.kind = kind;
 }
 
+function selectedIdentityName() {
+  const name = state.currentIdentity;
+  return typeof name === "string" && name.trim() ? name.trim() : "";
+}
+
+function setKeysTaskVisible(visible) {
+  const li = $("onboarding-tasks").querySelector('[data-task="keys"]');
+  if (li) li.hidden = !visible;
+}
+
+function syncUseCurrentButton(signupReady) {
+  const btn = $("onboarding-use-current");
+  const available = Boolean(selectedIdentityName());
+  btn.hidden = !available;
+  btn.disabled = !available || !signupReady;
+}
+
 function resetWizard() {
   Object.assign(wizard, {
     username: "",
@@ -62,8 +80,10 @@ function resetWizard() {
     quiz: [],
     identityName: "",
     identityCreated: false,
+    useExistingIdentity: false,
     published: false,
   });
+  setKeysTaskVisible(true);
   $("onboarding-username").value = "";
   $("onboarding-password").value = "";
   $("onboarding-password-confirm").value = "";
@@ -82,6 +102,7 @@ export async function openOnboarding() {
   resetWizard();
   wizard.server = serverUrl();
   showStep("welcome");
+  syncUseCurrentButton(false);
   modal.classList.add("active");
   const startBtn = $("onboarding-start");
   startBtn.disabled = true;
@@ -97,6 +118,7 @@ export async function openOnboarding() {
     wizard.domain = config.domain;
     $("onboarding-domain").textContent = `@${config.domain}`;
     startBtn.disabled = false;
+    syncUseCurrentButton(true);
   } catch (err) {
     $("onboarding-unavailable").textContent =
       `Couldn't reach the key server (${err.message}).`;
@@ -304,8 +326,33 @@ async function signupMailbox(pin) {
   });
 }
 
+function startWithCurrentIdentity() {
+  const name = selectedIdentityName();
+  if (!name) return;
+  wizard.useExistingIdentity = true;
+  wizard.identityName = name;
+  wizard.identityCreated = true;
+  wizard.published = false;
+  wizard.password = "";
+  wizard.mnemonic = "";
+  setKeysTaskVisible(false);
+  showStep("address");
+}
+
+function isUnlockError(message) {
+  return /failed to decrypt identity/i.test(message);
+}
+
 async function runCreate() {
+  if (wizard.useExistingIdentity && !wizard.password) {
+    const password = await requestPassword(
+      `Enter the password for ${wizard.identityName}`,
+    );
+    if (!password) return;
+    wizard.password = password;
+  }
   showStep("create");
+  setKeysTaskVisible(!wizard.useExistingIdentity);
   $("onboarding-create-error").textContent = "";
   $("onboarding-retry").style.display = "none";
   try {
@@ -337,6 +384,9 @@ async function runCreate() {
     });
     renderDone(result);
   } catch (err) {
+    if (wizard.useExistingIdentity && isUnlockError(err.message)) {
+      wizard.password = "";
+    }
     $("onboarding-create-error").textContent = err.message;
     $("onboarding-retry").style.display = "";
     if (/taken/i.test(err.message)) {
@@ -396,11 +446,25 @@ export function initOnboarding({ navigateTo }) {
     }
     closeOnboarding();
   });
-  $("onboarding-start").addEventListener("click", () => showStep("address"));
+  $("onboarding-start").addEventListener("click", () => {
+    if (wizard.useExistingIdentity) {
+      wizard.useExistingIdentity = false;
+      wizard.identityCreated = false;
+      wizard.identityName = "";
+      wizard.published = false;
+      wizard.password = "";
+      setKeysTaskVisible(true);
+    }
+    showStep("address");
+  });
+  $("onboarding-use-current").addEventListener("click", () => {
+    if ($("onboarding-use-current").disabled) return;
+    startWithCurrentIdentity();
+  });
   $("onboarding-username").addEventListener("input", onUsernameInput);
   const afterAddress = () => {
     if (!wizard.usernameOk) return;
-    if (wizard.identityCreated) void runCreate();
+    if (wizard.useExistingIdentity || wizard.identityCreated) void runCreate();
     else showStep("password");
   };
   $("onboarding-username").addEventListener("keydown", (e) => {

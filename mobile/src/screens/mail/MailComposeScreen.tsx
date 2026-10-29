@@ -1,4 +1,4 @@
-import React, {useCallback, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
@@ -13,6 +13,7 @@ import AppButton from '../../components/AppButton';
 import SectionTitle from '../../components/SectionTitle';
 import {
   findContactsByEmail,
+  resolveVerifiedRecipient,
   type StoredContact,
 } from '../../services/contacts';
 import {getCurrentIdentityRequired} from '../../services/storage';
@@ -72,6 +73,8 @@ export default function MailComposeScreen({
 }: Props): JSX.Element {
   const params = route.params;
   const [rows, setRows] = useState<RecipientRow[]>(() => initialRows(params));
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
   const [subject, setSubject] = useState(params?.subject ?? '');
   const [message, setMessage] = useState(params?.message ?? '');
   const [password, setPassword] = useState('');
@@ -86,7 +89,11 @@ export default function MailComposeScreen({
 
   const updateRow = useCallback(
     (id: string, patch: Partial<RecipientRow>) => {
-      setRows(prev => prev.map(r => (r.id === id ? {...r, ...patch} : r)));
+      const next = rowsRef.current.map(current =>
+        current.id === id ? {...current, ...patch} : current,
+      );
+      rowsRef.current = next;
+      setRows(next);
     },
     [],
   );
@@ -125,25 +132,62 @@ export default function MailComposeScreen({
     if (!looksLikeEmail(address)) {
       return;
     }
+    if (row.recipientContact.trim() && row.encryptionIntent === 'encrypted') {
+      return;
+    }
+    const addressKey = address.toLowerCase();
+    const stillCurrent = () =>
+      rowsRef.current.some(
+        current =>
+          current.id === row.id &&
+          current.to.trim().toLowerCase() === addressKey,
+      );
     try {
-      const matches = await findContactsByEmail(address);
-      if (matches.length === 1) {
+      const outcome = await resolveVerifiedRecipient(address);
+      if (!stillCurrent()) {
+        return;
+      }
+      if (outcome.status === 'unique') {
         updateRow(row.id, {
-          recipientContact: matches[0].name,
+          recipientContact: outcome.name,
           encryptionIntent: 'encrypted',
         });
         return;
       }
+      const matches = await findContactsByEmail(address);
+      if (!stillCurrent()) {
+        return;
+      }
+      updateRow(row.id, {recipientContact: '', encryptionIntent: 'pending'});
       setPreferredContacts(matches);
-      updateRow(row.id, {
-        recipientContact: '',
-        encryptionIntent: 'pending',
-      });
       setResolveRowId(row.id);
+      if (outcome.status === 'ambiguous' && matches.length === 0) {
+        setStatus('More than one verified identity publishes this address.');
+      }
     } catch (error) {
+      if (!stillCurrent()) {
+        return;
+      }
+      updateRow(row.id, {recipientContact: '', encryptionIntent: 'pending'});
+      setPreferredContacts([]);
+      setResolveRowId(row.id);
       setStatus(error instanceof Error ? error.message : String(error));
     }
   };
+
+  useEffect(() => {
+    for (const row of rowsRef.current) {
+      if (
+        row.to.includes('@') &&
+        row.encryptionIntent === 'pending' &&
+        !row.recipientContact.trim()
+      ) {
+        void resolveRecipientFromTo(row);
+      }
+    }
+    // Resolve a prefilled To address once, including plain-mail reply.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickAttachment = async () => {
     try {
@@ -255,8 +299,9 @@ export default function MailComposeScreen({
     <Screen scroll>
       <Text style={styles.note}>
         Compose an email. After you enter a To address, the app checks your
-        contacts for a matching email or opaque email detail. Add multiple To
-        rows for multi-recipient send.
+        contacts, then the key server, for one verified email detail. A contact
+        already saved on this device is kept. Add multiple To rows for
+        multi-recipient send.
       </Text>
 
       {showUnencryptedWarning ? (
@@ -305,9 +350,11 @@ export default function MailComposeScreen({
             <AppButton
               title="Remove recipient"
               variant="secondary"
-              onPress={() =>
-                setRows(prev => prev.filter(r => r.id !== row.id))
-              }
+              onPress={() => {
+                const next = rowsRef.current.filter(current => current.id !== row.id);
+                rowsRef.current = next;
+                setRows(next);
+              }}
             />
           ) : null}
         </View>
@@ -315,7 +362,11 @@ export default function MailComposeScreen({
       <AppButton
         title="Add recipient"
         variant="secondary"
-        onPress={() => setRows(prev => [...prev, newRow()])}
+        onPress={() => {
+          const next = [...rowsRef.current, newRow()];
+          rowsRef.current = next;
+          setRows(next);
+        }}
       />
 
       <SectionTitle>Message</SectionTitle>

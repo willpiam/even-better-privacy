@@ -1,5 +1,30 @@
 # Wiki Log
 
+## [2026-10-28] update | compose verified-email autofill
+
+- GUI and mobile compose auto-fill a recipient when the key server has exactly one unrevoked identity with a verified `email` detail equal to the address. A contact already on the device stays pinned.
+- Updated: [[analysis-pqpost-recipient-identity]], [[analysis-mobile-compose-recipient-resolve]], [[component-gui]], [[component-mobile]].
+
+## [2026-10-28] query | server lookup for pqpost recipients
+
+- Answered: a key-server identity check is safe. Auto-fill only on one exact, verified, unrevoked email match; a local contact stays pinned; misses keep the current unresolved path.
+- Updated: [[analysis-pqpost-recipient-identity]].
+
+## [2026-10-28] query | pqpost.com recipient identity
+
+- Answered: signup binds `username@pqpost.com` to one published identity, but reserved addresses, unregistered local-parts, later revocation, and local-only compose lookup mean the recipient identity is not always resolvable.
+- Filed: [[analysis-pqpost-recipient-identity]].
+
+## [2026-10-28] query | mobile app and pqpost.com
+
+- Answered: Android Get started can create an HD identity and a `@pqpost.com` mailbox, then use IMAP/SMTP. It cannot attach a mailbox to an existing identity, and neither client restores a mailbox secret after recovery-phrase restore.
+- Filed: [[analysis-mobile-pqpost-readiness]].
+
+## [2026-10-27] update | onboarding current identity
+
+- GUI welcome step shows "Use this identity" only when an identity is already selected. That path skips new keys and the recovery phrase, then publishes the selected identity and provisions the mailbox.
+- Updated: [[component-gui]], [[analysis-ebp-managed-email-onboarding]].
+
 ## [2026-10-27] fix | website verifier matches core
 
 - `website/crypto.js` now tries `ebp::message::v1::` before the legacy `ebp::messagehash::` envelope, and hashes the Kyber public key from decoded hex bytes.

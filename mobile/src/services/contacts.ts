@@ -1,6 +1,11 @@
 import RNFS from 'react-native-fs';
 import type {ExternalIdentity} from '../ebpCore';
 import {sha256Hex} from '../../../core/MessageHash.ts';
+import {
+  decideRecipientResolution,
+  matchVerifiedEmailIdentities,
+  searchVerifiedEmailIdentity,
+} from '../../../core/VerifiedEmailMatch.ts';
 import {getServerUrl} from './settings';
 import {ensureAppDirs, getContactsDir} from './storage';
 import {
@@ -111,6 +116,69 @@ export async function findContactsByEmail(
     }
   }
   return matches;
+}
+
+export type VerifiedRecipientResolution =
+  | {status: 'unique'; name: string}
+  | {status: 'none'}
+  | {status: 'ambiguous'};
+
+/**
+ * Resolve a To address to one EBP contact.
+ * A saved contact wins. Otherwise the key server is used only when exactly
+ * one unrevoked identity has a verified email detail equal to the address.
+ */
+export async function resolveVerifiedRecipient(
+  email: string,
+): Promise<VerifiedRecipientResolution> {
+  const local = await findContactsByEmail(email);
+  if (local.length === 1) {
+    return {status: 'unique', name: local[0].name};
+  }
+  if (local.length > 1) {
+    return {status: 'ambiguous'};
+  }
+  const serverMatch = await searchVerifiedEmailIdentity(
+    email,
+    async (page, limit) => {
+      const result = await browseServerIdentities({query: email, page, limit});
+      return {
+        identities: result.identities,
+        hasNextPage: result.hasNextPage,
+      };
+    },
+  );
+  const contacts = await listContacts();
+  const decision = decideRecipientResolution({
+    localEmailMatches: [],
+    serverMatch,
+    localFingerprintMatches: contacts.map(item => ({
+      name: item.name,
+      fingerprint: item.contact.fingerprint,
+    })),
+  });
+  if (decision.action === 'use') {
+    return {status: 'unique', name: decision.name};
+  }
+  if (decision.action !== 'import') {
+    return {status: serverMatch.status === 'ambiguous' ? 'ambiguous' : 'none'};
+  }
+  const saved = await fetchContactFromServer({fingerprint: decision.fingerprint});
+  const imported = (await listContacts()).find(item => item.name === saved.name);
+  const confirmed = imported
+    ? matchVerifiedEmailIdentities([imported.contact], email)
+    : {status: 'none' as const};
+  if (confirmed.status !== 'unique') {
+    if (imported) {
+      try {
+        await deleteContact({name: imported.name});
+      } catch {
+        // Leave the file if it cannot be removed; it is not selected.
+      }
+    }
+    return {status: 'none'};
+  }
+  return {status: 'unique', name: saved.name};
 }
 
 export async function importContact(
@@ -326,6 +394,7 @@ export async function requestVerifyEmail(params: {
 export async function browseServerIdentities(params?: {
   query?: string;
   page?: number;
+  limit?: number;
   server?: string;
 }): Promise<BrowseServerIdentitiesResult> {
   const server = params?.server ?? (await getServerUrl());
@@ -337,6 +406,12 @@ export async function browseServerIdentities(params?: {
   }
   if (query) {
     url.searchParams.set('query', query);
+  }
+  if (params?.limit && Number.isFinite(params.limit)) {
+    url.searchParams.set(
+      'limit',
+      String(Math.max(1, Math.min(100, Math.floor(params.limit)))),
+    );
   }
   const res = await fetch(url.toString());
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;

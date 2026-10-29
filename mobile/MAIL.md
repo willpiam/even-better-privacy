@@ -92,18 +92,23 @@ seconds (`tcp.readLine.timeout` in the stub log) instead of hanging forever.
 
 ## Compose recipient resolution
 
-On **Compose**, leaving the To field runs a local contact lookup for that
-address against published `email` details and `opaque::email` (resolved
-cleartext or SHA-256 hash of the trimmed typed value). `localEmail` notes are
-not matched.
+On **Compose**, leaving the To field resolves the address before send.
 
-- **One match:** the EBP contact is selected automatically and the body is
-  encrypted for that identity.
-- **Zero or multiple matches:** a modal asks you to pick a contact from a
-  searchable list, or mark the address as not intended to be encrypted.
+1. A contact already saved on the device wins when its published `email`
+   detail or `opaque::email` matches. `localEmail` notes are not matched.
+   One match selects that contact. Several matches ask you to pick.
+2. Otherwise the app searches the key server. It auto-fills only when exactly
+   one unrevoked identity has a verified `email` detail equal to the typed
+   address. The full public identity is fetched and saved as a contact. A
+   contact already stored under that fingerprint is kept as the pinned key.
+3. Zero matches, or more than one verified identity, open the resolve modal:
+   pick a contact, or mark the address as not intended to be encrypted.
+
 - **Unencrypted:** a red banner warns that no EBP recipient identity was found
   or specified; send uses plaintext MIME (`sendPlainMail`) instead of an EBP
   armor payload.
+- A reply that already bound an encrypt-to contact is left as-is. Changing
+  the To address runs resolution again.
 
 ## Reply
 
