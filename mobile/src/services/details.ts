@@ -1,4 +1,4 @@
-import {loadIdentity, saveIdentity} from './storage';
+import {loadIdentityForUse, saveIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 import {apiUrl} from './contactsLogic';
 import {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
@@ -7,9 +7,9 @@ export {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
 
 export async function listDetails(params: {
   identityName: string;
-  password: string;
+  password?: string;
 }): Promise<Array<{path: string; detail: string; proof: string}>> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   return Array.from(identity.details.entries()).map(([path, [detail, proof]]) => ({
     path,
     detail,
@@ -19,7 +19,7 @@ export async function listDetails(params: {
 
 export async function addDetail(params: {
   identityName: string;
-  password: string;
+  password?: string;
   path: string;
   detail: string;
   push?: boolean;
@@ -27,9 +27,9 @@ export async function addDetail(params: {
 }): Promise<void> {
   requirePathAndDetail(params.path, params.detail);
   const detailToAttach = prepareDetailValue(params.path, params.detail);
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   identity.attachDetail(params.path, detailToAttach);
-  await saveIdentity(params.identityName, params.password, identity);
+  await saveIdentityForUse(params.identityName, identity, params.password);
 
   if (params.push) {
     const server = params.server ?? (await getServerUrl());

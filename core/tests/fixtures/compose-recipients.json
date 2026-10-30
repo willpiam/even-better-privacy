@@ -1,0 +1,57 @@
+{
+  "parseAddressList": [
+    {
+      "name": "splits on comma, semicolon, and newline",
+      "text": "a@example.com, b@example.com;c@example.com\nd@example.com",
+      "existing": [],
+      "expected": [
+        { "email": "a@example.com", "valid": true },
+        { "email": "b@example.com", "valid": true },
+        { "email": "c@example.com", "valid": true },
+        { "email": "d@example.com", "valid": true }
+      ]
+    },
+    {
+      "name": "trims, lowercases the domain only, and unwraps display names",
+      "text": "  Alice@Example.COM ,  Bob Smith <Bob@PQPost.com>, mailto:carol@Example.org",
+      "existing": [],
+      "expected": [
+        { "email": "Alice@example.com", "valid": true },
+        { "email": "Bob@pqpost.com", "valid": true },
+        { "email": "carol@example.org", "valid": true }
+      ]
+    },
+    {
+      "name": "drops empties and case-insensitive duplicates",
+      "text": "a@example.com,, A@EXAMPLE.com ;; b@example.com",
+      "existing": ["b@example.com"],
+      "expected": [{ "email": "a@example.com", "valid": true }]
+    },
+    {
+      "name": "keeps invalid entries flagged",
+      "text": "not-an-email, x@nodot, good@example.com, two@@example.com",
+      "existing": [],
+      "expected": [
+        { "email": "not-an-email", "valid": false },
+        { "email": "x@nodot", "valid": false },
+        { "email": "good@example.com", "valid": true },
+        { "email": "two@@example.com", "valid": false }
+      ]
+    },
+    {
+      "name": "empty input",
+      "text": "  , ; ",
+      "existing": [],
+      "expected": []
+    }
+  ],
+  "deriveComposeIntent": [
+    { "name": "no chips", "states": [], "kind": "empty" },
+    { "name": "all encrypted", "states": ["encrypted", "encrypted"], "kind": "encrypted" },
+    { "name": "all plaintext", "states": ["plaintext"], "kind": "plaintext" },
+    { "name": "any invalid", "states": ["encrypted", "invalid"], "kind": "blocked", "reason": "invalid" },
+    { "name": "any resolving", "states": ["encrypted", "resolving"], "kind": "blocked", "reason": "resolving" },
+    { "name": "any unresolved", "states": ["plaintext", "unresolved"], "kind": "blocked", "reason": "unresolved" },
+    { "name": "mix of encrypted and plaintext", "states": ["encrypted", "plaintext"], "kind": "blocked", "reason": "mixed" }
+  ]
+}

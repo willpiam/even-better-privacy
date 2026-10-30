@@ -4,13 +4,12 @@ import Share from 'react-native-share';
 import RNFS from 'react-native-fs';
 import {decryptFile} from '../../services/encryptDecrypt';
 import {parseEbpPayloadInput} from '../../ebpCore';
-import {getCurrentIdentityRequired} from '../../services/storage';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {cryptoStyles} from './cryptoStyles';
 
@@ -33,7 +32,7 @@ function formatBytes(n: number): string {
 }
 
 export default function DecryptFileScreen(): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [decryptFilePayload, setDecryptFilePayload] = useState('');
   const [decryptFileSender, setDecryptFileSender] = useState('');
   const [decrypted, setDecrypted] = useState<DecryptedFile | null>(null);
@@ -41,22 +40,16 @@ export default function DecryptFileScreen(): JSX.Element {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const onDecryptFile = async () => {
-    const password = await promptSecret({
-      title: 'Identity password',
-      placeholder: 'Identity password',
-      submitLabel: 'Decrypt',
-    });
-    if (password === null) {
-      return;
-    }
-    setBusyMessage('Decrypting file…');
     setStatus('');
     try {
-      const identityName = await getCurrentIdentityRequired();
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
+        return;
+      }
+      setBusyMessage('Decrypting file…');
       const payload = parseEbpPayloadInput(decryptFilePayload);
       const result = await decryptFile({
         identityName,
-        password,
         payload,
         sender: decryptFileSender || undefined,
       });
@@ -103,7 +96,7 @@ export default function DecryptFileScreen(): JSX.Element {
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField

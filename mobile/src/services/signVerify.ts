@@ -11,7 +11,7 @@ import {
   externalIdentityFromEmbeddedRecord,
 } from '../ebpCore';
 import {loadContact} from './contacts';
-import {loadIdentity} from './storage';
+import {loadIdentityForUse} from './storage';
 import {
   type SignMessageOptions,
   signMessageWithIdentity,
@@ -26,11 +26,11 @@ function normalizeFileUri(uri: string): string {
 
 export async function signMessage(params: {
   identityName: string;
-  password: string;
+  password?: string;
   message: string;
   options?: SignMessageOptions;
 }): Promise<Record<string, unknown>> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   return signMessageWithIdentity(identity, params.message, params.options);
 }
 
@@ -84,7 +84,7 @@ export async function verifyMessage(params: {
 
 export async function signFile(params: {
   identityName: string;
-  password: string;
+  password?: string;
   fileUri: string;
   fileName?: string;
   contextMessage?: string;
@@ -95,7 +95,7 @@ export async function signFile(params: {
   signedMessage: string;
   salt: string;
 }> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const path = normalizeFileUri(params.fileUri);
   const base64 = await RNFS.readFile(path, 'base64');
   const bytes = base64ToBytes(base64);
@@ -152,7 +152,7 @@ export async function verifyFileSignature(params: {
 
 export async function exportPublicIdentity(
   identityName: string,
-  password: string,
+  password: string | undefined,
   options: IdentityPublicExportOptions = {},
 ): Promise<IdentityPublicExport> {
   const includeSigningKey = options.includeSigningKey ?? true;
@@ -160,7 +160,7 @@ export async function exportPublicIdentity(
   if (!includeSigningKey && !includeEncryptionKey) {
     throw new Error('Public export must include at least one public key');
   }
-  const identity = await loadIdentity(identityName, password);
+  const identity = await loadIdentityForUse(identityName, password);
   return identity.toPublicExport({
     includeSigningKey,
     includeEncryptionKey,

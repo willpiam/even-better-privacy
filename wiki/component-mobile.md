@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-10-28
+last_updated: 2026-10-30
 source_count: 6
 tags:
   - component
@@ -26,7 +26,9 @@ Identity UI parity (2026-09-09): random-key create, HD change/overwrite, selecti
 
 Mail UI parity (2026-09-09): folder/search/page/limit, help screen, HTML WebView, attachments, multi-recipient. Maestro: `mail-help.yaml` (no live mailbox). Remaining untested paths (file pickers, live IMAP): [[analysis-mobile-testing-and-gui-gaps]].
 
-**Get started** (2026-10-20): `OnboardingWizardScreen` from the empty Identities home and from Mail accounts. It creates an [[ebp-hd]] identity and a managed mailbox via `services/mail/ebpSignup.ts`. Maestro: `mobile/e2e/onboarding.yaml` (through the create step; mailbox provisioning expects a mail-server error when Stalwart is unreachable). See [[analysis-ebp-managed-email-onboarding]].
+**Get started** (`OnboardingWizardScreen`): creates an [[ebp-hd]] identity and a managed mailbox via `services/mail/ebpSignup.ts`, or attaches a mailbox to the current identity. A 409 offers restore. Maestro: `mobile/e2e/onboarding.yaml` and `mobile/e2e/onboarding-existing.yaml`. See [[analysis-ebp-managed-email-onboarding]] and [[analysis-mobile-pqpost-readiness]].
+
+Compose uses one To field with a chip per address (`RecipientChipsField`). Identity unlock is once per session (`services/unlockSession.ts`, default 15 idle minutes, Lock now in Settings). Encrypted sends refuse attachments. Restore and delete for a managed mailbox are on Mail accounts.
 
 ## Architecture
 

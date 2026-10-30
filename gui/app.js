@@ -13,6 +13,7 @@ import {
   withLoading,
 } from "./js/ui.js";
 import { requestPassword, showConfirmModal } from "./js/modals.js";
+import { initUnlockUi, withIdentity } from "./js/unlock.js";
 import {
   buildFileSignMessage,
   downloadJsonFromTextarea,
@@ -820,22 +821,14 @@ document.getElementById("export-form").addEventListener("submit", async (e) => {
   }
   await withLoading(btn, async () => {
     try {
-      const password = await requestPassword(
-        "Enter password to export your public identity",
-      );
-      if (!password) {
-        setStatus("Password is required", "error");
-        return;
-      }
-      const res = await api("/identity/export-public", {
+      const res = await withIdentity(async () => api("/identity/export-public", {
         method: "POST",
         body: JSON.stringify({
-          password,
           includeSigningKey,
           includeEncryptionKey,
           includeDetails,
         }),
-      });
+      }), "Enter password to export your public identity");
       document.getElementById("export-output").value = JSON.stringify(
         res,
         null,
@@ -907,29 +900,21 @@ document.getElementById("sign-form").addEventListener("submit", async (e) => {
     document.getElementById("sign-include-identity").checked;
   await withLoading(btn, async () => {
     try {
-      const password = await requestPassword(
-        "Enter password to sign this message",
-      );
-      if (!password) {
-        setStatus("Password is required", "error");
-        return;
-      }
       const signConfirmation = await requestSignConfirmation(message);
       if (!signConfirmation) {
         setStatus("Signing cancelled", "error");
         return;
       }
-      const res = await api("/sign", {
+      const res = await withIdentity(async () => api("/sign", {
         method: "POST",
         body: JSON.stringify({
           message,
-          password,
           detached,
           includeIdentity,
           includeSalt,
           signConfirmation,
         }),
-      });
+      }), "Enter password to sign this message");
       document.getElementById("sign-output").value = JSON.stringify(
         res,
         null,
@@ -1005,30 +990,22 @@ document.getElementById("sign-file-form").addEventListener(
         saltOutput.value = salt;
         const message = buildFileSignMessage(fileHash, salt, contextMessage);
 
-        const password = await requestPassword(
-          "Enter password to sign this file hash",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
         const signConfirmation = await requestSignConfirmation(message);
         if (!signConfirmation) {
           setStatus("Signing cancelled", "error");
           return;
         }
 
-        const signRes = await api("/sign", {
+        const signRes = await withIdentity(async () => api("/sign", {
           method: "POST",
           body: JSON.stringify({
             message,
-            password,
             signConfirmation,
             detached: true,
             includeIdentity: true,
             includeSalt: false,
           }),
-        });
+        }), "Enter password to sign this file hash");
 
         if (!signRes?.signature || !signRes?.identity) {
           throw new Error(
@@ -1313,20 +1290,10 @@ document.getElementById("encrypt-form").addEventListener(
     await withLoading(btn, async () => {
       try {
         const body = { message, recipient, sign };
-        if (sign) {
-          const password = await requestPassword(
-            "Enter password to sign this message",
-          );
-          if (!password) {
-            setStatus("Password is required to sign", "error");
-            return;
-          }
-          body.password = password;
-        }
-        const res = await api("/encrypt", {
+        const res = await withIdentity(async () => api("/encrypt", {
           method: "POST",
           body: JSON.stringify(body),
-        });
+        }), "Enter password to sign this message");
         document.getElementById("enc-output").value = JSON.stringify(
           res,
           null,
@@ -1352,21 +1319,14 @@ document.getElementById("decrypt-form").addEventListener(
     const sender = document.getElementById("dec-sender").value.trim();
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword("Enter password to decrypt");
-        if (!password) {
-          setStatus("Password is required", "error");
-          updateVerifyResult("dec-verified", null, null);
-          return;
-        }
         const payload = JSON.parse(payloadRaw);
-        const res = await api("/decrypt", {
+        const res = await withIdentity(async () => api("/decrypt", {
           method: "POST",
           body: JSON.stringify({
             payload,
-            password,
             sender: sender || undefined,
           }),
-        });
+        }), "Enter password to decrypt");
         document.getElementById("dec-output").value = res.message ?? "";
         updateVerifyResult("dec-verified", res.verified, res.verifyStatus);
         setStatus("Decrypted", "success");
@@ -1405,20 +1365,10 @@ document.getElementById("encrypt-file-form").addEventListener(
           mimeType: file.type || "application/octet-stream",
           fileDataBase64,
         };
-        if (sign) {
-          const password = await requestPassword(
-            "Enter password to sign encrypted file payload",
-          );
-          if (!password) {
-            setStatus("Password is required to sign", "error");
-            return;
-          }
-          body.password = password;
-        }
-        const res = await api("/encrypt-file", {
+        const res = await withIdentity(async () => api("/encrypt-file", {
           method: "POST",
           body: JSON.stringify(body),
-        });
+        }), "Enter password to sign encrypted file payload");
         document.getElementById("enc-file-output").value = JSON.stringify(
           res,
           null,
@@ -1443,23 +1393,14 @@ document.getElementById("decrypt-file-form").addEventListener(
     const downloadBtn = document.getElementById("dec-file-download-btn");
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to decrypt file payload",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          updateVerifyResult("dec-file-verified", null, null);
-          return;
-        }
         const payload = JSON.parse(payloadRaw);
-        const res = await api("/decrypt-file", {
+        const res = await withIdentity(async () => api("/decrypt-file", {
           method: "POST",
           body: JSON.stringify({
             payload,
-            password,
             sender: sender || undefined,
           }),
-        });
+        }), "Enter password to decrypt file payload");
         state.decryptedFileResult = res;
         if (downloadBtn) downloadBtn.disabled = false;
         if (info) {
@@ -1512,17 +1453,10 @@ document.getElementById("publish-form").addEventListener(
     const server = document.getElementById("publish-server").value.trim();
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to publish your identity",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-        await api("/publish", {
+        await withIdentity(async () => api("/publish", {
           method: "POST",
-          body: JSON.stringify({ password, server: server || undefined }),
-        });
+          body: JSON.stringify({ server: server || undefined }),
+        }), "Enter password to publish your identity");
         setStatus("Published", "success");
         await loadAll();
       } catch (err) {
@@ -1552,17 +1486,10 @@ document.getElementById("add-detail-form").addEventListener(
 
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to add this detail",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-        await api("/detail", {
+        await withIdentity(async () => api("/detail", {
           method: "POST",
-          body: JSON.stringify({ path: effectivePath, detail, password, push }),
-        });
+          body: JSON.stringify({ path: effectivePath, detail, push }),
+        }), "Enter password to add this detail");
         setStatus(
           `Detail "${effectivePath}" added${
             push ? " and pushed to server" : ""
@@ -1606,30 +1533,21 @@ document.getElementById("certificate-propose-form").addEventListener(
 
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to create and sign hierarchy certificate",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-
         const masterFingerprint = role === "master"
           ? state.currentFingerprint
           : otherFingerprint;
         const childFingerprint = role === "master"
           ? otherFingerprint
           : state.currentFingerprint;
-        await api("/hierarchy/propose", {
+        await withIdentity(async () => api("/hierarchy/propose", {
           method: "POST",
           body: JSON.stringify({
             masterFingerprint,
             childFingerprint,
             context,
             expiry,
-            password,
           }),
-        });
+        }), "Enter password to create and sign hierarchy certificate");
         setStatus(
           "Certificate proposed and awaiting other party acceptance",
           "success",
@@ -1731,22 +1649,14 @@ document.getElementById("revoke-detail-form").addEventListener(
 
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to revoke this detail",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-        await api("/revoke/detail", {
+        await withIdentity(async () => api("/revoke/detail", {
           method: "POST",
           body: JSON.stringify({
             path,
             reason: reason || undefined,
-            password,
             push,
           }),
-        });
+        }), "Enter password to revoke this detail");
         setStatus(
           `Detail "${path}" revoked${push ? " and pushed to server" : ""}`,
           "success",
@@ -1769,17 +1679,10 @@ document.getElementById("emergency-cert-form").addEventListener(
 
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to generate the emergency certificate",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-        const res = await api("/revoke/emergency-cert", {
+        const res = await withIdentity(async () => api("/revoke/emergency-cert", {
           method: "POST",
-          body: JSON.stringify({ password }),
-        });
+          body: JSON.stringify({}),
+        }), "Enter password to generate the emergency certificate");
         document.getElementById("emergency-cert-output").value = JSON.stringify(
           res,
           null,
@@ -1823,17 +1726,10 @@ document.getElementById("revoke-identity-form").addEventListener(
 
     await withLoading(btn, async () => {
       try {
-        const password = await requestPassword(
-          "Enter password to revoke your identity",
-        );
-        if (!password) {
-          setStatus("Password is required", "error");
-          return;
-        }
-        await api("/revoke/identity", {
+        await withIdentity(async () => api("/revoke/identity", {
           method: "POST",
-          body: JSON.stringify({ reason: reason || undefined, password, push }),
-        });
+          body: JSON.stringify({ reason: reason || undefined, push }),
+        }), "Enter password to revoke your identity");
         setStatus(
           `Identity revoked${push ? " and pushed to server" : ""}`,
           "success",
@@ -1872,6 +1768,7 @@ initNavigation();
 initCollapsibleSections();
 initContactSearch();
 initMailPage();
+initUnlockUi();
 initOnboarding({ navigateTo });
 renderToastLogs();
 loadAll().then(maybeOpenOnboardingOnFirstRun);

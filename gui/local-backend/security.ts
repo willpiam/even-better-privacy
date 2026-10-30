@@ -29,7 +29,8 @@ const DEFAULT_ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
 	// Same-origin fetches from the static-served frontend.
 	"http://127.0.0.1:8787",
 	"http://localhost:8787",
-	"null",
+	// "null" is deliberately absent: the sandboxed mail iframe has a null
+	// origin and must never reach routes that use unlocked identity keys.
 ]);
 
 const CSRF_HEADER = "x-ebp-csrf";

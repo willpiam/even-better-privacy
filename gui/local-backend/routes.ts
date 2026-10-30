@@ -7,6 +7,7 @@ import {
   type MultiRecipientAttachmentManifestEntry,
   sha256Hex,
 } from "../../core/MessageHash.ts";
+import { buildMailAuthenticityFields } from "../../core/MailAuthenticity.ts";
 import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
 import {
   createHierarchyCertificate,
@@ -37,7 +38,9 @@ import {
 } from "../../core/EmailAttachmentPayload.ts";
 import { validatePassword } from "../../core/PasswordPolicy.ts";
 import {
+  buildMailDeleteDetail,
   buildMailPasswordResetDetail,
+  MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
   validateMailUsername,
 } from "../../core/MailUsername.ts";
@@ -89,6 +92,15 @@ import {
   toSafeString,
 } from "./identity.ts";
 import {
+  getUnlockStatus,
+  loadIdentityForRequest,
+  lockAll,
+  lockIdentity,
+  saveIdentityForRequest,
+  setUnlockTimeout,
+  unlockIdentity,
+} from "./unlock-session.ts";
+import {
   computeExternalFingerprint,
   deleteContact,
   findContactRecord,
@@ -105,6 +117,7 @@ import {
   getMailSecretsStore,
   getMailStore,
   isMailOauthProvider,
+  type MailAccountConfig,
   type MailAccountRecord,
   type MailAuthSecrets,
   type MailOauthProvider,
@@ -320,6 +333,105 @@ async function fetchEbpMailConfig(server: string): Promise<EbpMailConfig> {
     throw new HttpError(STATUS.BadGateway, `mail sign-up config failed: HTTP ${res.status}`);
   }
   return await res.json() as EbpMailConfig;
+}
+
+type MailEndpoint = { host: string; port: number; secure: boolean };
+
+/**
+ * The managed address for `identity`. Identities restored from a recovery
+ * phrase carry no details, so fall back to the key server's verified record.
+ */
+async function resolveManagedEmail(
+  identity: Identity,
+  server: string,
+  domain: string,
+): Promise<string> {
+  const suffix = `@${domain.toLowerCase()}`;
+  const local = identity.getDetail("email")?.toLowerCase();
+  if (local && local.endsWith(suffix)) return local;
+  let res: Response;
+  try {
+    res = await fetch(
+      apiUrl(server, `/api/v1/identity/${encodeURIComponent(identity.toFingerprint())}`),
+    );
+  } catch (e) {
+    throw new HttpError(
+      STATUS.BadGateway,
+      `key server unreachable: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+  const record = await res.json().catch(() => ({})) as {
+    details?: Record<string, [string, string]>;
+    detailsMeta?: Record<string, { verified?: boolean }>;
+    revokedDetails?: string[];
+  };
+  const remote = res.ok ? record.details?.email?.[0]?.toLowerCase() : undefined;
+  const verified = record.detailsMeta?.email?.verified === true &&
+    !(record.revokedDetails ?? []).includes("email");
+  if (!remote || !verified || !remote.endsWith(suffix)) {
+    throw new HttpError(
+      STATUS.NotFound,
+      `this identity has no verified ${suffix} mailbox on the key server`,
+    );
+  }
+  return remote;
+}
+
+async function saveEbpMailAccount(identityDir: string, options: {
+  email: string;
+  login: string;
+  imap: MailEndpoint;
+  smtp: MailEndpoint;
+  fromName?: string;
+}): Promise<{ accountId: string; accountConfig: MailAccountConfig }> {
+  const accountConfig = normalizeMailConfig(DEFAULT_MAIL_ACCOUNT, {
+    authType: "password",
+    imapHost: options.imap.host,
+    imapPort: options.imap.port,
+    imapSecure: options.imap.secure,
+    smtpHost: options.smtp.host,
+    smtpPort: options.smtp.port,
+    smtpSecure: options.smtp.secure,
+    username: options.login,
+    fromEmail: options.email,
+    fromName: options.fromName ?? "",
+    persistSecrets: true,
+  });
+  const store = await getMailStore(identityDir);
+  const accountId = `mail-${randomHex(8)}`;
+  const now = Date.now();
+  store.accounts.push({
+    id: accountId,
+    name: "EBP Mail",
+    config: accountConfig,
+    createdAt: now,
+    updatedAt: now,
+  });
+  store.selectedAccountId = accountId;
+  await saveMailStore(identityDir, store);
+  return { accountId, accountConfig };
+}
+
+/** Unlocks mail secrets for writing; false when no PIN candidate works. */
+async function prepareMailSecrets(
+  identityDir: string,
+  candidates: Array<string | undefined>,
+): Promise<boolean> {
+  const status = await getMailSecretsStatus(identityDir);
+  const usable = candidates.filter((c): c is string => typeof c === "string" && c.length > 0);
+  if (!status.locked) {
+    if (!mailPinCache.get(identityDir) && usable[0]) mailPinCache.set(identityDir, usable[0]);
+    return Boolean(mailPinCache.get(identityDir));
+  }
+  for (const candidate of usable) {
+    try {
+      await unlockMailSecretsWithPin(identityDir, candidate);
+      return true;
+    } catch {
+      // try the next candidate
+    }
+  }
+  return false;
 }
 
 async function nextHdIdentityIndex(
@@ -1546,9 +1658,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           "at least one recipient is required",
         );
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       if (!message && attachmentsInput.length === 0) {
         throw new HttpError(
           STATUS.BadRequest,
@@ -1557,7 +1666,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
 
       const ctx = await getContext(home ?? undefined, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const resolved = await resolveMailAccount(ctx.identityDir, accountId);
       const account = resolved.account.config;
       const secrets = resolved.secrets;
@@ -2056,6 +2165,73 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       return json({ ok: true, currentIdentity: name });
     }
 
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/unlock") {
+      const body = await readJson<{
+        password?: unknown;
+        home?: unknown;
+        identity?: unknown;
+        timeoutMinutes?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const identityName = typeof body.identity === "string"
+        ? body.identity
+        : undefined;
+      const password = typeof body.password === "string" ? body.password : "";
+      const ctx = await getContext(home, identityName);
+      const { identity, status, mailUnlocked } = await unlockIdentity(
+        ctx,
+        password,
+        body.timeoutMinutes,
+      );
+      return json({
+        ok: true,
+        ...status,
+        fingerprint: identity.toFingerprint(),
+        mailSecretsUnlocked: mailUnlocked,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/identity/lock") {
+      const body = await readJson<
+        { home?: unknown; identity?: unknown; all?: unknown }
+      >(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const identityName = typeof body.identity === "string"
+        ? body.identity
+        : undefined;
+      const ctx = await getContext(home, identityName);
+      const lockedCurrent = lockIdentity(ctx);
+      const lockedOthers = body.all === true ? lockAll() : 0;
+      return json({
+        ok: true,
+        locked: lockedCurrent || lockedOthers > 0,
+        ...getUnlockStatus(ctx),
+      });
+    }
+
+    if (
+      req.method === "POST" && url.pathname === "/api/v1/identity/unlock-timeout"
+    ) {
+      const body = await readJson<
+        { home?: unknown; identity?: unknown; timeoutMinutes?: unknown }
+      >(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const identityName = typeof body.identity === "string"
+        ? body.identity
+        : undefined;
+      const ctx = await getContext(home, identityName);
+      return json(setUnlockTimeout(ctx, body.timeoutMinutes));
+    }
+
+    if (
+      req.method === "GET" && url.pathname === "/api/v1/identity/unlock-status"
+    ) {
+      const home = url.searchParams.get("home") ?? undefined;
+      const identityName = url.searchParams.get("identity") ?? undefined;
+      const ctx = await getContext(home, identityName);
+      return json(getUnlockStatus(ctx));
+    }
+
     if (req.method === "POST" && url.pathname === "/api/v1/identity/info") {
       const body = await readJson<
         { password?: unknown; home?: unknown; identity?: unknown }
@@ -2067,12 +2243,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const password = typeof body.password === "string"
         ? body.password
         : undefined;
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       return json({
         fingerprint: identity.toFingerprint(),
         signingKeyType: identity.signingKeyType,
@@ -2103,9 +2276,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const password = typeof body.password === "string"
         ? body.password
         : undefined;
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       const includeSigningKey = body.includeSigningKey !== false;
       const includeEncryptionKey = body.includeEncryptionKey !== false;
       const includeDetails = body.includeDetails === true;
@@ -2117,7 +2287,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       return json(identity.toPublicExport({
         includeSigningKey,
         includeEncryptionKey,
@@ -2226,6 +2396,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         }
         throw e;
       }
+      lockIdentity(ctx);
       const state = await readState(ctx.identityDir);
       if (state?.currentIdentity === name) {
         const remaining = (await listIdentityNames(ctx.identityDir)).filter(
@@ -2512,9 +2683,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           "masterFingerprint and childFingerprint are required",
         );
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       if (
         !isValidFingerprintBech32(masterFingerprint) ||
         !isValidFingerprintBech32(childFingerprint)
@@ -2526,7 +2694,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const proposerFingerprint = identity.toFingerprint();
       if (
         proposerFingerprint !== masterFingerprint &&
@@ -2771,12 +2939,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!certificate) {
         throw new HttpError(STATUS.BadRequest, "certificate is required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const cert = decodeHierarchyCertificateDraft(certificate);
       const myFingerprint = identity.toFingerprint();
       if (
@@ -2884,23 +3049,20 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           "proposer cannot reject their own pending entry",
         );
       }
+      // F-SERVER-02: the server requires a signature over
+      // {action, fingerprint, proposalId, timestamp} from the rejecting
+      // identity's signing key, so unlock before touching the local queue.
+      const rejectSigner = (serverOverride || ctx.server)
+        ? await loadIdentityForRequest(ctx, password)
+        : null;
       await writePendingHierarchyLocal(
         ctx,
         local.filter((p) => p.id !== proposalId),
       );
-      if (serverOverride || ctx.server) {
-        // F-SERVER-02: the server now requires a signature over
-        // {action, fingerprint, proposalId, timestamp} from the
-        // rejecting identity's signing key.
-        if (!password) {
-          throw new HttpError(
-            STATUS.BadRequest,
-            "password is required to sign the reject request for the server",
-          );
-        }
+      if (rejectSigner) {
         try {
           const server = resolveServer(ctx, serverOverride);
-          const identity = await loadIdentity(ctx, password);
+          const identity = rejectSigner;
           const timestamp = Date.now();
           const rejectMessage = stableStringify({
             action: "hierarchy::reject",
@@ -3148,9 +3310,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!message) {
         throw new HttpError(STATUS.BadRequest, "message is required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       if (
         (Deno.env.get("GUI_SIGN_CONFIRM_BYPASS") ?? "false").toLowerCase() !==
           "true"
@@ -3175,7 +3334,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const salt = providedSalt ?? (includeSalt ? randomHex(16) : "");
       const signature = (identity as Identity & {
         signMessage: (
@@ -3502,13 +3661,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const contact = await loadContact(ctx, recipient);
 
       if (sign) {
-        if (!password) {
-          throw new HttpError(
-            STATUS.BadRequest,
-            "password is required when signing",
-          );
-        }
-        const identity = await loadIdentity(ctx, password);
+        const identity = await loadIdentityForRequest(ctx, password);
         const ciphertext = identity.signAndEncryptFor(message, contact);
         const summary = identity.summary;
         const senderIdentity = includePublicKeys
@@ -3561,14 +3714,59 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!payload) {
         throw new HttpError(STATUS.BadRequest, "payload is required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
 
       const type = payload.type;
+      const rawMessageFrom = (body as Record<string, unknown>).messageFrom;
+      const messageFrom = typeof rawMessageFrom === "string"
+        ? rawMessageFrom
+        : senderEmail ?? "";
+      // Claims are matched against `claimSource` (server copy when fetched).
+      const signer: {
+        contact: ExternalIdentity | null;
+        claimSource: ExternalIdentity | null;
+        isKnownContact: boolean;
+      } = { contact: null, claimSource: null, isKnownContact: false };
+      const respond = async (
+        result: {
+          verified: boolean | null;
+          verifyStatus: string;
+          signerEmail?: string | null;
+          signerEmailVerified?: boolean | null;
+          signerMatchesSenderEmail?: boolean | null;
+        } & Record<string, unknown>,
+      ) => {
+        let contactName: string | null = null;
+        const signerFp = signer.contact?.fingerprint;
+        if (signerFp && signer.isKnownContact) {
+          try {
+            const contacts = await listContacts(ctx);
+            contactName = contacts.find((c) =>
+              c.contact.fingerprint === signerFp
+            )?.name ?? null;
+          } catch {
+            contactName = null;
+          }
+        }
+        return json({
+          ...result,
+          ...buildMailAuthenticityFields({
+            verified: result.verified,
+            verifyStatus: result.verifyStatus,
+            contact: signer.claimSource ?? signer.contact,
+            messageFrom,
+            isKnownContact: signer.isKnownContact,
+            contactName,
+            fallback: {
+              signerEmail: result.signerEmail,
+              signerEmailVerified: result.signerEmailVerified,
+              signerMatchesSenderEmail: result.signerMatchesSenderEmail,
+            },
+          }),
+        });
+      };
       if (type === "ebp-encrypted-message") {
         const ciphertext = String(payload.ciphertext ?? "");
         let message: string;
@@ -3580,7 +3778,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
             "decryption failed - message may be corrupted or not intended for this identity",
           );
         }
-        return json({
+        return await respond({
           message,
           verified: null,
           verifyStatus: "unsigned",
@@ -3663,7 +3861,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         const status = result.verified
           ? (isKnownContact ? "valid" : "valid_unknown_signer")
           : "invalid";
-        return json({
+        signer.contact = contact;
+        signer.isKnownContact = isKnownContact;
+        return await respond({
           message: result.message,
           verified: result.verified,
           verifyStatus: status,
@@ -3781,6 +3981,30 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           return ext;
         };
 
+        const unverifiedResult = async (
+          verifyStatus: string,
+          verified: false | null,
+        ) => {
+          const message = safeDecrypt(ciphertext);
+          let text = message;
+          try {
+            const inner = JSON.parse(message);
+            text = inner.message ?? message;
+          } catch {
+            text = message;
+          }
+          return await respond({
+            message: text,
+            verified,
+            verifyStatus,
+            signerFingerprint,
+            signerEmail,
+            signerEmailVerified,
+            signerMatchesSenderEmail,
+            serverIdentityMatch,
+          });
+        };
+
         const resolvedSigned = await tryResolveSenderForCtx(ctx, {
           senderHint: sender,
           senderFingerprint: senderFp,
@@ -3802,31 +4026,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               if (embedded) {
                 contact = embedded;
               } else {
-                const message = safeDecrypt(ciphertext);
-                try {
-                  const inner = JSON.parse(message);
-                  return json({
-                    message: inner.message ?? message,
-                    verified: null,
-                    verifyStatus: "sender_not_found",
-                    signerFingerprint,
-                    signerEmail,
-                    signerEmailVerified,
-                    signerMatchesSenderEmail,
-                    serverIdentityMatch,
-                  });
-                } catch {
-                  return json({
-                    message,
-                    verified: null,
-                    verifyStatus: "sender_not_found",
-                    signerFingerprint,
-                    signerEmail,
-                    signerEmailVerified,
-                    signerMatchesSenderEmail,
-                    serverIdentityMatch,
-                  });
-                }
+                return await unverifiedResult("sender_not_found", null);
               }
             }
           }
@@ -3841,31 +4041,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               if (embedded) {
                 contact = embedded;
               } else {
-                const message = safeDecrypt(ciphertext);
-                try {
-                  const inner = JSON.parse(message);
-                  return json({
-                    message: inner.message ?? message,
-                    verified: null,
-                    verifyStatus: "sender_not_in_contacts",
-                    signerFingerprint,
-                    signerEmail,
-                    signerEmailVerified,
-                    signerMatchesSenderEmail,
-                    serverIdentityMatch,
-                  });
-                } catch {
-                  return json({
-                    message,
-                    verified: null,
-                    verifyStatus: "sender_not_in_contacts",
-                    signerFingerprint,
-                    signerEmail,
-                    signerEmailVerified,
-                    signerMatchesSenderEmail,
-                    serverIdentityMatch,
-                  });
-                }
+                return await unverifiedResult("sender_not_in_contacts", null);
               }
             }
           }
@@ -3875,34 +4051,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
             contact = embedded;
             signerFingerprint = embedded.fingerprint;
           } else {
-            const message = safeDecrypt(ciphertext);
-            try {
-              const inner = JSON.parse(message);
-              return json({
-                message: inner.message ?? message,
-                verified: null,
-                verifyStatus: "sender_not_specified",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            } catch {
-              return json({
-                message,
-                verified: null,
-                verifyStatus: "sender_not_specified",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            }
+            return await unverifiedResult("sender_not_specified", null);
           }
         }
 
+        signer.contact = contact;
+        signer.isKnownContact = isKnownContact;
         try {
           const computedFingerprint = computeExternalFingerprint(contact);
           signerFingerprint = contact.fingerprint ?? signerFingerprint;
@@ -3923,60 +4077,11 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               senderEmailNormalized === signerEmailNormalized;
           }
           if (
-            !computedFingerprint || computedFingerprint !== contact.fingerprint
+            !computedFingerprint ||
+            computedFingerprint !== contact.fingerprint ||
+            (senderFp && computedFingerprint !== senderFp)
           ) {
-            const message = safeDecrypt(ciphertext);
-            try {
-              const inner = JSON.parse(message);
-              return json({
-                message: inner.message ?? message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            } catch {
-              return json({
-                message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            }
-          }
-          if (senderFp && computedFingerprint !== senderFp) {
-            const message = safeDecrypt(ciphertext);
-            try {
-              const inner = JSON.parse(message);
-              return json({
-                message: inner.message ?? message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            } catch {
-              return json({
-                message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-                signerEmail,
-                signerEmailVerified,
-                signerMatchesSenderEmail,
-                serverIdentityMatch,
-              });
-            }
+            return await unverifiedResult("fingerprint_mismatch", false);
           }
           const result = identity.decryptAndVerify(ciphertext, contact);
 
@@ -3992,6 +4097,9 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               serverIdentityMatch = serverFp === computedFingerprint &&
                 serverIdentity.signingKey === contact.signingKey &&
                 serverIdentity.encryptionKey === contact.encryptionKey;
+              if (serverIdentityMatch) {
+                signer.claimSource = serverIdentity;
+              }
               if (serverIdentity.details) {
                 const serverEmail = getIdentityDetailValue(
                   serverIdentity.details,
@@ -4030,7 +4138,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
             const status = result.verifyStatus === "valid_unbound"
               ? `${base}_unbound`
               : base;
-            return json({
+            return await respond({
               message: result.message,
               verified: result.verified,
               verifyStatus: status,
@@ -4041,7 +4149,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               serverIdentityMatch,
             });
           } else {
-            return json({
+            return await respond({
               message: result.message,
               verified: false,
               verifyStatus: "invalid",
@@ -4123,13 +4231,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const cleartext = JSON.stringify(envelope);
 
       if (sign) {
-        if (!password) {
-          throw new HttpError(
-            STATUS.BadRequest,
-            "password is required when signing",
-          );
-        }
-        const identity = await loadIdentity(ctx, password);
+        const identity = await loadIdentityForRequest(ctx, password);
         const ciphertext = identity.signAndEncryptFor(cleartext, contact);
         return json(buildEncryptedSignedFilePayload({
           recipientFingerprint: contact.fingerprint,
@@ -4171,16 +4273,13 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!payload) {
         throw new HttpError(STATUS.BadRequest, "payload is required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       const ciphertext = String(payload.ciphertext ?? "");
       if (!ciphertext) {
         throw new HttpError(STATUS.BadRequest, "payload missing ciphertext");
       }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
 
       let cleartextEnvelopeRaw = "";
       let verified: boolean | null = null;
@@ -4291,13 +4390,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!payloadInput) {
         throw new HttpError(STATUS.BadRequest, "payload is required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
       const payload = parseEncryptedEmailAttachmentPayload(payloadInput);
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       let cleartextEnvelopeRaw = "";
       let verified: boolean | null = null;
       let verifyStatus = "unsigned";
@@ -4515,34 +4611,16 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
       await saveIdentity(ctx, password, identity);
 
-      const imap = result.imap as { host: string; port: number; secure: boolean };
-      const smtp = result.smtp as { host: string; port: number; secure: boolean };
+      const imap = result.imap as MailEndpoint;
+      const smtp = result.smtp as MailEndpoint;
       const login = typeof result.login === "string" ? result.login : email;
-      const accountConfig = normalizeMailConfig(DEFAULT_MAIL_ACCOUNT, {
-        authType: "password",
-        imapHost: imap.host,
-        imapPort: imap.port,
-        imapSecure: imap.secure,
-        smtpHost: smtp.host,
-        smtpPort: smtp.port,
-        smtpSecure: smtp.secure,
-        username: login,
-        fromEmail: email,
+      const { accountId, accountConfig } = await saveEbpMailAccount(ctx.identityDir, {
+        email,
+        login,
+        imap,
+        smtp,
         fromName: toSafeString(body.fromName, 128),
-        persistSecrets: true,
       });
-      const store = await getMailStore(ctx.identityDir);
-      const accountId = `mail-${randomHex(8)}`;
-      const now = Date.now();
-      store.accounts.push({
-        id: accountId,
-        name: "EBP Mail",
-        config: accountConfig,
-        createdAt: now,
-        updatedAt: now,
-      });
-      store.selectedAccountId = accountId;
-      await saveMailStore(ctx.identityDir, store);
       const secretStore = await getMailSecretsStore(ctx.identityDir);
       secretStore[accountId] = { imapPassword: mailPassword, smtpPassword: mailPassword };
       await saveMailSecretsStore(ctx.identityDir, secretStore);
@@ -4566,25 +4644,34 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         password?: unknown;
         server?: unknown;
         accountId?: unknown;
+        pin?: unknown;
+        fromName?: unknown;
       }>(req);
-      const password = typeof body.password === "string" ? body.password : "";
-      if (!password) throw new HttpError(STATUS.BadRequest, "password is required");
+      const password = typeof body.password === "string" && body.password
+        ? body.password
+        : undefined;
+      const pin = typeof body.pin === "string" && body.pin ? body.pin : undefined;
       const ctx = await getContext(
         typeof body.home === "string" ? body.home : undefined,
         typeof body.identity === "string" ? body.identity : undefined,
       );
       const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
-      const identity = await loadIdentity(ctx, password);
-      const email = identity.getDetail("email");
-      if (!email) throw new HttpError(STATUS.BadRequest, "identity has no email detail");
+      // The reset proof is never saved, so the loaded identity is not persisted.
+      const identity = await loadIdentityForRequest(ctx, password);
+      const config = await fetchEbpMailConfig(server);
+      if (!config.enabled || !config.domain) {
+        throw new HttpError(
+          STATUS.ServiceUnavailable,
+          "this key server does not offer EBP email",
+        );
+      }
+      const email = await resolveManagedEmail(identity, server, config.domain);
       const mailPassword = randomHex(16);
-      // Sign on a throwaway copy so the reset proof never lands in saved details.
-      const signer = await loadIdentity(ctx, password);
-      signer.attachDetail(
+      identity.attachDetail(
         MAIL_PASSWORD_RESET_PATH,
         buildMailPasswordResetDetail(email, sha256Hex(mailPassword)),
       );
-      const proof = signer.details.get(MAIL_PASSWORD_RESET_PATH)?.[1];
+      const proof = identity.details.get(MAIL_PASSWORD_RESET_PATH)?.[1];
       const res = await fetch(apiUrl(server, "/api/v1/mail/reset-password"), {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -4593,30 +4680,48 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const result = await res.json().catch(() => ({})) as Record<string, unknown>;
       if (!res.ok) {
         throw new HttpError(
-          STATUS.BadGateway,
+          res.status === 404 ? STATUS.NotFound : STATUS.BadGateway,
           typeof result.error === "string" ? result.error : `HTTP ${res.status}`,
         );
       }
+      const imap = (result.imap ?? config.imap) as MailEndpoint | undefined;
+      const smtp = (result.smtp ?? config.smtp) as MailEndpoint | undefined;
       const store = await getMailStore(ctx.identityDir);
       const requestedId = toSafeString(body.accountId, 128);
-      const account = store.accounts.find((a) =>
-        requestedId ? a.id === requestedId : a.config.fromEmail.toLowerCase() === email.toLowerCase()
+      let account = store.accounts.find((a) =>
+        requestedId ? a.id === requestedId : a.config.fromEmail.toLowerCase() === email
       );
+      let created = false;
+      if (!account && !requestedId) {
+        if (imap && smtp) {
+          const saved = await saveEbpMailAccount(ctx.identityDir, {
+            email,
+            login: email,
+            imap,
+            smtp,
+            fromName: toSafeString(body.fromName, 128),
+          });
+          account = (await getMailStore(ctx.identityDir)).accounts.find((a) =>
+            a.id === saved.accountId
+          );
+          created = true;
+        }
+      }
       let savedLocally = false;
       if (account) {
         try {
-          if (!mailPinCache.get(ctx.identityDir)) {
-            const status = await getMailSecretsStatus(ctx.identityDir);
-            if (status.locked) {
-              await unlockMailSecretsWithPin(ctx.identityDir, password);
-            } else {
-              mailPinCache.set(ctx.identityDir, password);
-            }
+          if (
+            await prepareMailSecrets(ctx.identityDir, [
+              pin,
+              mailPinCache.get(ctx.identityDir),
+              password,
+            ])
+          ) {
+            const secretStore = await getMailSecretsStore(ctx.identityDir);
+            secretStore[account.id] = { imapPassword: mailPassword, smtpPassword: mailPassword };
+            await saveMailSecretsStore(ctx.identityDir, secretStore);
+            savedLocally = true;
           }
-          const secretStore = await getMailSecretsStore(ctx.identityDir);
-          secretStore[account.id] = { imapPassword: mailPassword, smtpPassword: mailPassword };
-          await saveMailSecretsStore(ctx.identityDir, secretStore);
-          savedLocally = true;
         } catch {
           // Mail secrets are locked with a different PIN; caller shows the password.
         }
@@ -4624,9 +4729,100 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       return json({
         ok: true,
         email,
+        fingerprint: identity.toFingerprint(),
         accountId: account?.id ?? null,
+        created,
         savedLocally,
         password: mailPassword,
+        connection: { imap, smtp, login: email, password: mailPassword },
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-delete") {
+      const body = await readJson<{
+        home?: unknown;
+        identity?: unknown;
+        password?: unknown;
+        server?: unknown;
+        confirm?: unknown;
+      }>(req);
+      const password = typeof body.password === "string" && body.password
+        ? body.password
+        : undefined;
+      const ctx = await getContext(
+        typeof body.home === "string" ? body.home : undefined,
+        typeof body.identity === "string" ? body.identity : undefined,
+      );
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const identity = await loadIdentityForRequest(ctx, password);
+      const config = await fetchEbpMailConfig(server);
+      if (!config.enabled || !config.domain) {
+        throw new HttpError(
+          STATUS.ServiceUnavailable,
+          "this key server does not offer EBP email",
+        );
+      }
+      const email = await resolveManagedEmail(identity, server, config.domain);
+      const confirm = typeof body.confirm === "string" ? body.confirm.trim().toLowerCase() : "";
+      if (confirm !== email) {
+        throw new HttpError(STATUS.BadRequest, `type ${email} to confirm`);
+      }
+      const signer = await loadIdentityForRequest(ctx, password);
+      signer.attachDetail(MAIL_DELETE_PATH, buildMailDeleteDetail(email));
+      const proof = signer.details.get(MAIL_DELETE_PATH)?.[1];
+      const res = await fetch(apiUrl(server, "/api/v1/mail/delete"), {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fingerprint: identity.toFingerprint(), proof }),
+      });
+      const result = await res.json().catch(() => ({})) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new HttpError(
+          res.status === 404 ? STATUS.NotFound : STATUS.BadGateway,
+          typeof result.error === "string" ? result.error : `HTTP ${res.status}`,
+        );
+      }
+
+      const store = await getMailStore(ctx.identityDir);
+      const removedIds = store.accounts
+        .filter((a) => a.config.fromEmail.toLowerCase() === email)
+        .map((a) => a.id);
+      if (removedIds.length) {
+        store.accounts = store.accounts.filter((a) => !removedIds.includes(a.id));
+        if (store.selectedAccountId && removedIds.includes(store.selectedAccountId)) {
+          store.selectedAccountId = store.accounts[0]?.id ?? null;
+        }
+        await saveMailStore(ctx.identityDir, store);
+      }
+      let secretsCleared = removedIds.length === 0;
+      try {
+        const status = await getMailSecretsStatus(ctx.identityDir);
+        if (!status.locked) {
+          const secretStore = await getMailSecretsStore(ctx.identityDir);
+          for (const id of removedIds) delete secretStore[id];
+          await saveMailSecretsStore(ctx.identityDir, secretStore);
+          secretsCleared = true;
+        }
+      } catch {
+        // Orphaned secrets stay encrypted and unused until the PIN is entered.
+      }
+      let detailRemoved = false;
+      if (identity.getDetail("email")?.toLowerCase() === email) {
+        identity.details.delete("email");
+        try {
+          await saveIdentityForRequest(ctx, password, identity);
+          detailRemoved = true;
+        } catch {
+          // The server copy is already revoked; the stale local detail is harmless.
+        }
+      }
+      return json({
+        ok: true,
+        email,
+        removedAccountIds: removedIds,
+        selectedAccountId: store.selectedAccountId,
+        secretsCleared,
+        detailRemoved,
       });
     }
 
@@ -4656,17 +4852,14 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!path || !detail) {
         throw new HttpError(STATUS.BadRequest, "path and detail are required");
       }
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const detailToAttach = path.startsWith("opaque::")
         ? sha256Hex(detail)
         : detail;
       identity.attachDetail(path, detailToAttach);
-      await saveIdentity(ctx, password, identity);
+      await saveIdentityForRequest(ctx, password, identity);
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);
@@ -4786,13 +4979,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const serverOverride = typeof body.server === "string"
         ? body.server
         : undefined;
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
       const server = resolveServer(ctx, serverOverride);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
       const summary = identity.summary;
 
       let serverIdentity: ExternalIdentity | null = null;
@@ -5070,19 +5260,16 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.server
         : undefined;
       if (!path) throw new HttpError(STATUS.BadRequest, "path is required");
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
 
       if (!identity.details.has(path)) {
         throw new HttpError(STATUS.NotFound, "detail not found");
       }
 
       const certificate = identity.revokeDetail(path, reason);
-      await saveIdentity(ctx, password, identity);
+      await saveIdentityForRequest(ctx, password, identity);
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);
@@ -5136,19 +5323,16 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const serverOverride = typeof body.server === "string"
         ? body.server
         : undefined;
-      if (!password) {
-        throw new HttpError(STATUS.BadRequest, "password is required");
-      }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentity(ctx, password);
+      const identity = await loadIdentityForRequest(ctx, password);
 
       if (identity.isRevoked()) {
         throw new HttpError(STATUS.Conflict, "identity is already revoked");
       }
 
       const certificate = identity.createIdentityRevocation(reason);
-      await saveIdentity(ctx, password, identity);
+      await saveIdentityForRequest(ctx, password, identity);
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);

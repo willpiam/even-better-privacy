@@ -4,7 +4,7 @@ import {
   stableStringify,
   type ExternalIdentity,
 } from '../ebpCore';
-import {loadIdentity} from './storage';
+import {loadIdentityForUse} from './storage';
 
 function apiUrl(server: string, path: string): string {
   const base = server.replace(/\/+$/, '');
@@ -14,10 +14,10 @@ function apiUrl(server: string, path: string): string {
 
 export async function publishIdentity(params: {
   identityName: string;
-  password: string;
+  password?: string;
   server: string;
 }): Promise<string> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const summary = identity.summary;
 
   let serverIdentity: ExternalIdentity | null = null;

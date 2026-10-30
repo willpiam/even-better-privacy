@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import {DecryptionAuthError} from '../../../core/AES';
 import {
   AES,
   Identity,
@@ -8,6 +9,12 @@ import {
 import {deriveIdentityKey} from './argon2';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
+import {sameBytes} from './unlockSessionLogic';
+import {
+  cacheUnlockedIdentity,
+  getUnlockMaterial,
+  lock as lockIdentitySession,
+} from './unlockSession';
 
 export const BASE_DIR = `${RNFS.DocumentDirectoryPath}/ebp`;
 const STATE_FILE = `${BASE_DIR}/state.json`;
@@ -17,6 +24,24 @@ const PENDING_CERTIFICATES_FILE = `${BASE_DIR}/pending-certificates.json`;
 
 /** Ciphertext versions >= 3 use Argon2id (native on mobile). */
 const ARGON2_AES_VERSION = 3;
+
+/** No cached key, or the session was idle-locked. */
+export class IdentityLockedError extends Error {
+  readonly code = 'identity_locked';
+  constructor(message = 'identity locked') {
+    super(message);
+    this.name = 'IdentityLockedError';
+  }
+}
+
+/** Cached key no longer decrypts (salt change or corrupt ciphertext). The cache entry is dropped. */
+export class IdentitySessionStaleError extends Error {
+  readonly code = 'identity_session_stale';
+  constructor(message = 'identity unlock is stale') {
+    super(message);
+    this.name = 'IdentitySessionStaleError';
+  }
+}
 
 function identityPath(name: string): string {
   return `${BASE_DIR}/${name}.identity.json`;
@@ -170,6 +195,125 @@ export async function loadIdentity(
   return Identity.fromStorageFormat(raw, normalizedPassword);
 }
 
+/**
+ * Derive the storage key, cache it for the idle session, and verify it decrypts.
+ * Returns the normalized identity name.
+ */
+export async function unlockIdentity(
+  name: string,
+  password: string,
+): Promise<string> {
+  const normalizedPassword = password.trim();
+  if (!normalizedPassword) {
+    throw new Error('Password is required');
+  }
+  const normalized = normalizeName(name);
+  await ensureAppDirs();
+  const path = identityPath(normalized);
+  if (!(await RNFS.exists(path))) {
+    throw new Error('Identity not found');
+  }
+  const raw = await RNFS.readFile(path, 'utf8');
+  const encrypted = parseEncryptedField(raw);
+  const {version, salt} = AES.readHeader(encrypted);
+  const key =
+    version >= ARGON2_AES_VERSION
+      ? await deriveIdentityKey(passwordBytes(normalizedPassword), salt)
+      : AES.deriveKeyForStorage(normalizedPassword, salt, version);
+  try {
+    Identity.fromStorageFormatWithKey(raw, key);
+  } catch (error) {
+    key.fill(0);
+    if (error instanceof DecryptionAuthError) {
+      throw new Error('Wrong password');
+    }
+    throw error;
+  }
+  try {
+    await cacheUnlockedIdentity(normalized, key, salt);
+  } catch (error) {
+    key.fill(0);
+    throw error;
+  }
+  return normalized;
+}
+
+/**
+ * Re-read the identity with the cached storage key.
+ * A salt change or decrypt failure evicts the session and throws
+ * {@link IdentitySessionStaleError}. A missing session throws
+ * {@link IdentityLockedError}.
+ */
+export async function loadIdentityUnlocked(name: string): Promise<Identity> {
+  const normalized = normalizeName(name);
+  const material = getUnlockMaterial(normalized);
+  if (!material) {
+    throw new IdentityLockedError();
+  }
+  await ensureAppDirs();
+  const path = identityPath(normalized);
+  if (!(await RNFS.exists(path))) {
+    lockIdentitySession(normalized);
+    throw new IdentityLockedError();
+  }
+  const raw = await RNFS.readFile(path, 'utf8');
+  let salt: Uint8Array;
+  try {
+    salt = AES.readHeader(parseEncryptedField(raw)).salt;
+  } catch {
+    lockIdentitySession(normalized);
+    throw new IdentitySessionStaleError();
+  }
+  if (!sameBytes(salt, material.salt)) {
+    lockIdentitySession(normalized);
+    throw new IdentitySessionStaleError();
+  }
+  try {
+    return Identity.fromStorageFormatWithKey(raw, material.key);
+  } catch {
+    lockIdentitySession(normalized);
+    throw new IdentitySessionStaleError();
+  }
+}
+
+/** Re-save with the cached key and salt so the session stays valid. */
+export async function saveIdentityUnlocked(
+  name: string,
+  identity: Identity,
+): Promise<void> {
+  const normalized = normalizeName(name);
+  const material = getUnlockMaterial(normalized);
+  if (!material) {
+    throw new IdentityLockedError();
+  }
+  await ensureAppDirs();
+  const storageData = identity.toStorageFormatWithKey(material.key, material.salt);
+  await RNFS.writeFile(identityPath(normalized), storageData, 'utf8');
+}
+
+/** Password path for creation flows; otherwise the unlock session. */
+export async function loadIdentityForUse(
+  name: string,
+  password?: string,
+): Promise<Identity> {
+  if (password?.trim()) {
+    return loadIdentity(name, password);
+  }
+  return loadIdentityUnlocked(name);
+}
+
+export async function saveIdentityForUse(
+  name: string,
+  identity: Identity,
+  password?: string,
+): Promise<void> {
+  if (password?.trim()) {
+    await saveIdentity(name, password, identity);
+    return;
+  }
+  await saveIdentityUnlocked(name, identity);
+}
+
 export async function importIdentity(params: {
   storageJson: string;
   name?: string;
@@ -204,6 +348,7 @@ export async function deleteIdentity(name: string): Promise<void> {
     throw new Error('Identity not found');
   }
   await RNFS.unlink(path);
+  lockIdentitySession(normalized);
   const current = await getCurrentIdentity();
   if (current === normalized) {
     await setCurrentIdentity(null);

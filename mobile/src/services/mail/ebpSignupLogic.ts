@@ -155,3 +155,109 @@ export function chooseIdentityName(
 export function isAddressTakenError(message: string): boolean {
   return /taken|already exists/i.test(message);
 }
+
+/** Signup 409 whose body says this identity already has a mailbox. */
+export function isAlreadyHasMailboxError(message: string, status?: number): boolean {
+  if (status !== undefined && status !== 409) {
+    return false;
+  }
+  return /already has a mailbox/i.test(message);
+}
+
+export type OnboardingWizardStep =
+  | 'welcome'
+  | 'address'
+  | 'password'
+  | 'unlock'
+  | 'phrase'
+  | 'confirm'
+  | 'create'
+  | 'done';
+
+/**
+ * New identities set a password and confirm a recovery phrase.
+ * An existing identity keeps the username step, unlocks with its password,
+ * and skips the new-password, phrase, and confirm steps.
+ */
+export function wizardSteps(useExisting: boolean): OnboardingWizardStep[] {
+  if (useExisting) {
+    return ['welcome', 'address', 'unlock', 'create', 'done'];
+  }
+  return ['welcome', 'address', 'password', 'phrase', 'confirm', 'create', 'done'];
+}
+
+/** True when `email` is exactly `local@domain` (domain match is exact, case-insensitive). */
+export function isManagedMailAddress(email: string, domain: string): boolean {
+  const addr = email.trim().toLowerCase();
+  const dom = domain.trim().toLowerCase();
+  if (!addr || !dom) {
+    return false;
+  }
+  const at = addr.lastIndexOf('@');
+  if (at <= 0 || at !== addr.indexOf('@') || at === addr.length - 1) {
+    return false;
+  }
+  return addr.slice(at + 1) === dom;
+}
+
+/**
+ * Verified `email` detail from `GET /api/v1/identity/:fp`, or null when missing,
+ * revoked, unverified, or on a different domain.
+ */
+export function parseVerifiedManagedEmail(body: unknown, domain: string): string | null {
+  if (!body || typeof body !== 'object') {
+    return null;
+  }
+  const record = body as {
+    details?: Record<string, unknown>;
+    detailsMeta?: Record<string, {verified?: boolean}>;
+    revokedDetails?: unknown;
+  };
+  const revoked = Array.isArray(record.revokedDetails) ? record.revokedDetails : [];
+  if (revoked.includes('email')) {
+    return null;
+  }
+  if (record.detailsMeta?.email?.verified !== true) {
+    return null;
+  }
+  const entry = record.details?.email;
+  const raw = Array.isArray(entry)
+    ? entry[0]
+    : entry;
+  if (typeof raw !== 'string' || !isManagedMailAddress(raw, domain)) {
+    return null;
+  }
+  return raw.trim().toLowerCase();
+}
+
+export function buildMailPasswordResetRequest(params: {
+  fingerprint: string;
+  mailPassword: string;
+  proof: string;
+}): string {
+  return JSON.stringify({
+    fingerprint: params.fingerprint,
+    mailPassword: params.mailPassword,
+    proof: params.proof,
+  });
+}
+
+export function buildMailDeleteRequest(params: {
+  fingerprint: string;
+  proof: string;
+}): string {
+  return JSON.stringify({
+    fingerprint: params.fingerprint,
+    proof: params.proof,
+  });
+}
+
+/** Typed confirmation must match the mailbox address exactly, ignoring case and surrounding space. */
+export function mailboxDeleteConfirmed(email: string, typed: string): boolean {
+  const expected = email.trim().toLowerCase();
+  return expected.length > 0 && typed.trim().toLowerCase() === expected;
+}
+
+export function managedMailboxRestoreHint(email: string): string {
+  return `This identity has a verified mailbox (${email}). Mailbox access can be restored from Mail accounts.`;
+}

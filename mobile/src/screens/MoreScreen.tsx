@@ -50,7 +50,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
         <ListRow
           testID="more-settings"
           title="Settings"
-          subtitle={serverUrl || 'Server, password policy, mail'}
+          subtitle={serverUrl || 'Server, auto-lock, password policy, mail'}
           onPress={() => navigation.navigate('Settings')}
         />
         <ListRow

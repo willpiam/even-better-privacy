@@ -18,6 +18,8 @@ import ContactListRow from './ContactListRow';
 type Props = {
   visible: boolean;
   email: string;
+  /** Overrides the "no matching contact" heading when re-opening a resolved recipient. */
+  title?: string;
   /** When set (ambiguous match), these contacts are shown first with empty search. */
   preferredContacts?: StoredContact[];
   onCancel: () => void;
@@ -28,6 +30,7 @@ type Props = {
 export default function RecipientResolveModal({
   visible,
   email,
+  title,
   preferredContacts,
   onCancel,
   onSelectContact,
@@ -72,10 +75,11 @@ export default function RecipientResolveModal({
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.modal}>
-          <Text style={styles.title}>No matching EBP contact</Text>
+          <Text style={styles.title}>{title ?? 'No matching EBP contact'}</Text>
           <Text style={styles.body}>
-            No contact has {email || 'this address'} as an email or opaque email
-            detail. Select a contact to encrypt for, or send without encryption.
+            {title
+              ? `Select a contact to encrypt ${email || 'this address'} for, or send to it without encryption.`
+              : `No contact has ${email || 'this address'} as an email or opaque email detail. Select a contact to encrypt for, or send without encryption.`}
           </Text>
           <TextInput
             style={styles.input}

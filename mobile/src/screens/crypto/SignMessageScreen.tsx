@@ -3,19 +3,18 @@ import {Alert, Switch, Text, View} from 'react-native';
 import Share from 'react-native-share';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {signMessage} from '../../services/signVerify';
-import {getCurrentIdentityRequired} from '../../services/storage';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import BusyOverlay from '../../components/BusyOverlay';
 import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {cryptoStyles} from './cryptoStyles';
 
 export default function SignMessageScreen(): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [message, setMessage] = useState('');
   const [detached, setDetached] = useState(false);
   const [includeIdentity, setIncludeIdentity] = useState(true);
@@ -24,14 +23,12 @@ export default function SignMessageScreen(): JSX.Element {
   const [status, setStatus] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
-  const runSign = async (password: string) => {
+  const runSign = async (identityName: string) => {
     setBusyMessage('Signing message…');
     setStatus('');
     try {
-      const identityName = await getCurrentIdentityRequired();
       const payload = await signMessage({
         identityName,
-        password,
         message,
         options: {detached, includeIdentity, includeSalt},
       });
@@ -53,15 +50,15 @@ export default function SignMessageScreen(): JSX.Element {
         text: 'Sign',
         onPress: () => {
           void (async () => {
-            const password = await promptSecret({
-              title: 'Identity password',
-              placeholder: 'Identity password',
-              submitLabel: 'Sign',
-            });
-            if (password === null) {
-              return;
+            try {
+              const identityName = await ensureUnlocked();
+              if (!identityName) {
+                return;
+              }
+              await runSign(identityName);
+            } catch (error) {
+              setStatus(error instanceof Error ? error.message : String(error));
             }
-            await runSign(password);
           })();
         },
       },
@@ -72,7 +69,7 @@ export default function SignMessageScreen(): JSX.Element {
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField

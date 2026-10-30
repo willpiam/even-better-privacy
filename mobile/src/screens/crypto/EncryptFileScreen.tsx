@@ -11,12 +11,12 @@ import BusyOverlay from '../../components/BusyOverlay';
 import ContactPicker from '../../components/ContactPicker';
 import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {cryptoStyles} from './cryptoStyles';
 
 export default function EncryptFileScreen(): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [fileUri, setFileUri] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileMime, setFileMime] = useState('application/octet-stream');
@@ -46,25 +46,18 @@ export default function EncryptFileScreen(): JSX.Element {
   };
 
   const onEncryptFile = async () => {
-    let password: string | undefined;
-    if (fileSign) {
-      const entered = await promptSecret({
-        title: 'Identity password',
-        placeholder: 'Identity password',
-        submitLabel: 'Encrypt',
-      });
-      if (entered === null) {
-        return;
-      }
-      password = entered;
-    }
-    setBusyMessage('Encrypting file…');
     setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
+      if (fileSign) {
+        const unlocked = await ensureUnlocked(identityName);
+        if (!unlocked) {
+          return;
+        }
+      }
+      setBusyMessage('Encrypting file…');
       const payload = await encryptFile({
         identityName,
-        password,
         fileUri,
         fileName: fileName || 'encrypted.bin',
         mimeType: fileMime || undefined,
@@ -84,7 +77,7 @@ export default function EncryptFileScreen(): JSX.Element {
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <AppButton title="Pick File" onPress={pickEncryptFile} />

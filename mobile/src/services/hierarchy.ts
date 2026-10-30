@@ -24,7 +24,7 @@ import {
   ensureAppDirs,
   getCertificatesDir,
   getPendingCertificatesFile,
-  loadIdentity,
+  loadIdentityForUse,
 } from './storage';
 
 export type {PendingHierarchyProposal};
@@ -115,14 +115,14 @@ export async function listCertificates(): Promise<
 
 export async function proposeHierarchy(params: {
   identityName: string;
-  password: string;
+  password?: string;
   masterFingerprint: string;
   childFingerprint: string;
   context?: string;
   expiry?: number;
   server?: string;
 }): Promise<PendingHierarchyProposal> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const proposerFingerprint = identity.toFingerprint();
   const cert = createHierarchyCertificate(
     params.masterFingerprint,
@@ -247,11 +247,11 @@ export async function listPending(
 
 export async function acceptProposal(params: {
   identityName: string;
-  password: string;
+  password?: string;
   proposalId: number;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const myFingerprint = identity.toFingerprint();
   const pending = await listPending(myFingerprint, params.server);
   const proposal = pending.find(p => p.id === params.proposalId);
@@ -311,10 +311,10 @@ export async function acceptProposal(params: {
 export async function rejectProposal(params: {
   proposalId: number;
   identityName: string;
-  password: string;
+  password?: string;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const rejectorFingerprint = identity.toFingerprint();
   const pending = await listPending(rejectorFingerprint, params.server);
   const proposal = pending.find(p => p.id === params.proposalId);

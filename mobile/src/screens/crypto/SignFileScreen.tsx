@@ -3,19 +3,18 @@ import {Switch, Text, View} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import Share from 'react-native-share';
 import {signFile} from '../../services/signVerify';
-import {getCurrentIdentityRequired} from '../../services/storage';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import BusyOverlay from '../../components/BusyOverlay';
 import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {cryptoStyles} from './cryptoStyles';
 
 export default function SignFileScreen(): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [fileUri, setFileUri] = useState('');
   const [fileName, setFileName] = useState('');
   const [fileContext, setFileContext] = useState('');
@@ -45,21 +44,15 @@ export default function SignFileScreen(): JSX.Element {
   };
 
   const onSignFile = async () => {
-    const password = await promptSecret({
-      title: 'Identity password',
-      placeholder: 'Identity password',
-      submitLabel: 'Sign',
-    });
-    if (password === null) {
-      return;
-    }
-    setBusyMessage('Signing file…');
     setStatus('');
     try {
-      const identityName = await getCurrentIdentityRequired();
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
+        return;
+      }
+      setBusyMessage('Signing file…');
       const result = await signFile({
         identityName,
-        password,
         fileUri,
         fileName: fileName || undefined,
         contextMessage: fileContext || undefined,
@@ -80,7 +73,7 @@ export default function SignFileScreen(): JSX.Element {
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <AppButton title="Pick File" onPress={pickSignFile} />

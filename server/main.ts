@@ -28,6 +28,7 @@ import {
 } from "./handlers/hierarchy.ts";
 import { handleListIdentities, handleSearchIdentities } from "./handlers/discovery.ts";
 import {
+  handleMailDelete,
   handleMailE2eCleanup,
   handleMailResetPassword,
   handleMailSignup,
@@ -183,6 +184,10 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/reset-password") {
       return respond(attachCors(await handleMailResetPassword(req, db), corsHeaders));
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/delete") {
+      return respond(attachCors(await handleMailDelete(req, db), corsHeaders));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/identities") {

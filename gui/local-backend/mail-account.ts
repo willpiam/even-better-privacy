@@ -337,6 +337,28 @@ export async function unlockMailSecretsWithPin(identityDir: string, pin: string)
 	return legacy;
 }
 
+/**
+ * Managed mailboxes default their email PIN to the identity password, so an
+ * identity unlock silently opens the mail secrets too. A different PIN (manual
+ * accounts) leaves the store locked and the PIN prompt in place.
+ */
+export async function tryUnlockMailSecretsWithIdentityPassword(identityDir: string, password: string): Promise<boolean> {
+	if (mailPinCache.has(identityDir) && mailSecretCache.has(identityDir)) return true;
+	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	if (!isEncryptedSecretsEnvelope(diskSecrets)) return false;
+	try {
+		await unlockMailSecretsWithPin(identityDir, password);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+export function clearMailSecrets(identityDir: string): void {
+	mailSecretCache.delete(identityDir);
+	mailPinCache.delete(identityDir);
+}
+
 export async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {
 	mailSecretCache.set(identityDir, store);
 	if (Object.keys(store).length === 0) {

@@ -1,7 +1,9 @@
 import {
+  ENCRYPTED_MAIL_ATTACHMENT_ERROR,
   ebpMailPlainIntro,
   elevateUnknownSignerVerifyStatus,
   formatFromHeader,
+  rejectEncryptedMailAttachments,
   resolveEbpMailRecipients,
   resolvePlainMailRecipients,
   sourceLooksLikeEbpArmor,
@@ -54,6 +56,14 @@ describe('ebpMailLogic', () => {
     expect(elevateUnknownSignerVerifyStatus(true, true, 'valid')).toBe('valid');
     expect(elevateUnknownSignerVerifyStatus(false, false, 'invalid')).toBe(
       'invalid',
+    );
+  });
+
+  test('rejectEncryptedMailAttachments blocks encrypted sends that include files', () => {
+    expect(() => rejectEncryptedMailAttachments(undefined)).not.toThrow();
+    expect(() => rejectEncryptedMailAttachments([])).not.toThrow();
+    expect(() => rejectEncryptedMailAttachments([{filename: 'a.txt'}])).toThrow(
+      ENCRYPTED_MAIL_ATTACHMENT_ERROR,
     );
   });
 });

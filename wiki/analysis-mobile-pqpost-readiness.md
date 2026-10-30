@@ -2,7 +2,7 @@
 title: "Mobile Readiness for pqpost.com"
 type: analysis
 status: active
-last_updated: 2026-10-28
+last_updated: 2026-10-30
 source_count: 4
 tags:
   - analysis
@@ -48,9 +48,9 @@ Stalwart's 993/465 ports. See [[component-mobile]] and
 |---|---|
 | New identity plus `@pqpost.com` mailbox | Implemented |
 | Read and send on the provisioned mailbox | Implemented; no live-mailbox device test |
-| Attach a mailbox to an identity that already exists | Missing. Desktop welcome offers **Use this identity** ([[component-gui]]). The mobile wizard always generates new keys. |
-| Recovery-phrase restore back into the same mailbox | Missing in the app. `POST /api/v1/mail/reset-password` exists on the key server, and the GUI local backend proxies it, but no GUI or mobile screen calls it. |
-| Delete the mailbox | Neither app has a control. Cleanup is the server e2e path only. |
+| Attach a mailbox to an identity that already exists | Implemented on both clients. Mobile welcome shows **Use this identity** when an identity is current. |
+| Recovery-phrase restore back into the same mailbox | Implemented. Both clients call `POST /api/v1/mail/reset-password` and save a new mailbox secret locally. |
+| Delete the mailbox | Implemented. `POST /api/v1/mail/delete` revokes the email detail and retires the username. The user must type the address. |
 | iOS install of this flow | Not documented. The wizard is in the React Native app; the recorded install path is Android. |
 | Mail to Gmail and other providers | Not an app gap. Outbound port 25 is still closed. |
 | Post-quantum DKIM | Not an app gap. Stalwart's classical DKIM key is the current deliverability stopgap. |

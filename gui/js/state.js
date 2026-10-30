@@ -3,6 +3,8 @@ export const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
 export const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
 export const MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY = "ebp.mail.includePublicKeys";
 export const PASSWORD_POLICY_ENFORCE_PREF_KEY = "ebp.identity.enforcePasswordPolicy";
+export const AUTO_LOCK_MINUTES_PREF_KEY = "ebp.identity.autoLockMinutes";
+export const DEFAULT_AUTO_LOCK_MINUTES = 15;
 export const STARTUP_RETRY_ATTEMPTS = 12;
 export const STARTUP_RETRY_DELAY_MS = 500;
 export const TOAST_LOG_LIMIT = 50;
@@ -40,6 +42,8 @@ export const state = {
   mailRenderHtml: false,
   mailIncludePublicKeys: true,
   enforcePasswordPolicy: true,
+  autoLockMinutes: DEFAULT_AUTO_LOCK_MINUTES,
+  identityUnlocked: false,
   mailOAuthPendingState: "",
   mailOAuthProvider: "",
   mailOAuthEmail: "",
@@ -50,6 +54,7 @@ export const state = {
   selectedMailMessageContentKey: null,
   selectedMailMessageAttachmentManifest: [],
   selectedMailMessageRecipientFingerprints: [],
+  selectedMailDecryptResult: null,
   decryptedFileResult: null,
   toastLogs: [],
   serverDefaultApplied: false,
@@ -73,10 +78,30 @@ export function saveBooleanPreference(key, value) {
   }
 }
 
+export function loadNumberPreference(key, fallback = 0) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null) return fallback;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveNumberPreference(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Ignore localStorage failures in restricted environments.
+  }
+}
+
 export function loadUiPreferences() {
   state.mailRenderHtml = loadBooleanPreference(MAIL_RENDER_HTML_PREF_KEY, false);
   state.mailIncludePublicKeys = loadBooleanPreference(MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, true);
   state.enforcePasswordPolicy = loadBooleanPreference(PASSWORD_POLICY_ENFORCE_PREF_KEY, true);
+  state.autoLockMinutes = loadNumberPreference(AUTO_LOCK_MINUTES_PREF_KEY, DEFAULT_AUTO_LOCK_MINUTES);
 }
 
 export function getDetailValue(details, path) {

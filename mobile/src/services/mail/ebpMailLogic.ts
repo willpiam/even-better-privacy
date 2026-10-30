@@ -7,6 +7,18 @@ export type EbpMailRecipient = {
   contact: string;
 };
 
+/** Thrown by sendEbpMail so compose can show it. Encrypted attachments are a later port. */
+export const ENCRYPTED_MAIL_ATTACHMENT_ERROR =
+  'Attachments on encrypted mail are not supported on mobile yet';
+
+export function rejectEncryptedMailAttachments(
+  attachments: readonly unknown[] | undefined,
+): void {
+  if (attachments && attachments.length > 0) {
+    throw new Error(ENCRYPTED_MAIL_ATTACHMENT_ERROR);
+  }
+}
+
 export function sourceLooksLikeEbpArmor(source: string): boolean {
   return (
     source.includes('-----BEGIN EBP') && source.includes('-----END EBP')
@@ -50,18 +62,4 @@ export function resolvePlainMailRecipients(params: {
     .filter(Boolean);
 }
 
-/**
- * When crypto verified but signer is not a known contact, elevate verify status.
- */
-export function elevateUnknownSignerVerifyStatus(
-  verified: boolean | null,
-  isKnownContact: boolean,
-  verifyStatus: string,
-): string {
-  if (verified === true && !isKnownContact) {
-    if (verifyStatus === 'valid' || verifyStatus === 'valid_unbound') {
-      return 'valid_unknown_signer';
-    }
-  }
-  return verifyStatus;
-}
+export {elevateUnknownSignerVerifyStatus} from '../../../../core/MailAuthenticity.ts';

@@ -37,7 +37,7 @@ import HierarchyTreeView from '../components/HierarchyTreeView';
 import HierarchyDiagramDetailModal, {
   type HierarchyDiagramDetail,
 } from '../components/HierarchyDiagramDetailModal';
-import {useSecretPrompt} from '../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../hooks/useIdentityUnlock';
 import {statusKind} from '../theme/statusKind';
 import {colors, spacing, typography} from '../theme/tokens';
 
@@ -84,7 +84,7 @@ export function parseCertificateExpiryInput(raw: string): number {
 }
 
 export default function CertificatesScreen({route}: Props): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [active, setActive] = useState<ActiveCert[]>([]);
   const [pending, setPending] = useState<PendingProposal[]>([]);
   const [iAmMaster, setIAmMaster] = useState(true);
@@ -160,23 +160,17 @@ export default function CertificatesScreen({route}: Props): JSX.Element {
         setStatus('Other party fingerprint is required');
         return;
       }
-      const password = await promptSecret({
-        title: 'Identity password',
-        placeholder: 'Identity password',
-        submitLabel: 'Propose',
-      });
-      if (password === null) {
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
         return;
       }
       setBusyMessage('Creating proposal…');
       setStatus('');
-      const identityName = await getCurrentIdentityRequired();
       const masterFingerprint = iAmMaster ? myFingerprint : otherFingerprint;
       const childFingerprint = iAmMaster ? otherFingerprint : myFingerprint;
       const expiryMs = parseCertificateExpiryInput(expiry);
       await proposeHierarchy({
         identityName,
-        password,
         masterFingerprint,
         childFingerprint,
         context: context || undefined,
@@ -196,18 +190,13 @@ export default function CertificatesScreen({route}: Props): JSX.Element {
 
   const onAccept = async (proposalId: number) => {
     try {
-      const password = await promptSecret({
-        title: 'Identity password',
-        placeholder: 'Identity password',
-        submitLabel: 'Accept',
-      });
-      if (password === null) {
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
         return;
       }
       setBusyMessage('Accepting proposal…');
       setStatus('');
-      const identityName = await getCurrentIdentityRequired();
-      await acceptProposal({identityName, password, proposalId});
+      await acceptProposal({identityName, proposalId});
       setStatus('Proposal accepted');
       await refresh();
     } catch (error) {
@@ -219,21 +208,15 @@ export default function CertificatesScreen({route}: Props): JSX.Element {
 
   const onReject = async (proposalId: number) => {
     try {
-      const password = await promptSecret({
-        title: 'Identity password',
-        placeholder: 'Identity password',
-        submitLabel: 'Reject',
-      });
-      if (password === null) {
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
         return;
       }
       setBusyMessage('Rejecting proposal…');
       setStatus('');
-      const identityName = await getCurrentIdentityRequired();
       await rejectProposal({
         proposalId,
         identityName,
-        password,
       });
       setStatus('Proposal rejected');
       await refresh();
@@ -280,7 +263,7 @@ export default function CertificatesScreen({route}: Props): JSX.Element {
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
-      {secretPrompt}
+      {unlockPrompt}
       <CertificateDetailModal
         certificate={selectedCert}
         onClose={() => setSelectedCert(null)}

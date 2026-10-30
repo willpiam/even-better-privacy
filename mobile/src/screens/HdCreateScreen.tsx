@@ -8,7 +8,23 @@ import {
   discoverHdIdentities,
   verifyHdMnemonic,
 } from '../services/hd';
+import {getServerUrl} from '../services/settings';
+import {
+  fetchEbpSignupConfig,
+  lookupVerifiedManagedEmail,
+} from '../services/mail/ebpSignup';
+import {managedMailboxRestoreHint} from '../services/mail/ebpSignupLogic';
 import type {HdChange, HdProfile} from '../ebpCore';
+
+async function managedMailboxHint(fingerprint: string): Promise<string> {
+  const server = await getServerUrl();
+  const cfg = await fetchEbpSignupConfig(server);
+  if (!cfg.enabled) {
+    return '';
+  }
+  const email = await lookupVerifiedManagedEmail(server, fingerprint, cfg.domain);
+  return email ? managedMailboxRestoreHint(email) : '';
+}
 import Screen from '../components/Screen';
 import TextField from '../components/TextField';
 import AppButton from '../components/AppButton';
@@ -34,6 +50,8 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
   const [account, setAccount] = useState('0');
   const [index, setIndex] = useState('0');
   const [discoverOutput, setDiscoverOutput] = useState('');
+  const [mailboxHint, setMailboxHint] = useState('');
+  const [createdName, setCreatedName] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState(false);
   const [busyMessage, setBusyMessage] = useState('Working…');
@@ -49,6 +67,7 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     setBusy(true);
     setBusyMessage('Creating HD identity…');
     setStatus('');
+    setMailboxHint('');
     try {
       if (mnemonic.trim() !== confirmMnemonic.trim()) {
         throw new Error('Mnemonic confirmation does not match');
@@ -68,7 +87,18 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
         overwrite,
       });
       setStatus(`Created HD identity ${created.name}`);
-      navigation.replace('IdentityDetail', {identityName: created.name});
+      let hint = '';
+      try {
+        hint = await managedMailboxHint(created.fingerprint);
+      } catch {
+        hint = '';
+      }
+      if (hint) {
+        setMailboxHint(hint);
+        setCreatedName(created.name);
+      } else {
+        navigation.replace('IdentityDetail', {identityName: created.name});
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -99,6 +129,7 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     setBusy(true);
     setBusyMessage('Discovering on server…');
     setStatus('');
+    setMailboxHint('');
     try {
       const matches = await discoverHdIdentities({
         mnemonic,
@@ -107,6 +138,21 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
         account: Number(account) || 0,
       });
       setDiscoverOutput(JSON.stringify(matches, null, 2));
+      let hint = '';
+      for (const match of matches) {
+        if (!match.publishedToServer) {
+          continue;
+        }
+        try {
+          hint = await managedMailboxHint(match.fingerprint);
+        } catch {
+          hint = '';
+        }
+        if (hint) {
+          break;
+        }
+      }
+      setMailboxHint(hint);
       setStatus(`Discovery found ${matches.length} match(es)`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -121,6 +167,19 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
     <Screen scroll>
       <BusyOverlay visible={busy} message={busyMessage} />
       <StatusBanner message={status} kind={statusKind(status)} />
+      {mailboxHint ? (
+        <Text testID="hd-mailbox-restore-hint" style={styles.hint}>
+          {mailboxHint}
+        </Text>
+      ) : null}
+      {createdName && mailboxHint ? (
+        <AppButton
+          title="View identity"
+          onPress={() =>
+            navigation.replace('IdentityDetail', {identityName: createdName})
+          }
+        />
+      ) : null}
       <AppButton
         title="Generate mnemonic"
         testID="hd-generate-mnemonic"

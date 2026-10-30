@@ -870,6 +870,10 @@
         z-index: 220;
       }
 
+      #mail-authenticity-modal {
+        z-index: 225;
+      }
+
       #password-modal {
         z-index: 230;
       }
@@ -1309,6 +1313,26 @@
       .context-item-value {
         color: var(--text-primary);
         font-weight: 600;
+      }
+
+      .unlock-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 4px 2px 10px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        font-weight: 600;
+      }
+
+      .unlock-pill[data-state="unlocked"] {
+        border-color: var(--success, #2e7d32);
+      }
+
+      .unlock-pill button {
+        padding: 2px 10px;
+        font-size: 0.75rem;
+        border-radius: 999px;
       }
 
       .context-item-fingerprint {
@@ -2098,6 +2122,144 @@
         text-align: center;
       }
 
+      .recipient-chips {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        background: var(--bg-input);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        cursor: text;
+      }
+
+      .recipient-chips:focus-within {
+        border-color: var(--border-focus);
+        box-shadow: 0 0 0 3px var(--accent-bg);
+      }
+
+      .recipient-chip-list {
+        display: contents;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      .recipient-chips input {
+        flex: 1;
+        min-width: 180px;
+        border: none;
+        background: transparent;
+        box-shadow: none;
+        padding: 4px;
+      }
+
+      .recipient-chips input:focus {
+        box-shadow: none;
+      }
+
+      .recipient-chip {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--bg-hover);
+        color: var(--text-primary);
+        font-size: 0.82rem;
+        max-width: 100%;
+      }
+
+      .recipient-chip button {
+        background: transparent;
+        border: none;
+        color: inherit;
+        padding: 3px 8px;
+        font-size: inherit;
+        box-shadow: none;
+        min-height: 0;
+      }
+
+      .recipient-chip-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .recipient-chip-remove {
+        padding-left: 2px !important;
+        opacity: 0.7;
+      }
+
+      .recipient-chip-email {
+        color: var(--text-secondary);
+      }
+
+      .recipient-chip[data-state="resolving"] {
+        opacity: 0.7;
+        border-style: dashed;
+      }
+
+      .recipient-chip[data-state="encrypted"] {
+        border-color: var(--success);
+        background: var(--success-bg);
+      }
+
+      .recipient-chip[data-state="encrypted"] .recipient-chip-lock {
+        color: var(--success);
+      }
+
+      .recipient-chip[data-state="unresolved"] {
+        border-color: var(--warning);
+        background: rgba(210, 153, 34, 0.15);
+        color: var(--warning);
+      }
+
+      .recipient-chip[data-state="plaintext"],
+      .recipient-chip[data-state="invalid"] {
+        border-color: var(--error);
+        background: var(--error-bg);
+        color: var(--error);
+      }
+
+      .recipient-chip[data-state="invalid"] .recipient-chip-label {
+        text-decoration: line-through;
+      }
+
+      #mail-compose-recipient-status {
+        color: var(--warning);
+      }
+
+      #mail-compose-recipient-status:empty {
+        display: none;
+      }
+
+      .compose-plaintext-banner {
+        padding: 10px 12px;
+        border: 1px solid var(--error);
+        border-radius: var(--radius-sm);
+        background: var(--error-bg);
+        color: var(--error);
+        font-weight: 600;
+      }
+
+      .compose-plaintext-banner[hidden] {
+        display: none;
+      }
+
+      .recipient-resolve-list {
+        list-style: none;
+        margin: 10px 0 16px;
+        padding: 0;
+        max-height: 280px;
+        overflow-y: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+      }
+
       .contact-search-hint {
         padding: 8px 12px;
         color: var(--text-muted);
@@ -2262,6 +2424,104 @@
 
       .mail-reader-actions {
         justify-content: space-between;
+      }
+
+      .mail-reader-from-value {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        flex-wrap: wrap;
+      }
+
+      .mail-authenticity-badge {
+        border: none;
+        cursor: pointer;
+        padding: 2px 10px;
+        font-size: 0.8rem;
+      }
+
+      .mail-authenticity-badge:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .mail-reader-locked {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--bg-base);
+        padding: 24px 16px;
+        margin-bottom: 10px;
+        text-align: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .mail-reader-locked-icon {
+        font-size: 1.6rem;
+      }
+
+      .mail-reader-locked-title {
+        font-weight: 600;
+      }
+
+      .mail-technical-details {
+        margin-top: 10px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        padding: 8px 12px;
+        font-size: 0.85rem;
+      }
+
+      .mail-technical-details > summary {
+        cursor: pointer;
+        color: var(--text-muted);
+      }
+
+      .mail-technical-details[open] > summary {
+        margin-bottom: 8px;
+      }
+
+      .mail-technical-details textarea {
+        min-height: 120px;
+        font-family: var(--font-mono, monospace);
+        font-size: 0.75rem;
+      }
+
+      .mail-authenticity-section {
+        margin-bottom: 14px;
+      }
+
+      .mail-authenticity-section h4 {
+        margin: 0 0 6px;
+        font-size: 0.9rem;
+      }
+
+      .mail-authenticity-rows {
+        display: grid;
+        grid-template-columns: 160px 1fr;
+        gap: 4px 12px;
+        font-size: 0.85rem;
+      }
+
+      .mail-authenticity-rows dt {
+        color: var(--text-muted);
+      }
+
+      .mail-authenticity-rows dd {
+        margin: 0;
+        word-break: break-all;
+      }
+
+      .mail-authenticity-note {
+        margin: 6px 0 0;
+        font-size: 0.85rem;
+      }
+
+      .mail-authenticity-body {
+        overflow: auto;
       }
 
       .mail-folder-custom-wrap {
@@ -2439,6 +2699,19 @@
         <div class="context-item">
           <span class="context-item-label">Protocol:</span>
           <span class="context-item-value" id="ctx-protocol">-</span>
+        </div>
+        <div class="context-item">
+          <span
+            class="unlock-pill"
+            id="ctx-unlock-pill"
+            data-state="locked"
+            title="Private keys stay unlocked in memory until idle auto-lock"
+          >
+            <span id="ctx-unlock-label">Locked</span>
+            <button type="button" class="secondary" id="ctx-unlock-btn">
+              Unlock
+            </button>
+          </span>
         </div>
       </div>
 
@@ -3779,9 +4052,16 @@
                   </div>
                   <div class="mail-reader-header-row">
                     <span class="mail-reader-header-label">From</span><span
-                      id="mail-reader-from"
-                      class="small muted"
-                    >-</span>
+                      class="mail-reader-from-value"
+                    ><span id="mail-reader-from" class="small muted">-</span
+                      ><button
+                        type="button"
+                        id="mail-authenticity-badge"
+                        class="result-badge pending mail-authenticity-badge"
+                        style="display: none"
+                        aria-label="Sender authenticity details"
+                        title="Sender authenticity details"
+                      >○</button></span>
                   </div>
                   <div class="mail-reader-header-row">
                     <span class="mail-reader-header-label">To</span><span
@@ -3798,6 +4078,21 @@
                 </div>
                 <div id="mail-reader-empty" class="mail-reader-empty">
                   Select a message from Inbox to view it.
+                </div>
+                <div
+                  id="mail-reader-locked"
+                  class="mail-reader-locked"
+                  style="display: none"
+                >
+                  <div class="mail-reader-locked-icon" aria-hidden="true">🔒</div>
+                  <div class="mail-reader-locked-title">
+                    This message is encrypted
+                  </div>
+                  <div class="small muted" id="mail-reader-locked-hint">
+                    Decrypt it with your identity to read it and check who
+                    signed it.
+                  </div>
+                  <button type="button" id="mail-decrypt-btn">Decrypt</button>
                 </div>
                 <label id="mail-message-body-wrap">Selected message
                   <textarea
@@ -3838,28 +4133,46 @@
                   <button type="button" class="secondary" id="mail-reply-btn">
                     Reply
                   </button>
-                  <div class="row">
-                    <input
-                      id="mail-sender-contact"
-                      type="text"
-                      placeholder="Sender contact name or fingerprint (for signed EBP payloads)"
-                    />
-                    <button
-                      type="button"
-                      class="secondary"
-                      id="mail-decrypt-btn"
-                    >
-                      Decrypt EBP Payload
-                    </button>
+                </div>
+                <details
+                  id="mail-technical-details"
+                  class="mail-technical-details"
+                  style="display: none"
+                >
+                  <summary>Technical details</summary>
+                  <div class="stack">
+                    <div class="small">
+                      Payload type:
+                      <code id="mail-technical-payload-type">-</code>
+                    </div>
+                    <label>Encrypted payload
+                      <textarea id="mail-technical-armor" readonly></textarea>
+                    </label>
+                    <label>Override sender
+                      <input
+                        id="mail-sender-contact"
+                        type="text"
+                        placeholder="Contact name or fingerprint, if the signer is not detected automatically"
+                      />
+                    </label>
+                    <div class="row">
+                      <button
+                        type="button"
+                        class="secondary"
+                        id="mail-redecrypt-btn"
+                      >
+                        Decrypt again
+                      </button>
+                    </div>
+                    <div class="small">
+                      Verification: <span
+                        id="mail-verify-result"
+                        class="result-badge pending"
+                      >-</span>
+                    </div>
+                    <div class="small muted" id="mail-verify-meta"></div>
                   </div>
-                </div>
-                <div class="small">
-                  Verification: <span
-                    id="mail-verify-result"
-                    class="result-badge pending"
-                  >-</span>
-                </div>
-                <div class="small muted" id="mail-verify-meta"></div>
+                </details>
               </section>
             </div>
           </div>
@@ -3881,51 +4194,48 @@
                   placeholder="No sender account selected"
                 />
               </label>
-              <div class="two">
-                <label id="mail-compose-to-wrap">To (Plain mode)
+              <div class="stack recipient-chips-wrap">
+                <label for="mail-compose-to-input" style="margin: 0">To</label>
+                <div id="mail-compose-to-chips" class="recipient-chips">
+                  <ul
+                    id="mail-compose-to-chip-list"
+                    class="recipient-chip-list"
+                    aria-label="Recipients"
+                  ></ul>
                   <input
-                    id="mail-compose-to"
+                    id="mail-compose-to-input"
                     type="text"
-                    placeholder="recipient@example.com"
+                    autocomplete="off"
+                    placeholder="Add recipients (comma or Enter to separate)"
                   />
-                </label>
-                <label>Subject
-                  <input
-                    id="mail-compose-subject"
-                    type="text"
-                    placeholder="Subject"
-                  />
-                </label>
-              </div>
-              <label>Mode
-                <select id="mail-compose-mode">
-                  <option value="plain">Plaintext email</option>
-                  <option value="ebp-encrypt" selected>
-                    EBP sign + encrypt payload in email body
-                  </option>
-                </select>
-              </label>
-              <div id="mail-compose-recipients-wrap" class="stack">
-                <div
-                  class="row"
-                  style="justify-content: space-between; align-items: center"
-                >
-                  <label style="margin: 0"
-                  >EBP Recipients (contact + SMTP email)</label>
-                  <button
-                    type="button"
-                    class="secondary"
-                    id="mail-compose-add-recipient"
-                  >
-                    Add recipient
-                  </button>
                 </div>
-                <div id="mail-compose-recipients" class="stack"></div>
                 <div class="small muted">
-                  Each recipient row links one EBP identity to one SMTP email
-                  address.
+                  Each address is checked against your contacts, then the key
+                  server. Locked chips are encrypted. Click an amber chip to
+                  choose a contact or send it unencrypted.
+                </div>
+                <div
+                  id="mail-compose-recipient-status"
+                  class="small"
+                  role="status"
+                ></div>
+                <div
+                  id="mail-compose-plaintext-banner"
+                  class="compose-plaintext-banner"
+                  role="alert"
+                  hidden
+                >
+                  This message will not be encrypted. Every recipient is set to
+                  receive it as plaintext.
                 </div>
               </div>
+              <label>Subject
+                <input
+                  id="mail-compose-subject"
+                  type="text"
+                  placeholder="Subject"
+                />
+              </label>
               <label>Body
                 <textarea
                   id="mail-compose-body"
@@ -4109,6 +4419,14 @@
                   Test IMAP + SMTP
                 </button>
               </div>
+              <div class="row" id="mail-ebp-managed-actions" style="display: none">
+                <button type="button" class="secondary" id="mail-ebp-restore-btn">
+                  Restore EBP mailbox access
+                </button>
+                <button type="button" class="danger" id="mail-ebp-delete-btn">
+                  Delete mailbox
+                </button>
+              </div>
               <p class="small muted">
                 Mail credentials are used by the local backend on this PC. They
                 are not sent to your remote EBP key server.
@@ -4205,6 +4523,18 @@
             symbols), and cannot match a small list of common passwords. Disable
             only if you accept weaker protection against offline guessing of
             stolen identity files.
+          </p>
+          <label style="margin-top: 16px">Auto-lock after
+            <select id="settings-auto-lock-minutes">
+              <option value="5">5 minutes</option>
+              <option value="15" selected>15 minutes</option>
+              <option value="60">60 minutes</option>
+            </select>
+          </label>
+          <p class="small muted" style="margin-top: 8px">
+            You enter your identity password once; private keys then stay
+            unlocked in the local backend until this much idle time passes or
+            you press Lock. Locking also forgets stored mail passwords.
           </p>
         </section>
         <section>
@@ -4387,6 +4717,46 @@
         </div>
       </div>
     </main>
+
+    <!-- Compose Recipient Resolve Modal -->
+    <div class="modal-overlay" id="mail-recipient-resolve-modal">
+      <div
+        class="modal modal-wide"
+        role="dialog"
+        aria-labelledby="mail-recipient-resolve-title"
+      >
+        <h3 id="mail-recipient-resolve-title">
+          Recipient <span id="mail-recipient-resolve-email"></span>
+        </h3>
+        <p id="mail-recipient-resolve-message" class="small"></p>
+        <input
+          id="mail-recipient-resolve-search"
+          type="text"
+          autocomplete="off"
+          placeholder="Search contacts by name, email, alias, or fingerprint"
+        />
+        <ul
+          id="mail-recipient-resolve-list"
+          class="recipient-resolve-list"
+        ></ul>
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="secondary"
+            id="mail-recipient-resolve-cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            class="danger"
+            id="mail-recipient-resolve-plaintext"
+          >
+            Send unencrypted to this address
+          </button>
+        </div>
+      </div>
+    </div>
 
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirm-modal">
@@ -4587,6 +4957,81 @@
             Establish Hierarchy
           </button>
           <button id="contact-detail-sync-btn">Sync from Server</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mail Sender Authenticity Modal -->
+    <div class="modal-overlay" id="mail-authenticity-modal">
+      <div
+        class="modal modal-wide"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mail-authenticity-title"
+      >
+        <h3 id="mail-authenticity-title">
+          <span
+            id="mail-authenticity-modal-badge"
+            class="result-badge pending"
+          >○</span>
+          Sender authenticity
+        </h3>
+        <div class="mail-authenticity-body">
+          <section class="mail-authenticity-section">
+            <h4>Who signed</h4>
+            <dl class="mail-authenticity-rows">
+              <dt>Contact</dt>
+              <dd id="mail-authenticity-contact">-</dd>
+              <dt>Fingerprint</dt>
+              <dd><code id="mail-authenticity-fingerprint">-</code></dd>
+              <dt>Known contact</dt>
+              <dd id="mail-authenticity-known">-</dd>
+              <dt id="mail-authenticity-server-label">Matches server identity</dt>
+              <dd id="mail-authenticity-server">-</dd>
+            </dl>
+          </section>
+          <section class="mail-authenticity-section">
+            <h4>Email claims</h4>
+            <dl class="mail-authenticity-rows">
+              <dt>Message From</dt>
+              <dd id="mail-authenticity-from">-</dd>
+              <dt>Published email</dt>
+              <dd id="mail-authenticity-signer-email">-</dd>
+              <dt>Matched path</dt>
+              <dd id="mail-authenticity-matched-path">-</dd>
+              <dt>Opaque email match</dt>
+              <dd id="mail-authenticity-opaque">-</dd>
+            </dl>
+            <p
+              class="mail-authenticity-note"
+              id="mail-authenticity-from-note"
+            ></p>
+          </section>
+          <section class="mail-authenticity-section">
+            <h4>Endorsement</h4>
+            <dl class="mail-authenticity-rows">
+              <dt>Verified</dt>
+              <dd id="mail-authenticity-endorsed">-</dd>
+            </dl>
+            <p
+              class="mail-authenticity-note"
+              id="mail-authenticity-endorse-note"
+            ></p>
+          </section>
+          <section class="mail-authenticity-section">
+            <h4>Signature</h4>
+            <dl class="mail-authenticity-rows">
+              <dt>Status</dt>
+              <dd id="mail-authenticity-status">-</dd>
+            </dl>
+            <p
+              class="mail-authenticity-note"
+              id="mail-authenticity-signature-note"
+            ></p>
+          </section>
+        </div>
+        <div class="modal-actions">
+          <button class="secondary" id="mail-authenticity-close">Close</button>
         </div>
       </div>
     </div>

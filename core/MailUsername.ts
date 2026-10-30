@@ -10,6 +10,9 @@ export const MAIL_PASSWORD_MAX = 128;
 /** Path signed (but never stored) when resetting a managed mailbox password. */
 export const MAIL_PASSWORD_RESET_PATH = "ebp-mail::password-reset";
 
+/** Path signed (but never stored) when deleting a managed mailbox. */
+export const MAIL_DELETE_PATH = "ebp-mail::delete";
+
 /** Live end-to-end tests use `e2e` plus digits. People cannot register these. */
 export const E2E_MAIL_USERNAME = /^e2e[0-9]+$/;
 
@@ -77,4 +80,8 @@ export function buildMailPasswordResetDetail(
   passwordSha256Hex: string,
 ): string {
   return `${email.toLowerCase()}|${passwordSha256Hex}`;
+}
+
+export function buildMailDeleteDetail(email: string): string {
+  return `${email.toLowerCase()}|delete`;
 }

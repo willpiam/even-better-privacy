@@ -1,6 +1,7 @@
 import { state, getDetailValue, getDetailMeta, isOpaqueDetailPath, formatOpaqueHash, DEFAULT_SERVER_URL, LOCAL_BACKEND_ORIGIN, STARTUP_RETRY_ATTEMPTS, STARTUP_RETRY_DELAY_MS } from "./state.js";
 import { api, sleep, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
-import { showConfirmModal, requestPassword, requestTextInput } from "./modals.js";
+import { showConfirmModal, requestTextInput } from "./modals.js";
+import { withIdentity } from "./unlock.js";
 import { updateRevokeDetailPathOptions, updateRevocationStatus } from "./revocation.js";
 import { renderHierarchyTreeSVG, loadContactHierarchyDiagram, renderCertificatesPage } from "./hierarchy.js";
 import { shortFingerprint } from "./fingerprint.js";
@@ -179,16 +180,13 @@ export function renderIdentityDetails() {
 }
 
 export async function showPushDetailModal(path, btn) {
-  const password = await requestPassword(`Enter password to push "${path}" to server`);
-  if (!password) return;
-  
   if (btn) setButtonLoading(btn, true);
   try {
     const detail = state.currentDetails.find(d => d.path === path)?.detail;
-    await api("/detail", {
+    await withIdentity(async () => api("/detail", {
       method: "POST",
-      body: JSON.stringify({ path, detail, password, push: true }),
-    });
+      body: JSON.stringify({ path, detail, push: true }),
+    }), `Enter password to push "${path}" to server`);
     setStatus(`Detail "${path}" pushed to server`, "success");
     await loadAll();
   } catch (err) {
@@ -731,9 +729,12 @@ export async function loadServerIdentities(page = 1, serverOverride = null, sear
 export function updateVerifyResult(elementId, status, verifyStatus) {
   const el = document.getElementById(elementId);
   if (!el) return;
+  applyVerifyResultBadge(el, status, verifyStatus);
+}
 
+export function applyVerifyResultBadge(el, status, verifyStatus) {
   el.className = "result-badge";
-  
+
   if (verifyStatus === "valid") {
     el.classList.add("valid");
     el.textContent = "✓ Valid";
@@ -749,6 +750,9 @@ export function updateVerifyResult(elementId, status, verifyStatus) {
   } else if (verifyStatus === "manifest_mismatch") {
     el.classList.add("invalid");
     el.textContent = "✗ Attachment/body mismatch";
+  } else if (verifyStatus === "fingerprint_mismatch") {
+    el.classList.add("invalid");
+    el.textContent = "✗ Fingerprint mismatch";
   } else if (status === false && verifyStatus === "invalid") {
     el.classList.add("invalid");
     el.textContent = "✗ Invalid";
@@ -831,22 +835,10 @@ export function renderMailVerifyMeta(result) {
     metaEl.textContent = "";
     return;
   }
-  const lines = [];
-  if (result.signerFingerprint) lines.push(`Signer fingerprint: ${result.signerFingerprint}`);
-  if (result.signerEmail) lines.push(`Signer email detail: ${result.signerEmail}`);
-  if (typeof result.signerEmailVerified === "boolean") {
-    lines.push(`Signer email verified: ${result.signerEmailVerified ? "yes" : "no"}`);
-  }
-  if (typeof result.signerMatchesSenderEmail === "boolean") {
-    lines.push(`Signer email matches sender address: ${result.signerMatchesSenderEmail ? "yes" : "no"}`);
-  }
-  if (typeof result.serverIdentityMatch === "boolean") {
-    lines.push(`Server identity match: ${result.serverIdentityMatch ? "yes" : "no"}`);
-  }
-  if (Array.isArray(result.recipientFingerprints) && result.recipientFingerprints.length > 0) {
-    lines.push(`Recipients: ${result.recipientFingerprints.join(", ")}`);
-  }
-  metaEl.textContent = lines.join(" • ");
+  // Signer and email-claim details live in the sender authenticity modal.
+  metaEl.textContent = Array.isArray(result.recipientFingerprints) && result.recipientFingerprints.length > 0
+    ? `Recipients: ${result.recipientFingerprints.join(", ")}`
+    : "";
 }
 
 let _loadMailAccount = async () => {};

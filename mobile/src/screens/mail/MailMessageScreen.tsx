@@ -25,7 +25,7 @@ import StatusBanner from '../../components/StatusBanner';
 import Card from '../../components/Card';
 import BusyOverlay from '../../components/BusyOverlay';
 import AuthenticityBadge from '../../components/AuthenticityBadge';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {colors, typography, spacing} from '../../theme/tokens';
 
@@ -35,7 +35,7 @@ export default function MailMessageScreen({
   route,
   navigation,
 }: Props): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const folder = route.params.folder ?? 'INBOX';
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
@@ -111,20 +111,15 @@ export default function MailMessageScreen({
   }, [route.params.uid, folder]);
 
   const onDecrypt = async () => {
-    const password = await promptSecret({
-      title: 'Identity password',
-      placeholder: 'Identity password to decrypt EBP',
-      submitLabel: 'Decrypt',
-    });
-    if (password === null) {
-      return;
-    }
-    setBusyMessage('Decrypting…');
+    setBusyMessage(null);
     try {
-      const identityName = await getCurrentIdentityRequired();
+      const identityName = await ensureUnlocked();
+      if (!identityName) {
+        return;
+      }
+      setBusyMessage('Decrypting…');
       const result = await decryptMailBody({
         identityName,
-        password,
         uid: route.params.uid,
         folder,
       });
@@ -184,7 +179,7 @@ export default function MailMessageScreen({
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <Text style={styles.subject}>{subject || '(no subject)'}</Text>

@@ -2,7 +2,9 @@ import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
 import { createIdentityPayload, createSignedProof } from "./helpers.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
+  buildMailDeleteDetail,
   buildMailPasswordResetDetail,
+  MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
   validateMailUsername,
 } from "../../core/MailUsername.ts";
@@ -413,5 +415,144 @@ Deno.test("e2e signup is not capped by the public signup rate limit", async () =
       const res = await signup(mod, identity, `e2e${1000 + i}`, 0, e2eHeaders(), false);
       assertEquals(res.status, 200, await res.text());
     }
+  });
+});
+
+function deleteProof(
+  identity: Awaited<ReturnType<typeof registerIdentity>>,
+  email: string,
+  timestamp = Date.now(),
+): string {
+  return createSignedProof(identity.signingKey, {
+    nonce: 0,
+    path: MAIL_DELETE_PATH,
+    detail: buildMailDeleteDetail(email),
+    timestamp,
+  }).proof;
+}
+
+Deno.test("delete destroys the mailbox, revokes the email detail, and retires the name", async () => {
+  await withServer(async (mod, stalwart) => {
+    const identity = await registerIdentity(mod);
+    assertEquals((await signup(mod, identity, "grace")).status, 200);
+    assertEquals(stalwart.accounts.size, 1);
+
+    const res = await post(mod, "/api/v1/mail/delete", {
+      fingerprint: identity.fingerprint,
+      proof: deleteProof(identity, `grace@${DOMAIN}`),
+    });
+    const body = await res.json();
+    assertEquals(res.status, 200, JSON.stringify(body));
+    assertEquals(body, { ok: true, email: `grace@${DOMAIN}` });
+    assertEquals(stalwart.accounts.size, 0);
+
+    const idBody = await (await get(mod, `/api/v1/identity/${identity.fingerprint}`)).json();
+    assertEquals(idBody.revokedDetails, ["email"]);
+    assertEquals(idBody.detailsMeta.email.verified, false);
+
+    const avail = await (await get(mod, "/api/v1/mail/username-available?u=grace")).json();
+    assertEquals(avail.available, false);
+
+    const other = await registerIdentity(mod);
+    const takeover = await signup(mod, other, "grace");
+    assertEquals(takeover.status, 409);
+    await takeover.body?.cancel();
+
+    const again = await post(mod, "/api/v1/mail/delete", {
+      fingerprint: identity.fingerprint,
+      proof: deleteProof(identity, `grace@${DOMAIN}`),
+    });
+    assertEquals(again.status, 404);
+    await again.body?.cancel();
+  });
+});
+
+Deno.test("delete rejects stale, mismatched, and foreign proofs", async () => {
+  await withServer(async (mod, stalwart) => {
+    const identity = await registerIdentity(mod);
+    assertEquals((await signup(mod, identity, "heidi")).status, 200);
+    const attacker = await registerIdentity(mod);
+
+    const cases = [
+      deleteProof(identity, `heidi@${DOMAIN}`, Date.now() - 60 * 60_000),
+      deleteProof(identity, `other@${DOMAIN}`),
+      deleteProof(attacker, `heidi@${DOMAIN}`),
+      createSignedProof(identity.signingKey, {
+        nonce: 0,
+        path: MAIL_PASSWORD_RESET_PATH,
+        detail: buildMailDeleteDetail(`heidi@${DOMAIN}`),
+        timestamp: Date.now(),
+      }).proof,
+    ];
+    for (const proof of cases) {
+      const res = await post(mod, "/api/v1/mail/delete", { fingerprint: identity.fingerprint, proof });
+      assertEquals(res.status, 400);
+      await res.body?.cancel();
+    }
+    assertEquals(stalwart.accounts.size, 1);
+
+    const noMailbox = await post(mod, "/api/v1/mail/delete", {
+      fingerprint: attacker.fingerprint,
+      proof: deleteProof(attacker, `heidi@${DOMAIN}`),
+    });
+    assertEquals(noMailbox.status, 404);
+    await noMailbox.body?.cancel();
+  });
+});
+
+Deno.test("after delete the old signup proof cannot be replayed, but a new name works", async () => {
+  await withServer(async (mod, stalwart) => {
+    const identity = await registerIdentity(mod);
+    const { proof: oldProof } = createSignedProof(identity.signingKey, {
+      nonce: 0,
+      path: "email",
+      detail: `ivan@${DOMAIN}`,
+      timestamp: Date.now(),
+    });
+    const created = await post(mod, "/api/v1/mail/signup", {
+      fingerprint: identity.fingerprint,
+      username: "ivan",
+      mailPassword: MAIL_PASSWORD,
+      detailProof: oldProof,
+    });
+    assertEquals(created.status, 200);
+    await created.body?.cancel();
+
+    const deleted = await post(mod, "/api/v1/mail/delete", {
+      fingerprint: identity.fingerprint,
+      proof: deleteProof(identity, `ivan@${DOMAIN}`),
+    });
+    assertEquals(deleted.status, 200);
+    await deleted.body?.cancel();
+
+    const replay = await post(mod, "/api/v1/mail/signup", {
+      fingerprint: identity.fingerprint,
+      username: "ivan",
+      mailPassword: MAIL_PASSWORD,
+      detailProof: oldProof,
+    });
+    assertEquals(replay.status, 409);
+    await replay.body?.cancel();
+
+    const db = await mod.getDbForTests();
+    await db.query("DELETE FROM retired_mail_usernames WHERE username = ?", ["ivan"]);
+    const replayUnretired = await post(mod, "/api/v1/mail/signup", {
+      fingerprint: identity.fingerprint,
+      username: "ivan",
+      mailPassword: MAIL_PASSWORD,
+      detailProof: oldProof,
+    });
+    assertEquals(replayUnretired.status, 400);
+    await replayUnretired.body?.cancel();
+
+    const fresh = await signup(mod, identity, "ivan2", 1);
+    const freshBody = await fresh.json();
+    assertEquals(fresh.status, 200, JSON.stringify(freshBody));
+    assertEquals(freshBody.email, `ivan2@${DOMAIN}`);
+    assertEquals(stalwart.accounts.size, 1);
+    const idBody = await (await get(mod, `/api/v1/identity/${identity.fingerprint}`)).json();
+    assertEquals(idBody.details.email[0], `ivan2@${DOMAIN}`);
+    assertEquals(idBody.detailsMeta.email.verified, true);
+    assertEquals(idBody.revokedDetails, []);
   });
 });

@@ -12,6 +12,7 @@ import {
   type MailAuthSecrets,
 } from './types';
 import {ensureIdentityMailDir, mailAccountPath, mailSecretsPath} from './paths';
+import {onIdentityLocked} from '../unlockSession';
 import {
   DEFAULT_MAIL_STORE,
   deleteAccountFromStore,
@@ -73,6 +74,22 @@ function setSecretsStoreInMemory(
 
 export function getMailPinInMemory(identityName: string): string | null {
   return pinMemory.get(identityName) ?? null;
+}
+
+/** Drop decrypted mail secrets and the remembered PIN for one identity, or all. */
+export function clearMailSecretsMemory(identityName?: string): void {
+  if (!identityName) {
+    secretsMemory.clear();
+    pinMemory.clear();
+    return;
+  }
+  const prefix = `${identityName}:`;
+  for (const key of [...secretsMemory.keys()]) {
+    if (key.startsWith(prefix)) {
+      secretsMemory.delete(key);
+    }
+  }
+  pinMemory.delete(identityName);
 }
 
 export function hasMailSecretsInMemory(identityName: string): boolean {
@@ -371,3 +388,7 @@ export async function resolveSelectedAccount(
   }
   return {account, secrets};
 }
+
+onIdentityLocked(name => {
+  clearMailSecretsMemory(name);
+});

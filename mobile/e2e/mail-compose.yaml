@@ -1,0 +1,17 @@
+appId: com.mobile
+---
+# Assumes the inbox is already open (mail secrets unlocked).
+# Checks the single To field: an invalid token becomes a chip, and Send stays blocked.
+- tapOn: Compose
+- extendedWaitUntil:
+    visible:
+      id: compose-to-input
+    timeout: 10000
+- tapOn:
+    id: compose-to-input
+- inputText: "not-an-email,"
+- extendedWaitUntil:
+    visible: "invalid address"
+    timeout: 5000
+- assertNotVisible: "Send EBP encrypted mail"
+- assertNotVisible: "Send unencrypted mail"

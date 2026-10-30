@@ -142,6 +142,17 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       )
     `);
 
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS retired_mail_usernames (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        identity_fingerprint TEXT NOT NULL,
+        retired_at INTEGER NOT NULL,
+        UNIQUE(username, domain)
+      )
+    `);
+
     // Add revocation columns to existing tables if they don't exist (migration)
     try {
       this.db.exec(`ALTER TABLE identities ADD COLUMN revoked_at INTEGER`);

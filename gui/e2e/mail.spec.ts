@@ -160,15 +160,17 @@ async function sendEncryptedEmail(
   recipientFingerprint: string,
 ) {
   await expandMailSection(page, "Compose");
-  await page.selectOption("#mail-compose-mode", "ebp-encrypt");
-  await page.fill("#mail-compose-to", to);
+  await page.fill("#mail-compose-to-input", to);
+  await page.press("#mail-compose-to-input", "Enter");
+  const chip = page.locator(`#mail-compose-to-chip-list .recipient-chip[data-email="${to}"]`);
+  await expect(chip).toHaveAttribute("data-state", "encrypted", { timeout: 30_000 });
+  await expect(chip).toContainText(recipientFingerprint);
   await page.fill("#mail-compose-subject", subject);
   await page.fill("#mail-compose-body", body);
-  await page.fill("#mail-compose-recipient", recipientFingerprint);
-  await page.dispatchEvent("#mail-compose-recipient", "input");
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Send Email", exact: true })).toBeEnabled();
-  await page.getByRole("button", { name: "Send Email", exact: true }).click();
+  const sendBtn = page.locator("#mail-compose-send-btn");
+  await expect(sendBtn).toHaveText("Send encrypted");
+  await expect(sendBtn).toBeEnabled();
+  await sendBtn.click();
   await submitIdentityPassword(page);
   await expect(page.locator("#mail-compose-subject")).toHaveValue("", { timeout: 30_000 });
   await expect(page.locator("#mail-compose-body")).toHaveValue("", { timeout: 30_000 });

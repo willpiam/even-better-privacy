@@ -2,7 +2,7 @@
 title: "Mobile Compose Recipient Resolve"
 type: analysis
 status: active
-last_updated: 2026-10-28
+last_updated: 2026-10-30
 source_count: 4
 tags:
   - analysis
@@ -14,9 +14,11 @@ tags:
 
 # Mobile Compose Recipient Resolve
 
-On [[component-mobile]] compose, the To address is resolved against local
-contacts before send so encryption is either bound to an EBP identity or
-explicitly declined.
+On [[component-mobile]] and [[component-gui]] compose, one To field turns each
+address into a chip (`core/ComposeRecipients.ts`). Each chip is resolved
+against local contacts, then the key server, before send. Encryption is bound
+to an EBP identity or explicitly declined. Mobile encrypted sends refuse
+attachments.
 
 ## Behavior
 

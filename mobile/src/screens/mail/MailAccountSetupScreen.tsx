@@ -4,6 +4,14 @@ import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
+import {getServerUrl} from '../../services/settings';
+import {
+  deleteEbpMailbox,
+  fetchEbpSignupConfig,
+  resetEbpMailbox,
+} from '../../services/mail/ebpSignup';
+import {isManagedMailAddress} from '../../services/mail/ebpSignupLogic';
+import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {
   deleteMailAccount,
   getMailPinInMemory,
@@ -41,8 +49,12 @@ export default function MailAccountSetupScreen({
 }: Props): JSX.Element {
   const accountId = route.params?.accountId;
   const isEdit = Boolean(accountId);
+  const {promptSecret, secretPrompt} = useSecretPrompt();
 
   const [identityName, setIdentityName] = useState('');
+  const [server, setServer] = useState('');
+  const [managedDomain, setManagedDomain] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState('');
   const [existing, setExisting] = useState<MailAccountRecord | null>(null);
   const [isOAuth, setIsOAuth] = useState(false);
   const [hasExistingSecrets, setHasExistingSecrets] = useState(false);
@@ -70,6 +82,14 @@ export default function MailAccountSetupScreen({
     const name = await getCurrentIdentityRequired();
     setIdentityName(name);
     setPinInSession(Boolean(getMailPinInMemory(name)));
+    try {
+      const url = await getServerUrl();
+      setServer(url);
+      const cfg = await fetchEbpSignupConfig(url);
+      setManagedDomain(cfg.enabled ? cfg.domain : '');
+    } catch {
+      setManagedDomain('');
+    }
     if (!accountId) {
       setExisting(null);
       setIsOAuth(false);
@@ -218,6 +238,78 @@ export default function MailAccountSetupScreen({
     }
   };
 
+  const promptIdentityPassword = async (): Promise<string | null> => {
+    const password = await promptSecret({
+      title: 'Identity password',
+      placeholder: 'Identity password',
+      submitLabel: 'Continue',
+    });
+    if (password === null) {
+      return null;
+    }
+    if (!password.trim()) {
+      setStatus('Identity password is required');
+      return null;
+    }
+    return password;
+  };
+
+  const onRestoreMailbox = async () => {
+    const password = await promptIdentityPassword();
+    if (!password) {
+      return;
+    }
+    setLoading(true);
+    setBusyMessage('Restoring mailbox access…');
+    setStatus('');
+    try {
+      const cfg = await fetchEbpSignupConfig(server);
+      const res = await resetEbpMailbox({
+        identityName,
+        password,
+        server,
+        config: cfg,
+        accountId,
+        fromName,
+      });
+      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
+      setStatus(`Mailbox access restored for ${res.email}`);
+      setImapPassword('');
+      setSmtpPassword('');
+      await load();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+      setBusyMessage(null);
+    }
+  };
+
+  const onDeleteMailbox = async () => {
+    const password = await promptIdentityPassword();
+    if (!password) {
+      return;
+    }
+    setLoading(true);
+    setBusyMessage('Deleting mailbox…');
+    setStatus('');
+    try {
+      const res = await deleteEbpMailbox({
+        identityName,
+        password,
+        server,
+        confirm: deleteConfirm,
+      });
+      await appendActivityLog(`EBP mailbox deleted: ${res.email}`, 'success');
+      navigation.goBack();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLoading(false);
+      setBusyMessage(null);
+    }
+  };
+
   const onDelete = () => {
     if (!accountId) {
       return;
@@ -267,8 +359,11 @@ export default function MailAccountSetupScreen({
 
   const showEmailPin = persistSecrets && !pinInSession;
 
+  const managedAddress = isManagedMailAddress(fromEmail, managedDomain);
+
   return (
     <Screen scroll>
+      {secretPrompt}
       <BusyOverlay visible={busyMessage !== null} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
 
@@ -395,6 +490,32 @@ export default function MailAccountSetupScreen({
         disabled={loading}
         onPress={onSave}
       />
+      {isEdit && managedAddress ? (
+        <>
+          <AppButton
+            title="Restore mailbox access"
+            testID="mail-restore-access"
+            variant="secondary"
+            disabled={loading}
+            onPress={() => void onRestoreMailbox()}
+          />
+          <TextField
+            label={`Type ${fromEmail} to delete the mailbox on the server`}
+            testID="mail-delete-confirm"
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={deleteConfirm}
+            onChangeText={setDeleteConfirm}
+          />
+          <AppButton
+            title="Delete mailbox"
+            testID="mail-delete-mailbox"
+            variant="danger"
+            disabled={loading}
+            onPress={() => void onDeleteMailbox()}
+          />
+        </>
+      ) : null}
       {isEdit ? (
         <AppButton title="Delete account" variant="danger" onPress={onDelete} />
       ) : null}

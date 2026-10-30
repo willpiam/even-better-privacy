@@ -4,12 +4,15 @@ import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import {
+  AUTO_LOCK_MINUTE_OPTIONS,
+  getAutoLockMinutes,
   getEnforcePasswordPolicy,
   getMailIncludePublicKeys,
   getMailOauthGmailClientIdOverride,
   getMailOauthOutlookClientIdOverride,
   getMailRenderHtml,
   getServerUrl,
+  setAutoLockMinutes,
   setEnforcePasswordPolicy,
   setMailIncludePublicKeys,
   setMailOauthGmailClientIdOverride,
@@ -18,7 +21,13 @@ import {
   setServerUrl,
 } from '../services/settings';
 import {appendActivityLog} from '../services/activityLog';
+import {
+  applyUnlockTimeoutMinutes,
+  installIdentityUnlockWatcher,
+  lockAll,
+} from '../services/unlockSession';
 import Screen from '../components/Screen';
+import SegmentedControl from '../components/SegmentedControl';
 import TextField from '../components/TextField';
 import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
@@ -31,6 +40,7 @@ type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
 export default function SettingsScreen(_props: Props): JSX.Element {
   const [serverUrl, setServerUrlValue] = useState('');
   const [enforcePasswordPolicy, setEnforcePasswordPolicyValue] = useState(true);
+  const [autoLockMinutes, setAutoLockMinutesValue] = useState(15);
   const [mailRenderHtml, setMailRenderHtmlValue] = useState(false);
   const [mailIncludePublicKeys, setMailIncludePublicKeysValue] = useState(true);
   const [gmailOauthClientIdOverride, setGmailOauthClientIdOverride] = useState('');
@@ -41,11 +51,20 @@ export default function SettingsScreen(_props: Props): JSX.Element {
 
   useFocusEffect(
     useCallback(() => {
+      installIdentityUnlockWatcher();
       void (async () => {
-        const [url, enforce, renderHtml, includeKeys, gmailOverride, outlookOverride] =
-          await Promise.all([
+        const [
+          url,
+          enforce,
+          lockMinutes,
+          renderHtml,
+          includeKeys,
+          gmailOverride,
+          outlookOverride,
+        ] = await Promise.all([
             getServerUrl(),
             getEnforcePasswordPolicy(),
+            getAutoLockMinutes(),
             getMailRenderHtml(),
             getMailIncludePublicKeys(),
             getMailOauthGmailClientIdOverride(),
@@ -53,6 +72,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           ]);
         setServerUrlValue(url);
         setEnforcePasswordPolicyValue(enforce);
+        setAutoLockMinutesValue(lockMinutes);
         setMailRenderHtmlValue(renderHtml);
         setMailIncludePublicKeysValue(includeKeys);
         setGmailOauthClientIdOverride(gmailOverride);
@@ -111,6 +131,30 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           }}
         />
       </View>
+      <Text style={styles.fieldLabel}>Auto-lock after</Text>
+      <SegmentedControl
+        testID="settings-auto-lock"
+        options={AUTO_LOCK_MINUTE_OPTIONS.map(minutes => ({
+          label: `${minutes} min`,
+          value: String(minutes),
+        }))}
+        value={String(autoLockMinutes)}
+        onChange={value => {
+          const minutes = Number(value);
+          setAutoLockMinutesValue(minutes);
+          void setAutoLockMinutes(minutes);
+          applyUnlockTimeoutMinutes(minutes);
+        }}
+      />
+      <AppButton
+        title="Lock now"
+        testID="settings-lock-now"
+        variant="secondary"
+        onPress={() => {
+          lockAll();
+          setStatus('Identity locked');
+        }}
+      />
 
       <SectionTitle>Mail preferences</SectionTitle>
       <View style={styles.switchRow}>
@@ -181,6 +225,11 @@ const styles = StyleSheet.create({
   },
   advancedNote: {
     fontSize: 13,
+    color: colors.muted,
+  },
+  fieldLabel: {
+    fontSize: typography.caption,
+    fontWeight: '600',
     color: colors.muted,
   },
 });

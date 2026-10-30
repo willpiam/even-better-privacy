@@ -1,0 +1,71 @@
+appId: com.mobile
+env:
+  MAIL_USERNAME: e2e-existing
+  IDENTITY_NAME: e2e-existing-id
+  IDENTITY_PASSWORD: Smoke-test-password1
+---
+# Use the current identity: username -> unlock password -> publish -> mailbox.
+# Skips the new-password, recovery-phrase, and confirm steps.
+# The runner's key server has MAIL_SIGNUP_ENABLED with an unreachable Stalwart,
+# so publish succeeds and the mailbox step reports a mail-server error.
+- runFlow: helpers/clear-and-launch.yaml
+- runFlow:
+    file: helpers/set-server.yaml
+    env:
+      SERVER_URL: ${SERVER_URL}
+- runFlow:
+    file: helpers/create-hd-identity.yaml
+    env:
+      IDENTITY_NAME: ${IDENTITY_NAME}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "tab-mail"
+- extendedWaitUntil:
+    visible:
+      id: "mail-onboarding"
+    timeout: 15000
+- tapOn:
+    id: "mail-onboarding"
+- extendedWaitUntil:
+    visible: "Get a quantum-secure email address"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-use-current"
+      enabled: true
+    timeout: 20000
+- tapOn:
+    id: "onboarding-use-current"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-username"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-username"
+- inputText: ${MAIL_USERNAME}
+- hideKeyboard
+- extendedWaitUntil:
+    visible: ".*is available"
+    timeout: 15000
+- tapOn:
+    id: "onboarding-address-next"
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-unlock-password"
+    timeout: 10000
+- tapOn:
+    id: "onboarding-unlock-password"
+- inputText: ${IDENTITY_PASSWORD}
+- hideKeyboard
+- tapOn:
+    id: "onboarding-unlock-next"
+- extendedWaitUntil:
+    visible: "✓ Publishing your public keys"
+    timeout: 180000
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-retry"
+    timeout: 60000
+- assertVisible: ".*mail server.*"
+- assertNotVisible:
+    id: "onboarding-task-keys"

@@ -10,24 +10,28 @@ import {randomHex, validatePassword} from '../ebpCore';
 import {createHdIdentity, createHdMnemonic} from '../services/hd';
 import {publishIdentity} from '../services/publish';
 import {getEnforcePasswordPolicy, getServerUrl} from '../services/settings';
-import {listIdentities, setCurrentIdentity} from '../services/storage';
+import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../services/storage';
 import {appendActivityLog} from '../services/activityLog';
 import {
   checkEbpUsername,
+  EbpMailApiError,
   fetchEbpSignupConfig,
+  resetEbpMailbox,
   signupEbpMailbox,
 } from '../services/mail/ebpSignup';
 import {
   chooseIdentityName,
   isAddressTakenError,
+  isAlreadyHasMailboxError,
   pickQuizIndexes,
   quizMatches,
   validateMailUsername,
   type EbpSignupConfig,
+  type OnboardingWizardStep,
 } from '../services/mail/ebpSignupLogic';
 import {colors} from '../theme/tokens';
 
-type Step = 'welcome' | 'address' | 'password' | 'phrase' | 'confirm' | 'create' | 'done';
+type Step = OnboardingWizardStep;
 type TaskState = 'pending' | 'running' | 'done' | 'error';
 type TaskKey = 'keys' | 'publish' | 'mailbox';
 
@@ -65,6 +69,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
   });
   const [createError, setCreateError] = useState('');
   const [identityName, setIdentityName] = useState('');
+  const [currentIdentity, setCurrentIdentityName] = useState<string | null>(null);
+  const [useExisting, setUseExisting] = useState(false);
+  const [restored, setRestored] = useState(false);
+  const [createStatus, setCreateStatus] = useState<number | undefined>();
   const [published, setPublished] = useState(false);
   const [result, setResult] = useState<{
     email: string;
@@ -76,6 +84,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
   } | null>(null);
   const [showConnection, setShowConnection] = useState(false);
   const checkSeq = useRef(0);
+
+  useEffect(() => {
+    void getCurrentIdentity().then(name => setCurrentIdentityName(name));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,6 +193,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
     if (!config?.enabled) return;
     setStep('create');
     setCreateError('');
+    setCreateStatus(undefined);
+    setRestored(false);
     let current: TaskKey = 'keys';
     try {
       let name = identityName;
@@ -232,8 +246,62 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setStep('done');
     } catch (error) {
       setTask(current, 'error');
+      setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
       setCreateError(error instanceof Error ? error.message : String(error));
     }
+  };
+
+  const runRestore = async () => {
+    if (!config?.enabled || !identityName) return;
+    setCreateError('');
+    setCreateStatus(undefined);
+    setTask('mailbox', 'running');
+    try {
+      const res = await resetEbpMailbox({
+        identityName,
+        password,
+        server,
+        config,
+      });
+      setTask('mailbox', 'done');
+      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
+      setResult({
+        email: res.email,
+        fingerprint: res.fingerprint,
+        imap: `${res.imap.host}:${res.imap.port}`,
+        smtp: `${res.smtp.host}:${res.smtp.port}`,
+        login: res.login,
+        mailPassword: res.mailPassword,
+      });
+      setRestored(true);
+      setPassword('');
+      setConfirmPassword('');
+      setMnemonic('');
+      setStep('done');
+    } catch (error) {
+      setTask('mailbox', 'error');
+      setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
+      setCreateError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const startUseCurrent = () => {
+    if (!currentIdentity) return;
+    setUseExisting(true);
+    setIdentityName(currentIdentity);
+    setPublished(false);
+    setPassword('');
+    setPasswordHint('');
+    setStep('address');
+  };
+
+  const onUnlockNext = () => {
+    if (!password) {
+      setPasswordHint('Enter the password for this identity.');
+      return;
+    }
+    setPasswordHint('');
+    void runCreate();
   };
 
   const onCreate = () => {
@@ -246,11 +314,15 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
   const onAddressNext = () => {
     if (!usernameOk) return;
+    if (useExisting) {
+      setStep('unlock');
+      return;
+    }
     if (identityName) {
       void runCreate();
-    } else {
-      setStep('password');
+      return;
     }
+    setStep('password');
   };
 
   const openInbox = () => {
@@ -259,6 +331,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
   const words = mnemonic.trim() ? mnemonic.trim().split(/\s+/) : [];
   const addressTaken = isAddressTakenError(createError);
+  const mailboxExists = isAlreadyHasMailboxError(createError, createStatus);
+  const taskKeys: TaskKey[] = useExisting
+    ? ['publish', 'mailbox']
+    : ['keys', 'publish', 'mailbox'];
 
   return (
     <Screen scroll>
@@ -274,8 +350,20 @@ export default function OnboardingWizardScreen(): JSX.Element {
             title="Get started"
             testID="onboarding-start"
             disabled={!config?.enabled}
-            onPress={() => setStep('address')}
+            onPress={() => {
+              setUseExisting(false);
+              setStep('address');
+            }}
           />
+          {currentIdentity ? (
+            <AppButton
+              title="Use this identity"
+              testID="onboarding-use-current"
+              variant="secondary"
+              disabled={!config?.enabled}
+              onPress={startUseCurrent}
+            />
+          ) : null}
           <AppButton
             title="Set up manually"
             testID="onboarding-skip"
@@ -288,6 +376,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
       {step === 'address' ? (
         <Card padded>
           <Text style={styles.title}>Choose your address</Text>
+          {useExisting ? (
+            <Text style={styles.hint}>
+              Using {identityName}. Next you'll enter that identity's password.
+            </Text>
+          ) : null}
           <Text style={styles.hint}>
             3–30 characters: letters, numbers, dots, hyphens.
           </Text>
@@ -310,6 +403,30 @@ export default function OnboardingWizardScreen(): JSX.Element {
             disabled={!usernameOk}
             onPress={onAddressNext}
           />
+        </Card>
+      ) : null}
+
+      {step === 'unlock' ? (
+        <Card padded>
+          <Text style={styles.title}>Unlock this identity</Text>
+          <Text style={styles.hint}>
+            Enter the password for {identityName}. It stays on this device and
+            is used to publish your keys and create the mailbox.
+          </Text>
+          <TextField
+            label="Identity password"
+            testID="onboarding-unlock-password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          <Text style={[styles.hint, styles.err]}>{passwordHint}</Text>
+          <AppButton
+            title="Next"
+            testID="onboarding-unlock-next"
+            onPress={onUnlockNext}
+          />
+          <AppButton title="Back" variant="secondary" onPress={() => setStep('address')} />
         </Card>
       ) : null}
 
@@ -395,7 +512,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       {step === 'create' ? (
         <Card padded>
           <Text style={styles.title}>Setting things up</Text>
-          {(Object.keys(TASK_LABELS) as TaskKey[]).map(key => (
+          {taskKeys.map(key => (
             <Text
               key={key}
               testID={`onboarding-task-${key}`}
@@ -404,12 +521,29 @@ export default function OnboardingWizardScreen(): JSX.Element {
               {TASK_LABELS[key]}
             </Text>
           ))}
-          <StatusBanner message={createError} kind="error" />
+          <StatusBanner
+            message={
+              mailboxExists
+                ? 'This identity already has an EBP mailbox. Restore access to set a new mailbox password on this device.'
+                : createError
+            }
+            kind="error"
+          />
           {createError ? (
             <AppButton
-              title={addressTaken ? 'Choose another address' : 'Try again'}
-              testID="onboarding-retry"
+              title={
+                mailboxExists
+                  ? 'Restore access'
+                  : addressTaken
+                    ? 'Choose another address'
+                    : 'Try again'
+              }
+              testID={mailboxExists ? 'onboarding-restore' : 'onboarding-retry'}
               onPress={() => {
+                if (mailboxExists) {
+                  void runRestore();
+                  return;
+                }
                 if (addressTaken) {
                   setUsernameOk(false);
                   setUsernameHint('');
@@ -425,7 +559,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
       {step === 'done' && result ? (
         <Card padded>
-          <Text style={styles.title}>You're all set</Text>
+          <Text style={styles.title}>
+            {restored ? 'Mailbox access restored' : "You're all set"}
+          </Text>
           <Text style={styles.hint}>Your new address</Text>
           <Text style={styles.result} testID="onboarding-result-email" selectable>
             {result.email}

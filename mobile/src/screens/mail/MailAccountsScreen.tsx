@@ -28,6 +28,7 @@ import {
   getMailOauthOutlookClientIdOverride,
   getServerUrl,
 } from '../../services/settings';
+import {fetchEbpSignupConfig, resetEbpMailbox} from '../../services/mail/ebpSignup';
 import {appendActivityLog} from '../../services/activityLog';
 import Screen from '../../components/Screen';
 import AddAccountModal from '../../components/AddAccountModal';
@@ -60,6 +61,8 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [secretsLocked, setSecretsLocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [status, setStatus] = useState('');
+  const [mailDomain, setMailDomain] = useState('');
+  const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const [addAccountVisible, setAddAccountVisible] = useState(false);
   const promptedThisFocus = useRef(false);
 
@@ -92,6 +95,12 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     const secretStatus = await getMailSecretsStatus(name);
     setSecretsLocked(secretStatus.locked && !secretStatus.inMemory);
     await loadOAuthConfig();
+    try {
+      const cfg = await fetchEbpSignupConfig(await getServerUrl());
+      setMailDomain(cfg.enabled ? cfg.domain : '');
+    } catch {
+      setMailDomain('');
+    }
     return secretStatus.locked && !secretStatus.inMemory;
   }, [loadOAuthConfig]);
 
@@ -193,6 +202,41 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     });
   }, [identityName, refresh]);
 
+  const onRestoreMailbox = async () => {
+    const password = await promptSecret({
+      title: 'Identity password',
+      placeholder: 'Identity password',
+      submitLabel: 'Restore',
+    });
+    if (password === null) {
+      return;
+    }
+    if (!password.trim()) {
+      setStatus('Identity password is required');
+      return;
+    }
+    setBusyMessage('Restoring mailbox access…');
+    try {
+      setStatus('');
+      const server = await getServerUrl();
+      const config = await fetchEbpSignupConfig(server);
+      const name = identityName || (await getCurrentIdentityRequired());
+      const res = await resetEbpMailbox({
+        identityName: name,
+        password,
+        server,
+        config,
+      });
+      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
+      setStatus(`Mailbox access restored for ${res.email}`);
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyMessage(null);
+    }
+  };
+
   const startOAuth = async (provider: MailOauthProvider) => {
     if (provider !== 'gmail' && provider !== 'outlook') {
       return;
@@ -218,7 +262,10 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   return (
     <Screen scroll>
       {secretPrompt}
-      <BusyOverlay visible={unlocking} message="Unlocking mail secrets…" />
+      <BusyOverlay
+        visible={unlocking || busyMessage !== null}
+        message={busyMessage ?? 'Unlocking mail secrets…'}
+      />
       <Text style={styles.header}>Mail accounts ({identityName || '…'})</Text>
       <StatusBanner message={status} kind={statusKind(status)} />
 
@@ -280,6 +327,14 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         testID="mail-onboarding"
         onPress={() => navigation.navigate('OnboardingWizard')}
       />
+      {mailDomain ? (
+        <AppButton
+          title="Restore mailbox access"
+          testID="mail-restore-access"
+          variant="secondary"
+          onPress={() => void onRestoreMailbox()}
+        />
+      ) : null}
       <AppButton
         title="Add account"
         variant="secondary"

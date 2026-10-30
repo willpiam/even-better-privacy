@@ -1,8 +1,10 @@
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
+  buildMailDeleteDetail,
   buildMailPasswordResetDetail,
   isE2eMailUsername,
+  MAIL_DELETE_PATH,
   MAIL_PASSWORD_MAX,
   MAIL_PASSWORD_MIN,
   MAIL_PASSWORD_RESET_PATH,
@@ -25,6 +27,8 @@ import {
   isMailboxUsernameTaken,
   listOldE2eMailboxes,
   markDetailVerified,
+  retireMailUsername,
+  revokeDetail,
   setMailboxStalwartId,
   updateDetail,
 } from "../db/index.ts";
@@ -37,7 +41,7 @@ import {
   StalwartError,
 } from "../stalwart.ts";
 
-// Proofs for password resets are not stored, so freshness bounds replay.
+// Proofs for password resets and deletes are not stored, so freshness bounds replay.
 const RESET_PROOF_MAX_AGE_MS = 10 * 60_000;
 const RESET_PROOF_MAX_SKEW_MS = 2 * 60_000;
 const DEFAULT_QUOTA_BYTES = 1024 * 1024 * 1024;
@@ -341,6 +345,84 @@ export async function handleMailResetPassword(
     return json({ error: "mail server could not update the password" }, 502);
   }
   return json({ ok: true, email, ...connectionInfo(settings) });
+}
+
+export async function handleMailDelete(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
+  const settings = readMailSignupSettings();
+  const stalwart = getStalwartClient();
+  if (!settings.enabled || !stalwart) return disabled();
+
+  const bodyResult = await readJsonBody<Record<string, unknown>>(req);
+  if (!bodyResult.ok) {
+    return json({ error: bodyResult.error }, bodyResult.status);
+  }
+  const payload = bodyResult.data;
+
+  const fingerprintCheck = validateStringLength(
+    payload.fingerprint,
+    "fingerprint",
+    LIMITS.fingerprint,
+  );
+  if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
+  const fingerprint = fingerprintCheck.value;
+  const proofCheck = validateStringLength(payload.proof, "proof", LIMITS.proof);
+  if (!proofCheck.ok) return json({ error: proofCheck.error }, 400);
+
+  const identity = await getIdentity(db, fingerprint);
+  const mailbox = await getMailboxByFingerprint(db, fingerprint);
+  if (!identity || !mailbox) {
+    return json({ error: "no mailbox for this identity" }, 404);
+  }
+
+  const email = `${mailbox.username}@${mailbox.domain}`;
+  const proofResult = verifyDetailProof(
+    identity,
+    MAIL_DELETE_PATH,
+    buildMailDeleteDetail(email),
+    proofCheck.value,
+  );
+  if (!proofResult.ok) {
+    return json({ error: proofResult.error ?? "invalid proof" }, 400);
+  }
+  const age = Date.now() - proofResult.record.timestamp;
+  if (age > RESET_PROOF_MAX_AGE_MS || age < -RESET_PROOF_MAX_SKEW_MS) {
+    return json({ error: "proof expired; try again" }, 400);
+  }
+
+  if (mailbox.stalwartId) {
+    try {
+      await stalwart.destroyUser(mailbox.stalwartId);
+    } catch (err) {
+      console.error("stalwart destroyUser failed:", err);
+      return json({ error: "mail server could not delete the mailbox" }, 502);
+    }
+  }
+
+  const now = Date.now();
+  try {
+    // Revoke rather than delete so the signup proof's nonce stays on record.
+    const emailDetail = await getDetailRecord(db, fingerprint, "email");
+    if (
+      emailDetail && emailDetail.revoked_at === null &&
+      emailDetail.detail.toLowerCase() === email
+    ) {
+      await revokeDetail(db, fingerprint, "email", proofCheck.value, now);
+    }
+    await retireMailUsername(db, {
+      username: mailbox.username,
+      domain: mailbox.domain,
+      fingerprint,
+      retiredAt: now,
+    });
+    await deleteMailbox(db, mailbox.username, mailbox.domain);
+  } catch (err) {
+    console.error("mailbox delete bookkeeping failed:", err);
+    return json({ error: "failed to record mailbox deletion" }, 500);
+  }
+  return json({ ok: true, email });
 }
 
 async function removeE2eMailbox(

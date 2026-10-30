@@ -1,23 +1,24 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
-import ContactPicker from '../../components/ContactPicker';
-import RecipientResolveModal from '../../components/RecipientResolveModal';
+import RecipientChipsField from '../../components/RecipientChipsField';
 import StatusBanner from '../../components/StatusBanner';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import SectionTitle from '../../components/SectionTitle';
-import {
-  findContactsByEmail,
-  resolveVerifiedRecipient,
-  type StoredContact,
-} from '../../services/contacts';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {sendEbpMail, sendPlainMail} from '../../services/mail/ebpMail';
+import {ENCRYPTED_MAIL_ATTACHMENT_ERROR} from '../../services/mail/ebpMailLogic';
+import {
+  chipsFromInitial,
+  deriveComposeIntent,
+  type RecipientChip,
+} from '../../services/mail/recipientChipsLogic';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import type {MailAttachmentPart} from '../../services/mail/mime';
 import {appendActivityLog} from '../../services/activityLog';
 import {statusKind} from '../../theme/statusKind';
@@ -25,46 +26,17 @@ import {colors, typography} from '../../theme/tokens';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
-type EncryptionIntent = 'pending' | 'encrypted' | 'unencrypted';
-
-type RecipientRow = {
-  id: string;
-  to: string;
-  recipientContact: string;
-  encryptionIntent: EncryptionIntent;
-};
-
-function looksLikeEmail(value: string): boolean {
-  return value.trim().includes('@');
-}
-
-function newRow(partial?: Partial<RecipientRow>): RecipientRow {
-  return {
-    id: `r-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    to: '',
-    recipientContact: '',
-    encryptionIntent: 'pending',
-    ...partial,
-  };
-}
-
-function initialRows(params: Props['route']['params']): RecipientRow[] {
-  if (params?.to || params?.recipientContact || params?.encryptionIntent) {
-    let intent: EncryptionIntent = 'pending';
-    if (params.encryptionIntent === 'encrypted' || params.recipientContact) {
-      intent = 'encrypted';
-    } else if (params.encryptionIntent === 'unencrypted') {
-      intent = 'unencrypted';
-    }
-    return [
-      newRow({
-        to: params.to ?? '',
-        recipientContact: params.recipientContact ?? '',
-        encryptionIntent: intent,
-      }),
-    ];
+function initialChips(params: Props['route']['params']): RecipientChip[] {
+  if (!params?.to && !params?.recipientContact) {
+    return [];
   }
-  return [newRow()];
+  return chipsFromInitial([
+    {
+      email: params.to ?? '',
+      contact: params.recipientContact,
+      intent: params.encryptionIntent,
+    },
+  ]);
 }
 
 export default function MailComposeScreen({
@@ -72,122 +44,14 @@ export default function MailComposeScreen({
   route,
 }: Props): JSX.Element {
   const params = route.params;
-  const [rows, setRows] = useState<RecipientRow[]>(() => initialRows(params));
-  const rowsRef = useRef(rows);
-  rowsRef.current = rows;
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
+  const [chips, setChips] = useState<RecipientChip[]>(() => initialChips(params));
   const [subject, setSubject] = useState(params?.subject ?? '');
   const [message, setMessage] = useState(params?.message ?? '');
-  const [password, setPassword] = useState('');
   const [status, setStatus] = useState('');
   const [attachments, setAttachments] = useState<MailAttachmentPart[]>([]);
-  const [resolveRowId, setResolveRowId] = useState<string | null>(null);
-  const [preferredContacts, setPreferredContacts] = useState<StoredContact[]>(
-    [],
-  );
   const inReplyTo = params?.inReplyTo;
   const references = params?.references;
-
-  const updateRow = useCallback(
-    (id: string, patch: Partial<RecipientRow>) => {
-      const next = rowsRef.current.map(current =>
-        current.id === id ? {...current, ...patch} : current,
-      );
-      rowsRef.current = next;
-      setRows(next);
-    },
-    [],
-  );
-
-  const applyEncryptedContact = useCallback(
-    (name: string) => {
-      if (!resolveRowId) {
-        return;
-      }
-      updateRow(resolveRowId, {
-        recipientContact: name,
-        encryptionIntent: 'encrypted',
-      });
-      setResolveRowId(null);
-      setPreferredContacts([]);
-      setStatus('');
-    },
-    [resolveRowId, updateRow],
-  );
-
-  const applyUnencrypted = useCallback(() => {
-    if (!resolveRowId) {
-      return;
-    }
-    updateRow(resolveRowId, {
-      recipientContact: '',
-      encryptionIntent: 'unencrypted',
-    });
-    setResolveRowId(null);
-    setPreferredContacts([]);
-    setStatus('');
-  }, [resolveRowId, updateRow]);
-
-  const resolveRecipientFromTo = async (row: RecipientRow) => {
-    const address = row.to.trim();
-    if (!looksLikeEmail(address)) {
-      return;
-    }
-    if (row.recipientContact.trim() && row.encryptionIntent === 'encrypted') {
-      return;
-    }
-    const addressKey = address.toLowerCase();
-    const stillCurrent = () =>
-      rowsRef.current.some(
-        current =>
-          current.id === row.id &&
-          current.to.trim().toLowerCase() === addressKey,
-      );
-    try {
-      const outcome = await resolveVerifiedRecipient(address);
-      if (!stillCurrent()) {
-        return;
-      }
-      if (outcome.status === 'unique') {
-        updateRow(row.id, {
-          recipientContact: outcome.name,
-          encryptionIntent: 'encrypted',
-        });
-        return;
-      }
-      const matches = await findContactsByEmail(address);
-      if (!stillCurrent()) {
-        return;
-      }
-      updateRow(row.id, {recipientContact: '', encryptionIntent: 'pending'});
-      setPreferredContacts(matches);
-      setResolveRowId(row.id);
-      if (outcome.status === 'ambiguous' && matches.length === 0) {
-        setStatus('More than one verified identity publishes this address.');
-      }
-    } catch (error) {
-      if (!stillCurrent()) {
-        return;
-      }
-      updateRow(row.id, {recipientContact: '', encryptionIntent: 'pending'});
-      setPreferredContacts([]);
-      setResolveRowId(row.id);
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  useEffect(() => {
-    for (const row of rowsRef.current) {
-      if (
-        row.to.includes('@') &&
-        row.encryptionIntent === 'pending' &&
-        !row.recipientContact.trim()
-      ) {
-        void resolveRecipientFromTo(row);
-      }
-    }
-    // Resolve a prefilled To address once, including plain-mail reply.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const pickAttachment = async () => {
     try {
@@ -216,33 +80,21 @@ export default function MailComposeScreen({
     }
   };
 
-  const overallIntent = (): EncryptionIntent => {
-    if (rows.some(r => r.encryptionIntent === 'pending')) {
-      return 'pending';
-    }
-    if (rows.every(r => r.encryptionIntent === 'unencrypted')) {
-      return 'unencrypted';
-    }
-    if (rows.every(r => r.encryptionIntent === 'encrypted')) {
-      return 'encrypted';
-    }
-    return 'pending';
-  };
+  const intent = deriveComposeIntent(chips);
 
   const onSend = async () => {
     try {
-      const intent = overallIntent();
-      if (intent === 'pending') {
-        setStatus('Resolve recipient encryption for every To row first');
-        return;
-      }
-      if (rows.some(r => !r.to.trim())) {
-        setStatus('Each recipient row needs an email address');
+      if (intent.kind === 'empty' || intent.kind === 'blocked') {
+        setStatus(
+          intent.kind === 'blocked'
+            ? intent.message
+            : 'Add at least one recipient.',
+        );
         return;
       }
       const identityName = await getCurrentIdentityRequired();
-      const emails = rows.map(r => r.to.trim());
-      if (intent === 'unencrypted') {
+      const emails = chips.map(chip => chip.email);
+      if (intent.kind === 'plaintext') {
         await sendPlainMail({
           identityName,
           to: emails.join(', '),
@@ -261,18 +113,17 @@ export default function MailComposeScreen({
         navigation.goBack();
         return;
       }
-      if (rows.some(r => !r.recipientContact.trim())) {
-        setStatus('Select an EBP contact for every recipient');
+      const unlocked = await ensureUnlocked(identityName);
+      if (!unlocked) {
         return;
       }
       await sendEbpMail({
-        identityName,
-        password,
+        identityName: unlocked,
         subject,
         message,
-        recipients: rows.map(r => ({
-          email: r.to.trim(),
-          contact: r.recipientContact.trim(),
+        recipients: chips.map(chip => ({
+          email: chip.email,
+          contact: chip.contact ?? '',
         })),
         sign: true,
         inReplyTo,
@@ -290,84 +141,48 @@ export default function MailComposeScreen({
     }
   };
 
-  const intent = overallIntent();
-  const showUnencryptedWarning = intent === 'unencrypted';
-  const resolveEmail =
-    rows.find(r => r.id === resolveRowId)?.to.trim() ?? '';
+  const sendTitle =
+    intent.kind === 'encrypted'
+      ? 'Send EBP encrypted mail'
+      : intent.kind === 'plaintext'
+        ? 'Send unencrypted mail'
+        : 'Send';
+  const sendHint =
+    intent.kind === 'encrypted'
+      ? `The message body is encrypted for ${chips.length === 1 ? 'the selected contact' : 'the selected contacts'}.`
+      : intent.kind === 'plaintext'
+        ? 'Sending as plaintext. Tap a recipient to choose a contact and encrypt instead.'
+        : intent.kind === 'blocked'
+          ? intent.message
+          : 'Add recipients. Separate addresses with a comma.';
 
   return (
     <Screen scroll>
+      {unlockPrompt}
       <Text style={styles.note}>
-        Compose an email. After you enter a To address, the app checks your
-        contacts, then the key server, for one verified email detail. A contact
-        already saved on this device is kept. Add multiple To rows for
-        multi-recipient send.
+        Type or paste addresses. Each one becomes a chip and is checked against
+        your contacts, then the key server. Encrypted by default when every
+        recipient resolves.
       </Text>
 
-      {showUnencryptedWarning ? (
+      {intent.kind === 'plaintext' ? (
         <StatusBanner
           kind="error"
-          message="This message will not be encrypted because an EBP recipient identity could not be found nor was specified."
+          message="This message will not be encrypted."
         />
       ) : null}
 
-      <StatusBanner message={status} kind={statusKind(status)} />
+      <StatusBanner
+        message={status}
+        kind={
+          status === ENCRYPTED_MAIL_ATTACHMENT_ERROR
+            ? 'error'
+            : statusKind(status)
+        }
+      />
 
       <SectionTitle>Recipients</SectionTitle>
-      {rows.map((row, index) => (
-        <View key={row.id} style={styles.recipientBlock}>
-          <TextField
-            label={rows.length > 1 ? `To ${index + 1}` : 'To'}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            value={row.to}
-            onChangeText={next =>
-              updateRow(row.id, {
-                to: next,
-                encryptionIntent: 'pending',
-                recipientContact: '',
-              })
-            }
-            onBlur={() => {
-              void resolveRecipientFromTo(row);
-            }}
-            placeholder="recipient@example.com"
-            accessibilityLabel={`To email address ${index + 1}`}
-          />
-          <ContactPicker
-            variant="dropdown"
-            value={row.recipientContact}
-            onChange={name =>
-              updateRow(row.id, {
-                recipientContact: name,
-                encryptionIntent: name.trim() ? 'encrypted' : 'pending',
-              })
-            }
-            placeholder="Select EBP contact"
-          />
-          {rows.length > 1 ? (
-            <AppButton
-              title="Remove recipient"
-              variant="secondary"
-              onPress={() => {
-                const next = rowsRef.current.filter(current => current.id !== row.id);
-                rowsRef.current = next;
-                setRows(next);
-              }}
-            />
-          ) : null}
-        </View>
-      ))}
-      <AppButton
-        title="Add recipient"
-        variant="secondary"
-        onPress={() => {
-          const next = [...rowsRef.current, newRow()];
-          rowsRef.current = next;
-          setRows(next);
-        }}
-      />
+      <RecipientChipsField chips={chips} onChange={setChips} />
 
       <SectionTitle>Message</SectionTitle>
       <TextField
@@ -405,49 +220,19 @@ export default function MailComposeScreen({
         variant="secondary"
         onPress={() => void pickAttachment()}
       />
+      {intent.kind === 'encrypted' && attachments.length > 0 ? (
+        <Text style={styles.hint}>
+          Attachments are not encrypted on mobile yet. Remove them to send this
+          message, or mark every recipient as unencrypted.
+        </Text>
+      ) : null}
 
       <SectionTitle>Send</SectionTitle>
-      {intent === 'encrypted' ? (
-        <>
-          <Text style={styles.hint}>
-            The message body is encrypted for the selected contact
-            {rows.length > 1 ? 's' : ''}.
-          </Text>
-          <TextField
-            label="Identity password"
-            value={password}
-            onChangeText={setPassword}
-            placeholder="Password for your current identity"
-            secureTextEntry
-            accessibilityLabel="Identity password"
-          />
-          <AppButton title="Send EBP encrypted mail" onPress={onSend} />
-        </>
-      ) : intent === 'unencrypted' ? (
-        <>
-          <Text style={styles.hint}>
-            Sending as plaintext. Change a To address to re-check contacts, or
-            pick EBP contacts above to encrypt.
-          </Text>
-          <AppButton title="Send unencrypted mail" onPress={onSend} />
-        </>
-      ) : (
-        <>
-          <Text style={styles.hint}>
-            Resolve encryption for every recipient (leave To fields to check
-            contacts, or pick contacts manually).
-          </Text>
-          <AppButton title="Send" onPress={onSend} />
-        </>
-      )}
-
-      <RecipientResolveModal
-        visible={resolveRowId !== null}
-        email={resolveEmail}
-        preferredContacts={preferredContacts}
-        onCancel={() => setResolveRowId(null)}
-        onSelectContact={applyEncryptedContact}
-        onMarkUnencrypted={applyUnencrypted}
+      <Text style={styles.hint}>{sendHint}</Text>
+      <AppButton
+        title={sendTitle}
+        onPress={onSend}
+        disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
       />
     </Screen>
   );
@@ -464,10 +249,6 @@ const styles = StyleSheet.create({
   },
   bodyField: {
     minHeight: 120,
-  },
-  recipientBlock: {
-    gap: 8,
-    marginBottom: 8,
   },
   attachmentRow: {
     flexDirection: 'row',

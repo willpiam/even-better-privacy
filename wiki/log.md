@@ -1,5 +1,15 @@
 # Wiki Log
 
+## [2026-10-30] update | email experience implementation
+
+- Session unlock (idle timeout, Lock) on GUI and mobile. Locked-first GUI reader. One To field with recipient chips on both clients. Managed mailbox restore and delete, including retired usernames.
+- Updated: [[component-gui]], [[component-mobile]], [[key-management]], [[analysis-ebp-managed-email-onboarding]], [[analysis-mobile-pqpost-readiness]], [[analysis-mobile-compose-recipient-resolve]].
+
+## [2026-10-30] query | streamline the email experience
+
+- Answered: the biggest wins are unlocking once per session (no prompt per decrypt, attachment, or send), a locked-first GUI reader matching mobile, one compose model across clients, mailbox restore after recovery, and opening outbound port 25.
+- Filed: [[analysis-streamline-email-experience]].
+
 ## [2026-10-28] update | compose verified-email autofill
 
 - GUI and mobile compose auto-fill a recipient when the key server has exactly one unrevoked identity with a verified `email` detail equal to the address. A contact already on the device stays pinned.

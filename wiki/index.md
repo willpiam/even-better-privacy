@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-10-28
+last_updated: 2026-10-30
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-10-28 (compose verified-email autofill)
+Last updated: 2026-10-30 (email experience implementation)
 
 ## Wiki Operations
 
@@ -107,6 +107,9 @@ Last updated: 2026-10-28 (compose verified-email autofill)
 - [[analysis-pqpost-recipient-identity]] - Signup binds a mailbox to one
   identity. Compose auto-fills the recipient only for one exact, verified,
   unrevoked email match on the key server; a saved contact stays pinned.
+- [[analysis-streamline-email-experience]] - Ranked mail UX fixes: unlock once
+  per session, locked-first GUI reader, one compose model, mailbox restore,
+  outbound delivery.
 - [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
   with `<ebp-fingerprint>@domain` addressing (personal or product domain).
   Related to managed signup above; fingerprint local-parts are not that design.

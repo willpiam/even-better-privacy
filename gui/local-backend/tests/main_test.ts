@@ -1230,6 +1230,114 @@ Deno.test({
 });
 
 Deno.test({
+  name:
+    "POST /api/v1/decrypt matches From against opaque::email and returns badge fields",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      const sender = new Identity("dilithium", "kyber");
+      const recipient = await createTestIdentity(
+        home,
+        "recipient",
+        "password123",
+      );
+      await writeState(`${home}/.ebp`, { currentIdentity: "recipient" });
+      await createTestContact(home, "alice", {
+        ...sender.summary,
+        details: {
+          "opaque::email": [sha256Hex("alice@example.com"), "proof"],
+        },
+        detailsMeta: { "opaque::email": { verified: true, verifiedAt: 1 } },
+      });
+
+      const ciphertext = sender.signAndEncryptFor("hi", recipient.summary);
+      const payload = {
+        type: "ebp-encrypted-signed-message",
+        senderFingerprint: sender.toFingerprint(),
+        recipientFingerprint: recipient.toFingerprint(),
+        ciphertext,
+      };
+
+      const ok = await makeRequest(
+        handler,
+        "/api/v1/decrypt",
+        jsonPost({
+          payload,
+          sender: "alice",
+          password: "password123",
+          messageFrom: "Alice <alice@example.com>",
+          home,
+        }),
+      );
+      assertEquals(ok.status, STATUS.OK);
+      const b = ok.body as Record<string, unknown>;
+      assertEquals(b.verifyStatus, "valid");
+      assertEquals(b.matchedEmailPath, "opaque::email");
+      assertEquals(b.opaqueEmailMatched, true);
+      assertEquals(b.signerMatchesSenderEmail, true);
+      assertEquals(b.signerEmailVerified, true);
+      assertEquals(b.isKnownContact, true);
+      assertEquals(b.contactName, "alice");
+      assertEquals(b.messageFrom, "Alice <alice@example.com>");
+      assertEquals(b.badgeKind, "good");
+      assertEquals(b.badgeLabel, "✓");
+
+      const mismatch = await makeRequest(
+        handler,
+        "/api/v1/decrypt",
+        jsonPost({
+          payload,
+          sender: "alice",
+          password: "password123",
+          messageFrom: "mallory@example.com",
+          home,
+        }),
+      );
+      const m = mismatch.body as Record<string, unknown>;
+      assertEquals(m.verifyStatus, "valid");
+      assertEquals(m.matchedEmailPath, null);
+      assertEquals(m.signerMatchesSenderEmail, false);
+      assertEquals(m.badgeKind, "caution");
+      assertEquals(m.badgeLabel, "!");
+    });
+  },
+});
+
+Deno.test({
+  name: "POST /api/v1/decrypt returns neutral badge for unsigned message",
+  permissions: { read: true, write: true, env: true, net: true },
+  fn: async () => {
+    await withTestEnv(async (home, handler) => {
+      const recipient = await createTestIdentity(
+        home,
+        "recipient",
+        "password123",
+      );
+      await writeState(`${home}/.ebp`, { currentIdentity: "recipient" });
+      const { body } = await makeRequest(
+        handler,
+        "/api/v1/decrypt",
+        jsonPost({
+          payload: {
+            type: "ebp-encrypted-message",
+            recipientFingerprint: recipient.toFingerprint(),
+            ciphertext: Identity.EncryptFor(recipient.summary, "plain"),
+          },
+          password: "password123",
+          senderEmail: "bob@example.com",
+          home,
+        }),
+      );
+      const b = body as Record<string, unknown>;
+      assertEquals(b.badgeKind, "neutral");
+      assertEquals(b.isKnownContact, false);
+      assertEquals(b.contactName, null);
+      assertEquals(b.messageFrom, "bob@example.com");
+    });
+  },
+});
+
+Deno.test({
   name: "POST /api/v1/encrypt-file creates encrypted file payload",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {

@@ -8,7 +8,7 @@ import {
 import {decryptMessage} from '../encryptDecrypt';
 import {publicIdentityBlock} from '../encryptDecryptLogic';
 import {listContacts, getDetailValue, loadContact} from '../contacts';
-import {loadIdentity} from '../storage';
+import {loadIdentityForUse} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
 import {fetchMessageDetail} from './imap';
@@ -28,6 +28,7 @@ import {
   ebpMailPlainIntro,
   elevateUnknownSignerVerifyStatus,
   formatFromHeader,
+  rejectEncryptedMailAttachments,
   resolveEbpMailRecipients,
   resolvePlainMailRecipients,
   sourceLooksLikeEbpArmor,
@@ -46,7 +47,7 @@ export {
 
 export async function sendEbpMail(params: {
   identityName: string;
-  password: string;
+  password?: string;
   to?: string;
   subject: string;
   message: string;
@@ -58,11 +59,12 @@ export async function sendEbpMail(params: {
   references?: string;
   attachments?: MailAttachmentPart[];
 }): Promise<void> {
+  rejectEncryptedMailAttachments(params.attachments);
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
     throw new Error('No mail account configured');
   }
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const includePublicKeys = await getMailIncludePublicKeys();
   const recipientRows = resolveEbpMailRecipients(params);
   if (recipientRows.length === 0) {
@@ -167,7 +169,7 @@ export async function sendPlainMail(params: {
 
 export async function decryptMailBody(params: {
   identityName: string;
-  password: string;
+  password?: string;
   uid: number;
   folder?: string;
 }): Promise<MailAuthenticitySummary> {

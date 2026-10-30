@@ -389,7 +389,11 @@ async function runCreate() {
     }
     $("onboarding-create-error").textContent = err.message;
     $("onboarding-retry").style.display = "";
-    if (/taken/i.test(err.message)) {
+    if (/already has a mailbox/i.test(err.message)) {
+      $("onboarding-create-error").textContent =
+        "This identity already has an EBP mailbox. Restore access to set a new mailbox password on this device.";
+      $("onboarding-retry").textContent = "Restore access";
+    } else if (/taken/i.test(err.message)) {
       $("onboarding-retry").textContent = "Choose another address";
     } else {
       $("onboarding-retry").textContent = "Try again";
@@ -397,7 +401,36 @@ async function runCreate() {
   }
 }
 
-function renderDone(result) {
+async function resetMailboxAccess(pin) {
+  return await api("/mail/ebp-reset-password", {
+    method: "POST",
+    body: JSON.stringify({
+      identity: wizard.identityName,
+      password: wizard.password,
+      server: wizard.server,
+      ...(pin ? { pin } : {}),
+    }),
+  });
+}
+
+async function restoreAccess() {
+  $("onboarding-create-error").textContent = "";
+  $("onboarding-retry").style.display = "none";
+  try {
+    let result = await runTask("mailbox", () => resetMailboxAccess());
+    if (!result.savedLocally && result.accountId) {
+      const pin = await requestPassword("Enter your email PIN to save the mailbox password");
+      if (pin) result = await resetMailboxAccess(pin);
+    }
+    renderDone(result, "Restored");
+  } catch (err) {
+    $("onboarding-create-error").textContent = err.message;
+    $("onboarding-retry").style.display = "";
+    $("onboarding-retry").textContent = "Restore access";
+  }
+}
+
+function renderDone(result, verb = "Created") {
   wizard.password = "";
   wizard.mnemonic = "";
   $("onboarding-result-email").textContent = result.email;
@@ -419,7 +452,7 @@ function renderDone(result) {
     dl.append(dt, dd);
   }
   showStep("done");
-  setStatus(`Created ${result.email}`, "success");
+  setStatus(`${verb} ${result.email}`, "success");
   void loadAll();
 }
 
@@ -487,6 +520,10 @@ export function initOnboarding({ navigateTo }) {
     void runCreate();
   });
   $("onboarding-retry").addEventListener("click", () => {
+    if (/restore access/i.test($("onboarding-retry").textContent)) {
+      void restoreAccess();
+      return;
+    }
     if (/another address/i.test($("onboarding-retry").textContent)) {
       wizard.usernameOk = false;
       $("onboarding-address-next").disabled = true;

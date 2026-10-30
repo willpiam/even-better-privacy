@@ -10,12 +10,12 @@ import BusyOverlay from '../../components/BusyOverlay';
 import ContactPicker from '../../components/ContactPicker';
 import CopyableOutput from '../../components/CopyableOutput';
 import StatusBanner from '../../components/StatusBanner';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {cryptoStyles} from './cryptoStyles';
 
 export default function EncryptMessageScreen(): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [recipient, setRecipient] = useState('');
   const [message, setMessage] = useState('');
   const [sign, setSign] = useState(false);
@@ -24,25 +24,18 @@ export default function EncryptMessageScreen(): JSX.Element {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
 
   const onEncrypt = async () => {
-    let password: string | undefined;
-    if (sign) {
-      const entered = await promptSecret({
-        title: 'Identity password',
-        placeholder: 'Identity password',
-        submitLabel: 'Encrypt',
-      });
-      if (entered === null) {
-        return;
-      }
-      password = entered;
-    }
-    setBusyMessage('Encrypting message…');
     setStatus('');
     try {
       const identityName = await getCurrentIdentityRequired();
+      if (sign) {
+        const unlocked = await ensureUnlocked(identityName);
+        if (!unlocked) {
+          return;
+        }
+      }
+      setBusyMessage('Encrypting message…');
       const payload = await encryptMessage({
         identityName,
-        password,
         message,
         recipient,
         sign,
@@ -60,7 +53,7 @@ export default function EncryptMessageScreen(): JSX.Element {
 
   return (
     <Screen scroll>
-      {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
       <ContactPicker

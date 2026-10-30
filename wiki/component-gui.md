@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-10-28
+last_updated: 2026-10-30
 source_count: 9
 tags:
   - component
@@ -44,7 +44,10 @@ The GUI includes a built-in email interface:
 - Supports OAuth with Gmail (and partially Outlook) via the local backend's authorization-code flow (`gui/local-backend/mail-oauth.ts`): browser redirect to Google, callback on `127.0.0.1`, code exchange through [[component-server]] so secrets stay server-side. Google's web-server flow, `state` CSRF parameter, offline refresh tokens, and redirect-uri registration rules are summarized in [[source-google-oauth2-web-server]]. Until the Google Cloud OAuth client completes [app verification](https://support.google.com/cloud/answer/9110914) for the scopes in use, Google may label the client **unverified**, show additional consent warnings, and cap **new** users (100 total after the unverified screen); see [[source-google-cloud-unverified-apps]]. For reacting to Google Account compromise or token revocation at scale, see [[source-google-cross-account-protection-risc]] (not yet implemented in EBP).
 - Proton Mail users need Proton Mail Bridge running.
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
-- Compose fills the recipient contact from a saved contact when the address matches. Otherwise `GET /api/v1/contacts/resolve-verified-email` imports the one key-server identity whose verified `email` detail equals that address ([[analysis-pqpost-recipient-identity]]).
+- Compose is one To field. Each address becomes a chip, resolved locally or via `GET /api/v1/contacts/resolve-verified-email` ([[analysis-pqpost-recipient-identity]]). Send encrypts when every chip resolves, and warns before a plaintext send.
+- The reader hides EBP armor until decrypt. A badge opens a sender-authenticity dialog. Authenticity rules live in `core/MailAuthenticity.ts`.
+- Identity private keys unlock once per session (`POST /api/v1/identity/unlock`, idle timeout, Lock control). The same password tries to open stored mail secrets. See [[key-management]].
+- Managed mailboxes can be restored (`POST /api/v1/mail/ebp-reset-password`) or deleted (`POST /api/v1/mail/ebp-delete`) from the Account tab. Delete retires the username on the key server.
 
 SMTP and IMAP do not provide EBP's end-to-end message security. The GUI uses them to send and fetch mail, then applies EBP payload encryption and signature verification at the application layer; see [[email-transport]] for the standards boundary.
 

@@ -1,6 +1,7 @@
 import { state } from "./state.js";
 import { api, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
-import { showConfirmModal, requestPassword } from "./modals.js";
+import { showConfirmModal } from "./modals.js";
+import { withIdentity } from "./unlock.js";
 import { shortFingerprint } from "./fingerprint.js";
 
 let _hierarchyTreeTooltip = null;
@@ -594,15 +595,10 @@ export function navigateToHierarchyWithContact(fingerprint, navigateTo) {
 
 export async function handleAcceptProposal(proposalId, certificate) {
   try {
-    const password = await requestPassword("Enter password to accept and sign this certificate");
-    if (!password) {
-      setStatus("Password is required", "error");
-      return;
-    }
-    await api("/hierarchy/accept", {
+    await withIdentity(async () => api("/hierarchy/accept", {
       method: "POST",
-      body: JSON.stringify({ proposalId, certificate, password }),
-    });
+      body: JSON.stringify({ proposalId, certificate }),
+    }), "Enter password to accept and sign this certificate");
     setStatus("Certificate accepted and signed", "success");
     await renderCertificatesPage();
   } catch (err) {

@@ -1,14 +1,22 @@
 import {
   buildEbpMailAccountRecord,
   buildMailAddress,
+  buildMailDeleteRequest,
+  buildMailPasswordResetRequest,
   buildSignupRequest,
   chooseIdentityName,
   isAddressTakenError,
+  isAlreadyHasMailboxError,
+  isManagedMailAddress,
+  mailboxDeleteConfirmed,
+  managedMailboxRestoreHint,
   parseSignupConfig,
   parseSignupResponse,
+  parseVerifiedManagedEmail,
   pickQuizIndexes,
   quizMatches,
   validateMailUsername,
+  wizardSteps,
 } from '../src/services/mail/ebpSignupLogic';
 
 const IMAP = {host: 'mail.pqpost.test', port: 993, secure: true};
@@ -111,5 +119,83 @@ describe('ebpSignupLogic', () => {
     expect(isAddressTakenError('That address is taken.')).toBe(true);
     expect(isAddressTakenError('mailbox already exists')).toBe(true);
     expect(isAddressTakenError('mail server unreachable')).toBe(false);
+  });
+
+  test('wizardSteps skips password, phrase, and confirm for an existing identity', () => {
+    expect(wizardSteps(false)).toEqual([
+      'welcome',
+      'address',
+      'password',
+      'phrase',
+      'confirm',
+      'create',
+      'done',
+    ]);
+    expect(wizardSteps(true)).toEqual([
+      'welcome',
+      'address',
+      'unlock',
+      'create',
+      'done',
+    ]);
+    expect(wizardSteps(true)).not.toEqual(expect.arrayContaining(['password', 'phrase', 'confirm']));
+  });
+
+  test('isManagedMailAddress matches the signup domain exactly', () => {
+    expect(isManagedMailAddress(' Alice@PQPost.test ', 'pqpost.test')).toBe(true);
+    expect(isManagedMailAddress('alice@mail.pqpost.test', 'pqpost.test')).toBe(false);
+    expect(isManagedMailAddress('alice@pqpost.test.evil', 'pqpost.test')).toBe(false);
+    expect(isManagedMailAddress('not-an-email', 'pqpost.test')).toBe(false);
+    expect(isManagedMailAddress('alice@pqpost.test', '')).toBe(false);
+  });
+
+  test('parseVerifiedManagedEmail requires a verified, unrevoked managed address', () => {
+    const body = {
+      details: {email: ['Alice@pqpost.test', 'proof']},
+      detailsMeta: {email: {verified: true}},
+      revokedDetails: [],
+    };
+    expect(parseVerifiedManagedEmail(body, 'pqpost.test')).toBe('alice@pqpost.test');
+    expect(parseVerifiedManagedEmail({...body, detailsMeta: {email: {verified: false}}}, 'pqpost.test')).toBeNull();
+    expect(parseVerifiedManagedEmail({...body, revokedDetails: ['email']}, 'pqpost.test')).toBeNull();
+    expect(parseVerifiedManagedEmail(body, 'other.test')).toBeNull();
+    expect(parseVerifiedManagedEmail(null, 'pqpost.test')).toBeNull();
+  });
+
+  test('isAlreadyHasMailboxError is the signup 409 mailbox conflict', () => {
+    expect(isAlreadyHasMailboxError('this identity already has a mailbox', 409)).toBe(true);
+    expect(isAlreadyHasMailboxError('this identity already has a mailbox')).toBe(true);
+    expect(isAlreadyHasMailboxError('this identity already has a mailbox', 500)).toBe(false);
+    expect(isAlreadyHasMailboxError('That address is taken.', 409)).toBe(false);
+  });
+
+  test('reset and delete request bodies', () => {
+    expect(JSON.parse(buildMailPasswordResetRequest({
+      fingerprint: 'ebpdk1abc',
+      mailPassword: 'ab'.repeat(16),
+      proof: 'deadbeef',
+    }))).toEqual({
+      fingerprint: 'ebpdk1abc',
+      mailPassword: 'ab'.repeat(16),
+      proof: 'deadbeef',
+    });
+    expect(JSON.parse(buildMailDeleteRequest({
+      fingerprint: 'ebpdk1abc',
+      proof: 'cafebabe',
+    }))).toEqual({
+      fingerprint: 'ebpdk1abc',
+      proof: 'cafebabe',
+    });
+  });
+
+  test('mailboxDeleteConfirmed ignores case and surrounding space', () => {
+    expect(mailboxDeleteConfirmed('Alice@pqpost.test', '  alice@pqpost.test ')).toBe(true);
+    expect(mailboxDeleteConfirmed('alice@pqpost.test', 'bob@pqpost.test')).toBe(false);
+    expect(mailboxDeleteConfirmed('', 'alice@pqpost.test')).toBe(false);
+  });
+
+  test('managedMailboxRestoreHint points at Mail accounts', () => {
+    expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('alice@pqpost.test');
+    expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('Mail accounts');
   });
 });

@@ -1,4 +1,4 @@
-import {loadIdentity, saveIdentity} from './storage';
+import {loadIdentityForUse, saveIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 
 function apiUrl(server: string, path: string): string {
@@ -8,15 +8,15 @@ function apiUrl(server: string, path: string): string {
 
 export async function revokeDetail(params: {
   identityName: string;
-  password: string;
+  password?: string;
   path: string;
   reason?: string;
   push?: boolean;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const certificate = identity.revokeDetail(params.path, params.reason);
-  await saveIdentity(params.identityName, params.password, identity);
+  await saveIdentityForUse(params.identityName, identity, params.password);
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
     const res = await fetch(apiUrl(server, '/api/v1/revoke'), {
@@ -38,14 +38,14 @@ export async function revokeDetail(params: {
 
 export async function revokeIdentity(params: {
   identityName: string;
-  password: string;
+  password?: string;
   reason?: string;
   push?: boolean;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const certificate = identity.createIdentityRevocation(params.reason);
-  await saveIdentity(params.identityName, params.password, identity);
+  await saveIdentityForUse(params.identityName, identity, params.password);
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
     const res = await fetch(apiUrl(server, '/api/v1/revoke'), {
@@ -66,7 +66,7 @@ export async function revokeIdentity(params: {
 
 export async function generateEmergencyCert(params: {
   identityName: string;
-  password: string;
+  password?: string;
 }): Promise<{
   type: string;
   fingerprint: string;
@@ -74,7 +74,7 @@ export async function generateEmergencyCert(params: {
   createdAt: string;
   warning: string;
 }> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const certificate = identity.generateEmergencyRevocationCertificate();
   return {
     type: 'ebp-emergency-revocation-certificate',

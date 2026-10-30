@@ -2,7 +2,7 @@
 title: "Key Management Context"
 type: concept
 status: active
-last_updated: 2026-05-24
+last_updated: 2026-10-30
 source_count: 5
 tags:
   - key-management
@@ -76,6 +76,10 @@ For consolidated citations to the raw BIP files, see
 [[source-bip-hd-wallet-standards]]. For a per-BIP analysis of how these patterns
 apply to EBP (PQ leaves, backup, namespace, multi-account UX), see
 [[analysis-bip-patterns-for-ebp]] and [[ebp-hd]].
+
+## Session unlock
+
+GUI and mobile keep the derived identity storage key in memory after one password prompt. The idle timeout defaults to 15 minutes (5 or 60 are also offered) and a Lock control clears it. Expiry also clears in-memory mail secrets. The password is not kept. A salt change, such as a password change, drops the cache entry. GUI routes that need the key are POST and still require the local CSRF token.
 
 ## Related Pages
 

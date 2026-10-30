@@ -1,6 +1,7 @@
 import { state, getDetailValue } from "./state.js";
 import { escapeHtml } from "./ui.js";
 import { shortFingerprint } from "./fingerprint.js";
+import { getComposeIntent } from "./compose-recipients.js";
 
 const contactSearchFields = [
   { inputId: "enc-recipient", dropdownId: "enc-recipient-dropdown" },
@@ -218,17 +219,19 @@ export function closeAllDropdowns() {
 }
 
 export function updateMailComposeSendState() {
-  const modeEl = document.getElementById("mail-compose-mode");
   const sendBtn = document.getElementById("mail-compose-send-btn");
-  if (!modeEl || !sendBtn) return;
-  const requiresRecipient = modeEl.value === "ebp-encrypt";
-  const rows = Array.from(document.querySelectorAll("[data-mail-recipient-row='true']"));
-  const hasRecipient = rows.some((row) => {
-    const contact = row.querySelector("input[data-mail-recipient-contact='true']");
-    const email = row.querySelector("input[data-mail-recipient-email='true']");
-    return Boolean(contact?.value?.trim() && email?.value?.trim());
-  });
-  sendBtn.disabled = requiresRecipient && !hasRecipient;
+  if (!sendBtn) return;
+  const intent = getComposeIntent();
+  const statusEl = document.getElementById("mail-compose-recipient-status");
+  const bannerEl = document.getElementById("mail-compose-plaintext-banner");
+  sendBtn.disabled = intent.kind === "empty" || intent.kind === "blocked";
+  sendBtn.textContent = intent.kind === "encrypted"
+    ? "Send encrypted"
+    : intent.kind === "plaintext"
+    ? "Send unencrypted"
+    : "Send Email";
+  if (statusEl) statusEl.textContent = intent.kind === "blocked" ? intent.message : "";
+  if (bannerEl) bannerEl.hidden = intent.kind !== "plaintext";
 }
 
 export function setMailTab(tabName) {

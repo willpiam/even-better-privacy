@@ -14,6 +14,7 @@ import {
   PROTOCOL_VERSION,
 } from "../../../core/version.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
+import { buildMailAuthenticityFields } from "../../../core/MailAuthenticity.ts";
 import {
   buildDetachedSignaturePayload,
   buildEncryptedMessagePayload,
@@ -1117,6 +1118,43 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
       const identity = await loadIdentity(ctx, password);
 
       const type = payload.type;
+      const rawMessageFrom = (body as Record<string, unknown>).messageFrom;
+      const rawSenderEmail = (body as Record<string, unknown>).senderEmail;
+      const messageFrom = typeof rawMessageFrom === "string"
+        ? rawMessageFrom
+        : typeof rawSenderEmail === "string"
+        ? rawSenderEmail
+        : "";
+      const signer: {
+        contact: ExternalIdentity | null;
+        isKnownContact: boolean;
+      } = { contact: null, isKnownContact: false };
+      const respond = async (
+        result: {
+          verified: boolean | null;
+          verifyStatus: string;
+        } & Record<string, unknown>,
+      ) => {
+        let contactName: string | null = null;
+        const signerFp = signer.contact?.fingerprint;
+        if (signerFp && signer.isKnownContact) {
+          const contacts = await listContacts(ctx);
+          contactName = contacts.find((c) =>
+            c.contact.fingerprint === signerFp
+          )?.name ?? null;
+        }
+        return json({
+          ...result,
+          ...buildMailAuthenticityFields({
+            verified: result.verified,
+            verifyStatus: result.verifyStatus,
+            contact: signer.contact,
+            messageFrom,
+            isKnownContact: signer.isKnownContact,
+            contactName,
+          }),
+        });
+      };
       if (type === "ebp-encrypted-message") {
         const ciphertext = String(payload.ciphertext ?? "");
         let message: string;
@@ -1128,7 +1166,7 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
             "decryption failed - message may be corrupted or not intended for this identity",
           );
         }
-        return json({
+        return await respond({
           message,
           verified: null,
           verifyStatus: "unsigned",
@@ -1227,60 +1265,42 @@ export async function handleRequestForTest(req: Request): Promise<Response> {
           }
         }
 
+        signer.contact = contact;
+        signer.isKnownContact = isKnownContact;
         try {
           const computedFingerprint = computeExternalFingerprint(contact);
           signerFingerprint = contact.fingerprint ?? signerFingerprint;
           if (
-            !computedFingerprint || computedFingerprint !== contact.fingerprint
+            !computedFingerprint ||
+            computedFingerprint !== contact.fingerprint ||
+            (senderFp && computedFingerprint !== senderFp)
           ) {
             const message = safeDecrypt(ciphertext);
+            let text = message;
             try {
               const inner = JSON.parse(message);
-              return json({
-                message: inner.message ?? message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-              });
+              text = inner.message ?? message;
             } catch {
-              return json({
-                message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-              });
+              text = message;
             }
-          }
-          if (senderFp && computedFingerprint !== senderFp) {
-            const message = safeDecrypt(ciphertext);
-            try {
-              const inner = JSON.parse(message);
-              return json({
-                message: inner.message ?? message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-              });
-            } catch {
-              return json({
-                message,
-                verified: false,
-                verifyStatus: "fingerprint_mismatch",
-                signerFingerprint,
-              });
-            }
+            return await respond({
+              message: text,
+              verified: false,
+              verifyStatus: "fingerprint_mismatch",
+              signerFingerprint,
+            });
           }
           const result = identity.decryptAndVerify(ciphertext, contact);
           if (result.verified) {
             const status = isKnownContact ? "valid" : "valid_unknown_signer";
-            return json({
+            return await respond({
               message: result.message,
               verified: result.verified,
               verifyStatus: status,
               signerFingerprint,
             });
           } else {
-            return json({
+            return await respond({
               message: result.message,
               verified: false,
               verifyStatus: "invalid",

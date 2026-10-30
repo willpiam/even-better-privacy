@@ -10,7 +10,7 @@ import {
   parseMultiRecipientEntries,
 } from '../ebpCore';
 import {loadContact} from './contacts';
-import {loadIdentity} from './storage';
+import {loadIdentityForUse} from './storage';
 import {resolveSenderForDecrypt} from './senderContext';
 import {
   decryptMessageWithIdentity,
@@ -48,10 +48,7 @@ export async function encryptMessage(params: {
   const contact = await loadContact(params.recipient);
   let identity: Identity | undefined;
   if (params.sign) {
-    if (!params.password) {
-      throw new Error('Password is required when signing');
-    }
-    identity = await loadIdentity(params.identityName, params.password);
+    identity = await loadIdentityForUse(params.identityName, params.password);
   }
   return encryptMessageWithIdentity({
     message: params.message,
@@ -63,7 +60,7 @@ export async function encryptMessage(params: {
 
 export async function decryptMessage(params: {
   identityName: string;
-  password: string;
+  password?: string;
   payload: Record<string, unknown>;
   sender?: string;
 }): Promise<{
@@ -74,7 +71,7 @@ export async function decryptMessage(params: {
   signerFingerprint: string | null;
   contact: import('../ebpCore').ExternalIdentity | null;
 }> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const type = params.payload.type;
   const ciphertext = requireCiphertext(params.payload);
   if (isEncryptedMessageType(type)) {
@@ -159,10 +156,7 @@ export async function encryptFile(params: {
   );
   const cleartext = JSON.stringify(envelope);
   if (params.sign) {
-    if (!params.password) {
-      throw new Error('Password is required when signing');
-    }
-    const identity = await loadIdentity(params.identityName, params.password);
+    const identity = await loadIdentityForUse(params.identityName, params.password);
     const ciphertext = identity.signAndEncryptFor(cleartext, recipient);
     return buildEncryptedSignedFilePayload({
       recipientFingerprint: recipient.fingerprint,
@@ -185,7 +179,7 @@ export async function encryptFile(params: {
 
 export async function decryptFile(params: {
   identityName: string;
-  password: string;
+  password?: string;
   payload: Record<string, unknown>;
   sender?: string;
 }): Promise<{
@@ -196,7 +190,7 @@ export async function decryptFile(params: {
   verified: boolean | null;
   verifyStatus: 'unsigned' | 'valid' | 'invalid';
 }> {
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await loadIdentityForUse(params.identityName, params.password);
   const type = params.payload.type;
   const ciphertext = requireCiphertext(params.payload);
   let cleartext = '';

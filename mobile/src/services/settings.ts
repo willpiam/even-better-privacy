@@ -2,18 +2,28 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {DEFAULT_SERVER_URL} from '../config/constants';
 import {
   booleanPrefToStorage,
+  clampAutoLockMinutes,
   normalizeOptionalPref,
+  numberPrefToStorage,
+  parseAutoLockMinutes,
   parseEnforcePasswordPolicy,
   parseStoredBoolean,
+  parseStoredNumber,
   requireNonEmptyServerUrl,
   resolveServerUrl,
 } from './settingsLogic';
 
 export {
   booleanPrefToStorage,
+  clampAutoLockMinutes,
+  DEFAULT_AUTO_LOCK_MINUTES,
+  AUTO_LOCK_MINUTE_OPTIONS,
   normalizeOptionalPref,
+  numberPrefToStorage,
+  parseAutoLockMinutes,
   parseEnforcePasswordPolicy,
   parseStoredBoolean,
+  parseStoredNumber,
   requireNonEmptyServerUrl,
   resolveServerUrl,
 } from './settingsLogic';
@@ -23,6 +33,8 @@ const SERVER_URL_KEY = 'ebp.server_url';
 export const ENFORCE_PASSWORD_POLICY_KEY = 'ebp.identity.enforcePasswordPolicy';
 export const MAIL_RENDER_HTML_KEY = 'ebp.mail.renderHtml';
 export const MAIL_INCLUDE_PUBLIC_KEYS_KEY = 'ebp.mail.includePublicKeys';
+/** Matches GUI localStorage key `ebp.identity.autoLockMinutes`. */
+export const AUTO_LOCK_MINUTES_KEY = 'ebp.identity.autoLockMinutes';
 
 async function getBooleanPref(key: string, fallback: boolean): Promise<boolean> {
   const value = await AsyncStorage.getItem(key);
@@ -101,4 +113,14 @@ export async function getMailIncludePublicKeys(): Promise<boolean> {
 
 export async function setMailIncludePublicKeys(value: boolean): Promise<void> {
   await setBooleanPref(MAIL_INCLUDE_PUBLIC_KEYS_KEY, value);
+}
+
+export async function getAutoLockMinutes(): Promise<number> {
+  const value = await AsyncStorage.getItem(AUTO_LOCK_MINUTES_KEY);
+  return parseAutoLockMinutes(value);
+}
+
+export async function setAutoLockMinutes(minutes: number): Promise<void> {
+  const clamped = clampAutoLockMinutes(minutes);
+  await AsyncStorage.setItem(AUTO_LOCK_MINUTES_KEY, numberPrefToStorage(clamped));
 }

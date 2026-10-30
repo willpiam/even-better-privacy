@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import {
   Alert,
   Pressable,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Share from 'react-native-share';
 import Clipboard from '@react-native-clipboard/clipboard';
+import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {
@@ -40,6 +41,7 @@ import BusyOverlay from '../components/BusyOverlay';
 import Card from '../components/Card';
 import CopyableOutput from '../components/CopyableOutput';
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../hooks/useIdentityUnlock';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
 
@@ -50,8 +52,9 @@ export default function IdentityDetailScreen({
   navigation,
 }: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [identity, setIdentity] = useState<StoredIdentityMeta | null>(null);
-  const [password, setPassword] = useState('');
+  const [sessionUnlocked, setSessionUnlocked] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
   const [publishServer, setPublishServer] = useState('');
   const [status, setStatus] = useState('');
@@ -78,46 +81,54 @@ export default function IdentityDetailScreen({
     navigation.setOptions({title: route.params.identityName});
   }, [navigation, route.params.identityName]);
 
-  useEffect(() => {
-    const load = async () => {
-      const [all, server] = await Promise.all([
-        listIdentities(),
-        getServerUrl(),
-      ]);
-      setServerUrl(server);
-      setIdentity(
-        all.find(item => item.name === route.params.identityName) ?? null,
-      );
-      if (password) {
-        try {
-          setDetails(
-            await listDetails({
-              identityName: route.params.identityName,
-              password,
-            }),
-          );
-        } catch {
-          setDetails([]);
-        }
+  const loadProtected = useCallback(async () => {
+    const [all, server] = await Promise.all([listIdentities(), getServerUrl()]);
+    setServerUrl(server);
+    const meta =
+      all.find(item => item.name === route.params.identityName) ?? null;
+    setIdentity(meta);
+    if (!meta) {
+      setSessionUnlocked(false);
+      setDetails([]);
+      return;
+    }
+    try {
+      const unlocked = await ensureUnlocked(meta.name);
+      if (!unlocked) {
+        setSessionUnlocked(false);
+        setDetails([]);
+        return;
       }
-    };
-    void load();
-  }, [route.params.identityName, password]);
+      setSessionUnlocked(true);
+      setDetails(await listDetails({identityName: unlocked}));
+    } catch (error) {
+      setSessionUnlocked(false);
+      setDetails([]);
+      setStatus(error instanceof Error ? error.message : String(error));
+    }
+  }, [route.params.identityName, ensureUnlocked]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProtected();
+    }, [loadProtected]),
+  );
 
   const onPublish = async () => {
-    setBusy(true);
-    setBusyMessage('Publishing…');
     setStatus('');
     try {
       if (!identity) {
         throw new Error('Identity not found');
       }
-      if (!password) {
-        throw new Error('Password is required');
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
       }
+      setSessionUnlocked(true);
+      setBusy(true);
+      setBusyMessage('Publishing…');
       const fingerprint = await publishIdentity({
-        identityName: identity.name,
-        password,
+        identityName: unlocked,
         server: publishServer.trim() || serverUrl,
       });
       setStatus(`Published: ${fingerprint}`);
@@ -133,10 +144,14 @@ export default function IdentityDetailScreen({
       if (!identity) {
         throw new Error('Identity not found');
       }
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
+      }
+      setSessionUnlocked(true);
       const path = resolveOpaqueDetailPath(detailPath, detailOpaque);
       await addDetail({
-        identityName: identity.name,
-        password,
+        identityName: unlocked,
         path,
         detail: detailValue,
         push: detailPush,
@@ -145,12 +160,7 @@ export default function IdentityDetailScreen({
       setDetailPath('');
       setDetailValue('');
       setDetailOpaque(false);
-      setDetails(
-        await listDetails({
-          identityName: identity.name,
-          password,
-        }),
-      );
+      setDetails(await listDetails({identityName: unlocked}));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -180,13 +190,15 @@ export default function IdentityDetailScreen({
       if (!identity) {
         throw new Error('Identity not found');
       }
-      if (!password) {
-        throw new Error('Password is required');
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
       }
+      setSessionUnlocked(true);
       if (!includeSigningKey && !includeEncryptionKey) {
         throw new Error('Public export must include at least one public key');
       }
-      const publicIdentity = await exportPublicIdentity(identity.name, password, {
+      const publicIdentity = await exportPublicIdentity(identity.name, undefined, {
         includeSigningKey,
         includeEncryptionKey,
         includeDetails,
@@ -207,9 +219,13 @@ export default function IdentityDetailScreen({
       if (!revokePath.trim()) {
         throw new Error('Select a detail path to revoke');
       }
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
+      }
+      setSessionUnlocked(true);
       await revokeDetail({
-        identityName: identity.name,
-        password,
+        identityName: unlocked,
         path: revokePath,
         reason: revokeReason || undefined,
         push: revokePush,
@@ -217,12 +233,7 @@ export default function IdentityDetailScreen({
       setStatus('Detail revoked');
       setRevokePath('');
       setRevokeReason('');
-      setDetails(
-        await listDetails({
-          identityName: identity.name,
-          password,
-        }),
-      );
+      setDetails(await listDetails({identityName: unlocked}));
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }
@@ -233,9 +244,13 @@ export default function IdentityDetailScreen({
       if (!identity) {
         throw new Error('Identity not found');
       }
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
+      }
+      setSessionUnlocked(true);
       await revokeIdentity({
-        identityName: identity.name,
-        password,
+        identityName: unlocked,
         reason: revokeReason || undefined,
         push: revokePush,
       });
@@ -354,15 +369,19 @@ export default function IdentityDetailScreen({
   };
 
   const onEmergencyCert = async () => {
-    setBusy(true);
-    setBusyMessage('Generating certificate…');
     try {
       if (!identity) {
         throw new Error('Identity not found');
       }
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) {
+        return;
+      }
+      setSessionUnlocked(true);
+      setBusy(true);
+      setBusyMessage('Generating certificate…');
       const cert = await generateEmergencyCert({
-        identityName: identity.name,
-        password,
+        identityName: unlocked,
       });
       setEmergencyOutput(JSON.stringify(cert, null, 2));
       setStatus('Emergency certificate generated');
@@ -376,6 +395,8 @@ export default function IdentityDetailScreen({
   if (!identity) {
     return (
       <Screen>
+        {unlockPrompt}
+        {secretPrompt}
         <StatusBanner message="Identity not found." kind="error" />
       </Screen>
     );
@@ -387,6 +408,7 @@ export default function IdentityDetailScreen({
 
   return (
     <Screen scroll>
+      {unlockPrompt}
       {secretPrompt}
       <BusyOverlay visible={busy} message={busyMessage} />
       <Card padded>
@@ -404,17 +426,18 @@ export default function IdentityDetailScreen({
       <StatusBanner message={status} kind={statusKind(status)} />
 
       <SectionTitle>Unlock</SectionTitle>
-      <TextField
-        label="Password"
-        testID="identity-password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-        autoCapitalize="none"
-      />
       <Text style={styles.hint}>
-        Enter the password to load details and run protected actions.
+        {sessionUnlocked
+          ? 'Identity is unlocked for this session.'
+          : 'Unlock once to load details and run protected actions.'}
       </Text>
+      {sessionUnlocked ? null : (
+        <AppButton
+          title="Unlock identity"
+          testID="identity-unlock"
+          onPress={() => void loadProtected()}
+        />
+      )}
 
       <SectionTitle>Publish</SectionTitle>
       <TextField
@@ -436,9 +459,9 @@ export default function IdentityDetailScreen({
       <SectionTitle>Identity details</SectionTitle>
       {details.length === 0 ? (
         <Text style={styles.hint}>
-          {password
+          {sessionUnlocked
             ? 'No details yet. Add one below.'
-            : 'Unlock with password to load details.'}
+            : 'Unlock the identity to load details.'}
         </Text>
       ) : (
         details.map(item => (
@@ -583,7 +606,7 @@ export default function IdentityDetailScreen({
         <View style={styles.pickerList}>
           {detailPaths.length === 0 ? (
             <Text style={styles.hint}>
-              No loaded details. Unlock with password first.
+              No loaded details. Unlock the identity first.
             </Text>
           ) : (
             detailPaths.map((path, index) => (

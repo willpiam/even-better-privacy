@@ -8,10 +8,8 @@ import {
 } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 
-export async function loadIdentity(
-  ctx: CLIContext,
-  password: string,
-): Promise<Identity> {
+/** Read the private identity file, enforcing the test-fixture guard. */
+export async function readIdentityStorage(ctx: CLIContext): Promise<string> {
   let storageData: string;
   try {
     storageData = await Deno.readTextFile(ctx.identityPath);
@@ -30,24 +28,36 @@ export async function loadIdentity(
   }
   const fixtureWarning = testIdentityWarning(ctx.identityPath);
   if (fixtureWarning) console.warn(fixtureWarning);
+  return storageData;
+}
+
+export function toIdentityDecryptHttpError(e: unknown): unknown {
+  if (e instanceof DecryptionAuthError) {
+    return new HttpError(
+      STATUS.Unauthorized,
+      "failed to decrypt identity (wrong password or tampered data)",
+    );
+  }
+  if (e instanceof StorageFormatError) {
+    return new HttpError(
+      STATUS.BadRequest,
+      `invalid identity file: ${e.message}`,
+    );
+  }
+  return e;
+}
+
+export async function loadIdentity(
+  ctx: CLIContext,
+  password: string,
+): Promise<Identity> {
+  const storageData = await readIdentityStorage(ctx);
 
   let identity: Identity;
   try {
     identity = Identity.fromStorageFormat(storageData, password);
   } catch (e) {
-    if (e instanceof DecryptionAuthError) {
-      throw new HttpError(
-        STATUS.Unauthorized,
-        "failed to decrypt identity (wrong password or tampered data)",
-      );
-    }
-    if (e instanceof StorageFormatError) {
-      throw new HttpError(
-        STATUS.BadRequest,
-        `invalid identity file: ${e.message}`,
-      );
-    }
-    throw e;
+    throw toIdentityDecryptHttpError(e);
   }
 
   // F-STORAGE-02: transparent KDF upgrade on successful unlock.
@@ -95,6 +105,23 @@ export async function saveIdentity(
   const storageData = identity.toStorageFormat(password);
   await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
   console.log(`Saved identity to ${newPath}`);
+
+  ctx.identityPath = newPath;
+}
+
+/** Re-save with an already-derived storage key (unlock session path). */
+export async function saveIdentityWithKey(
+  ctx: CLIContext,
+  key: Uint8Array,
+  salt: Uint8Array,
+  identity: Identity,
+): Promise<void> {
+  const dir = ctx.identityDir;
+  const newPath = `${dir}/${ctx.currentIdentity}.identity.json`;
+
+  await ensurePrivateDir(dir);
+  const storageData = identity.toStorageFormatWithKey(key, salt);
+  await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
 
   ctx.identityPath = newPath;
 }

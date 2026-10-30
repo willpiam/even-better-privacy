@@ -4,6 +4,7 @@ import { loadSync } from "std/dotenv";
 import { handleRequest } from "./routes.ts";
 import { initSecurity, getTokenPersistPath } from "./security.ts";
 import { fixLegacyPerms } from "../../cli/utils.ts";
+import { startUnlockSweeper } from "./unlock-session.ts";
 
 let envLoaded = false;
 function loadEnvOnce(): void {
@@ -47,6 +48,8 @@ const ebpHome = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
 if (ebpHome) {
 	await fixLegacyPerms(`${ebpHome}/.ebp`);
 }
+
+startUnlockSweeper();
 
 Deno.serve({ port: PORT, hostname: HOST }, handleRequest);
 console.log(`EBP GUI local backend listening on http://${HOST}:${PORT}`);

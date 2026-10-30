@@ -899,7 +899,35 @@ export async function isMailboxUsernameTaken(
   username: string,
   domain: string,
 ): Promise<boolean> {
-  return (await getMailboxByUsername(db, username, domain)) !== null;
+  if (await getMailboxByUsername(db, username, domain)) return true;
+  return await isMailUsernameRetired(db, username, domain);
+}
+
+/** Retired usernames are never reissued, so pinned addresses cannot be taken over. */
+export async function retireMailUsername(db: DatabaseAdapter, record: {
+  username: string;
+  domain: string;
+  fingerprint: string;
+  retiredAt: number;
+}): Promise<void> {
+  if (await isMailUsernameRetired(db, record.username, record.domain)) return;
+  await db.query(
+    `INSERT INTO retired_mail_usernames (username, domain, identity_fingerprint, retired_at)
+     VALUES (?, ?, ?, ?)`,
+    [record.username, record.domain, record.fingerprint, record.retiredAt],
+  );
+}
+
+export async function isMailUsernameRetired(
+  db: DatabaseAdapter,
+  username: string,
+  domain: string,
+): Promise<boolean> {
+  const rows = await db.query<[string]>(
+    "SELECT username FROM retired_mail_usernames WHERE username = ? AND domain = ?",
+    [username, domain],
+  );
+  return rows.length > 0;
 }
 
 export async function markDetailVerified(
