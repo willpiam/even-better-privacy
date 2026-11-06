@@ -13,7 +13,7 @@ import {
   setUnlockClockForTest,
   sweepExpiredSessions,
 } from "../unlock-session.ts";
-import { getContext } from "../../../cli/utils.ts";
+import { getContext, writeState } from "../../../cli/utils.ts";
 
 const TEST_TOKEN = "u".repeat(64);
 const PASSWORD = "Unlock-Session-Pass-7";
@@ -56,6 +56,7 @@ async function withIdentityHome(fn: (home: string) => Promise<void>) {
       `${ebpDir}/me.identity.json`,
       identity.toStorageFormat(PASSWORD),
     );
+    await writeState(ebpDir, { currentIdentity: "me" });
     await fn(home);
   } finally {
     lockAll();
@@ -265,5 +266,98 @@ Deno.test({
       assertEquals(second.status, 200);
       assertEquals(second.body.mailSecretsUnlocked, false);
       assertEquals(mailSecretCache.has(ebpDir), false);
+    }),
+});
+
+Deno.test({
+  name:
+    "mail credentials: identity password protects new accounts; supplied PIN is ignored",
+  permissions: PERMS,
+  fn: () =>
+    withIdentityHome(async (home) => {
+      const locked = await post("/api/v1/mail/account", {
+        home,
+        createNew: true,
+      });
+      assertEquals(locked.status, 401);
+      await post("/api/v1/identity/unlock", {
+        home,
+        identity: "me",
+        password: PASSWORD,
+      });
+      const saved = await post("/api/v1/mail/account", {
+        home,
+        createNew: true,
+        pin: "must-not-be-used",
+        account: {
+          authType: "password",
+          persistSecrets: true,
+          imapHost: "imap.example.com",
+          smtpHost: "smtp.example.com",
+          username: "me@example.com",
+          fromEmail: "me@example.com",
+        },
+        imapPassword: "imap-secret",
+        smtpPassword: "smtp-secret",
+      });
+      assertEquals(saved.status, 200, JSON.stringify(saved.body));
+      await post("/api/v1/identity/lock", { home, identity: "me" });
+      const unlocked = await post("/api/v1/identity/unlock", {
+        home,
+        identity: "me",
+        password: PASSWORD,
+      });
+      assertEquals(unlocked.body.mailSecretsUnlocked, true);
+      assertEquals(
+        Object.values(mailSecretCache.get(`${home}/.ebp`) ?? {})[0]
+          ?.imapPassword,
+        "imap-secret",
+      );
+    }),
+});
+
+Deno.test({
+  name:
+    "mail credentials: legacy PIN migration requires identity unlock and survives relock",
+  permissions: PERMS,
+  fn: () =>
+    withIdentityHome(async (home) => {
+      const path = `${home}/.ebp/mail-account.secrets.json`;
+      const original = JSON.stringify(
+        await encryptSecretsStore({
+          acct: { imapPassword: "imap", smtpPassword: "smtp" },
+        }, "old-pin"),
+      );
+      await Deno.writeTextFile(path, original);
+      assertEquals(
+        (await post("/api/v1/mail/unlock", { home, pin: "old-pin" })).status,
+        401,
+      );
+      await post("/api/v1/identity/unlock", {
+        home,
+        identity: "me",
+        password: PASSWORD,
+      });
+      assertEquals(
+        (await post("/api/v1/mail/unlock", { home, pin: "wrong-pin" })).status,
+        401,
+      );
+      assertEquals(await Deno.readTextFile(path), original);
+      assertEquals(
+        (await post("/api/v1/mail/unlock", { home, pin: "old-pin" })).status,
+        200,
+      );
+      assert(await Deno.readTextFile(path) !== original);
+      await post("/api/v1/identity/lock", { home, identity: "me" });
+      const unlocked = await post("/api/v1/identity/unlock", {
+        home,
+        identity: "me",
+        password: PASSWORD,
+      });
+      assertEquals(unlocked.body.mailSecretsUnlocked, true);
+      assertEquals(
+        mailSecretCache.get(`${home}/.ebp`)?.acct?.smtpPassword,
+        "smtp",
+      );
     }),
 });

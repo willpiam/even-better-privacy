@@ -98,6 +98,7 @@ import {
   lockIdentity,
   saveIdentityForRequest,
   setUnlockTimeout,
+  sweepExpiredSessions,
   unlockIdentity,
 } from "./unlock-session.ts";
 import {
@@ -122,11 +123,11 @@ import {
   type MailAuthSecrets,
   type MailOauthProvider,
   mailPinCache,
+  migrateMailSecrets,
   normalizeMailConfig,
   resolveMailAccount,
   saveMailSecretsStore,
   saveMailStore,
-  unlockMailSecretsWithPin,
 } from "./mail-account.ts";
 import {
   buildImapClient,
@@ -412,26 +413,11 @@ async function saveEbpMailAccount(identityDir: string, options: {
   return { accountId, accountConfig };
 }
 
-/** Unlocks mail secrets for writing; false when no PIN candidate works. */
-async function prepareMailSecrets(
-  identityDir: string,
-  candidates: Array<string | undefined>,
-): Promise<boolean> {
+/** Only verified identity unlocks may establish the mail encryption password. */
+async function prepareMailSecrets(identityDir: string, previousPin?: string): Promise<boolean> {
   const status = await getMailSecretsStatus(identityDir);
-  const usable = candidates.filter((c): c is string => typeof c === "string" && c.length > 0);
-  if (!status.locked) {
-    if (!mailPinCache.get(identityDir) && usable[0]) mailPinCache.set(identityDir, usable[0]);
-    return Boolean(mailPinCache.get(identityDir));
-  }
-  for (const candidate of usable) {
-    try {
-      await unlockMailSecretsWithPin(identityDir, candidate);
-      return true;
-    } catch {
-      // try the next candidate
-    }
-  }
-  return false;
+  if (status.locked && previousPin) await migrateMailSecrets(identityDir, previousPin);
+  return Boolean(mailPinCache.get(identityDir));
 }
 
 async function nextHdIdentityIndex(
@@ -483,6 +469,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
   }
 
   try {
+    sweepExpiredSessions();
     const url = new URL(req.url);
     const staticResponse = await tryServeStatic(req, url);
     if (staticResponse) return staticResponse;
@@ -760,10 +747,13 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         throw new HttpError(STATUS.Conflict, "oauth flow is not completed yet");
       }
       const ctx = await getContext(home ?? undefined);
+      await loadIdentityForRequest(ctx);
+      if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
+        throw new HttpError(STATUS.Conflict, "mail migration required");
+      }
       const requestedAccountId = toSafeString(body.accountId, 128);
       const createNew = Boolean(body.createNew);
       const accountName = toSafeString(body.accountName, 128) || "Mail account";
-      const pin = typeof body.pin === "string" ? body.pin : "";
       const store = await getMailStore(ctx.identityDir);
       const current = createNew
         ? null
@@ -808,9 +798,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
       store.selectedAccountId = accountId;
       await saveMailStore(ctx.identityDir, store);
-      if (pin) {
-        mailPinCache.set(ctx.identityDir, pin);
-      }
       const secretStore = await getMailSecretsStore(ctx.identityDir);
       secretStore[accountId] = {
         imapPassword: "",
@@ -933,7 +920,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
       const secretStatus = await getMailSecretsStatus(ctx.identityDir);
       if (secretStatus.locked) {
-        throw new HttpError(STATUS.Unauthorized, "email pin required");
+        throw new HttpError(STATUS.Unauthorized, "mail migration required");
       }
       store.accounts = store.accounts.filter((entry) => entry.id !== accountId);
       if (store.selectedAccountId === accountId) {
@@ -956,9 +943,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const body = await readJson<{ home?: unknown; pin?: unknown }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const pin = typeof body.pin === "string" ? body.pin : "";
-      if (!pin) throw new HttpError(STATUS.BadRequest, "email pin is required");
+      if (!pin) throw new HttpError(STATUS.BadRequest, "previous email PIN is required for migration");
       const ctx = await getContext(home ?? undefined);
-      const store = await unlockMailSecretsWithPin(ctx.identityDir, pin);
+      await loadIdentityForRequest(ctx);
+      const store = await migrateMailSecrets(ctx.identityDir, pin);
       return json({
         ok: true,
         unlocked: true,
@@ -979,13 +967,16 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const ctx = await getContext(home ?? undefined);
+      await loadIdentityForRequest(ctx);
+      if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
+        throw new HttpError(STATUS.Conflict, "mail migration required");
+      }
       const accountPayload = body.account && typeof body.account === "object"
         ? body.account as Record<string, unknown>
         : null;
       const requestedAccountId = toSafeString(body.accountId, 128);
       const createNew = Boolean(body.createNew);
       const accountName = toSafeString(body.accountName, 128) || "Mail account";
-      const pin = typeof body.pin === "string" ? body.pin : "";
       const store = await getMailStore(ctx.identityDir);
       const current = createNew
         ? null
@@ -1017,9 +1008,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       store.selectedAccountId = accountId;
       await saveMailStore(ctx.identityDir, store);
 
-      if (pin) {
-        mailPinCache.set(ctx.identityDir, pin);
-      }
       const secretStore = await getMailSecretsStore(ctx.identityDir);
       const existingSecrets = secretStore[accountId] ??
         { imapPassword: "", smtpPassword: "" };
@@ -4559,21 +4547,11 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
       const ctx = await getContext(home, identityName);
       const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
-      const identity = await loadIdentity(ctx, password);
-
-      // Resolve the mail PIN before provisioning so the mailbox password can
-      // always be stored locally once the server has created the account.
-      const pinInput = typeof body.pin === "string" && body.pin ? body.pin : "";
-      const secretsStatus = await getMailSecretsStatus(ctx.identityDir);
-      if (secretsStatus.locked) {
-        const candidate = pinInput || mailPinCache.get(ctx.identityDir) || password;
-        try {
-          await unlockMailSecretsWithPin(ctx.identityDir, candidate);
-        } catch {
-          throw new HttpError(STATUS.Unauthorized, "email pin required");
-        }
-      } else if (!mailPinCache.get(ctx.identityDir)) {
-        mailPinCache.set(ctx.identityDir, pinInput || password);
+      const { identity } = await unlockIdentity(ctx, password);
+      const pinInput = typeof body.pin === "string" ? body.pin : "";
+      if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
+        if (!pinInput) throw new HttpError(STATUS.Conflict, "mail migration required");
+        await migrateMailSecrets(ctx.identityDir, pinInput);
       }
 
       const config = await fetchEbpMailConfig(server);
@@ -4711,11 +4689,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (account) {
         try {
           if (
-            await prepareMailSecrets(ctx.identityDir, [
-              pin,
-              mailPinCache.get(ctx.identityDir),
-              password,
-            ])
+            await prepareMailSecrets(ctx.identityDir, pin)
           ) {
             const secretStore = await getMailSecretsStore(ctx.identityDir);
             secretStore[account.id] = { imapPassword: mailPassword, smtpPassword: mailPassword };

@@ -64,8 +64,8 @@ From **Mail Accounts → Add manual account**, enter:
 - Username and separate IMAP / SMTP passwords (app passwords where required)
 - From email and optional from name
 
-**Persist passwords on this device** is on by default. When enabled, set an
-**email PIN** on first save; passwords are encrypted into
+**Persist passwords on this device** is on by default. When enabled, unlock with your
+**identity password**; mail credentials are encrypted into
 `mail-account.secrets.json` (same envelope as the GUI).
 
 Use **Test IMAP + SMTP** before saving to verify credentials. Mail credentials
@@ -126,11 +126,11 @@ the original `Message-ID` when present.
 ## Unlock after restart
 
 After restarting the app, open **Mail Accounts** and **Unlock mail secrets** with
-your email PIN before opening the inbox. Unlock uses native PBKDF2
+your identity password before opening the inbox. Unlock uses native PBKDF2
 (`react-native-quick-crypto`); pure JS on Hermes is too slow for the 210k
 iteration envelope used by the GUI.
 
-## Native crypto (mail PIN)
+## Native crypto (mail credential encryption)
 
 Mail secrets use PBKDF2-HMAC-SHA-256 with 210,000 iterations (same as GUI).
 After pulling changes that add `react-native-quick-crypto`, reinstall and rebuild:
@@ -146,9 +146,11 @@ In **Settings → Diagnostics**, run **Verify mail PBKDF2 parity** once after a
 native rebuild. Unlock should finish in a few seconds, not hang indefinitely.
 
 Accounts created in the desktop GUI under the same identity use the same storage
-files and can be unlocked on mobile with the same email PIN.
+files and can be unlocked on mobile with the same identity password.
 
 ## Deep links
 
 - Android: `AndroidManifest.xml` intent-filter for `ebp` scheme
 - iOS: `Info.plist` `CFBundleURLTypes` for `ebp`
+
+Stored mail credentials use the identity password. Unlocking the identity also unlocks mail. Older credential stores protected by a separate email PIN ask for that previous PIN once and are then re-encrypted with the verified identity password. Cancelling migration leaves the original encrypted file intact.

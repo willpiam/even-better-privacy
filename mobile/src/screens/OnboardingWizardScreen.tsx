@@ -1,3 +1,4 @@
+import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useNavigation} from '@react-navigation/native';
@@ -48,6 +49,7 @@ function randomInt(max: number): number {
 export default function OnboardingWizardScreen(): JSX.Element {
   // Registered in both the Identities and Mail stacks.
   const navigation = useNavigation<any>();
+  const {promptSecret, secretPrompt} = useSecretPrompt();
   const [step, setStep] = useState<Step>('welcome');
   const [server, setServer] = useState('');
   const [config, setConfig] = useState<EbpSignupConfig | null>(null);
@@ -224,6 +226,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
       current = 'mailbox';
       setTask('mailbox', 'running');
       const res = await signupEbpMailbox({
+        requestPreviousPin: () => promptSecret({
+          title: 'Migrate stored mail credentials',
+          placeholder: 'Previous email PIN (one time)',
+          submitLabel: 'Migrate',
+        }),
         identityName: name,
         password,
         username: normalizedUsername,
@@ -258,6 +265,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setTask('mailbox', 'running');
     try {
       const res = await resetEbpMailbox({
+        requestPreviousPin: () => promptSecret({
+          title: 'Migrate stored mail credentials',
+          placeholder: 'Previous email PIN (one time)',
+          submitLabel: 'Migrate',
+        }),
         identityName,
         password,
         server,
@@ -338,6 +350,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
   return (
     <Screen scroll>
+      {secretPrompt}
       {step === 'welcome' ? (
         <Card padded>
           <Text style={styles.title}>Get a quantum-secure email address</Text>

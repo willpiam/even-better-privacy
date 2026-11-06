@@ -1,3 +1,4 @@
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import React, {useCallback, useState} from 'react';
 import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -14,7 +15,6 @@ import {isManagedMailAddress} from '../../services/mail/ebpSignupLogic';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {
   deleteMailAccount,
-  getMailPinInMemory,
   getMailSecretsInMemory,
   readMailStore,
   saveMailAccountWithSecrets,
@@ -50,6 +50,7 @@ export default function MailAccountSetupScreen({
   const accountId = route.params?.accountId;
   const isEdit = Boolean(accountId);
   const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
 
   const [identityName, setIdentityName] = useState('');
   const [server, setServer] = useState('');
@@ -58,7 +59,7 @@ export default function MailAccountSetupScreen({
   const [existing, setExisting] = useState<MailAccountRecord | null>(null);
   const [isOAuth, setIsOAuth] = useState(false);
   const [hasExistingSecrets, setHasExistingSecrets] = useState(false);
-  const [pinInSession, setPinInSession] = useState(false);
+
 
   const [accountName, setAccountName] = useState('Mail account');
   const [imapHost, setImapHost] = useState('');
@@ -73,7 +74,7 @@ export default function MailAccountSetupScreen({
   const [fromEmail, setFromEmail] = useState('');
   const [fromName, setFromName] = useState('');
   const [persistSecrets, setPersistSecrets] = useState(true);
-  const [emailPin, setEmailPin] = useState('');
+
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
@@ -81,7 +82,7 @@ export default function MailAccountSetupScreen({
   const load = useCallback(async () => {
     const name = await getCurrentIdentityRequired();
     setIdentityName(name);
-    setPinInSession(Boolean(getMailPinInMemory(name)));
+
     try {
       const url = await getServerUrl();
       setServer(url);
@@ -211,13 +212,7 @@ export default function MailAccountSetupScreen({
       const config = buildConfig();
       const secrets = resolveSecretsForAction();
       const id = accountId ?? `pwd-${Date.now()}`;
-      const pin =
-        config.persistSecrets && !pinInSession
-          ? emailPin
-          : getMailPinInMemory(identityName) ?? undefined;
-      if (config.persistSecrets && !pin) {
-        throw new Error('Email PIN is required to persist encrypted mail passwords');
-      }
+      if (!(await ensureUnlocked(identityName))) return;
       await saveMailAccountWithSecrets(identityName, {
         record: {
           id,
@@ -226,7 +221,6 @@ export default function MailAccountSetupScreen({
         },
         imapPassword: secrets.imapPassword,
         smtpPassword: secrets.smtpPassword,
-        pin,
       });
       await appendActivityLog(`Mail account saved: ${config.fromEmail}`, 'success');
       navigation.goBack();
@@ -265,6 +259,11 @@ export default function MailAccountSetupScreen({
     try {
       const cfg = await fetchEbpSignupConfig(server);
       const res = await resetEbpMailbox({
+        requestPreviousPin: () => promptSecret({
+          title: 'Migrate stored mail credentials',
+          placeholder: 'Previous email PIN (one time)',
+          submitLabel: 'Migrate',
+        }),
         identityName,
         password,
         server,
@@ -357,13 +356,14 @@ export default function MailAccountSetupScreen({
     );
   }
 
-  const showEmailPin = persistSecrets && !pinInSession;
+
 
   const managedAddress = isManagedMailAddress(fromEmail, managedDomain);
 
   return (
     <Screen scroll>
       {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay visible={busyMessage !== null} message={busyMessage ?? undefined} />
       <StatusBanner message={status} kind={statusKind(status)} />
 
@@ -464,15 +464,7 @@ export default function MailAccountSetupScreen({
         <Switch value={persistSecrets} onValueChange={setPersistSecrets} />
       </View>
 
-      {showEmailPin ? (
-        <TextField
-          label="Email PIN (encrypt at rest)"
-          secureTextEntry
-          value={emailPin}
-          onChangeText={setEmailPin}
-          placeholder="PIN used to encrypt stored passwords"
-        />
-      ) : null}
+
 
       <Text style={styles.note}>
         Mail credentials stay on this device. They are not sent to your EBP key

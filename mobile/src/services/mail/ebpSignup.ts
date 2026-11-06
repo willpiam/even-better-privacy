@@ -8,10 +8,11 @@ import {
   sha256Hex,
 } from '../../ebpCore';
 import {apiUrl} from '../contactsLogic';
-import {loadIdentity, saveIdentity} from '../storage';
+import {unlockIdentity, loadIdentityUnlocked, saveIdentity} from '../storage';
 import {
   deleteMailAccount,
-  getMailPinInMemory,
+  getMailSecretsStatus,
+  migrateMailSecrets,
   readMailStore,
   saveMailAccountWithSecrets,
   selectMailAccount,
@@ -46,7 +47,9 @@ async function readError(res: Response): Promise<string> {
   return body.error ?? `HTTP ${res.status}`;
 }
 
-export async function fetchEbpSignupConfig(server: string): Promise<EbpSignupConfig> {
+export async function fetchEbpSignupConfig(
+  server: string,
+): Promise<EbpSignupConfig> {
   const res = await fetch(apiUrl(server, '/api/v1/mail/signup/config'));
   if (res.status === 404) {
     return {enabled: false};
@@ -95,6 +98,7 @@ export async function signupEbpMailbox(params: {
   server: string;
   config: EbpSignupConfig;
   pin?: string;
+  requestPreviousPin?: () => Promise<string | null>;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
   if (!params.config.enabled) {
     throw new Error('This key server does not offer EBP email sign-up');
@@ -103,8 +107,13 @@ export async function signupEbpMailbox(params: {
   if (!check.ok) {
     throw new Error(check.reason);
   }
-  const pin = params.pin || getMailPinInMemory(params.identityName) || params.password;
-  const identity = await loadIdentity(params.identityName, params.password);
+  const identity = await openIdentity(params.identityName, params.password);
+  if ((await getMailSecretsStatus(params.identityName)).locked) {
+    const previousPin = params.pin || (await params.requestPreviousPin?.());
+    if (!previousPin) throw new Error('Mail credential migration cancelled');
+    await migrateMailSecrets(params.identityName, previousPin);
+  }
+  const pin = params.password;
   const email = buildMailAddress(check.username, params.config.domain);
   identity.attachDetail('email', email);
   const entry = identity.details.get('email');
@@ -150,11 +159,16 @@ export async function signupEbpMailbox(params: {
  * `unlockSession.ts` does not export `loadIdentityUnlocked`.
  */
 async function openIdentity(name: string, password: string): Promise<Identity> {
-  return loadIdentity(name, password);
+  await unlockIdentity(name, password);
+  return loadIdentityUnlocked(name);
 }
 
 /** Sign on a copy so the saved identity's `detailsNonce` is not consumed. */
-function signThrowawayDetail(identity: Identity, path: string, detail: string): string {
+function signThrowawayDetail(
+  identity: Identity,
+  path: string,
+  detail: string,
+): string {
   const signer = Identity.fromJSON(identity.toJSON());
   const nonce = identity.detailsNonce;
   signer.attachDetail(path, detail);
@@ -248,14 +262,20 @@ export async function resetEbpMailbox(params: {
   server: string;
   config: EbpSignupConfig;
   pin?: string;
+  requestPreviousPin?: () => Promise<string | null>;
   accountId?: string;
   fromName?: string;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
   if (!params.config.enabled) {
     throw new Error('This key server does not offer EBP email');
   }
-  const pin = params.pin || getMailPinInMemory(params.identityName) || params.password;
   const identity = await openIdentity(params.identityName, params.password);
+  if ((await getMailSecretsStatus(params.identityName)).locked) {
+    const previousPin = params.pin || (await params.requestPreviousPin?.());
+    if (!previousPin) throw new Error('Mail credential migration cancelled');
+    await migrateMailSecrets(params.identityName, previousPin);
+  }
+  const pin = params.password;
   const email = await fetchVerifiedManagedEmail(
     params.server,
     identity.toFingerprint(),
@@ -267,15 +287,18 @@ export async function resetEbpMailbox(params: {
     MAIL_PASSWORD_RESET_PATH,
     buildMailPasswordResetDetail(email, sha256Hex(mailPassword)),
   );
-  const res = await fetch(apiUrl(params.server, '/api/v1/mail/reset-password'), {
-    method: 'POST',
-    headers: {'content-type': 'application/json'},
-    body: buildMailPasswordResetRequest({
-      fingerprint: identity.toFingerprint(),
-      mailPassword,
-      proof,
-    }),
-  });
+  const res = await fetch(
+    apiUrl(params.server, '/api/v1/mail/reset-password'),
+    {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: buildMailPasswordResetRequest({
+        fingerprint: identity.toFingerprint(),
+        mailPassword,
+        proof,
+      }),
+    },
+  );
   if (!res.ok) {
     throw new EbpMailApiError(res.status, await readError(res));
   }

@@ -1,3 +1,4 @@
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
@@ -7,9 +8,9 @@ import {getCurrentIdentityRequired} from '../../services/storage';
 import {
   getMailSecretsStatus,
   readMailStore,
+  persistMailSecretsStore,
   selectMailAccount,
   setMailSecretsInMemory,
-  unlockMailSecretsWithPin,
   upsertMailAccount,
 } from '../../services/mail/accountStore';
 import {
@@ -50,6 +51,7 @@ const EMPTY_OAUTH_CONFIG: MailOauthServerConfig = {
 
 export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [identityName, setIdentityName] = useState('');
   const [accounts, setAccounts] = useState<
     Array<{id: string; name: string; fromEmail: string; authType: string}>
@@ -104,13 +106,13 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     return secretStatus.locked && !secretStatus.inMemory;
   }, [loadOAuthConfig]);
 
-  const unlockWithPin = useCallback(
-    async (pin: string) => {
+  const unlockMailWithIdentity = useCallback(
+    async () => {
       setUnlocking(true);
       try {
         setStatus('');
         const name = identityName || (await getCurrentIdentityRequired());
-        await unlockMailSecretsWithPin(name, pin);
+        if (!(await ensureUnlocked(name))) return;
         await appendActivityLog('Mail secrets unlocked', 'success');
         setStatus('Mail secrets unlocked');
         await refresh();
@@ -120,29 +122,17 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         setUnlocking(false);
       }
     },
-    [identityName, refresh],
+    [identityName, refresh, ensureUnlocked],
   );
 
-  const requestPinUnlock = useCallback(async () => {
-    const pin = await promptSecret({
-      title: 'Email PIN',
-      placeholder: 'Email PIN',
-      submitLabel: 'Unlock',
-    });
-    if (pin === null) {
-      return;
-    }
-    if (!pin.trim()) {
-      setStatus('Email PIN is required');
-      return;
-    }
-    await unlockWithPin(pin);
-  }, [promptSecret, unlockWithPin]);
+  const requestIdentityUnlock = useCallback(async () => {
+    await unlockMailWithIdentity();
+  }, [unlockMailWithIdentity]);
 
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
-  const requestPinUnlockRef = useRef(requestPinUnlock);
-  requestPinUnlockRef.current = requestPinUnlock;
+  const requestIdentityUnlockRef = useRef(requestIdentityUnlock);
+  requestIdentityUnlockRef.current = requestIdentityUnlock;
 
   useFocusEffect(
     useCallback(() => {
@@ -154,7 +144,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
           return;
         }
         promptedThisFocus.current = true;
-        await requestPinUnlockRef.current();
+        await requestIdentityUnlockRef.current();
       })();
       return () => {
         cancelled = true;
@@ -166,6 +156,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     return subscribeMailOAuthCallbacks(async url => {
       try {
         const tokens = await completeMailOAuthFromUrl(url);
+        if (!(await ensureUnlocked(identityName))) return;
         const cfg = getOAuthProviderConfig(tokens.provider);
         const id = `oauth-${tokens.provider}-${Date.now()}`;
         await upsertMailAccount(identityName, {
@@ -193,6 +184,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
           refreshToken: tokens.refreshToken,
           tokenExpiry: tokens.tokenExpiry,
         });
+        await persistMailSecretsStore(identityName);
         await appendActivityLog(`Mail OAuth linked: ${tokens.email}`, 'success');
         setStatus(`Linked ${tokens.email}`);
         await refresh();
@@ -200,7 +192,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         setStatus(error instanceof Error ? error.message : String(error));
       }
     });
-  }, [identityName, refresh]);
+  }, [identityName, refresh, ensureUnlocked]);
 
   const onRestoreMailbox = async () => {
     const password = await promptSecret({
@@ -222,6 +214,11 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       const config = await fetchEbpSignupConfig(server);
       const name = identityName || (await getCurrentIdentityRequired());
       const res = await resetEbpMailbox({
+        requestPreviousPin: () => promptSecret({
+          title: 'Migrate stored mail credentials',
+          placeholder: 'Previous email PIN (one time)',
+          submitLabel: 'Migrate',
+        }),
         identityName: name,
         password,
         server,
@@ -262,6 +259,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   return (
     <Screen scroll>
       {secretPrompt}
+      {unlockPrompt}
       <BusyOverlay
         visible={unlocking || busyMessage !== null}
         message={busyMessage ?? 'Unlocking mail secrets…'}
@@ -278,7 +276,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
             title="Unlock"
             variant="secondary"
             disabled={unlocking}
-            onPress={() => void requestPinUnlock()}
+            onPress={() => void requestIdentityUnlock()}
           />
         </View>
       ) : null}

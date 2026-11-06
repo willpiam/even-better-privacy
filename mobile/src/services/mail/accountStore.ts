@@ -38,6 +38,7 @@ export {
 } from './accountStoreLogic';
 
 const secretsMemory = new Map<string, MailAuthSecrets>();
+const identityPasswords = new Map<string, string>();
 const pinMemory = new Map<string, string>();
 
 function getSecretsStoreInMemory(
@@ -81,6 +82,7 @@ export function clearMailSecretsMemory(identityName?: string): void {
   if (!identityName) {
     secretsMemory.clear();
     pinMemory.clear();
+    identityPasswords.clear();
     return;
   }
   const prefix = `${identityName}:`;
@@ -90,6 +92,7 @@ export function clearMailSecretsMemory(identityName?: string): void {
     }
   }
   pinMemory.delete(identityName);
+  identityPasswords.delete(identityName);
 }
 
 export function hasMailSecretsInMemory(identityName: string): boolean {
@@ -121,7 +124,7 @@ export async function getMailSecretsStatus(
   }
 }
 
-export async function unlockMailSecretsWithPin(
+async function unlockMailSecretsWithPin(
   identityName: string,
   pin: string,
 ): Promise<Record<string, MailAuthSecrets>> {
@@ -143,12 +146,42 @@ export async function unlockMailSecretsWithPin(
       setSecretsStoreInMemory(identityName, decrypted, pin);
       return decrypted;
     } catch {
-      throw new Error('Invalid email PIN');
+      throw new Error(
+        'Stored mail credentials require migration with the previous email PIN',
+      );
     }
   }
   const legacy = parsed as Record<string, MailAuthSecrets>;
   setSecretsStoreInMemory(identityName, legacy, pin);
   return legacy;
+}
+
+/** Called only after the identity password has been verified. */
+export async function unlockMailWithIdentityPassword(
+  identityName: string,
+  password: string,
+): Promise<boolean> {
+  identityPasswords.set(identityName, password);
+  try {
+    await unlockMailSecretsWithPin(identityName, password);
+    return true;
+  } catch {
+    setSecretsStoreInMemory(identityName, {});
+    pinMemory.delete(identityName);
+    return false;
+  }
+}
+
+export async function migrateMailSecrets(
+  identityName: string,
+  previousPin: string,
+): Promise<void> {
+  const password = identityPasswords.get(identityName);
+  if (!password)
+    throw new Error('Unlock your identity before migrating mail credentials');
+  const secrets = await loadEncryptedSecrets(identityName, previousPin);
+  await saveEncryptedSecrets(identityName, password, secrets);
+  setSecretsStoreInMemory(identityName, secrets, password);
 }
 
 export async function persistMailSecretsStore(
@@ -171,7 +204,7 @@ export async function persistMailSecretsStore(
     return;
   }
   if (!pin) {
-    throw new Error('Email PIN is required to persist encrypted mail passwords');
+    throw new Error('Unlock your identity to save encrypted mail credentials');
   }
   await saveEncryptedSecrets(identityName, pin, secretStore);
 }
@@ -185,7 +218,7 @@ export async function saveMailAccountWithSecrets(
     pin?: string;
   },
 ): Promise<MailAccountRecord> {
-  const {record, imapPassword, smtpPassword, pin} = params;
+  const {record, imapPassword, smtpPassword} = params;
   const accountId = record.id;
   const existingSecrets = getMailSecretsInMemory(identityName, accountId);
   const nextSecrets: MailAuthSecrets = {
@@ -206,12 +239,17 @@ export async function saveMailAccountWithSecrets(
       throw new Error('IMAP and SMTP passwords are required');
     }
   }
-  const effectivePin = pin || pinMemory.get(identityName);
+  const effectivePin = pinMemory.get(identityName);
+  if (record.config.persistSecrets && !effectivePin) {
+    throw new Error('Unlock your identity to save encrypted mail credentials');
+  }
   const saved = await upsertMailAccount(identityName, record);
-  setMailSecretsInMemory(identityName, accountId, nextSecrets, effectivePin);
+  setMailSecretsInMemory(identityName, accountId, nextSecrets);
   if (record.config.persistSecrets) {
     if (!effectivePin) {
-      throw new Error('Email PIN is required to persist encrypted mail passwords');
+      throw new Error(
+        'Unlock your identity to save encrypted mail credentials',
+      );
     }
     pinMemory.set(identityName, effectivePin);
     await persistMailSecretsStore(identityName);
@@ -287,19 +325,17 @@ export function setMailSecretsInMemory(
   identityName: string,
   accountId: string,
   secrets: MailAuthSecrets,
-  pin?: string,
 ): void {
   secretsMemory.set(mailSecretsStoreKey(identityName, accountId), secrets);
-  if (pin) {
-    pinMemory.set(identityName, pin);
-  }
 }
 
 export function getMailSecretsInMemory(
   identityName: string,
   accountId: string,
 ): MailAuthSecrets | null {
-  return secretsMemory.get(mailSecretsStoreKey(identityName, accountId)) ?? null;
+  return (
+    secretsMemory.get(mailSecretsStoreKey(identityName, accountId)) ?? null
+  );
 }
 
 export async function encryptSecretsStore(
@@ -308,7 +344,11 @@ export async function encryptSecretsStore(
 ): Promise<string> {
   const salt = randomBytes(16);
   const iv = randomBytes(12);
-  const key = await deriveMailSecretsKey(pin, salt, MAIL_SECRETS_KDF_ITERATIONS);
+  const key = await deriveMailSecretsKey(
+    pin,
+    salt,
+    MAIL_SECRETS_KDF_ITERATIONS,
+  );
   const plaintext = new TextEncoder().encode(JSON.stringify(secrets));
   const cipher = gcm(key, iv);
   const ciphertext = cipher.encrypt(plaintext);
@@ -384,7 +424,7 @@ export async function resolveSelectedAccount(
   }
   const secrets = getMailSecretsInMemory(identityName, id);
   if (!secrets) {
-    throw new Error('Mail secrets locked; unlock with PIN first');
+    throw new Error('Mail secrets locked; unlock your identity first');
   }
   return {account, secrets};
 }

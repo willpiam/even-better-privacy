@@ -13,7 +13,6 @@ import {getCurrentIdentityRequired} from '../../services/storage';
 import {
   getMailSecretsStatus,
   resolveSelectedAccount,
-  unlockMailSecretsWithPin,
 } from '../../services/mail/accountStore';
 import {
   clampMailLimit,
@@ -27,7 +26,7 @@ import Card from '../../components/Card';
 import InlineBusy from '../../components/InlineBusy';
 import StatusBanner from '../../components/StatusBanner';
 import TextField from '../../components/TextField';
-import {useSecretPrompt} from '../../hooks/useSecretPrompt';
+import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {statusKind} from '../../theme/statusKind';
 import {colors, radius, spacing, typography} from '../../theme/tokens';
 
@@ -43,7 +42,7 @@ const FOLDER_PRESETS = [
 ] as const;
 
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
   const [status, setStatus] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -80,7 +79,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         const locked = secretStatus.locked && !secretStatus.inMemory;
         setSecretsLocked(locked);
         if (locked) {
-          throw new Error('Mail secrets locked; unlock with PIN first');
+          throw new Error('Mail secrets locked; unlock your identity first');
         }
         const resolved = await resolveSelectedAccount(identityName);
         if (!resolved) {
@@ -147,21 +146,8 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
   }, [navigation]);
 
   const onUnlock = async () => {
-    const pin = await promptSecret({
-      title: 'Email PIN',
-      placeholder: 'Email PIN',
-      submitLabel: 'Unlock',
-    });
-    if (pin === null) {
-      return;
-    }
-    if (!pin.trim()) {
-      setStatus('Email PIN is required');
-      return;
-    }
     try {
-      const identityName = await getCurrentIdentityRequired();
-      await unlockMailSecretsWithPin(identityName, pin);
+      if (!(await ensureUnlocked())) return;
       setSecretsLocked(false);
       await load(1);
     } catch (error) {
@@ -175,7 +161,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
-      {secretPrompt}
+      {unlockPrompt}
       {accountEmail ? (
         <Text style={styles.accountEmail}>{accountEmail}</Text>
       ) : null}

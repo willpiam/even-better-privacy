@@ -72,6 +72,7 @@ function emptyMailStore(): MailAccountStore {
 const MAIL_SECRETS_KDF_ITERATIONS = 210_000;
 
 export const mailSecretCache = new Map<string, MailSecretsStore>();
+const identityMailPasswords = new Map<string, string>();
 export const mailPinCache = new Map<string, string>();
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -283,7 +284,7 @@ export async function decryptSecretsEnvelope(envelope: EncryptedMailSecretsEnvel
 		);
 		return parseLegacySecretsStore(JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext))));
 	} catch {
-		throw new HttpError(STATUS.Unauthorized, "invalid email pin");
+		throw new HttpError(STATUS.Unauthorized, "Stored mail credentials require migration with the previous email PIN");
 	}
 }
 
@@ -307,7 +308,7 @@ export async function getMailSecretsStore(identityDir: string): Promise<MailSecr
 	}
 	if (isEncryptedSecretsEnvelope(diskSecrets)) {
 		const pin = mailPinCache.get(identityDir);
-		if (!pin) throw new HttpError(STATUS.Unauthorized, "email pin required");
+		if (!pin) throw new HttpError(STATUS.Unauthorized, "identity locked");
 		const decrypted = await decryptSecretsEnvelope(diskSecrets, pin);
 		mailSecretCache.set(identityDir, decrypted);
 		return decrypted;
@@ -337,26 +338,38 @@ export async function unlockMailSecretsWithPin(identityDir: string, pin: string)
 	return legacy;
 }
 
-/**
- * Managed mailboxes default their email PIN to the identity password, so an
- * identity unlock silently opens the mail secrets too. A different PIN (manual
- * accounts) leaves the store locked and the PIN prompt in place.
- */
+/** Remember only a verified identity password; never overwrite a locked store. */
 export async function tryUnlockMailSecretsWithIdentityPassword(identityDir: string, password: string): Promise<boolean> {
-	if (mailPinCache.has(identityDir) && mailSecretCache.has(identityDir)) return true;
-	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
-	if (!isEncryptedSecretsEnvelope(diskSecrets)) return false;
+	identityMailPasswords.set(identityDir, password);
 	try {
 		await unlockMailSecretsWithPin(identityDir, password);
 		return true;
 	} catch {
+		mailPinCache.delete(identityDir);
+		mailSecretCache.delete(identityDir);
 		return false;
 	}
+}
+
+/** One-time conversion of legacy PIN encryption to the verified identity password. */
+export async function migrateMailSecrets(identityDir: string, previousPin: string): Promise<MailSecretsStore> {
+	const password = identityMailPasswords.get(identityDir);
+	if (!password) throw new HttpError(STATUS.Unauthorized, "identity locked");
+	const disk = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+	const store = isEncryptedSecretsEnvelope(disk)
+		? await decryptSecretsEnvelope(disk, previousPin)
+		: parseLegacySecretsStore(disk ?? {});
+	const encrypted = await encryptSecretsStore(store, password);
+	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), encrypted);
+	mailPinCache.set(identityDir, password);
+	mailSecretCache.set(identityDir, store);
+	return store;
 }
 
 export function clearMailSecrets(identityDir: string): void {
 	mailSecretCache.delete(identityDir);
 	mailPinCache.delete(identityDir);
+	identityMailPasswords.delete(identityDir);
 }
 
 export async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {
@@ -370,7 +383,7 @@ export async function saveMailSecretsStore(identityDir: string, store: MailSecre
 		return;
 	}
 	const pin = mailPinCache.get(identityDir);
-	if (!pin) throw new HttpError(STATUS.Unauthorized, "email pin required");
+	if (!pin) throw new HttpError(STATUS.Unauthorized, "identity locked");
 	const encrypted = await encryptSecretsStore(store, pin);
 	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), encrypted);
 }

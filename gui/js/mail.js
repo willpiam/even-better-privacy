@@ -1,7 +1,7 @@
 import { state, saveBooleanPreference, MAIL_RENDER_HTML_PREF_KEY, MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, LOCAL_BACKEND_ORIGIN } from "./state.js";
 import { api, setStatus, setButtonLoading, withLoading, escapeHtml } from "./ui.js";
 import { requestPassword, requestTextInput } from "./modals.js";
-import { isIdentityUnlocked, isUnlockCancelled, withIdentity } from "./unlock.js";
+import { ensureIdentityUnlocked, isIdentityUnlocked, isUnlockCancelled, withIdentity } from "./unlock.js";
 import { updateMailComposeSendState, setMailTab, initMailTabs, syncMailFolderCustomUi, getSelectedMailFolder } from "./contact-search.js";
 import { updateVerifyResult, applyVerifyResultBadge, autoFillSenderContact, extractEbpPayloadFromText, extractEmailAddress, renderMailVerifyMeta, loadAll } from "./render.js";
 import { renderMailAuthenticityBadge, openMailAuthenticityModal, initMailAuthenticityModal, resolveBadgeKind } from "./mail-authenticity.js";
@@ -149,7 +149,7 @@ async function restoreEbpMailboxAccess() {
     body: JSON.stringify(body),
   }), "Enter your identity password to restore mailbox access");
   if (!result?.savedLocally && result?.accountId) {
-    const pin = await requestPassword("Enter your email PIN to save the mailbox password");
+    const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
     if (pin) {
       result = await withIdentity(async () => api("/mail/ebp-reset-password", {
         method: "POST",
@@ -314,12 +314,7 @@ async function completeMailOAuth(eventData) {
     const oauthState = eventData.oauthState || "";
     if (!oauthState) throw new Error("OAuth callback did not include state");
     const accountName = document.getElementById("mail-account-name").value.trim();
-    const pinNeeded = !state.mailSecretsInMemory;
-    let pin;
-    if (pinNeeded) {
-      pin = await requestPassword("Set or enter email PIN (used to encrypt OAuth tokens at rest)");
-      if (!pin) throw new Error("Email PIN is required to persist OAuth tokens");
-    }
+    if (!(await ensureMailSecretsUnlocked())) return;
     await api("/mail/oauth/complete", {
       method: "POST",
       body: JSON.stringify({
@@ -327,7 +322,6 @@ async function completeMailOAuth(eventData) {
         accountId: state.selectedMailAccountId || undefined,
         createNew: state.mailCreatingNewAccount,
         accountName: accountName || undefined,
-        pin: pin || undefined,
       }),
     });
     if (oauthStatus) oauthStatus.textContent = `Connected as ${eventData.email || ""}`;
@@ -353,14 +347,16 @@ async function completeMailOAuth(eventData) {
 
 export async function ensureMailPageUnlocked() {
   await loadMailAccount();
-  return ensureMailSecretsUnlocked("Enter email PIN to unlock stored IMAP/SMTP passwords");
+  return ensureMailSecretsUnlocked();
 }
 
-async function ensureMailSecretsUnlocked(promptText) {
+async function ensureMailSecretsUnlocked() {
+  if (!(await ensureIdentityUnlocked())) return false;
+  await loadMailAccount();
   if (!state.mailSecretsLocked || state.mailSecretsInMemory) return true;
-  const pin = await requestPassword(promptText);
+  const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials to your identity password");
   if (!pin) {
-    setStatus("Email PIN is required", "error");
+    setStatus("Previous email PIN is required for migration", "error");
     return false;
   }
   try {
@@ -398,7 +394,7 @@ export function renderStoredMailCredentials() {
   }
   for (const item of state.settingsMailCredentials) {
     const li = document.createElement("li");
-    const lockedLabel = item.hasStoredSecret === null ? "locked (PIN required)" : (item.hasStoredSecret ? "stored" : "not stored");
+    const lockedLabel = item.hasStoredSecret === null ? "locked (unlock identity)" : (item.hasStoredSecret ? "stored" : "not stored");
     const authLabel = item.authType === "oauth"
       ? `OAuth (${item.oauthProvider || "provider"})`
       : "Manual IMAP/SMTP";
@@ -432,7 +428,7 @@ export function renderStoredMailCredentials() {
       if (!confirmed) return;
       await withLoading(btn, async () => {
         try {
-          const unlocked = await ensureMailSecretsUnlocked("Enter email PIN to manage stored mail credentials");
+          const unlocked = await ensureMailSecretsUnlocked();
           if (!unlocked) return;
           await api("/mail/account/delete", {
             method: "POST",
@@ -1128,14 +1124,7 @@ export function initMailPage() {
               throw new Error("Complete OAuth sign-in before saving this account");
             }
           }
-          let pin;
-          if (account.persistSecrets && !state.mailSecretsInMemory) {
-            pin = await requestPassword("Set or enter email PIN (used to encrypt mail passwords at rest)");
-            if (!pin) {
-              setStatus("Email PIN is required to persist encrypted mail passwords", "error");
-              return;
-            }
-          }
+          if (!(await ensureMailSecretsUnlocked())) return;
           await api("/mail/account", {
             method: "POST",
             body: JSON.stringify({
@@ -1145,7 +1134,6 @@ export function initMailPage() {
               account,
               imapPassword: imapPassword || undefined,
               smtpPassword: smtpPassword || undefined,
-              pin: pin || undefined,
             }),
           });
           setStatus("Mail account saved", "success");

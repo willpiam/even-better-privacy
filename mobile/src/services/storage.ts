@@ -235,6 +235,8 @@ export async function unlockIdentity(
     key.fill(0);
     throw error;
   }
+  const {unlockMailWithIdentityPassword} = await import('./mail/accountStore');
+  await unlockMailWithIdentityPassword(normalized, normalizedPassword);
   return normalized;
 }
 

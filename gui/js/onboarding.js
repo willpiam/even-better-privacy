@@ -376,9 +376,9 @@ async function runCreate() {
       try {
         return await signupMailbox();
       } catch (err) {
-        if (!/email pin required/i.test(err.message)) throw err;
-        const pin = await requestPassword("Enter your existing email PIN to save the new mailbox");
-        if (!pin) throw new Error("Email PIN is required to save the mailbox password.");
+        if (!/mail migration required/i.test(err.message)) throw err;
+        const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
+        if (!pin) throw new Error("The previous email PIN is required for this one-time migration.");
         return await signupMailbox(pin);
       }
     });
@@ -419,7 +419,7 @@ async function restoreAccess() {
   try {
     let result = await runTask("mailbox", () => resetMailboxAccess());
     if (!result.savedLocally && result.accountId) {
-      const pin = await requestPassword("Enter your email PIN to save the mailbox password");
+      const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
       if (pin) result = await resetMailboxAccess(pin);
     }
     renderDone(result, "Restored");
