@@ -71,6 +71,24 @@ describe('MIME threading headers', () => {
     expect(mime).toContain('References: <xyz@example.com>');
   });
 
+  test('chat channel sets the header, subject token, and Message-ID', () => {
+    const mime = buildMultipartMimeMessage({
+      from: 'me@pqpost.com',
+      to: 'bob@pqpost.com',
+      subject: 'Chat',
+      plainBody: 'hint',
+      ebpArmor: '-----BEGIN EBP MESSAGE-----\n{}\n-----END EBP MESSAGE-----',
+      channel: 'chat',
+      messageId: '<abc@pqpost.com>',
+      inReplyTo: '<prev@pqpost.com>',
+      references: '<prev@pqpost.com>',
+    });
+    expect(mime).toContain('Subject: Chat');
+    expect(mime).toContain('Message-ID: <abc@pqpost.com>');
+    expect(mime).toContain('X-EBP-Channel: chat');
+    expect(mime).toContain('In-Reply-To: <prev@pqpost.com>');
+  });
+
   test('omits threading headers when absent', () => {
     const mime = buildSimpleMimeMessage({
       from: 'me@example.com',

@@ -12,6 +12,15 @@ import {
   setChips as setComposeChips,
 } from "./compose-recipients.js";
 
+function isSentFolderView(folder) {
+  const name = String(folder || "").trim().toLowerCase();
+  return name === "sent"
+    || name === "sent items"
+    || name === "sent messages"
+    || name === "[gmail]/sent mail"
+    || name === "inbox.sent";
+}
+
 let mailMessageAbortController = null;
 let mailMessageTimeoutId = null;
 let mailMessageAbortReason = "";
@@ -804,7 +813,10 @@ function renderMailMessages() {
   if (!list) return;
   list.innerHTML = "";
   if (!state.mailMessages.length) {
-    list.innerHTML = "<li class='muted'>(no messages)</li>";
+    const emptyText = isSentFolderView(getSelectedMailFolder())
+      ? "(no sent messages)"
+      : "(no messages)";
+    list.innerHTML = `<li class='muted'>${emptyText}</li>`;
     return;
   }
   const selectedUid = state.selectedMailMessageUid != null
@@ -815,7 +827,11 @@ function renderMailMessages() {
     const isSelected = selectedUid !== null && String(msg.uid) === selectedUid;
     const dateText = formatMailRelativeDate(msg.date);
     const sizeText = formatMailSize(msg.size);
-    const fromMeta = [msg.from || "(unknown sender)", sizeText ? `Size: ${sizeText}` : ""].filter(Boolean).join(" • ");
+    const sentView = isSentFolderView(getSelectedMailFolder());
+    const who = sentView
+      ? `To: ${msg.to || "(unknown recipient)"}`
+      : (msg.from || "(unknown sender)");
+    const fromMeta = [who, sizeText ? `Size: ${sizeText}` : ""].filter(Boolean).join(" • ");
     li.className = isSelected ? "clickable current mail-message-item" : "clickable mail-message-item";
     if (!msg.seen) li.classList.add("unread");
     li.innerHTML = `
@@ -907,6 +923,56 @@ function renderMailMessages() {
   }
 }
 
+export async function openMailMessage(folder, uid) {
+  const presets = ["INBOX", "Sent", "Drafts", "Trash", "Spam"];
+  const folderEl = document.getElementById("mail-folder");
+  const customEl = document.getElementById("mail-folder-custom");
+  if (folderEl) {
+    if (presets.includes(folder)) {
+      folderEl.value = folder;
+    } else {
+      folderEl.value = "__custom__";
+      if (customEl) customEl.value = folder;
+    }
+    syncMailFolderCustomUi();
+  }
+  setMailTab("inbox");
+  cancelMailMessageRequest();
+  const requestId = state.mailMessageLoadRequestId + 1;
+  state.mailMessageLoadRequestId = requestId;
+  state.selectedMailMessage = null;
+  state.selectedMailDecryptResult = null;
+  state.decryptedMailAttachments = {};
+  state.selectedMailMessageContentKey = null;
+  state.selectedMailMessageAttachmentManifest = [];
+  state.selectedMailMessageRecipientFingerprints = [];
+  state.selectedMailMessageUid = String(uid);
+  renderSelectedMailMessageBody();
+  setMailMessageLoading(true);
+  try {
+    const accountQ = state.selectedMailAccountId
+      ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}`
+      : "";
+    const detail = await api(
+      `/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(uid))}${accountQ}`,
+    );
+    if (requestId !== state.mailMessageLoadRequestId) return;
+    state.selectedMailMessage = detail;
+    if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
+    setMailMessageLoading(false);
+    renderSelectedMailMessageBody();
+    autoFillSenderContact(detail);
+    if (isEncryptedMailPayload(getSelectedMailPayload()) && isIdentityUnlocked()) {
+      await decryptSelectedMailMessage();
+    }
+  } catch (err) {
+    if (requestId !== state.mailMessageLoadRequestId) return;
+    setMailMessageLoading(false);
+    if (isUnlockCancelled(err)) return;
+    setStatus(err.message, "error");
+  }
+}
+
 export async function loadMailMessages(page = 1) {
   cancelMailMessageRequest();
   const folder = getSelectedMailFolder();
@@ -920,6 +986,10 @@ export async function loadMailMessages(page = 1) {
     console.warn("mail/messages timing", res._timing);
   }
   state.mailMessages = res?.messages || [];
+  const heading = document.getElementById("mail-list-heading");
+  if (heading) {
+    heading.textContent = isSentFolderView(folder) ? "Sent" : (folder === "INBOX" ? "Inbox" : folder);
+  }
   if (res?.pagination) {
     state.mailPagination = {
       page: res.pagination.page ?? page,
@@ -959,16 +1029,54 @@ function renderMailPagination() {
   nextBtn.disabled = page >= totalPages;
 }
 
+function selectMailboxFolder(folder) {
+  const folderEl = document.getElementById("mail-folder");
+  const customEl = document.getElementById("mail-folder-custom");
+  const presets = ["INBOX", "Sent", "Drafts", "Trash", "Spam"];
+  if (folderEl) {
+    if (presets.includes(folder)) {
+      folderEl.value = folder;
+      if (customEl) customEl.value = "";
+    } else {
+      folderEl.value = "__custom__";
+      if (customEl) customEl.value = folder;
+    }
+  }
+  syncMailFolderCustomUi();
+  if (state.mailActiveTab === "inbox" || state.mailActiveTab === "sent" || !state.mailActiveTab) {
+    setMailTab(isSentFolderView(folder) ? "sent" : "inbox");
+  }
+}
+
+async function showMailboxFolder(folder) {
+  selectMailboxFolder(folder);
+  setMailTab(isSentFolderView(folder) ? "sent" : "inbox");
+  await loadMailMessages(1);
+}
+
 export function initMailPage() {
   initMailTabs();
   renderMailReaderHeader();
   syncMailFolderCustomUi();
+
+  document.querySelectorAll('[data-mail-tab="inbox"], [data-mail-tab="sent"]').forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const folder = btn.dataset.mailTab === "sent" ? "Sent" : "INBOX";
+      selectMailboxFolder(folder);
+      loadMailMessages(1).catch((err) => setStatus(err.message, "error"));
+    });
+  });
 
   const folderEl = document.getElementById("mail-folder");
   if (folderEl) {
     folderEl.addEventListener("change", () => {
       cancelMailMessageRequest();
       syncMailFolderCustomUi();
+      const folder = getSelectedMailFolder();
+      if (state.mailActiveTab === "inbox" || state.mailActiveTab === "sent") {
+        setMailTab(isSentFolderView(folder) ? "sent" : "inbox");
+      }
+      loadMailMessages(1).catch((err) => setStatus(err.message, "error"));
     });
   }
 
@@ -1307,9 +1415,10 @@ export function initMailPage() {
             })),
           );
 
+          let sentResult;
           if (intent.kind === "encrypted") {
             const recipients = chips.map((chip) => ({ contact: chip.contact, email: chip.email }));
-            await withIdentity(async () => api("/mail/send-ebp", {
+            sentResult = await withIdentity(async () => api("/mail/send-ebp", {
               method: "POST",
               body: JSON.stringify({
                 accountId: state.selectedMailAccountId || undefined,
@@ -1321,7 +1430,7 @@ export function initMailPage() {
               }),
             }), "Enter password to sign/encrypt this email and attachments");
           } else {
-            await api("/mail/send", {
+            sentResult = await api("/mail/send", {
               method: "POST",
               body: JSON.stringify({
                 accountId: state.selectedMailAccountId || undefined,
@@ -1332,11 +1441,25 @@ export function initMailPage() {
               }),
             });
           }
-          setStatus("Email sent", "success");
+          const savedToSent = sentResult?.savedToSent !== false;
           document.getElementById("mail-compose-subject").value = "";
           document.getElementById("mail-compose-body").value = "";
           setComposeChips([]);
           clearComposeAttachments();
+          if (savedToSent) {
+            try {
+              await showMailboxFolder("Sent");
+            } catch (err) {
+              setStatus(`Email sent, but Sent could not be opened: ${err.message}`, "error");
+              return;
+            }
+          }
+          setStatus(
+            savedToSent
+              ? "Email sent. It's in Sent."
+              : "Email sent, but a copy could not be saved to Sent",
+            savedToSent ? "success" : "error",
+          );
         } catch (err) {
           if (isUnlockCancelled(err)) return;
           setStatus(err.message, "error");

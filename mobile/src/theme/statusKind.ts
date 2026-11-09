@@ -14,7 +14,12 @@ export function statusKind(
     lower.includes('error') ||
     lower.includes('invalid') ||
     lower.includes('mismatch') ||
-    lower.includes('required')
+    lower.includes('required') ||
+    lower.includes('could not') ||
+    lower.includes('unable') ||
+    lower.includes('has no') ||
+    lower.includes('no verified') ||
+    lower.includes('not verified')
   ) {
     return 'error';
   }

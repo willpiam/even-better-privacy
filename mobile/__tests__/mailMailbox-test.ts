@@ -12,6 +12,7 @@ jest.mock('../src/services/mail/mailTrace', () => ({
 }));
 
 import {
+  buildChatSearchCommand,
   buildUidSearchCommand,
   clampMailLimit,
   paginateUids,
@@ -68,11 +69,21 @@ describe('mail list helpers', () => {
     expect(quoteImap('Sent Mail')).toBe('"Sent Mail"');
   });
 
-  it('buildUidSearchCommand uses ALL or TEXT', () => {
-    expect(buildUidSearchCommand('a3')).toBe('a3 UID SEARCH ALL');
-    expect(buildUidSearchCommand('a3', '  ')).toBe('a3 UID SEARCH ALL');
+  it('buildUidSearchCommand excludes the chat channel', () => {
+    expect(buildUidSearchCommand('a3')).toBe(
+      'a3 UID SEARCH NOT HEADER X-EBP-Channel "chat"',
+    );
+    expect(buildUidSearchCommand('a3', '  ')).toBe(
+      'a3 UID SEARCH NOT HEADER X-EBP-Channel "chat"',
+    );
     expect(buildUidSearchCommand('a3', 'hello "world"')).toBe(
-      'a3 UID SEARCH TEXT "hello \\"world\\""',
+      'a3 UID SEARCH TEXT "hello \\"world\\"" NOT HEADER X-EBP-Channel "chat"',
+    );
+  });
+
+  it('buildChatSearchCommand matches the chat header', () => {
+    expect(buildChatSearchCommand('c2')).toBe(
+      'c2 UID SEARCH HEADER X-EBP-Channel "chat"',
     );
   });
 
@@ -88,6 +99,8 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
     const lines = [
       '* OK ready',
       'a1 OK LOGIN completed',
+      '* LIST (\\Sent) "/" "Sent Items"',
+      's1 OK LIST completed',
       'a2 OK SELECT completed',
       '* SEARCH 10 11 12',
       'a3 OK SEARCH completed',
@@ -121,6 +134,7 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
       readBytes: async () => {
         throw new Error('unexpected readBytes');
       },
+      writeBytes: () => undefined,
       close: () => undefined,
     };
 
@@ -165,12 +179,117 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
       {folder: 'Sent', page: 1, limit: 2},
     );
 
-    expect(written.some(l => l.includes('SELECT Sent'))).toBe(true);
+    expect(written.some(l => l.includes('LIST "" "*"'))).toBe(true);
+    expect(written.some(l => l.includes('SELECT "Sent Items"'))).toBe(true);
     expect(written.some(l => l.includes('SELECT INBOX'))).toBe(false);
-    expect(result.folder).toBe('Sent');
+    expect(result.folder).toBe('Sent Items');
     expect(result.total).toBe(3);
     expect(result.messages.map((m: {uid: number}) => m.uid)).toEqual([12, 11]);
     expect(result.messages[0].subject).toBe('Newest');
+  });
+});
+
+describe('appendSentCopy', () => {
+  const account = {
+    gmailMode: false,
+    authType: 'password' as const,
+    oauthProvider: '' as const,
+    imapHost: 'imap.test',
+    imapPort: 993,
+    imapSecure: true,
+    smtpHost: 'smtp.test',
+    smtpPort: 465,
+    smtpSecure: true,
+    username: 'user',
+    fromEmail: 'user@test',
+    fromName: '',
+    persistSecrets: false,
+  };
+  const secrets = {imapPassword: 'secret', smtpPassword: 'secret'};
+
+  function mockClient(lines: string[]) {
+    const written: string[] = [];
+    const bytes: string[] = [];
+    let idx = 0;
+    const client = {
+      written,
+      bytes,
+      writeLine: (line: string) => {
+        written.push(line);
+      },
+      writeBytes: (data: string | Uint8Array) => {
+        bytes.push(typeof data === 'string' ? data : Buffer.from(data).toString('utf8'));
+      },
+      readLine: async () => {
+        const line = lines[idx++];
+        if (line === undefined) {
+          throw new Error('no more lines');
+        }
+        return line;
+      },
+      readBytes: async () => {
+        throw new Error('unexpected readBytes');
+      },
+      close: () => undefined,
+    };
+    jest.resetModules();
+    jest.doMock('react-native-tcp-socket', () => ({
+      __esModule: true,
+      default: {
+        connectTLS: jest.fn(),
+        createConnection: jest.fn(),
+        TLSSocket: jest.fn(),
+      },
+    }));
+    jest.doMock('../src/services/mail/mailTrace', () => ({
+      mailStub: jest.fn(async () => undefined),
+    }));
+    jest.doMock('../src/services/mail/tcpClient', () => {
+      const actual = jest.requireActual('../src/services/mail/tcpClient');
+      return {
+        ...actual,
+        connectMailLineClient: jest.fn(async () => client),
+      };
+    });
+    return client;
+  }
+
+  it('appends to the \\Sent mailbox', async () => {
+    const client = mockClient([
+      '* OK ready',
+      'a1 OK LOGIN completed',
+      '* LIST (\\HasNoChildren \\Sent) "/" "Sent Items"',
+      's1 OK LIST completed',
+      '+ go ahead',
+      's3 OK APPEND completed',
+    ]);
+    const {appendSentCopy} = require('../src/services/mail/imap');
+    const mailbox = await appendSentCopy(account, secrets, 'Subject: Hi\r\n\r\nBody\r\n');
+    expect(mailbox).toBe('Sent Items');
+    expect(client.written.some((line: string) => line.startsWith('s3 APPEND "Sent Items" (\\Seen) {'))).toBe(true);
+    expect(client.bytes[0]).toContain('Subject: Hi');
+    const appendLine = client.written.find((line: string) => line.startsWith('s3 APPEND'));
+    const literalSize = Number(appendLine.match(/\{(\d+)\}/)?.[1]);
+    expect(Buffer.byteLength(client.bytes[0])).toBe(literalSize);
+    expect(client.bytes[1]).toBe('\r\n');
+    expect(client.written.some((line: string) => line.startsWith('s2 CREATE'))).toBe(false);
+  });
+
+  it('creates Sent when the server has no sent mailbox', async () => {
+    const client = mockClient([
+      '* OK ready',
+      'a1 OK LOGIN completed',
+      's1 OK LIST completed',
+      's2 OK CREATE completed',
+      '+ go ahead',
+      's3 OK APPEND completed',
+    ]);
+    const {appendSentCopy} = require('../src/services/mail/imap');
+    const mailbox = await appendSentCopy(account, secrets, 'Subject: Hi\n\nBody');
+    expect(mailbox).toBe('Sent');
+    expect(client.written).toContain('s2 CREATE Sent');
+    expect(client.bytes[0].endsWith('\r\n')).toBe(true);
+    expect(client.bytes[1]).toBe('\r\n');
   });
 });
 

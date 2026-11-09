@@ -1,5 +1,11 @@
 import {armorPayload, parseEbpPayloadInput} from '../../ebpCore';
 import {
+  chatPeerAllowed,
+  EBP_CHAT_SUBJECT,
+  generateMessageId,
+} from '../../../../core/ChatChannel';
+import {includeSenderAmongRecipients} from '../../../../core/SentMailbox';
+import {
   buildEncryptedSignedMessageMultiPayload,
   buildEncryptedSignedMessagePayload,
   buildEncryptedMessagePayload,
@@ -11,7 +17,7 @@ import {listContacts, getDetailValue, loadContact} from '../contacts';
 import {loadIdentityForUse} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
-import {fetchMessageDetail} from './imap';
+import {appendSentCopy, fetchMessageDetail} from './imap';
 import {
   buildMultipartMimeMessage,
   buildSimpleMimeMessage,
@@ -55,10 +61,12 @@ export async function sendEbpMail(params: {
   /** Multi-recipient: each row needs email + contact name. */
   recipients?: EbpMailRecipient[];
   sign?: boolean;
+  channel?: 'chat';
+  messageId?: string;
   inReplyTo?: string;
   references?: string;
   attachments?: MailAttachmentPart[];
-}): Promise<void> {
+}): Promise<{savedToSent: boolean}> {
   rejectEncryptedMailAttachments(params.attachments);
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
@@ -71,9 +79,17 @@ export async function sendEbpMail(params: {
     throw new Error('At least one EBP recipient is required');
   }
 
+  const loaded = [];
+  for (const row of recipientRows) {
+    loaded.push(await loadContact(row.contact));
+  }
+  const encryptFor = (params.sign ?? true)
+    ? includeSenderAmongRecipients(loaded, identity.summary)
+    : loaded;
+
   let armor: string;
-  if (recipientRows.length === 1 && (params.sign ?? true)) {
-    const contact = await loadContact(recipientRows[0].contact);
+  if (encryptFor.length === 1 && (params.sign ?? true)) {
+    const contact = encryptFor[0];
     const ciphertext = identity.signAndEncryptFor(params.message, contact);
     const payload = buildEncryptedSignedMessagePayload({
       recipientFingerprint: contact.fingerprint,
@@ -82,8 +98,8 @@ export async function sendEbpMail(params: {
       senderIdentity: publicIdentityBlock(identity),
     });
     armor = armorPayload(payload);
-  } else if (recipientRows.length === 1) {
-    const contact = await loadContact(recipientRows[0].contact);
+  } else if (encryptFor.length === 1) {
+    const contact = encryptFor[0];
     const ciphertext = Identity.EncryptFor(contact, params.message);
     const payload = buildEncryptedMessagePayload({
       recipientFingerprint: contact.fingerprint,
@@ -94,11 +110,7 @@ export async function sendEbpMail(params: {
     if (!(params.sign ?? true)) {
       throw new Error('Multi-recipient EBP mail requires signing');
     }
-    const contacts = [];
-    for (const row of recipientRows) {
-      contacts.push(await loadContact(row.contact));
-    }
-    const encrypted = identity.signAndEncryptForMany(params.message, contacts);
+    const encrypted = identity.signAndEncryptForMany(params.message, encryptFor);
     const payload = buildEncryptedSignedMessageMultiPayload({
       senderFingerprint: identity.toFingerprint(),
       recipients: encrypted.recipients,
@@ -112,16 +124,35 @@ export async function sendEbpMail(params: {
   const fromName = resolved.account.config.fromName || identity.toShortFingerprint();
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
+  const chat = params.channel === 'chat';
+  if (chat) {
+    if (recipientRows.length !== 1) {
+      throw new Error('Chat allows one recipient');
+    }
+    if (!(params.sign ?? true)) {
+      throw new Error('Chat messages are signed');
+    }
+    if (params.attachments?.length) {
+      throw new Error('Chat messages cannot include attachments');
+    }
+    if (!chatPeerAllowed(fromEmail, recipientRows[0].email)) {
+      throw new Error('Chat is only available for addresses on your mail domain');
+    }
+  }
   const toHeader = recipientRows.map(r => r.email.trim()).join(', ');
   const mime = buildMultipartMimeMessage({
     from: formatFromHeader(fromName, fromEmail),
     to: toHeader,
-    subject: params.subject,
+    subject: chat ? EBP_CHAT_SUBJECT : params.subject,
     plainBody: ebpMailPlainIntro(includePublicKeys),
     ebpArmor: armor,
+    channel: chat ? 'chat' : undefined,
+    messageId: chat
+      ? params.messageId || generateMessageId(fromEmail)
+      : params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
-    attachments: params.attachments,
+    attachments: chat ? undefined : params.attachments,
   });
   await sendMimeMessage(
     resolved.account.config,
@@ -129,6 +160,20 @@ export async function sendEbpMail(params: {
     mime,
     recipientRows.map(r => r.email.trim()),
   );
+  return {savedToSent: await saveSentCopy(resolved.account.config, resolved.secrets, mime)};
+}
+
+async function saveSentCopy(
+  config: Parameters<typeof appendSentCopy>[0],
+  secrets: Parameters<typeof appendSentCopy>[1],
+  mime: string,
+): Promise<boolean> {
+  try {
+    await appendSentCopy(config, secrets, mime);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Send a plaintext (non-EBP) MIME message via the selected mail account. */
@@ -141,7 +186,7 @@ export async function sendPlainMail(params: {
   references?: string;
   attachments?: MailAttachmentPart[];
   recipients?: string[];
-}): Promise<void> {
+}): Promise<{savedToSent: boolean}> {
   const resolved = await resolveSelectedAccount(params.identityName);
   if (!resolved) {
     throw new Error('No mail account configured');
@@ -165,6 +210,7 @@ export async function sendPlainMail(params: {
     mime,
     rcpts,
   );
+  return {savedToSent: await saveSentCopy(resolved.account.config, resolved.secrets, mime)};
 }
 
 export async function decryptMailBody(params: {

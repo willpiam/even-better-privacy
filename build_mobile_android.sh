@@ -11,6 +11,10 @@
 # Notes:
 #   - Release is currently signed with the Android *debug* keystore (dev-only).
 #   - Default ABI is arm64-v8a (typical phones). Override with --arch if needed.
+#   - The Cursor command sandbox points GRADLE_USER_HOME at
+#     /tmp/cursor-sandbox-cache. This script pins it back to ~/.gradle so a
+#     second daemon does not OOM-kill Cursor. See
+#     wiki/analysis-mobile-android-build-oom.md.
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -61,6 +65,33 @@ done
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+# Cursor's command sandbox sets GRADLE_USER_HOME under /tmp/cursor-sandbox-cache.
+# That starts a second multi-GB daemon. Combined with a leftover daemon from a
+# previous crash, that fills 16GB RAM and the kernel kills Cursor
+# (oom_score_adj=300) before adb install runs. ~/.gradle itself is not
+# redirected, so pin the real cache and reuse its daemon.
+if [[ "${GRADLE_USER_HOME:-}" == *cursor-sandbox-cache* ]] || [[ -n "${__CURSOR_SANDBOX_ENV_RESTORE:-}" ]] || [[ "${GOCACHE:-}${NPM_CONFIG_CACHE:-}" == *cursor-sandbox-cache* ]]; then
+  echo "Cursor sandbox detected; pinning GRADLE_USER_HOME to ${HOME}/.gradle"
+  export GRADLE_USER_HOME="${HOME}/.gradle"
+fi
+
+MEM_AVAIL_KB="$(awk '/MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)"
+if [[ "${MEM_AVAIL_KB}" -lt 4000000 ]]; then
+  die "only $((MEM_AVAIL_KB / 1024)) MiB available. Stop leftover sandbox Gradle daemons (cwd under /tmp/cursor-sandbox-cache) before building. See wiki/analysis-mobile-android-build-oom.md"
+fi
+
+# React Native's CLI needs Node 22. Prefer the nvm install over an older system node.
+# An already-running Gradle daemon does not pick up this PATH, so the absolute
+# binary is also passed as -PnodeBinary (see mobile/android/app/build.gradle).
+NODE_BINARY=""
+if [[ -d "${HOME}/.nvm/versions/node" ]]; then
+  NODE22_BIN="$(find "${HOME}/.nvm/versions/node" -maxdepth 2 -type d -name 'v22.*' -printf '%T@ %p\n' 2>/dev/null | sort -nr | head -n1 | cut -d' ' -f2-)"
+  if [[ -n "${NODE22_BIN}" && -x "${NODE22_BIN}/bin/node" ]]; then
+    export PATH="${NODE22_BIN}/bin:${PATH}"
+    NODE_BINARY="${NODE22_BIN}/bin/node"
+  fi
+fi
+
 command -v node >/dev/null || die "node not found"
 command -v npm >/dev/null || die "npm not found"
 [[ -x "${ANDROID_DIR}/gradlew" ]] || die "missing ${ANDROID_DIR}/gradlew"
@@ -99,7 +130,15 @@ fi
 
 cd "${ANDROID_DIR}"
 echo "Building assembleRelease (embeds JS bundle; no Metro required at runtime)…"
-./gradlew --quiet assembleRelease "-PreactNativeArchitectures=${ARCHES}"
+if [[ -n "${NODE_BINARY}" ]]; then
+  echo "  node: ${NODE_BINARY} ($("${NODE_BINARY}" -v))"
+fi
+# Cap workers so native clang jobs do not spike the machine into OOM.
+GRADLE_ARGS=(--quiet assembleRelease "-PreactNativeArchitectures=${ARCHES}" -Dorg.gradle.workers.max=2)
+if [[ -n "${NODE_BINARY}" ]]; then
+  GRADLE_ARGS+=("-PnodeBinary=${NODE_BINARY}")
+fi
+./gradlew "${GRADLE_ARGS[@]}"
 
 BUILT_APK="$(find "${ANDROID_DIR}/app/build/outputs/apk/release" -maxdepth 1 -type f -name '*.apk' | sort | tail -n 1 || true)"
 [[ -n "${BUILT_APK}" && -f "${BUILT_APK}" ]] || die "release APK not found under app/build/outputs/apk/release"

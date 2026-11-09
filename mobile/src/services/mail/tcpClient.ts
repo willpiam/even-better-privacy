@@ -10,6 +10,8 @@ const DEFAULT_READ_TIMEOUT_MS = 30_000;
 
 export type TcpLineClient = {
   writeLine: (line: string) => void;
+  /** Write exact octets with no added CRLF. Used for IMAP literals. */
+  writeBytes: (data: string | Uint8Array) => void;
   readLine: () => Promise<string>;
   /** Consume exactly `n` octets from the stream (IMAP/SMTP literals). */
   readBytes: (n: number) => Promise<string>;
@@ -155,6 +157,12 @@ function attachLineClient(
     writeLine: (line: string) => {
       if (!closed) {
         activeSocket.write(`${line}\r\n`);
+      }
+    },
+    writeBytes: (data: string | Uint8Array) => {
+      if (!closed) {
+        const buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+        activeSocket.write(buf);
       }
     },
     readLine: () =>

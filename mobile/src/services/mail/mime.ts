@@ -1,5 +1,10 @@
 import {Buffer} from 'buffer';
 import {
+  EBP_CHAT_HEADER,
+  EBP_CHAT_HEADER_VALUE,
+  formatMessageId,
+} from '../../../../core/ChatChannel';
+import {
   armorPayload,
   extractArmoredPayload,
 } from '../../../../core/Payloads';
@@ -217,10 +222,19 @@ export function extractEbpPayloadFromMime(source: string): string | null {
 }
 
 function threadingHeaders(params: {
+  messageId?: string;
+  channel?: 'chat';
   inReplyTo?: string;
   references?: string;
 }): string[] {
   const headers: string[] = [];
+  const messageId = formatMessageId(params.messageId);
+  if (messageId) {
+    headers.push(`Message-ID: ${messageId}`);
+  }
+  if (params.channel === 'chat') {
+    headers.push(`${EBP_CHAT_HEADER}: ${EBP_CHAT_HEADER_VALUE}`);
+  }
   if (params.inReplyTo?.trim()) {
     headers.push(`In-Reply-To: ${params.inReplyTo.trim()}`);
   }
@@ -235,6 +249,8 @@ export function buildSimpleMimeMessage(params: {
   to: string;
   subject: string;
   body: string;
+  messageId?: string;
+  channel?: 'chat';
   inReplyTo?: string;
   references?: string;
   attachments?: MailAttachmentPart[];
@@ -245,6 +261,8 @@ export function buildSimpleMimeMessage(params: {
       to: params.to,
       subject: params.subject,
       plainBody: params.body,
+      messageId: params.messageId,
+      channel: params.channel,
       inReplyTo: params.inReplyTo,
       references: params.references,
       attachments: params.attachments,
@@ -275,6 +293,8 @@ export function buildMultipartMimeMessage(params: {
   subject: string;
   plainBody: string;
   ebpArmor?: string;
+  messageId?: string;
+  channel?: 'chat';
   inReplyTo?: string;
   references?: string;
   attachments?: MailAttachmentPart[];

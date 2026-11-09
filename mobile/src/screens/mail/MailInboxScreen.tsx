@@ -14,6 +14,7 @@ import {
   getMailSecretsStatus,
   resolveSelectedAccount,
 } from '../../services/mail/accountStore';
+import {isSentFolderRequest} from '../../../../core/SentMailbox';
 import {
   clampMailLimit,
   listMailboxMessages,
@@ -32,6 +33,15 @@ import {colors, radius, spacing, typography} from '../../theme/tokens';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailInbox'>;
 
+function emptyMailboxStatus(folder: string, found: boolean): string {
+  if (isSentFolderRequest(folder)) {
+    return found
+      ? 'No sent messages'
+      : 'No Sent mailbox on this account yet';
+  }
+  return 'Mailbox empty';
+}
+
 const FOLDER_PRESETS = [
   'INBOX',
   'Sent',
@@ -44,6 +54,7 @@ const FOLDER_PRESETS = [
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
+  const [openedFolder, setOpenedFolder] = useState('INBOX');
   const [status, setStatus] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accountEmail, setAccountEmail] = useState('');
@@ -99,12 +110,13 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           },
         );
         setMessages(result.messages);
+        setOpenedFolder(result.folder);
         setPage(result.page);
         setTotalPages(result.totalPages);
         setTotal(result.total);
         setStatus(
           result.total === 0
-            ? 'Mailbox empty'
+            ? emptyMailboxStatus(folder, result.found)
             : `Loaded ${result.messages.length} of ${result.total} (page ${result.page}/${result.totalPages})`,
         );
       } catch (error) {
@@ -134,7 +146,13 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
   );
 
   useLayoutEffect(() => {
+    const title = isSentFolderRequest(folder)
+      ? 'Sent'
+      : folder === 'INBOX'
+        ? 'Inbox'
+        : folder;
     navigation.setOptions({
+      title,
       headerRight: () => (
         <Text
           style={styles.headerAction}
@@ -143,7 +161,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         </Text>
       ),
     });
-  }, [navigation]);
+  }, [navigation, folder]);
 
   const onUnlock = async () => {
     try {
@@ -157,7 +175,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
 
   const emptyLabel = loadError
     ? loadError
-    : 'Mailbox empty.';
+    : status || 'Mailbox empty.';
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
@@ -287,11 +305,15 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
             renderItem={({item}) => (
               <ListRow
                 title={item.subject || '(no subject)'}
-                subtitle={`${item.from} · ${item.date}`}
+                subtitle={`${
+                  isSentFolderRequest(folder)
+                    ? `To: ${item.to || '(unknown)'}`
+                    : item.from
+                } · ${item.date}`}
                 onPress={() =>
                   navigation.navigate('MailMessage', {
                     uid: item.uid,
-                    folder,
+                    folder: openedFolder,
                   })
                 }
               />

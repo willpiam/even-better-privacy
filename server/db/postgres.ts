@@ -1,6 +1,23 @@
 import { loadSync } from "std/dotenv";
-import { Pool } from "postgres";
+import { Pool, type PoolClient } from "postgres";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
+
+/** Dead or reset connections should open a new pool instead of failing every request. */
+export function isTransientDbError(err: unknown): boolean {
+  const name = err && typeof err === "object" && "name" in err
+    ? String((err as { name?: unknown }).name ?? "")
+    : "";
+  if (name === "ConnectionError") return true;
+  const code = err && typeof err === "object" && "fields" in err
+    ? String((err as { fields?: { code?: unknown } }).fields?.code ?? "")
+    : "";
+  if (code.startsWith("08") || code === "57P01" || code === "57P02" || code === "57P03") {
+    return true;
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return /connection|ECONN|timed out|timeout|closed|terminated|broken pipe|EOF|reset by peer/i
+    .test(message);
+}
 
 let envLoaded = false;
 
@@ -24,42 +41,78 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
 
   static createFromEnv(): PostgresDatabaseAdapter {
     loadEnvOnce();
+    return new PostgresDatabaseAdapter(PostgresDatabaseAdapter.openPool());
+  }
+
+  private static openPool(): Pool {
     const hostname = Deno.env.get("PG_HOST") ?? "localhost";
     const port = Number(Deno.env.get("PG_PORT") ?? "5432");
     const user = Deno.env.get("PG_USER") ?? "postgres";
     const password = Deno.env.get("PG_PASSWORD") ?? "";
     const database = Deno.env.get("PG_DATABASE") ?? "postgres";
     const poolSize = Number(Deno.env.get("PG_POOL_SIZE") ?? "5");
-
-    const pool = new Pool({
+    return new Pool({
       hostname,
       port,
       user,
       password,
       database,
     }, poolSize, true);
+  }
 
-    return new PostgresDatabaseAdapter(pool);
+  private async replacePool(): Promise<void> {
+    const previous = this.pool;
+    this.pool = PostgresDatabaseAdapter.openPool();
+    try {
+      await previous.end();
+    } catch {
+      // The previous pool is already unusable.
+    }
+  }
+
+  private async withClient<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      let client: PoolClient | undefined;
+      try {
+        client = await this.pool.connect();
+        const result = await run(client);
+        client.release();
+        return result;
+      } catch (err) {
+        lastError = err;
+        const transient = isTransientDbError(err);
+        if (client) {
+          if (transient) {
+            try {
+              await client.end();
+            } catch {
+              // already closed
+            }
+          } else {
+            client.release();
+          }
+        }
+        if (attempt === 0 && transient) {
+          await this.replacePool();
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("database connection failed");
   }
 
   async execute(sql: string): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.queryArray(sql);
-    } finally {
-      client.release();
-    }
+    await this.withClient((client) => client.queryArray(sql));
   }
 
   async query<T extends unknown[]>(sql: string, params: DatabaseQueryParams = []): Promise<T[]> {
-    const client = await this.pool.connect();
-    try {
+    return await this.withClient(async (client) => {
       const { sql: rewrittenSql, params: rewrittenParams } = this.rewriteSql(sql, params);
       const result = await client.queryArray(rewrittenSql, rewrittenParams);
       return result.rows as T[];
-    } finally {
-      client.release();
-    }
+    });
   }
 
   async close(): Promise<void> {

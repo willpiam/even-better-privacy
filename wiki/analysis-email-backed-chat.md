@@ -2,7 +2,7 @@
 title: "Email-Backed Chat (Brainstorm)"
 type: analysis
 status: seed
-last_updated: 2026-10-20
+last_updated: 2026-10-30
 source_count: 0
 tags:
   - brainstorm
@@ -18,6 +18,11 @@ tags:
 **Status: seed brainstorm — not a committed design.** Captures a product idea:
 present a chat-like UI while the transport remains ordinary email, addressed by
 EBP fingerprint.
+
+The product direction as of 2026-10-30 is [[analysis-pqpost-chat-channel]]:
+chat uses the existing `username@pqpost.com` mailbox plus an
+`X-EBP-Channel: chat` header, and does not use fingerprint local-parts. This
+page remains the record of the earlier addressing sketch.
 
 ## Idea
 
@@ -141,6 +146,7 @@ That path does not use fingerprint local-parts.
 
 ## Related
 
+- [[analysis-pqpost-chat-channel]]
 - [[analysis-ebp-managed-email-onboarding]]
 - [[email-transport]]
 - [[identity-model]]

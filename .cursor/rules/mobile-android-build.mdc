@@ -1,0 +1,25 @@
+---
+description: Prevent Cursor from being OOM-killed while building or installing the Android mobile app
+alwaysApply: true
+---
+
+# Android mobile builds on this machine
+
+This computer has 16GB RAM. Cursor is started with `oom_score_adj=300`, so when RAM is exhausted the kernel kills Cursor and leaves Gradle running.
+
+## What crashes Cursor
+
+`./build_mobile_android.sh` runs `assembleRelease`. That starts a Gradle daemon (`-Xmx2048m` in `mobile/android/gradle.properties`) plus a Kotlin compile daemon and many `clang++` jobs for native modules.
+
+The sandbox does not hide `~/.gradle`. It exports `GRADLE_USER_HOME=/tmp/cursor-sandbox-cache/<id>/gradle`. Gradle then starts a **second** multi-gigabyte daemon and compiles cold. A daemon left behind by an earlier crashed build stays resident. Two of those, plus clang, filled RAM on 2026-10-30 at 14:52 and again at 16:57. Both times the kernel killed Cursor. The APK can still finish afterward, but `adb install` never runs, so the phone keeps the previous build.
+
+## Required procedure
+
+1. Run `./build_mobile_android.sh`. It pins `GRADLE_USER_HOME` to `~/.gradle` when it sees `__CURSOR_SANDBOX_ENV_RESTORE` or a `cursor-sandbox-cache` path. Do not invoke `gradlew` directly from the agent without that pin.
+2. Before building, stop leftover sandbox daemons. They are Java processes whose command line contains `/tmp/cursor-sandbox-cache/` and `gradle`. Leave the normal `~/.gradle` daemons alone.
+3. Confirm `MemAvailable` is at least 4GB (`free -h`). The script refuses to start below that.
+4. Build with Node 22 (`~/.nvm/versions/node/v22.*`). The script prepends that when it exists. Phone ABI is `arm64-v8a` (`adb shell getprop ro.product.cpu.abi`). Device serial seen here: `ZY22LTPGT8`.
+5. Install with `./build_mobile_android.sh --install --skip-npm` (or `adb install -r dist/mobile/ebp-mobile-release.apk` if the APK is already newer than `mobile/src` and the install step was skipped). Then `adb shell am start -n com.mobile/.MainActivity`.
+6. Do not start a second `assembleRelease` while one is running.
+
+Details: [[analysis-mobile-android-build-oom]] (`wiki/analysis-mobile-android-build-oom.md`).
