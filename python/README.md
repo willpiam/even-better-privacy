@@ -1,12 +1,14 @@
 # Python bindings for the C core (partial)
 
-These bindings currently expose SHA-256 and the key-based AES-256-GCM EBP
-ciphertext format. They are **not a replacement for the TypeScript core**:
-identity management, post-quantum operations, password-based key derivation,
-HD keys, payload handling, and the other core APIs are not implemented yet.
-The C library uses OpenSSL libcrypto for SHA-256, AES-GCM, and random IVs.
+These bindings expose SHA-256, password and key-based EBP v4 AES-GCM, and
+selected post-quantum, HD, fingerprint, and message-signing operations. They
+are **not a replacement for the TypeScript core**: identity management,
+mnemonic handling, payload handling, and other core APIs are not implemented yet.
+The C library uses OpenSSL libcrypto for SHA-256, AES-GCM, random IVs, and
+experimental ML-DSA-87, SLH-DSA-SHA2-256s and ML-KEM-1024 operations,
+and the reference Argon2 library for password key derivation.
 
-On Linux, install a C compiler, make, and OpenSSL development headers, then run
+On Linux, install a C compiler, make, OpenSSL 3.5 or newer, and Argon2 development headers, then run
 from the repository root:
 
 ```sh
@@ -43,3 +45,49 @@ dependencies available, run the cross-implementation tests from the repo root:
 ```sh
 deno test --allow-run=python3 --allow-read --allow-env c-core/tests/interop_test.ts
 ```
+
+Password-based encryption uses Argon2id with the same parameters as TypeScript:
+
+```python
+from ebp_core import encrypt, decrypt
+
+encoded = encrypt("a strong password", b"hello", b"context")
+assert decrypt("a strong password", encoded, b"context") == b"hello"
+```
+
+Use a strong password and protect it independently. Both password and AAD
+must match to decrypt. Only v4 ciphertext is accepted.
+
+The low-level `pq_keygen`, `pq_sign`, `pq_verify`, `pq_encapsulate`, and
+`pq_decapsulate` functions operate on raw keys and messages; they do not yet
+implement EBP identities or message envelopes. They require OpenSSL 3.5 or newer.
+ML-KEM decapsulation uses implicit rejection: a modified, correctly sized
+ciphertext can produce a different secret instead of an error. Authenticate
+the resulting encryption; `encrypt_for_key` and `decrypt_for_key` use AES-GCM.
+
+For standard account paths, `hd_identity_seeds` derives raw signing and KEM
+seeds, and `identity_fingerprint` computes a fingerprint from raw public keys.
+These are building blocks; they do not create or store EBP identities.
+`sign_message` and `verify_message` accept raw signing keys and use the
+current purpose-bound message envelope; recipient-bound signing convenience
+functions and identity objects are not implemented.
+
+For low-level current-profile interoperability, a message can be signed or
+sent to an ML-KEM public key:
+
+```python
+from ebp_core import (ML_DSA_87, ML_KEM_1024, pq_keygen, sign_message,
+                      verify_message, encrypt_for_key, decrypt_for_key)
+
+signing_public, signing_private = pq_keygen(ML_DSA_87)
+encryption_public, encryption_private = pq_keygen(ML_KEM_1024)
+signature = sign_message(ML_DSA_87, signing_private, "hello")
+assert verify_message(ML_DSA_87, signing_public, "hello", signature)
+ciphertext = encrypt_for_key(encryption_public, b"hello")
+assert decrypt_for_key(encryption_private, ciphertext) == b"hello"
+```
+
+These raw key operations do not create signed-and-encrypted EBP payloads.
+`recipient_envelope` constructs the bytes for a recipient-bound signature;
+the caller must sign and verify those bytes with the appropriate raw key.
+Use the full TypeScript implementation for complete message workflows.

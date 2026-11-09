@@ -1,7 +1,7 @@
 import base64
 import hashlib
 import unittest
-from ebp_core import sha256, encrypt_with_key, decrypt_with_key
+from ebp_core import sha256, encrypt_with_key, decrypt_with_key, encrypt, decrypt, derive_storage_key, hd_identity_seeds, identity_fingerprint, pq_keygen, ML_DSA_87
 
 
 class CoreTests(unittest.TestCase):
@@ -25,6 +25,19 @@ class CoreTests(unittest.TestCase):
                 decrypt_with_key(key, encoded, b"wrong")
             with self.assertRaises(ValueError):
                 decrypt_with_key(bytes(32), encoded, aad)
+
+    def test_password_encryption(self):
+        encoded = encrypt("sëcret", b"hello", b"metadata")
+        self.assertEqual(decrypt("sëcret", encoded, b"metadata"), b"hello")
+        with self.assertRaises(ValueError): decrypt("wrong", encoded, b"metadata")
+        with self.assertRaises(ValueError): decrypt("sëcret", encoded, b"wrong")
+        with self.assertRaises(ValueError): derive_storage_key("test", b"short")
+
+    def test_hd_input_validation(self):
+        for profile, account, change, index in (("bad", 0, "external", 0), ("sphincs", -1, "external", 0), ("dilithium", 0, "bad", 0), ("sphincs", 0, "internal", 2**31)):
+            with self.assertRaises(ValueError): hd_identity_seeds(bytes(64), profile, account, change, index)
+        with self.assertRaises(ValueError): identity_fingerprint("bad", b"a", b"b")
+        with self.assertRaises(ValueError): pq_keygen(ML_DSA_87, b"short")
 
     def test_invalid_inputs(self):
         with self.assertRaises(ValueError): decrypt_with_key(bytes(32), "not base64!")

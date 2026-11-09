@@ -11,7 +11,20 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - name: Install OpenSSL headers
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libargon2-dev
+      # Ubuntu's default OpenSSL may be too old for the current PQ algorithms.
+      - name: Build pinned OpenSSL 3.5.7
+        run: |
+          git clone --depth 1 --branch openssl-3.5.7 https://github.com/openssl/openssl.git "$RUNNER_TEMP/openssl-src"
+          test "$(git -C "$RUNNER_TEMP/openssl-src" rev-parse HEAD)" = 8cf17aaeb4599f8af87fefd810b5b5fee90fe69e
+          cd "$RUNNER_TEMP/openssl-src"
+          ./Configure --prefix="$RUNNER_TEMP/openssl" --libdir=lib shared
+          make -j2
+          make install_sw
+          echo "CPPFLAGS=-I$RUNNER_TEMP/openssl/include" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-L$RUNNER_TEMP/openssl/lib -Wl,-rpath,$RUNNER_TEMP/openssl/lib" >> "$GITHUB_ENV"
       - name: Build and test C, Python, and TypeScript interoperability
         run: deno task test:c-core
+      - name: Run native address and undefined behavior checks
+        run: make -C c-core sanitize

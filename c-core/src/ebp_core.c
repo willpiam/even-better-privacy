@@ -2,11 +2,20 @@
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
+#include <argon2.h>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
 void ebp_free(void *p) { free(p); }
+int ebp_derive_storage_key(const uint8_t *password, size_t password_len,
+                           const uint8_t salt[16], uint8_t out[32]) {
+    int rc;
+    if ((!password && password_len) || !salt || !out) return 0;
+    rc = argon2id_hash_raw(3, 65536, 1, password, password_len, salt, 16, out, 32);
+    if (rc != ARGON2_OK) { OPENSSL_cleanse(out, 32); return 0; }
+    return 1;
+}
 int ebp_sha256(const uint8_t *data, size_t len, uint8_t out[32]) {
     unsigned int n = 0;
     if ((!data && len) || !out) return 0;
