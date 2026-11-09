@@ -1,0 +1,17 @@
+name: C core interoperability
+on:
+  push:
+  pull_request:
+
+jobs:
+  interoperability:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Install OpenSSL headers
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - name: Build and test C, Python, and TypeScript interoperability
+        run: deno task test:c-core
