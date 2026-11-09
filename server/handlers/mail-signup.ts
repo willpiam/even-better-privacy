@@ -10,7 +10,7 @@ import {
   MAIL_PASSWORD_RESET_PATH,
   normalizeMailUsername,
   validateMailUsername,
-} from "../../core/MailUsername.ts";
+} from "../../common/MailUsername.ts";
 import { LIMITS, readJsonBody, validateStringLength } from "../body.ts";
 import { json } from "../response.ts";
 import {

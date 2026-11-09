@@ -12,7 +12,7 @@ import {
   type HdProfile,
   parseHdPath,
 } from "../../core/HdPath.ts";
-import { validatePassword } from "../../core/PasswordPolicy.ts";
+import { validatePassword } from "../../common/PasswordPolicy.ts";
 import {
   type CLIContext,
   ensurePrivateDir,

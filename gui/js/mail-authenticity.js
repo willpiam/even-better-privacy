@@ -1,5 +1,5 @@
 // Sender-authenticity badge and modal for the mail reader. The backend
-// computes badgeKind/badgeLabel (core/MailAuthenticity.ts); this module only
+// computes badgeKind/badgeLabel (common/MailAuthenticity.ts); this module only
 // renders them.
 
 const BADGE_CLASS_BY_KIND = {

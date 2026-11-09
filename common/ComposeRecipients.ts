@@ -1,7 +1,7 @@
 // Compose "To" field parsing and send-intent rules shared by the GUI and
 // mobile composers. The GUI frontend cannot import core/, so
 // gui/js/compose-recipients-logic.js mirrors these two functions; both are
-// checked against core/tests/fixtures/compose-recipients.json.
+// checked against common/tests/fixtures/compose-recipients.json.
 
 export type ComposeChipState =
   | "resolving"

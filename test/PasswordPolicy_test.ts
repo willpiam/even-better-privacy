@@ -1,5 +1,5 @@
 import { assert, assertEquals } from "jsr:@std/assert";
-import { validatePassword } from "../core/PasswordPolicy.ts";
+import { validatePassword } from "../common/PasswordPolicy.ts";
 
 Deno.test("validatePassword accepts long mixed-class passwords", () => {
   const result = validatePassword("Correct-Horse-Battery-Staple-9!");

@@ -1,7 +1,7 @@
 // Sender-authenticity helpers for decrypted EBP mail, shared by the mobile
 // app and the desktop GUI backend. Pure functions only.
 
-import { sha256Hex } from "./MessageHash.ts";
+import { sha256Hex } from "../core/MessageHash.ts";
 
 export type MailVerifyStatus =
   | "unsigned"

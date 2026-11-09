@@ -1,4 +1,4 @@
-import {validateMailUsername, type MailUsernameCheck} from '../../../../core/MailUsername';
+import {validateMailUsername, type MailUsernameCheck} from '../../../../common/MailUsername';
 import {DEFAULT_MAIL_ACCOUNT, type MailAccountRecord} from './types';
 
 export {validateMailUsername};

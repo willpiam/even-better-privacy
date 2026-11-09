@@ -9,6 +9,7 @@ WORKDIR /app
 COPY deno.json deno.lock ./
 COPY app-version.ts ./
 COPY core ./core
+COPY common ./common
 COPY server ./server
 RUN deno cache --lock=deno.lock ./server/main.ts
 

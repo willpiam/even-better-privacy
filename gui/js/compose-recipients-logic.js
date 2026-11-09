@@ -1,6 +1,6 @@
-// Mirror of parseAddressList / deriveComposeIntent in core/ComposeRecipients.ts.
-// Kept in sync by core/ComposeRecipients.test.ts, which runs both against
-// core/tests/fixtures/compose-recipients.json.
+// Mirror of parseAddressList / deriveComposeIntent in common/ComposeRecipients.ts.
+// Kept in sync by common/ComposeRecipients.test.ts, which runs both against
+// common/tests/fixtures/compose-recipients.json.
 
 const ADDRESS_SEPARATORS = /[,;\n\r]+/;
 const EMAIL_PATTERN = /^[^\s@<>()[\],;:"]+@[^\s@<>()[\],;:"]+\.[^\s@<>()[\],;:"]+$/;

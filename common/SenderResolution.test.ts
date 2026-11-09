@@ -3,7 +3,7 @@ import {
   externalIdentityFromEmbeddedRecord,
   tryResolveSenderIdentity,
 } from "./SenderResolution.ts";
-import { Identity } from "./Identity.ts";
+import { Identity } from "../core/Identity.ts";
 
 Deno.test("externalIdentityFromEmbeddedRecord rejects missing keys", () => {
   assertEquals(

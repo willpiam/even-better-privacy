@@ -1,10 +1,10 @@
+import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import {
 	createFileCleartextEnvelope,
 	parseFileCleartextEnvelope,
-	MAX_ENCRYPTED_FILE_BYTES,
 } from "../../core/FilePayload.ts";
 import {
 	type CLIContext,

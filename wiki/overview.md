@@ -136,6 +136,7 @@ The repository is organized as a multi-surface implementation:
 
 - `core/` — shared crypto and payload primitives (Identity, Kyber, Dilithium,
   Sphincs, Fingerprint, Revocation, AES, Payloads)
+- `common/` — TypeScript application policies and client logic shared across surfaces
 - `cli/` — command-line interface
 - `gui/` — web frontend + local backend server
 - `server/` — public key server

@@ -8,7 +8,7 @@ export {
   matchFromToIdentity,
   normalizeEmail,
   resolveSignerEmailClaim,
-} from '../../../../core/MailAuthenticity.ts';
+} from '../../../../common/MailAuthenticity.ts';
 export type {
   AuthenticityBadgeKind,
   AuthenticityContact,
@@ -16,4 +16,4 @@ export type {
   MailAuthenticitySummary,
   MailVerifyStatus,
   MatchedEmailPath,
-} from '../../../../core/MailAuthenticity.ts';
+} from '../../../../common/MailAuthenticity.ts';

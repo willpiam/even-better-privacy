@@ -1,6 +1,6 @@
 import type {ExternalIdentity} from '../ebpCore';
-import {resolveSenderIdentity} from '../../../core/SenderResolution';
-import type {ResolveSenderIdentityParams} from '../../../core/SenderResolution';
+import {resolveSenderIdentity} from '../../../common/SenderResolution';
+import type {ResolveSenderIdentityParams} from '../../../common/SenderResolution';
 import {apiUrl, normalizeServerIdentity} from './contactsLogic';
 import {getServerUrl} from './settings';
 import {loadContact} from './contacts';

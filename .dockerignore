@@ -6,6 +6,8 @@
 !app-version.ts
 !core/
 !core/**
+!common/
+!common/**
 !server/
 !server/**
 

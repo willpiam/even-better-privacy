@@ -20,7 +20,7 @@ iterations in `core/AES.ts`). The password policy reduces the risk that a stolen
 
 ## Default rules
 
-Enforced by `validatePassword()` in `core/PasswordPolicy.ts` when policy
+Enforced by `validatePassword()` in `common/PasswordPolicy.ts` when policy
 enforcement is on (the default):
 
 | Rule | Requirement |
@@ -78,7 +78,7 @@ only on trusted machines.
 
 April 2026 audit finding **F-STORAGE-09** documented an 8-character floor only
 (see [[security-audit-2026-04/phase-07-storage]]). Remediation added
-`core/PasswordPolicy.ts` with the 12-character / 3-of-4 / blocklist rules
+`common/PasswordPolicy.ts` with the 12-character / 3-of-4 / blocklist rules
 (fixed 2026-04-29). Offline brute-force cost also depends on PBKDF2 iteration
 count (**F-STORAGE-02**); weak passwords remain risky even when policy is
 disabled.
@@ -93,6 +93,6 @@ disabled.
 
 ## Sources
 
-- `core/PasswordPolicy.ts`
+- `common/PasswordPolicy.ts`
 - `test/PasswordPolicy_test.ts`
 - `wiki/security-audit-2026-04/phase-07-storage.md` (F-STORAGE-09)

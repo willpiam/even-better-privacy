@@ -1,7 +1,7 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "../../core/version.ts";
-import { validatePassword } from "../../core/PasswordPolicy.ts";
+import { validatePassword } from "../../common/PasswordPolicy.ts";
 import {
   type CLIContext,
   ensureDir,

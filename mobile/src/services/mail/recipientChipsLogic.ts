@@ -3,7 +3,7 @@ import {
   parseAddressList,
   type ComposeChip,
   type ComposeIntent,
-} from '../../../../core/ComposeRecipients';
+} from '../../../../common/ComposeRecipients';
 import type {
   StoredContact,
   VerifiedRecipientResolution,

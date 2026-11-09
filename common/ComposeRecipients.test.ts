@@ -27,7 +27,7 @@ const fixture = JSON.parse(
 ) as { parseAddressList: ParseCase[]; deriveComposeIntent: IntentCase[] };
 
 const implementations = [
-  { label: "core", parseAddressList, deriveComposeIntent },
+  { label: "common", parseAddressList, deriveComposeIntent },
   {
     label: "gui mirror",
     parseAddressList: guiMirror.parseAddressList,
@@ -58,7 +58,7 @@ for (const impl of implementations) {
   }
 }
 
-Deno.test("core and gui mirror return identical blocked messages", () => {
+Deno.test("common and gui mirror return identical blocked messages", () => {
   for (const testCase of fixture.deriveComposeIntent) {
     const chips = testCase.states.map((state) => ({ state }));
     assertEquals(

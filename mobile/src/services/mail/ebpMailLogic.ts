@@ -62,4 +62,4 @@ export function resolvePlainMailRecipients(params: {
     .filter(Boolean);
 }
 
-export {elevateUnknownSignerVerifyStatus} from '../../../../core/MailAuthenticity.ts';
+export {elevateUnknownSignerVerifyStatus} from '../../../../common/MailAuthenticity.ts';

@@ -1,3 +1,4 @@
+export {MAX_ENCRYPTED_FILE_BYTES} from '../../common/FileLimits';
 export {Identity} from '../../core/Identity';
 export type {
   IdentityPublicData,
@@ -24,11 +25,10 @@ export {
   buildEncryptedSignedFilePayload,
   createFileCleartextEnvelope,
   parseFileCleartextEnvelope,
-  MAX_ENCRYPTED_FILE_BYTES,
 } from '../../core/FilePayload';
 export {parseEbpPayloadInput, parseMultiRecipientEntries} from '../../core/PayloadInput';
 export {randomHex, buildFileSignMessage} from '../../core/CryptoUtils';
-export {validatePassword} from '../../core/PasswordPolicy';
+export {validatePassword} from '../../common/PasswordPolicy';
 export {
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
@@ -37,12 +37,12 @@ export {
   normalizeMailUsername,
   validateMailUsername,
   type MailUsernameCheck,
-} from '../../core/MailUsername';
+} from '../../common/MailUsername';
 export {
   resolveSenderIdentity,
   tryResolveSenderIdentity,
   externalIdentityFromEmbeddedRecord,
-} from '../../core/SenderResolution';
+} from '../../common/SenderResolution';
 export {
   computeExternalFingerprint,
   decodeFingerprintBech32,

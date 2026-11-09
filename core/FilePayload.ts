@@ -1,8 +1,6 @@
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
-export const MAX_ENCRYPTED_FILE_BYTES = 25 * 1024 * 1024; // 25 MiB soft bound for local API/UI flows
-
 export type FileCleartextEnvelope = {
 	type: "ebp-file-cleartext-envelope";
 	version: typeof FILE_FORMAT_VERSIONS.fileCleartextEnvelope;

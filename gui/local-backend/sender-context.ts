@@ -2,7 +2,7 @@ import { apiUrl, type CLIContext } from "../../cli/utils.ts";
 import type { ExternalIdentity } from "../../core/Identity.ts";
 import {
   tryResolveSenderIdentity,
-} from "../../core/SenderResolution.ts";
+} from "../../common/SenderResolution.ts";
 import { loadContact } from "./contacts.ts";
 
 export async function tryResolveSenderForCtx(

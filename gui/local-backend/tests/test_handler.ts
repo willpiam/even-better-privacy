@@ -1,3 +1,4 @@
+import { MAX_ENCRYPTED_FILE_BYTES } from "../../../common/FileLimits.ts";
 /**
  * Test handler module that re-exports the request handler from main.ts
  * without starting the server. This is done by extracting the handler logic.
@@ -14,7 +15,7 @@ import {
   PROTOCOL_VERSION,
 } from "../../../core/version.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
-import { buildMailAuthenticityFields } from "../../../core/MailAuthenticity.ts";
+import { buildMailAuthenticityFields } from "../../../common/MailAuthenticity.ts";
 import {
   buildDetachedSignaturePayload,
   buildEncryptedMessagePayload,
@@ -23,14 +24,13 @@ import {
 } from "../../../core/Payloads.ts";
 import {
   createFileCleartextEnvelope,
-  MAX_ENCRYPTED_FILE_BYTES,
   parseFileCleartextEnvelope,
 } from "../../../core/FilePayload.ts";
 import {
   parseEmailAttachmentCleartextEnvelope,
   parseEncryptedEmailAttachmentPayload,
 } from "../../../core/EmailAttachmentPayload.ts";
-import { validatePassword } from "../../../core/PasswordPolicy.ts";
+import { validatePassword } from "../../../common/PasswordPolicy.ts";
 import {
   apiUrl,
   buildStateFromExternal,

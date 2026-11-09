@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
-import { sha256Hex } from "./MessageHash.ts";
+import { sha256Hex } from "../core/MessageHash.ts";
 import {
   type AuthenticityContact,
   badgeLabel,

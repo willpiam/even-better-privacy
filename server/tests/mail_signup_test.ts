@@ -7,7 +7,7 @@ import {
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
   validateMailUsername,
-} from "../../core/MailUsername.ts";
+} from "../../common/MailUsername.ts";
 import { setStalwartClientForTests } from "../handlers/mail-signup.ts";
 import { StalwartClient } from "../stalwart.ts";
 import { rateLimitStore } from "../rate-limit.ts";

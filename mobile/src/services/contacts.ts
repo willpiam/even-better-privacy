@@ -5,7 +5,7 @@ import {
   decideRecipientResolution,
   matchVerifiedEmailIdentities,
   searchVerifiedEmailIdentity,
-} from '../../../core/VerifiedEmailMatch.ts';
+} from '../../../common/VerifiedEmailMatch.ts';
 import {getServerUrl} from './settings';
 import {ensureAppDirs, getContactsDir} from './storage';
 import {

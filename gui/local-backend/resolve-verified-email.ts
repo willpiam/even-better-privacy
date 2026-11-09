@@ -6,7 +6,7 @@ import {
   searchVerifiedEmailIdentity,
   type EmailIdentityCandidate,
   type VerifiedEmailPage,
-} from "../../core/VerifiedEmailMatch.ts";
+} from "../../common/VerifiedEmailMatch.ts";
 import { HttpError, json, STATUS } from "./http.ts";
 import { resolveServer } from "./identity.ts";
 import { listContacts, saveExternalContact } from "./contacts.ts";
