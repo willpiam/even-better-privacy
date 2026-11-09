@@ -1,4 +1,5 @@
 #include "ebp_core.h"
+#include "json_compat.h"
 #include <jansson.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -8,6 +9,11 @@
 #include <utf8proc.h>
 
 #define MAX_SAFE_INTEGER INT64_C(9007199254740991)
+static char *js_canonical_dump(const json_t *value) {
+    char *text=json_dumps(value,JSON_COMPACT|JSON_SORT_KEYS);
+    if (text) ebp_json_lowercase_escapes(text);
+    return text;
+}
 static int add_value(json_t *obj, const char *key, json_t *value) {
     return value && json_object_set_new(obj,key,value) == 0;
 }
@@ -63,10 +69,10 @@ int ebp_detail_proof_create(const ebp_identity *id, const uint8_t *path, size_t 
     if (!proof || !proof_len) return 0;
     *proof=NULL; *proof_len=0;
     obj=unsigned_proof(path,path_len,detail,detail_len,nonce,timestamp);
-    if (!obj || !(unsigned_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!obj || !(unsigned_json=js_canonical_dump(obj)) ||
         !ebp_identity_sign(id,EBP_DETAIL_PROOF,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,&signature,&signature_len) ||
         !(signature64=encode_b64(signature,signature_len)) || !add_value(obj,"signature",json_string(signature64)) ||
-        !(signed_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS))) goto done;
+        !(signed_json=js_canonical_dump(obj))) goto done;
     n=strlen(signed_json); if (n>SIZE_MAX/2 || !(encoded=malloc(n*2))) goto done;
     for (size_t i=0; i<n; i++) { encoded[2*i]=hex[(uint8_t)signed_json[i]>>4]; encoded[2*i+1]=hex[(uint8_t)signed_json[i]&15]; }
     *proof=encoded; *proof_len=n*2; encoded=NULL; ok=1;
@@ -104,7 +110,7 @@ int ebp_detail_proof_verify(int alg, const uint8_t *pub, size_t pub_len,
         if (!sig64 || strlen(sig64)!=json_string_length(signature_value) || !decode_b64(sig64,&sig,&sig_len)) goto done;
     }
     canonical=unsigned_proof(path,path_len,detail,detail_len,(uint64_t)json_integer_value(vnonce),(int64_t)json_integer_value(vtime));
-    if (!canonical || !(text=json_dumps(canonical,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!canonical || !(text=js_canonical_dump(canonical)) ||
         !ebp_message_envelope(EBP_DETAIL_PROOF,(const uint8_t *)text,strlen(text),NULL,0,&envelope,&envelope_len) ||
         !ebp_pq_verify(alg,pub,pub_len,envelope,envelope_len,sig,sig_len)) goto done;
     if (nonce) *nonce=(uint64_t)json_integer_value(vnonce);
@@ -168,10 +174,10 @@ int ebp_revocation_create(const ebp_identity *id, int type, uint64_t nonce, int6
     *out=NULL; *out_len=0;
     fp=identity_fingerprint(id);
     obj=unsigned_revocation(type,fp,nonce,timestamp,reason,reason_len,target,target_len);
-    if (!obj || !(unsigned_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!obj || !(unsigned_json=js_canonical_dump(obj)) ||
         !ebp_identity_sign(id,EBP_REVOCATION,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,&signature,&signature_len) ||
         !(sig64=encode_b64(signature,signature_len)) || !add_value(obj,"signature",json_string(sig64)) ||
-        !(signed_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS))) goto done;
+        !(signed_json=js_canonical_dump(obj))) goto done;
     n=strlen(signed_json); if (n>SIZE_MAX/2 || !(encoded=malloc(n*2))) goto done;
     for (size_t i=0; i<n; i++) { encoded[2*i]=hex[(uint8_t)signed_json[i]>>4]; encoded[2*i+1]=hex[(uint8_t)signed_json[i]&15]; }
     *out=encoded; *out_len=n*2; encoded=NULL; ok=1;
@@ -213,7 +219,7 @@ int ebp_revocation_verify(const ebp_identity *id, const uint8_t *encoded, size_t
     canonical=unsigned_revocation(kind,cert_fp,(uint64_t)json_integer_value(nonce_value),(int64_t)json_integer_value(time_value),
         reason_value?(const uint8_t *)json_string_value(reason_value):NULL,reason_value?json_string_length(reason_value):0,
         target_value?(const uint8_t *)json_string_value(target_value):NULL,target_value?json_string_length(target_value):0);
-    if (!canonical || !(unsigned_json=json_dumps(canonical,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!canonical || !(unsigned_json=js_canonical_dump(canonical)) ||
         !decode_b64(signature,&sig,&sig_len) ||
         !ebp_identity_verify(id,EBP_REVOCATION,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,sig,sig_len)) goto done;
     ok=1;
@@ -246,12 +252,12 @@ int ebp_hierarchy_create(const ebp_identity *master, const ebp_identity *child, 
     *out=NULL; *out_len=0;
     master_fp=identity_fingerprint(master); child_fp=identity_fingerprint(child);
     obj=hierarchy_payload(master_fp,child_fp,timestamp,expiry,context,context_len,salt,salt_len);
-    if (!obj || !(unsigned_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!obj || !(unsigned_json=js_canonical_dump(obj)) ||
         !ebp_identity_sign(master,EBP_HIERARCHY,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,&master_sig,&master_len) ||
         !ebp_identity_sign(child,EBP_HIERARCHY,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,&child_sig,&child_len) ||
         !(master64=encode_b64(master_sig,master_len)) || !(child64=encode_b64(child_sig,child_len)) ||
         json_object_del(obj,"type")!=0 || !add_value(obj,"masterSignature",json_string(master64)) ||
-        !add_value(obj,"childSignature",json_string(child64)) || !(signed_json=json_dumps(obj,JSON_COMPACT|JSON_SORT_KEYS))) goto done;
+        !add_value(obj,"childSignature",json_string(child64)) || !(signed_json=js_canonical_dump(obj))) goto done;
     n=strlen(signed_json); if (n>SIZE_MAX/2 || !(encoded=malloc(n*2))) goto done;
     for (size_t i=0; i<n; i++) { encoded[2*i]=hex[(uint8_t)signed_json[i]>>4]; encoded[2*i+1]=hex[(uint8_t)signed_json[i]&15]; }
     *out=encoded; *out_len=n*2; encoded=NULL; ok=1;
@@ -287,7 +293,7 @@ int ebp_hierarchy_verify(const ebp_identity *master, const ebp_identity *child, 
     payload=hierarchy_payload(m,c,(uint64_t)json_integer_value(time),(uint64_t)json_integer_value(expiry),
         (const uint8_t *)json_string_value(context),json_string_length(context),
         (const uint8_t *)json_string_value(salt),json_string_length(salt));
-    if (!payload || !(unsigned_json=json_dumps(payload,JSON_COMPACT|JSON_SORT_KEYS)) ||
+    if (!payload || !(unsigned_json=js_canonical_dump(payload)) ||
         !decode_b64(m64,&master_sig,&master_len) || !decode_b64(c64,&child_sig,&child_len) ||
         !ebp_identity_verify(master,EBP_HIERARCHY,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,master_sig,master_len) ||
         !ebp_identity_verify(child,EBP_HIERARCHY,(const uint8_t *)unsigned_json,strlen(unsigned_json),NULL,0,child_sig,child_len)) goto done;

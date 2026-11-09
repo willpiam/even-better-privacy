@@ -2,13 +2,13 @@
 
 These bindings expose hashing, current-format encryption, post-quantum keys,
 mnemonics, HD derivation, identity storage, and message-signing operations.
-They are **not a replacement for the TypeScript core**: signed multi-recipient
-payload handling, some data-format operations, and other APIs remain incomplete.
+They are **not a replacement for the TypeScript core**: some data-format
+operations, canonical JSON behavior, and other APIs remain incomplete.
 The C library uses OpenSSL for cryptographic operations and the reference Argon2
 library for password key derivation.
 
 On Linux, install a C compiler, Python development headers, OpenSSL 3.5 or
-newer, and Argon2, utf8proc, and Jansson development headers. Install from the
+newer, and Argon2, utf8proc, Jansson, and ICU development headers. Install from the
 repository root using `python3 -m pip install .`. The resulting platform-specific
 wheel links to those native libraries; it does not bundle them.
 
@@ -70,7 +70,8 @@ ciphertext can produce a different secret instead of an error. Authenticate
 the resulting encryption; `encrypt_for_key` and `decrypt_for_key` use AES-GCM.
 
 For standard account paths, `hd_identity_seeds` derives raw signing and KEM
-seeds, and `identity_fingerprint` computes a fingerprint from raw public keys.
+seeds. `hd_node_from_path` derives a node from a supported five-segment path,
+and `identity_fingerprint` computes a fingerprint from raw public keys.
 These are building blocks; they do not themselves create or store EBP identities.
 `sign_message` and `verify_message` accept raw signing keys and use the
 current purpose-bound message envelope; recipient-bound signing convenience
@@ -146,8 +147,11 @@ library may retain secret copies in memory even after cleanup.
 `encrypt_for_recipients` takes plaintext bytes and `(fingerprint, public_key)`
 pairs; `decrypt_for_recipient` accepts the resulting dictionary, the recipient
 fingerprint, and their private key. These operations encrypt content and wrap
-keys; they do not sign the message or bind the recipient list. Use the full
-TypeScript implementation for signed multi-recipient payloads.
+keys; they do not sign the message or bind the recipient list. For signed
+messages, use `Identity.sign_and_encrypt_many` and
+`Identity.decrypt_and_verify_many` instead. `sign_and_encrypt_many` accepts an
+optional 32-byte `content_key` for attachment workflows; otherwise it generates
+one with OpenSSL.
 
 ## Payload input
 
@@ -174,9 +178,10 @@ constraints: call `hierarchy_expired` and `validate_hierarchy` separately.
 Detail, revocation and hierarchy proof timestamps and nonces are restricted to
 JavaScript safe integers; legacy formats and fractional timestamps are rejected.
 
-`Identity.from_public_data` accepts a current public export containing both
-public keys. Exports that omit a key and carry only its hash are not yet
-supported. `sign_and_encrypt` and `decrypt_and_verify` implement current
+`Identity.from_public_data` accepts current public exports with both keys or
+with one key replaced by its hash. Verification requires the signing key,
+and encryption requires the encryption key.
+`sign_and_encrypt` and `decrypt_and_verify` implement current
 single-recipient messages. Always check `verified` before trusting a returned
 message; decryption can succeed even if its signature is invalid.
 
@@ -184,3 +189,10 @@ message; decryption can succeed even if its signature is invalid.
 metadata in the current cleartext file-envelope format. They do not access the
 filesystem. Encrypting, signing, and persisting the resulting payload remain
 separate operations.
+
+Signed multi-recipient messages use ICU collation for attachment identifiers.
+The default locale is `en-US`; pass the same `locale` used by the TypeScript
+runtime when its default differs. Different ICU versions can also order some
+Unicode strings differently. Decryption returns the content key and can return
+plaintext with `verified` set to `False`; treat the key as secret and always
+check verification before trusting the message or attachment manifest.

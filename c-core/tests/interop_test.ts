@@ -5,7 +5,7 @@ import * as kemVariants from "@noble/post-quantum/ml-kem";
 import { ml_dsa87 } from "@noble/post-quantum/ml-dsa";
 import { ml_kem1024 } from "@noble/post-quantum/ml-kem";
 import { slh_dsa_sha2_256s } from "@noble/post-quantum/slh-dsa";
-import { deriveAccountNode, deriveIdentitySeeds } from "../../core/Hd.ts";
+import { deriveAccountNode, deriveIdentitySeeds, deriveNode } from "../../core/Hd.ts";
 import { computeIdentityFingerprint } from "../../core/Fingerprint.ts";
 import { bytesToBase64 } from "../../core/Base64.ts";
 import { BIP39_ENGLISH_WORDLIST } from "../../core/bip39-english.ts";
@@ -13,6 +13,7 @@ import { entropyToMnemonic, mnemonicToSeed } from "../../core/Mnemonic.ts";
 import { armorPayload, buildSignedMessagePayload, buildEncryptedSignedMessageMultiPayload } from "../../core/Payloads.ts";
 import { parseEbpPayloadInput } from "../../core/PayloadInput.ts";
 import { createFileCleartextEnvelope, parseFileCleartextEnvelope } from "../../core/FilePayload.ts";
+import { parseHdPath } from "../../core/HdPath.ts";
 import { AES } from "../../core/AES.ts";
 import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
 import { KyberEncryptionKey } from "../../core/Kyber.ts";
@@ -20,7 +21,7 @@ import { verifyDetailProof } from "../../core/DetailProof.ts";
 import { createRevocationCertificate, getRevocationSignaturePayload, encodeRevocationCertificate, decodeAndVerifyRevocationCertificate } from "../../core/Revocation.ts";
 import { createHierarchyCertificate, getHierarchySignaturePayload, encodeHierarchyCertificate, decodeAndVerifyHierarchyCertificate, validateHierarchy, isHierarchyCertificateExpired } from "../../core/HierarchyCertificate.ts";
 import { Identity } from "../../core/Identity.ts";
-import { buildPurposeHashEnvelope, buildRecipientBoundEnvelope, type SignaturePurpose } from "../../core/MessageHash.ts";
+import { buildPurposeHashEnvelope, buildRecipientBoundEnvelope, buildMultiRecipientBoundEnvelope, type SignaturePurpose } from "../../core/MessageHash.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 
 const key = Uint8Array.from({ length: 32 }, (_, i) => i);
@@ -426,7 +427,7 @@ Deno.test("signed detail proofs interoperate without accepting tampered details"
 Deno.test("detail proof canonicalization handles Unicode and control characters", async () => {
   const identity = new Identity("dilithium", "kyber"), password = "secret";
   const path = "quote/\"\\" + String.fromCharCode(0) + "\u2028";
-  const detail = "emoji 🔐 / newline\n" + String.fromCharCode(0) + "é";
+  const detail = "emoji 🔐 / newline\n" + String.fromCharCode(0, 15, 31) + " literal\\u001F é";
   const cleanStorage = identity.toStorageFormat(password);
   identity.attachDetail(path, detail);
   const proof = identity.details.get(path)![1];
@@ -446,7 +447,7 @@ Deno.test("identity storage rejects detail keys containing embedded NUL", async 
 
 Deno.test("revocation certificates interoperate and bind identity and target", async () => {
   const identity = new Identity("dilithium", "kyber"), password = "secret", storage = identity.toStorageFormat(password);
-  const target = "email/☃", reason = "rotation 🔐";
+  const target = "email/☃", reason = "rotation 🔐" + String.fromCharCode(31) + " literal\\u001F";
   for (const kind of ["identity", "detail"] as const) {
     const cert = createRevocationCertificate(kind, identity.toFingerprint(), 4, {reason, ...(kind === "detail" ? {target} : {})});
     cert.signature = identity.signMessage(getRevocationSignaturePayload(cert), undefined, "revocation");
@@ -464,7 +465,7 @@ Deno.test("revocation certificates interoperate and bind identity and target", a
 Deno.test("hierarchy certificates exchange and bind both identities", async () => {
   const master = new Identity("dilithium", "kyber"), child = new Identity("sphincs", "kyber"), password = "secret";
   const masterStorage = master.toStorageFormat(password), childStorage = child.toStorageFormat(password);
-  const timestamp = 1700000000000, expiry = 1700000001000, context = "team ☃", salt = "salt";
+  const timestamp = 1700000000000, expiry = 1700000001000, context = "team ☃" + String.fromCharCode(15) + " literal\\u000F", salt = "salt";
   const cert = createHierarchyCertificate(master.toFingerprint(), child.toFingerprint(), {timestamp, expiry, context, salt});
   const payload = getHierarchySignaturePayload(cert);
   cert.masterSignature = master.signMessage(payload, undefined, "hierarchy");
@@ -567,8 +568,19 @@ Deno.test("public identity exports verify and receive encrypted messages", async
   const publicRecipient = JSON.stringify(recipient.toPublicExport());
   const cipher = (await python({operation: "public_identity_encrypt", sender: sender.toStorageFormat(password), password, public: publicRecipient, text})).result;
   assertEquals(recipient.decryptAndVerify(cipher, sender.summary), {message: text, verified: true, verifyStatus: "valid"});
-  const incomplete = JSON.stringify(recipient.toPublicExport({includeSigningKey: false}));
-  assertEquals((await python({operation: "public_identity_encrypt", sender: sender.toStorageFormat(password), password, public: incomplete, text})).error, "invalid ciphertext");
+  const encryptionOnly = recipient.toPublicExport({includeSigningKey: false});
+  const partialCipher = (await python({operation: "public_identity_encrypt", sender: sender.toStorageFormat(password), password, public: JSON.stringify(encryptionOnly), text})).result;
+  assertEquals(recipient.decryptAndVerify(partialCipher, sender.summary), {message: text, verified: true, verifyStatus: "valid"});
+  const signingOnly = sender.toPublicExport({includeEncryptionKey: false});
+  assertEquals((await python<boolean>({operation: "public_identity_verify", public: JSON.stringify(signingOnly), text, signature, salt: ""})).result, true);
+  assertEquals((await python({operation: "public_identity_encrypt", sender: sender.toStorageFormat(password), password, public: JSON.stringify(signingOnly), text})).error, "invalid ciphertext");
+  for (const invalid of [
+    {...encryptionOnly, signingKeyHash: "00".repeat(32)},
+    {...sender.toPublicExport(), signingKeyHash: "00".repeat(32)},
+    {...encryptionOnly, encryptionKey: undefined, encryptionKeyHash: "00".repeat(32)},
+  ]) {
+    assertEquals((await python({operation: "public_identity_verify", public: JSON.stringify(invalid), text, signature, salt: ""})).error, "invalid ciphertext");
+  }
 });
 
 Deno.test("file cleartext envelopes exchange bytes and metadata", async () => {
@@ -594,5 +606,124 @@ Deno.test("file envelope parsing follows TypeScript base64 rules", async () => {
     const expected = parseFileCleartextEnvelope(JSON.stringify(envelope));
     const actual = (await python<{fileBytes: string}>({operation: "file_parse", text: JSON.stringify(envelope)})).result;
     assertEquals(actual.fileBytes, hex(expected.fileBytes));
+  }
+});
+
+Deno.test("multi-recipient signature envelopes match Unicode sorting and JSON", async () => {
+  const cases = [
+    {message: "", recipients: [], manifest: [], salt: ""},
+    {message: "quoted \" and slash / and 雪", recipients: ["  ebpdk1z  ", "ebpdk1a", "", "ebpdk1a"], manifest: [{attachmentId: "b", ciphertextSha256: "12"}, {attachmentId: "a", ciphertextSha256: "34"}], salt: "salt"},
+    {message: "control" + String.fromCharCode(0, 1, 8, 9, 10, 12, 13, 31) + "\"/\\  ", recipients: ["b", "a"], manifest: [{attachmentId: "zero" + String.fromCharCode(0), ciphertextSha256: "x"}], salt: ""},
+    {message: "NUL" + String.fromCharCode(0) + "🧪", recipients: ["\ue000", "𐀀", "x", " \t x \ufeff"], manifest: ["z", "ä", "A", "a", "é", "e\u0301", "!", "😀"].map((attachmentId, i) => ({attachmentId, ciphertextSha256: String(i)})), salt: "é"},
+  ];
+  for (const {message, recipients, manifest, salt} of cases) {
+    const c = (await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt})).result;
+    assertEquals(c, buildMultiRecipientBoundEnvelope(recipients, message, manifest, salt));
+  }
+});
+
+Deno.test("v3 signatures bind recipients and attachment manifests across implementations", async () => {
+  const sender = new Identity("dilithium", "kyber"), password = "secret", storage = sender.toStorageFormat(password);
+  const message = "signed ☃", recipients = ["recipient-b", "recipient-a"], manifest = [{attachmentId: "é", ciphertextSha256: "34"}, {attachmentId: "a", ciphertextSha256: "12"}], salt = "salt";
+  const ts = sender.signMessageForRecipients(message, recipients, manifest, salt);
+  assertEquals((await python<boolean>({operation: "identity_verify_multi", storage, message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt, signature: ts})).result, true);
+  const c = (await python({operation: "identity_sign_multi", storage, password, message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt})).result;
+  assertEquals(Identity.VerifyMultiRecipientBoundSignature(sender.summary, recipients, message, c, manifest, salt), true);
+  assertEquals(Identity.VerifyMultiRecipientBoundSignature(sender.summary, ["recipient-a"], message, c, manifest, salt), false);
+  assertEquals((await python<boolean>({operation: "identity_verify_multi", storage, message, recipients: JSON.stringify(recipients), manifest: JSON.stringify([{...manifest[0], ciphertextSha256: "changed"}, manifest[1]]), salt, signature: ts})).result, false);
+});
+
+Deno.test("complete signed multi-recipient messages exchange and reject tampering", async () => {
+  const sender = new Identity("dilithium", "kyber"), alice = new Identity("dilithium", "kyber"), bob = new Identity("dilithium", "kyber"), outsider = new Identity("dilithium", "kyber");
+  const password = "secret", message = "team ☃" + String.fromCharCode(0) + "update";
+  const senderStorage = sender.toStorageFormat(password), aliceStorage = alice.toStorageFormat(password), bobStorage = bob.toStorageFormat(password), outsiderStorage = outsider.toStorageFormat(password);
+  const manifest = [{attachmentId: "é", ciphertextSha256: "aa"}, {attachmentId: "a", ciphertextSha256: "bb"}];
+  const suppliedKey = Uint8Array.from({length: 32}, (_, i) => 255 - i);
+  const fromTs = sender.signAndEncryptForMany(message, [alice.summary, bob.summary, alice.summary], {attachmentManifest: manifest, contentKeyHex: hex(suppliedKey)});
+  type Result = {message: string; verified: boolean; verifyStatus: string; contentKey: string; recipientFingerprints: string[]; attachmentManifest: typeof manifest};
+  for (const recipient of [aliceStorage, bobStorage]) {
+    const actual = (await python<Result>({operation: "multi_signed_decrypt", recipient, sender: senderStorage, password, payload: JSON.stringify(fromTs)})).result;
+    assertEquals(actual.verified, true);
+    assertEquals(actual.message, message);
+    assertEquals(actual.recipientFingerprints, fromTs.recipientFingerprints);
+    assertEquals(actual.attachmentManifest, fromTs.attachmentManifest);
+  }
+  const noEntry = (await python<Result>({operation: "multi_signed_decrypt", recipient: outsiderStorage, sender: senderStorage, password, payload: JSON.stringify(fromTs)})).result;
+  assertEquals(noEntry.verified, false);
+  assertEquals(noEntry.message, "");
+  const wrongSender = (await python<Result>({operation: "multi_signed_decrypt", recipient: aliceStorage, sender: outsiderStorage, password, payload: JSON.stringify(fromTs)})).result;
+  assertEquals(wrongSender.verified, false);
+  type Packet = {recipients: typeof fromTs.recipients; contentNonce: string; ciphertext: string; contentKey: string; signature: string; recipientFingerprints: string[]; attachmentManifest: typeof manifest};
+  const fromC = (await python<Packet>({operation: "multi_signed_encrypt", sender: senderStorage, password, recipient_storages: JSON.stringify([aliceStorage, bobStorage, aliceStorage]), message, manifest: JSON.stringify(manifest), content_key: hex(suppliedKey)})).result;
+  assertEquals(fromC.contentKey, hex(suppliedKey));
+  assertEquals(fromC.recipients.length, 2);
+  for (const recipient of [alice, bob]) {
+    const actual = recipient.decryptAndVerifyMulti(fromC, sender.summary);
+    assertEquals(actual.verified, true);
+    assertEquals(actual.message, message);
+    assertEquals(actual.attachmentManifest, fromTs.attachmentManifest);
+  }
+  const key = Uint8Array.from(fromC.contentKey.match(/../g) ?? [], (part) => parseInt(part, 16));
+  const forwarded = {...fromC, recipients: [...fromC.recipients, MultiRecipientCipher.wrapContentKeyForRecipient(key, outsider.summary)]};
+  const forwardedResult = (await python<Result>({operation: "multi_signed_decrypt", recipient: outsiderStorage, sender: senderStorage, password, payload: JSON.stringify(forwarded)})).result;
+  assertEquals(forwardedResult.verified, false);
+  assertEquals(forwardedResult.verifyStatus, "invalid");
+  const inner = JSON.parse(new TextDecoder().decode(MultiRecipientCipher.decryptWithContentKey(fromC.ciphertext, fromC.contentNonce, key)));
+  inner.attachmentManifest[0].ciphertextSha256 = "modified";
+  const reencrypted = MultiRecipientCipher.encryptWithContentKey(new TextEncoder().encode(JSON.stringify(inner)), key);
+  const changed = {...fromC, ...reencrypted};
+  const rejected = (await python<Result>({operation: "multi_signed_decrypt", recipient: aliceStorage, sender: senderStorage, password, payload: JSON.stringify(changed)})).result;
+  assertEquals(rejected.verified, false);
+  assertEquals(rejected.verifyStatus, "invalid");
+});
+
+Deno.test("signed multi-recipient workflow handles an empty message and one recipient", async () => {
+  const sender = new Identity("dilithium", "kyber"), recipient = new Identity("dilithium", "kyber"), password = "secret";
+  const senderStorage = sender.toStorageFormat(password), recipientStorage = recipient.toStorageFormat(password);
+  const ts = sender.signAndEncryptForMany("", [recipient.summary]);
+  type Result = {message: string; verified: boolean; attachmentManifest: unknown[]};
+  const c = (await python<Result>({operation: "multi_signed_decrypt", recipient: recipientStorage, sender: senderStorage, password, payload: JSON.stringify(ts)})).result;
+  assertEquals(c.verified, true);
+  assertEquals(c.message, "");
+  assertEquals(c.attachmentManifest, []);
+  type Packet = {recipients: typeof ts.recipients; contentNonce: string; ciphertext: string};
+  const packet = (await python<Packet>({operation: "multi_signed_encrypt", sender: senderStorage, password, recipient_storages: JSON.stringify([recipientStorage]), message: "", manifest: "[]"})).result;
+  assertEquals(recipient.decryptAndVerifyMulti(packet, sender.summary).verified, true);
+});
+
+Deno.test("multi-recipient canonical bytes cover all JSON control escapes", async () => {
+  const message = Array.from({length: 32}, (_, i) => String.fromCharCode(i)).join("") + " literal\\u001F";
+  const recipients = ["b", "a"], manifest = [{attachmentId: "a" + message, ciphertextSha256: "hash"}], salt = "";
+  const actual = (await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt})).result;
+  assertEquals(actual, buildMultiRecipientBoundEnvelope(recipients, message, manifest, salt));
+});
+
+Deno.test("multi-recipient manifest collation can match a specified locale", async () => {
+  const locale = "sv-SE", message = "message", recipients = ["b", "a"], salt = "";
+  const manifest = ["ä", "z", "å", "a", "ö"].map((attachmentId) => ({attachmentId, ciphertextSha256: "hash"}));
+  const canonicalManifest = [...manifest].sort((a, b) => a.attachmentId.localeCompare(b.attachmentId, locale));
+  const canonical = JSON.stringify({tag: "EBP-MULTIRECIPIENT-V3", message, recipientFingerprints: [...recipients].sort(), attachmentManifest: canonicalManifest});
+  const actual = (await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt, locale})).result;
+  assertEquals(actual, `ebp::messagehash::v3::${sha256Hex(canonical)}::`);
+});
+
+Deno.test("multi-recipient canonical JSON covers Unicode scalar ranges", async () => {
+  let message = "";
+  for (let cp = 0; cp <= 0xffff; cp++) if (cp < 0xd800 || cp > 0xdfff) message += String.fromCodePoint(cp);
+  message += "𐀀🧪";
+  const actual = (await python({operation: "multi_envelope", message, recipients: "[]", manifest: "[]", salt: ""})).result;
+  assertEquals(actual, buildMultiRecipientBoundEnvelope([], message));
+});
+
+Deno.test("arbitrary supported HD paths match TypeScript derivation", async () => {
+  const seed = Uint8Array.from({length: 64}, (_, i) => i);
+  const paths = ["m/ebp'/dilithium'/0'/0/0", "m/ebp'/sphincs'/3'/1/5", " \ufeffm/ebp'/0/0001'/1'/02'\u00a0", "m/ebp'/1'/2147483647'/0/2147483647'", "m/ebp'/0001/000'/01/000"];
+  for (const path of paths) {
+    const expected = deriveNode(seed, path), parsed = parseHdPath(path);
+    const actual = (await python<{key: string; chain: string; profile: string}>({operation: "hd_path", seed: hex(seed), path})).result;
+    assertEquals(actual, {key: hex(expected.key), chain: hex(expected.chainCode), profile: parsed.profile});
+  }
+  for (const path of ["m", "m/ebp/0'/0'/0/0", "m/ebp'/dilithium/0'/0/0", "m/ebp'/2'/0'/0/0", "m/ebp'/0/0/0/0", "m/ebp'/0/0'/2/0", "m/ebp'/0/0'/0/2147483648", "m/ebp'/0/0'/0/0/1"]) {
+    assertEquals((await python({operation: "hd_path", seed: hex(seed), path})).error, "invalid ciphertext");
   }
 });

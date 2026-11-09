@@ -8,15 +8,15 @@ static uint32_t polymod_step(uint32_t pre) {
     for (int i = 0; i < 5; i++) if ((top >> i) & 1) chk ^= gen[i];
     return chk;
 }
-int ebp_identity_fingerprint(int sphincs, const uint8_t *sign, size_t sign_len,
-                             const uint8_t *enc, size_t enc_len, char out[65]) {
+int ebp_identity_fingerprint_from_leaves(int sphincs, const uint8_t signing_leaf[32],
+                                          const uint8_t encryption_leaf[32], char out[65]) {
     const char *hrp = sphincs ? "ebpsk" : "ebpdk";
     static const char alphabet[] = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
     uint8_t leaves[64], root[32], words[52];
     uint32_t chk = 1, acc = 0; int bits = 0; size_t count = 0;
-    if (!out || !sign || !enc || !sign_len || !enc_len || (sphincs != 0 && sphincs != 1)) return 0;
-    if (!ebp_sha256(sign, sign_len, leaves) || !ebp_sha256(enc, enc_len, leaves+32) ||
-        !ebp_sha256(leaves, sizeof(leaves), root)) return 0;
+    if (!out || !signing_leaf || !encryption_leaf || (sphincs != 0 && sphincs != 1)) return 0;
+    memcpy(leaves,signing_leaf,32); memcpy(leaves+32,encryption_leaf,32);
+    if (!ebp_sha256(leaves, sizeof(leaves), root)) return 0;
     for (size_t i = 0; i < sizeof(root); i++) {
         acc = (acc << 8) | root[i]; bits += 8;
         while (bits >= 5) { bits -= 5; words[count++] = (uint8_t)((acc >> bits) & 31); }
@@ -31,4 +31,12 @@ int ebp_identity_fingerprint(int sphincs, const uint8_t *sign, size_t sign_len,
     chk ^= 1;
     for (int i=0; i<6; i++) out[6+count+i] = alphabet[(chk >> (5*(5-i))) & 31];
     out[6+count+6] = '\0'; return 1;
+}
+
+int ebp_identity_fingerprint(int sphincs, const uint8_t *sign, size_t sign_len,
+                             const uint8_t *enc, size_t enc_len, char out[65]) {
+    uint8_t sign_leaf[32], encryption_leaf[32];
+    if (!out || !sign || !enc || !sign_len || !enc_len ||
+        !ebp_sha256(sign,sign_len,sign_leaf) || !ebp_sha256(enc,enc_len,encryption_leaf)) return 0;
+    return ebp_identity_fingerprint_from_leaves(sphincs,sign_leaf,encryption_leaf,out);
 }

@@ -20,9 +20,11 @@ setup(
                 "c-core/src/payload.c",
                 "c-core/src/proof.c",
                 "c-core/src/file_payload.c",
+                "c-core/src/multi_envelope.c",
+                "c-core/src/json_compat.c",
             ],
             include_dirs=["c-core/include"],
-            libraries=["crypto", "argon2", "utf8proc", "jansson", "m"],
+            libraries=["crypto", "argon2", "utf8proc", "jansson", "icui18n", "icuuc", "m"],
             extra_compile_args=["-std=c11"],
         )
     ],

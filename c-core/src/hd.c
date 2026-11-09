@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <utf8proc.h>
 
 static int hkdf_sha512(const uint8_t *key, size_t key_len, const uint8_t *salt, size_t salt_len,
                        const char *info, uint8_t *out, size_t out_len) {
@@ -44,4 +45,73 @@ int ebp_hd_identity_seeds(const uint8_t node[64], int sphincs, uint8_t *sign_see
         OPENSSL_cleanse(sign_seed, sign_len); OPENSSL_cleanse(kem_seed, 64); return 0;
     }
     return 1;
+}
+
+static int path_space(utf8proc_int32_t cp) {
+    return (cp>=9 && cp<=13) || cp==0x20 || cp==0xa0 || cp==0x1680 ||
+           (cp>=0x2000 && cp<=0x200a) || cp==0x2028 || cp==0x2029 || cp==0x202f || cp==0x205f || cp==0x3000 || cp==0xfeff;
+}
+static int trim_path(const uint8_t **path, size_t *len) {
+    size_t pos=0,start=0,end=0; int found=0;
+    if (!*path || *len>PTRDIFF_MAX) return 0;
+    while (pos<*len) {
+        utf8proc_int32_t cp; size_t before=pos;
+        utf8proc_ssize_t n=utf8proc_iterate(*path+pos,(utf8proc_ssize_t)(*len-pos),&cp);
+        if (n<=0) return 0;
+        pos+=(size_t)n;
+        if (!path_space(cp)) { if (!found) start=before; end=pos; found=1; }
+    }
+    if (!found) return 0;
+    *path+=start; *len=end-start; return 1;
+}
+static int segment(const uint8_t *text, size_t len, size_t position, uint32_t *index, int *hardened) {
+    uint32_t value=0; size_t bare=len;
+    if (!len) return 0;
+    *hardened=text[len-1]=='\'';
+    if (*hardened) bare--;
+    if (!bare) return 0;
+    if (position==0) {
+        if (bare!=3 || memcmp(text,"ebp",3)!=0 || !*hardened) return 0;
+        *index=0x454250u; return 1;
+    }
+    if (position==1 && ((bare==9 && memcmp(text,"dilithium",9)==0) || (bare==7 && memcmp(text,"sphincs",7)==0))) {
+        if (!*hardened) return 0;
+        *index=bare==9?0u:1u; return 1;
+    }
+    for (size_t i=0; i<bare; i++) {
+        unsigned digit;
+        if (text[i]<'0' || text[i]>'9') return 0;
+        digit=(unsigned)(text[i]-'0');
+        if (value>(0x7fffffffu-digit)/10u) return 0;
+        value=value*10u+digit;
+    }
+    if (position==2 && !*hardened) return 0;
+    if ((position==1 || position==3) && value>1) return 0;
+    *index=value; return 1;
+}
+int ebp_hd_derive_path(const uint8_t *seed, size_t seed_len, const uint8_t *path, size_t path_len,
+                       uint8_t node[64], int *profile) {
+    uint32_t indices[5]; int hardened[5], which=0, ok=0; uint8_t current[64], next[64];
+    size_t start=2, count=0;
+    if (!node || !profile) return 0;
+    OPENSSL_cleanse(node,64); *profile=0;
+    if ((!seed && seed_len) || !trim_path(&path,&path_len) || path_len<3 || path[0]!='m' || path[1]!='/') return 0;
+    for (size_t i=2; i<=path_len; i++) {
+        if (i==path_len || path[i]=='/') {
+            if (count>=5 || !segment(path+start,i-start,count,&indices[count],&hardened[count])) goto done;
+            count++; start=i+1;
+        }
+    }
+    if (count!=5) goto done;
+    which=(int)indices[1];
+    if (!ebp_hd_master(seed,seed_len,current)) goto done;
+    for (size_t i=0; i<5; i++) {
+        uint32_t child=indices[i]+(hardened[i]?0x80000000u:0u);
+        if (!ebp_hd_child(current,child,(uint32_t)i+1,next)) goto done;
+        memcpy(current,next,sizeof(current));
+    }
+    memcpy(node,current,64); *profile=which; ok=1;
+done:
+    OPENSSL_cleanse(current,sizeof(current)); OPENSSL_cleanse(next,sizeof(next));
+    OPENSSL_cleanse(indices,sizeof(indices)); return ok;
 }

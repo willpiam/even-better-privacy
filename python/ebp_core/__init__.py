@@ -205,8 +205,23 @@ _lib.ebp_hd_master.argtypes = [_P, ctypes.c_size_t, _P]
 _lib.ebp_hd_master.restype = ctypes.c_int
 _lib.ebp_hd_child.argtypes = [_P, ctypes.c_uint32, ctypes.c_uint32, _P]
 _lib.ebp_hd_child.restype = ctypes.c_int
+_lib.ebp_hd_derive_path.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.POINTER(ctypes.c_int)]
+_lib.ebp_hd_derive_path.restype = ctypes.c_int
 _lib.ebp_hd_identity_seeds.argtypes = [_P, ctypes.c_int, _P, ctypes.c_size_t, _P]
 _lib.ebp_hd_identity_seeds.restype = ctypes.c_int
+
+
+def hd_node_from_path(seed: bytes, path: str) -> tuple[bytes, bytes, str]:
+    """Derive a key, chain code and profile from an EBP five-segment path."""
+    encoded = path.encode("utf-8")
+    seed_buf, path_buf, node, profile = _buffer(seed), _buffer(encoded), (_U8 * 64)(), ctypes.c_int()
+    try:
+        if not _lib.ebp_hd_derive_path(seed_buf, len(seed), path_buf, len(encoded), node, ctypes.byref(profile)):
+            raise ValueError("invalid HD path or seed")
+        return bytes(node[:32]), bytes(node[32:]), "sphincs" if profile.value else "dilithium"
+    finally:
+        ctypes.memset(seed_buf, 0, len(seed_buf))
+        ctypes.memset(node, 0, len(node))
 
 
 def hd_identity_seeds(seed: bytes, profile: str, account: int = 0, change: str = "external", index: int = 0) -> tuple[bytes, bytes]:
@@ -528,6 +543,14 @@ _lib.ebp_identity_attach_detail.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t
 _lib.ebp_identity_attach_detail.restype = ctypes.c_int
 _lib.ebp_identity_get_detail.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_get_detail.restype = ctypes.c_int
+_lib.ebp_identity_sign_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_sign_multi.restype = ctypes.c_int
+_lib.ebp_identity_verify_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, _P, ctypes.c_size_t]
+_lib.ebp_identity_verify_multi.restype = ctypes.c_int
+_lib.ebp_identity_sign_encrypt_many.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_sign_encrypt_many.restype = ctypes.c_int
+_lib.ebp_identity_decrypt_verify_many.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_decrypt_verify_many.restype = ctypes.c_int
 _lib.ebp_identity_sign_encrypt.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_sign_encrypt.restype = ctypes.c_int
 _lib.ebp_identity_decrypt_verify.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(ctypes.c_int)]
@@ -573,7 +596,7 @@ class Identity:
 
     @classmethod
     def from_public_data(cls, data: dict) -> "Identity":
-        """Load a public export containing both public keys."""
+        """Load a public export containing at least one public key."""
         import json
         encoded = json.dumps(data, ensure_ascii=False).encode("utf-8")
         handle = ctypes.c_void_p()
@@ -667,6 +690,61 @@ class Identity:
             if not _lib.ebp_identity_get_detail(self._get_handle(), _buffer(path_bytes), len(path_bytes), ctypes.byref(out), ctypes.byref(length)):
                 return None
             return ctypes.string_at(out, length.value).decode("utf-8")
+        finally:
+            _lib.ebp_secure_free(out, length.value)
+
+    def sign_for_recipients(self, message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> str:
+        """Sign the v3 recipient set and attachment manifest."""
+        import json
+        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        salt_bytes = salt.encode("utf-8")
+        out, length = _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_sign_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+                raise ValueError("multi-recipient signing failed")
+            return base64.b64encode(ctypes.string_at(out, length.value)).decode("ascii")
+        finally:
+            _lib.ebp_free(out)
+
+    def verify_for_recipients(self, message: str, signature: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> bool:
+        """Verify the v3 recipient set and attachment manifest signature."""
+        import json
+        try:
+            signature_bytes = base64.b64decode(signature, validate=True)
+        except (ValueError, TypeError):
+            return False
+        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        salt_bytes = salt.encode("utf-8")
+        return bool(_lib.ebp_identity_verify_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), _buffer(signature_bytes), len(signature_bytes)))
+
+    def sign_and_encrypt_many(self, message: str, recipients: list["Identity"], attachment_manifest: list[dict] | None = None, locale: str = "en-US", content_key: bytes | None = None) -> dict:
+        """Create a current signed, recipient-bound multi-recipient message."""
+        import json
+        text = message.encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        handles = (ctypes.c_void_p * len(recipients))(*(recipient._get_handle().value for recipient in recipients))
+        key_buf = None if content_key is None else _key(content_key)
+        out, length = _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_sign_encrypt_many(self._get_handle(), handles, len(recipients), _buffer(text), len(text), _buffer(manifest), len(manifest), key_buf, locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+                raise ValueError("multi-recipient signing or encryption failed")
+            return json.loads(ctypes.string_at(out, length.value))
+        finally:
+            _lib.ebp_secure_free(out, length.value)
+            if key_buf is not None:
+                ctypes.memset(key_buf, 0, len(key_buf))
+
+    def decrypt_and_verify_many(self, payload: dict, sender: "Identity", locale: str = "en-US") -> dict:
+        """Decrypt and verify a v3 message; callers must inspect `verified`."""
+        import json
+        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        out, length = _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_decrypt_verify_many(self._get_handle(), sender._get_handle(), _buffer(encoded), len(encoded), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+                raise ValueError("multi-recipient decryption failed or invalid payload")
+            return json.loads(ctypes.string_at(out, length.value))
         finally:
             _lib.ebp_secure_free(out, length.value)
 
@@ -954,3 +1032,21 @@ def parse_file_envelope(data: str) -> dict:
         _lib.ebp_secure_free(file, file_len.value)
         _lib.ebp_free(name)
         _lib.ebp_free(mime)
+
+_lib.ebp_multi_envelope.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_multi_envelope.restype = ctypes.c_int
+
+
+def multi_recipient_envelope(message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> bytes:
+    """Construct the current v3 recipient-set and attachment-bound signature envelope."""
+    import json
+    message_bytes, salt_bytes = message.encode("utf-8"), salt.encode("utf-8")
+    recipients = json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
+    manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_multi_envelope(_buffer(message_bytes), len(message_bytes), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid multi-recipient envelope input")
+        return ctypes.string_at(out, length.value)
+    finally:
+        _lib.ebp_secure_free(out, length.value)

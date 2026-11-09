@@ -1,7 +1,7 @@
 """JSON bridge used by the Deno interoperability tests."""
 import json
 import sys
-from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope
+from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope, multi_recipient_envelope, hd_node_from_path
 
 request = json.load(sys.stdin)
 key = bytes.fromhex(request.get("key", ""))
@@ -28,6 +28,22 @@ try:
     elif request["operation"] == "public_identity_encrypt":
         with Identity.from_storage(request["sender"], request["password"]) as sender, Identity.from_public_data(json.loads(request["public"])) as recipient:
             result = sender.sign_and_encrypt(request["text"], recipient)
+    elif request["operation"] == "multi_signed_encrypt":
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            sender = stack.enter_context(Identity.from_storage(request["sender"], request["password"]))
+            recipients = [stack.enter_context(Identity.from_storage(storage)) for storage in json.loads(request["recipient_storages"])]
+            key = bytes.fromhex(request["content_key"]) if "content_key" in request else None
+            result = sender.sign_and_encrypt_many(request["message"], recipients, json.loads(request["manifest"]), content_key=key)
+    elif request["operation"] == "multi_signed_decrypt":
+        with Identity.from_storage(request["recipient"], request["password"]) as recipient, Identity.from_storage(request["sender"]) as sender:
+            result = recipient.decrypt_and_verify_many(json.loads(request["payload"]), sender)
+    elif request["operation"] == "identity_sign_multi":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            result = identity.sign_for_recipients(request["message"], json.loads(request["recipients"]), json.loads(request["manifest"]), request["salt"])
+    elif request["operation"] == "identity_verify_multi":
+        with Identity.from_storage(request["storage"]) as identity:
+            result = identity.verify_for_recipients(request["message"], request["signature"], json.loads(request["recipients"]), json.loads(request["manifest"]), request["salt"])
     elif request["operation"] == "identity_sign_encrypt":
         with Identity.from_storage(request["sender"], request["password"]) as sender, Identity.from_storage(request["recipient"]) as recipient:
             result = sender.sign_and_encrypt(request["text"], recipient)
@@ -55,6 +71,11 @@ try:
             result = identity.create_detail_proof(request["path"], request["detail"], int(request["nonce"]), int(request["timestamp"]))
     elif request["operation"] == "verify_detail_proof":
         result = verify_detail_proof(int(request["algorithm"]), bytes.fromhex(request["public"]), request["path"], request["detail"], request["proof"])
+    elif request["operation"] == "hd_path":
+        key, chain, profile = hd_node_from_path(bytes.fromhex(request["seed"]), request["path"])
+        result = {"key": key.hex(), "chain": chain.hex(), "profile": profile}
+    elif request["operation"] == "multi_envelope":
+        result = multi_recipient_envelope(request["message"], json.loads(request["recipients"]), json.loads(request["manifest"]), request["salt"], request.get("locale", "en-US")).decode("utf-8")
     elif request["operation"] == "file_create":
         result = create_file_envelope(bytes.fromhex(request["file"]), request["name"], request["mime"])
     elif request["operation"] == "file_parse":

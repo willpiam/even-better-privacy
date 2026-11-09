@@ -26,6 +26,16 @@ int ebp_message_envelope(int purpose, const uint8_t *message, size_t message_len
 int ebp_recipient_envelope(const uint8_t *recipient, size_t recipient_len,
                            const uint8_t *message, size_t message_len,
                            const uint8_t *salt, size_t salt_len, uint8_t **out, size_t *out_len);
+/* Build the v3 recipient-set and attachment-manifest signature envelope.
+ * Recipients and manifest are JSON arrays; locale selects ICU collation (NULL = en-US). */
+int ebp_multi_normalize(const uint8_t *recipients_json, size_t recipients_len,
+                        const uint8_t *manifest_json, size_t manifest_len, const char *locale,
+                        uint8_t **out, size_t *out_len);
+int ebp_multi_envelope(const uint8_t *message, size_t message_len,
+                       const uint8_t *recipients_json, size_t recipients_len,
+                       const uint8_t *manifest_json, size_t manifest_len,
+                       const uint8_t *salt, size_t salt_len, const char *locale,
+                       uint8_t **out, size_t *out_len);
 /* Output must have space for 65 bytes (64 characters and a terminator). */
 int ebp_identity_fingerprint(int sphincs, const uint8_t *signing_key, size_t signing_key_len,
                              const uint8_t *encryption_key, size_t encryption_key_len, char out[65]);
@@ -34,9 +44,14 @@ int ebp_entropy_to_mnemonic(const uint8_t *entropy, size_t entropy_len, uint8_t 
 int ebp_mnemonic_to_entropy(const uint8_t *phrase, size_t phrase_len, uint8_t **entropy, size_t *entropy_len);
 int ebp_mnemonic_to_seed(const uint8_t *phrase, size_t phrase_len,
                          const uint8_t *passphrase, size_t passphrase_len, uint8_t out[64]);
+int ebp_identity_fingerprint_from_leaves(int sphincs, const uint8_t signing_leaf[32],
+                                          const uint8_t encryption_leaf[32], char out[65]);
 /* HD nodes are 32-byte key || 32-byte chain code. */
 int ebp_hd_master(const uint8_t *seed, size_t seed_len, uint8_t node[64]);
 int ebp_hd_child(const uint8_t parent[64], uint32_t child_index, uint32_t child_depth, uint8_t node[64]);
+/* Derive any TypeScript-supported five-segment path; profile is 0 (dilithium) or 1 (sphincs). */
+int ebp_hd_derive_path(const uint8_t *seed, size_t seed_len, const uint8_t *path, size_t path_len,
+                       uint8_t node[64], int *profile);
 int ebp_hd_identity_seeds(const uint8_t node[64], int sphincs,
                           uint8_t *sign_seed, size_t sign_seed_len, uint8_t kem_seed[64]);
 /* File envelopes operate on bytes; paths and file access remain with the caller. */
@@ -54,7 +69,7 @@ int ebp_identity_create(int sphincs, ebp_identity **out);
 int ebp_identity_from_hd_seed(const uint8_t *seed, size_t seed_len, int sphincs,
                               uint32_t account, int change, uint32_t index, ebp_identity **out);
 int ebp_identity_public_json(const ebp_identity *identity, uint8_t **json, size_t *json_len);
-/* Imports a public-data or current public-export object containing both public keys. */
+/* Imports a public-data or current public-export object with at least one public key. */
 int ebp_identity_from_public_json(const uint8_t *json, size_t json_len, ebp_identity **out);
 int ebp_identity_store(const ebp_identity *identity, const uint8_t *password, size_t password_len,
                        uint8_t **json, size_t *json_len);
@@ -70,6 +85,22 @@ int ebp_identity_attach_detail(ebp_identity *identity, const uint8_t *path, size
                                const uint8_t *detail, size_t detail_len, int64_t timestamp);
 int ebp_identity_get_detail(const ebp_identity *identity, const uint8_t *path, size_t path_len,
                             uint8_t **detail, size_t *detail_len);
+/* V3 multi-recipient signatures over JSON arrays of recipients and manifest entries. */
+int ebp_identity_sign_multi(const ebp_identity *identity, const uint8_t *message, size_t message_len,
+                            const uint8_t *recipients_json, size_t recipients_len, const uint8_t *manifest_json, size_t manifest_len,
+                            const uint8_t *salt, size_t salt_len, const char *locale, uint8_t **signature, size_t *signature_len);
+int ebp_identity_verify_multi(const ebp_identity *identity, const uint8_t *message, size_t message_len,
+                              const uint8_t *recipients_json, size_t recipients_len, const uint8_t *manifest_json, size_t manifest_len,
+                              const uint8_t *salt, size_t salt_len, const char *locale, const uint8_t *signature, size_t signature_len);
+/* Complete current v3 workflow. content_key is NULL to generate one, or points
+ * to 32 caller-supplied bytes. JSON results include the secret content key;
+ * release returned buffers with ebp_secure_free. */
+int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identity *const *recipients, size_t recipient_count,
+                                   const uint8_t *message, size_t message_len, const uint8_t *manifest_json, size_t manifest_len,
+                                   const uint8_t *content_key, const char *locale, uint8_t **result_json, size_t *result_len);
+int ebp_identity_decrypt_verify_many(const ebp_identity *recipient, const ebp_identity *sender,
+                                     const uint8_t *payload_json, size_t payload_len, const char *locale,
+                                     uint8_t **result_json, size_t *result_len);
 /* Current v2 recipient-bound signed and encrypted inner message. */
 int ebp_identity_sign_encrypt(const ebp_identity *sender, const ebp_identity *recipient,
                               const uint8_t *message, size_t message_len, uint8_t **ciphertext, size_t *ciphertext_len);

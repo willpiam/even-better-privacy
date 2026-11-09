@@ -15,7 +15,7 @@ jobs:
         with:
           deno-version: v2.x
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential libargon2-dev libutf8proc-dev libjansson-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential libargon2-dev libutf8proc-dev libjansson-dev libicu-dev
       # Ubuntu's default OpenSSL may be too old for the current PQ algorithms.
       - name: Build pinned OpenSSL 3.5.7
         run: |
@@ -39,4 +39,4 @@ jobs:
           python -m venv "$RUNNER_TEMP/ebp-wheel-test"
           "$RUNNER_TEMP/ebp-wheel-test/bin/python" -m pip install --no-index --no-deps "$RUNNER_TEMP"/ebp-wheels/ebp_core-*.whl
           cd "$RUNNER_TEMP"
-          "$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core, ebp_core._native, json; assert ebp_core.sha256(b"abc").hex().startswith("ba7816bf"); envelope=ebp_core.create_file_envelope(b"abc", "a.bin"); assert ebp_core.parse_file_envelope(json.dumps(envelope))["fileBytes"] == b"abc"'
+          "$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core, ebp_core._native, json; assert ebp_core.sha256(b"abc").hex().startswith("ba7816bf"); envelope=ebp_core.create_file_envelope(b"abc", "a.bin"); assert ebp_core.parse_file_envelope(json.dumps(envelope))["fileBytes"] == b"abc"; a=ebp_core.Identity(); b=ebp_core.Identity(); packet=a.sign_and_encrypt_many("hello", [b]); assert b.decrypt_and_verify_many(packet, a)["verified"]; a.close(); b.close()'

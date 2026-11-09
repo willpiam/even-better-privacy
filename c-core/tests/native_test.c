@@ -74,6 +74,9 @@ int main(void) {
         assert(ebp_mnemonic_to_entropy(phrase, phrase_len, &entropy, &entropy_len));
         assert(entropy_len == sizeof(input_entropy) && memcmp(input_entropy, entropy, entropy_len) == 0);
         assert(ebp_mnemonic_to_seed(phrase, phrase_len, NULL, 0, seed));
+        const uint8_t hd_path[]="m/ebp'/dilithium'/0'/0/0"; int profile=-1;
+        assert(ebp_hd_derive_path(seed,sizeof(seed),hd_path,sizeof(hd_path)-1,node,&profile));
+        assert(profile==0);
         ebp_secure_free(phrase, phrase_len); ebp_secure_free(entropy, entropy_len);
         assert(ebp_identity_create(0, &original));
         assert(ebp_identity_store(original, password, sizeof(password)-1, &storage, &storage_len));
@@ -107,6 +110,13 @@ int main(void) {
         assert(ebp_hierarchy_create(loaded, child, 10, 0, NULL, 0, (const uint8_t *)"salt", 4, &cert, &cert_len));
         assert(ebp_hierarchy_verify(public_only, child, cert, cert_len));
         assert(!ebp_hierarchy_verify(child, public_only, cert, cert_len));
+        const ebp_identity *members[] = {public_only, child};
+        const uint8_t manifest[] = "[{\"attachmentId\":\"é\",\"ciphertextSha256\":\"aa\"},{\"attachmentId\":\"a\",\"ciphertextSha256\":\"bb\"}]";
+        uint8_t *packet=NULL, *result=NULL; size_t packet_len=0, result_len=0;
+        assert(ebp_identity_sign_encrypt_many(loaded, members, 2, (const uint8_t *)"hello", 5,
+                                              manifest, sizeof(manifest)-1, NULL, NULL, &packet, &packet_len));
+        assert(ebp_identity_decrypt_verify_many(child, public_only, packet, packet_len, NULL, &result, &result_len));
+        ebp_secure_free(packet,packet_len); ebp_secure_free(result,result_len);
         ebp_free(proof); ebp_free(cert); ebp_free(storage); ebp_identity_free(child);
         ebp_identity_free(public_only); ebp_identity_free(loaded); ebp_identity_free(original);
     }

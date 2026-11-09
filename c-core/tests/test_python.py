@@ -84,6 +84,19 @@ class CoreTests(unittest.TestCase):
             self.assertFalse(identity.is_revoked)
             self.assertEqual(identity.public_data(), before)
 
+    def test_signed_multi_recipient_content_key(self):
+        with Identity("dilithium") as sender, Identity("dilithium") as recipient:
+            key = bytes(range(32))
+            packet = sender.sign_and_encrypt_many("hello", [recipient], content_key=key)
+            self.assertEqual(packet["contentKey"], key.hex())
+            result = recipient.decrypt_and_verify_many(packet, sender)
+            self.assertTrue(result["verified"])
+            self.assertEqual(result["message"], "hello")
+            with self.assertRaises(ValueError):
+                sender.sign_and_encrypt_many("hello", [recipient], content_key=b"short")
+            with self.assertRaises(ValueError):
+                sender.sign_and_encrypt_many("hello", [])
+
     def test_invalid_inputs(self):
         with self.assertRaises(ValueError): decrypt_with_key(bytes(32), "not base64!")
         with self.assertRaises(ValueError): decrypt_with_key(bytes(32), "AA==")
