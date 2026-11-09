@@ -8,11 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential libargon2-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential libargon2-dev libutf8proc-dev libjansson-dev
       # Ubuntu's default OpenSSL may be too old for the current PQ algorithms.
       - name: Build pinned OpenSSL 3.5.7
         run: |
@@ -28,3 +31,12 @@ jobs:
         run: deno task test:c-core
       - name: Run native address and undefined behavior checks
         run: make -C c-core sanitize
+      - name: Build and smoke-test the Python wheel
+        run: |
+          python -m pip install setuptools==80.9.0 wheel==0.45.1
+          python setup.py sdist --dist-dir "$RUNNER_TEMP/ebp-sdist"
+          python -m pip wheel --no-build-isolation --no-deps "$RUNNER_TEMP"/ebp-sdist/ebp_core-*.tar.gz -w "$RUNNER_TEMP/ebp-wheels"
+          python -m venv "$RUNNER_TEMP/ebp-wheel-test"
+          "$RUNNER_TEMP/ebp-wheel-test/bin/python" -m pip install --no-index --no-deps "$RUNNER_TEMP"/ebp-wheels/ebp_core-*.whl
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core, ebp_core._native, json; assert ebp_core.sha256(b"abc").hex().startswith("ba7816bf"); envelope=ebp_core.create_file_envelope(b"abc", "a.bin"); assert ebp_core.parse_file_envelope(json.dumps(envelope))["fileBytes"] == b"abc"'

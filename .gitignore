@@ -89,3 +89,4 @@ plot_remaining_findings.py
 
 # C core build output
 /c-core/libebp_core.so
+/python/*.egg-info/

@@ -1,7 +1,7 @@
 """JSON bridge used by the Deno interoperability tests."""
 import json
 import sys
-from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope
+from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope
 
 request = json.load(sys.stdin)
 key = bytes.fromhex(request.get("key", ""))
@@ -11,6 +11,89 @@ try:
         result = encrypt_with_key(key, request["text"].encode("utf-8"), bytes.fromhex(request["salt"]), aad)
     elif request["operation"] == "decrypt":
         result = decrypt_with_key(key, request["ciphertext"], aad).decode("utf-8")
+    elif request["operation"] == "identity_revoke":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            certificate = identity.revoke_detail(request["path"], request.get("reason"), int(request["timestamp"])) if request["kind"] == "detail" else identity.revoke_identity(request.get("reason"), int(request["timestamp"]))
+            result = {"certificate": certificate, "storage": identity.to_storage(request["password"]), "is_revoked": identity.is_revoked, "detail_revoked": identity.is_detail_revoked(request.get("path", ""))}
+    elif request["operation"] == "identity_attach_detail":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            identity.attach_detail(request["path"], request["detail"], int(request["timestamp"]))
+            result = {"public": identity.public_data(), "storage": identity.to_storage(request["password"]), "detail": identity.get_detail(request["path"])}
+    elif request["operation"] == "identity_get_detail":
+        with Identity.from_storage(request["storage"]) as identity:
+            result = identity.get_detail(request["path"])
+    elif request["operation"] == "public_identity_verify":
+        with Identity.from_public_data(json.loads(request["public"])) as identity:
+            result = identity.verify(request["text"], request["signature"], request["salt"])
+    elif request["operation"] == "public_identity_encrypt":
+        with Identity.from_storage(request["sender"], request["password"]) as sender, Identity.from_public_data(json.loads(request["public"])) as recipient:
+            result = sender.sign_and_encrypt(request["text"], recipient)
+    elif request["operation"] == "identity_sign_encrypt":
+        with Identity.from_storage(request["sender"], request["password"]) as sender, Identity.from_storage(request["recipient"]) as recipient:
+            result = sender.sign_and_encrypt(request["text"], recipient)
+    elif request["operation"] == "identity_decrypt_verify":
+        with Identity.from_storage(request["recipient"], request["password"]) as recipient, Identity.from_storage(request["sender"]) as sender:
+            result = recipient.decrypt_and_verify(request["ciphertext"], sender)
+    elif request["operation"] == "validate_hierarchy":
+        result = validate_hierarchy(json.loads(request["edges"]), json.loads(request["proposed"]) if request.get("proposed") else None)
+    elif request["operation"] == "hierarchy_expired":
+        result = hierarchy_expired(int(request["expiry"]), int(request["now"]))
+    elif request["operation"] == "create_hierarchy":
+        with Identity.from_storage(request["master"], request["password"]) as master, Identity.from_storage(request["child"], request["password"]) as child:
+            result = create_hierarchy_certificate(master, child, int(request["timestamp"]), int(request["expiry"]), request["context"], request["salt"])
+    elif request["operation"] == "verify_hierarchy":
+        with Identity.from_storage(request["master"]) as master, Identity.from_storage(request["child"]) as child:
+            result = verify_hierarchy_certificate(master, child, request["certificate"])
+    elif request["operation"] == "create_revocation":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            result = identity.create_revocation(request["revocation_type"], int(request["nonce"]), int(request["timestamp"]), request.get("reason"), request.get("target"))
+    elif request["operation"] == "verify_revocation":
+        with Identity.from_storage(request["storage"]) as identity:
+            result = identity.verify_revocation(request["certificate"], request.get("expected_type"), request.get("expected_target"))
+    elif request["operation"] == "create_detail_proof":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            result = identity.create_detail_proof(request["path"], request["detail"], int(request["nonce"]), int(request["timestamp"]))
+    elif request["operation"] == "verify_detail_proof":
+        result = verify_detail_proof(int(request["algorithm"]), bytes.fromhex(request["public"]), request["path"], request["detail"], request["proof"])
+    elif request["operation"] == "file_create":
+        result = create_file_envelope(bytes.fromhex(request["file"]), request["name"], request["mime"])
+    elif request["operation"] == "file_parse":
+        result = parse_file_envelope(request["text"])
+        result["fileBytes"] = result["fileBytes"].hex()
+    elif request["operation"] == "payload_parse":
+        result = parse_payload(request["text"])
+    elif request["operation"] == "payload_armor":
+        result = armor_payload(json.loads(request["payload"]))
+    elif request["operation"] == "identity_hd":
+        with Identity.from_hd_seed(bytes.fromhex(request["seed"]), request["profile"], int(request["account"]), request["change"], int(request["index"])) as identity:
+            result = {"public": identity.public_data(), "storage": identity.to_storage(request["password"])}
+    elif request["operation"] == "identity_create":
+        with Identity(request["profile"]) as identity:
+            result = {"public": identity.public_data(), "storage": identity.to_storage(request["password"]), "signature": identity.sign(request["text"], request["salt"])}
+    elif request["operation"] == "identity_load":
+        password = request["password"] if request.get("unlock") == "yes" else None
+        with Identity.from_storage(request["storage"], password) as identity:
+            result = {"public": identity.public_data(), "is_private": identity.is_private}
+            if identity.is_private:
+                result["signature"] = identity.sign(request["text"], request["salt"])
+                if request.get("restore") == "yes":
+                    result["storage"] = identity.to_storage(request["password"])
+    elif request["operation"] == "identity_verify":
+        with Identity.from_storage(request["storage"]) as identity:
+            result = identity.verify(request["text"], request["signature"], request["salt"])
+    elif request["operation"] == "multi_encrypt":
+        recipients = [(entry["fingerprint"], bytes.fromhex(entry["public"])) for entry in json.loads(request["recipients"])]
+        encrypted = encrypt_for_recipients(request["text"].encode("utf-8"), recipients, bytes.fromhex(request["content_key"]))
+        encrypted["contentKey"] = encrypted["contentKey"].hex()
+        result = encrypted
+    elif request["operation"] == "multi_decrypt":
+        result = decrypt_for_recipient(json.loads(request["encrypted"]), request["fingerprint"], bytes.fromhex(request["private"])).decode("utf-8")
+    elif request["operation"] == "entropy_to_mnemonic":
+        result = entropy_to_mnemonic(bytes.fromhex(request["entropy"]))
+    elif request["operation"] == "mnemonic_to_entropy":
+        result = mnemonic_to_entropy(request["mnemonic"]).hex()
+    elif request["operation"] == "mnemonic_to_seed":
+        result = mnemonic_to_seed(request["mnemonic"], request["passphrase"]).hex()
     elif request["operation"] == "recipient_envelope":
         result = recipient_envelope(request["recipient"], request["text"], request["salt"]).decode("utf-8")
     elif request["operation"] == "verify_recipient":
@@ -18,9 +101,9 @@ try:
     elif request["operation"] == "sign_recipient":
         result = pq_sign(int(request["algorithm"]), bytes.fromhex(request["private"]), recipient_envelope(request["recipient"], request["text"], request["salt"])).hex()
     elif request["operation"] == "kem_encrypt":
-        result = encrypt_for_key(bytes.fromhex(request["public"]), request["text"].encode("utf-8"))
+        result = encrypt_for_key(bytes.fromhex(request["public"]), request["text"].encode("utf-8"), int(request.get("algorithm", "3")))
     elif request["operation"] == "kem_decrypt":
-        result = decrypt_for_key(bytes.fromhex(request["private"]), request["ciphertext"]).decode("utf-8")
+        result = decrypt_for_key(bytes.fromhex(request["private"]), request["ciphertext"], int(request.get("algorithm", "3"))).decode("utf-8")
     elif request["operation"] == "envelope":
         result = message_envelope(request["text"], request["salt"], request["purpose"]).decode("utf-8")
     elif request["operation"] == "sign_message":
@@ -45,10 +128,10 @@ try:
     elif request["operation"] == "pq_verify":
         result = pq_verify(int(request["algorithm"]), bytes.fromhex(request["public"]), bytes.fromhex(request["message"]), bytes.fromhex(request["signature"]))
     elif request["operation"] == "pq_encapsulate":
-        ct, secret = pq_encapsulate(bytes.fromhex(request["public"]))
+        ct, secret = pq_encapsulate(bytes.fromhex(request["public"]), int(request.get("algorithm", "3")))
         result = {"ciphertext": ct.hex(), "secret": secret.hex()}
     elif request["operation"] == "pq_decapsulate":
-        result = pq_decapsulate(bytes.fromhex(request["private"]), bytes.fromhex(request["ciphertext"])).hex()
+        result = pq_decapsulate(bytes.fromhex(request["private"]), bytes.fromhex(request["ciphertext"]), int(request.get("algorithm", "3"))).hex()
     elif request["operation"] == "derive":
         result = derive_storage_key(request["password"], bytes.fromhex(request["salt"])).hex()
     elif request["operation"] == "encrypt_password":

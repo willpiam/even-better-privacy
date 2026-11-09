@@ -1,0 +1,5 @@
+include LICENSE
+include python/README.md
+include python/native_module.c
+recursive-include c-core/include *.h
+recursive-include c-core/src *.c *.inc

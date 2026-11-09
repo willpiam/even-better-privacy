@@ -1,25 +1,28 @@
 # Python bindings for the C core (partial)
 
-These bindings expose SHA-256, password and key-based EBP v4 AES-GCM, and
-selected post-quantum, HD, fingerprint, and message-signing operations. They
-are **not a replacement for the TypeScript core**: identity management,
-mnemonic handling, payload handling, and other core APIs are not implemented yet.
-The C library uses OpenSSL libcrypto for SHA-256, AES-GCM, random IVs, and
-experimental ML-DSA-87, SLH-DSA-SHA2-256s and ML-KEM-1024 operations,
-and the reference Argon2 library for password key derivation.
+These bindings expose hashing, current-format encryption, post-quantum keys,
+mnemonics, HD derivation, identity storage, and message-signing operations.
+They are **not a replacement for the TypeScript core**: signed multi-recipient
+payload handling, some data-format operations, and other APIs remain incomplete.
+The C library uses OpenSSL for cryptographic operations and the reference Argon2
+library for password key derivation.
 
-On Linux, install a C compiler, make, OpenSSL 3.5 or newer, and Argon2 development headers, then run
-from the repository root:
+On Linux, install a C compiler, Python development headers, OpenSSL 3.5 or
+newer, and Argon2, utf8proc, and Jansson development headers. Install from the
+repository root using `python3 -m pip install .`. The resulting platform-specific
+wheel links to those native libraries; it does not bundle them.
+
+For source-tree development, build the shared C library and set `PYTHONPATH`:
 
 ```sh
 make -C c-core
 PYTHONPATH=python python3 -c 'from ebp_core import sha256; print(sha256(b"hello").hex())'
 ```
 
-The bindings locate `c-core/libebp_core.so` relative to the source tree. Set
-`EBP_CORE_LIBRARY` to an absolute path to use a different build. The build and
-loader currently target Linux; no Python package or binary distribution is
-provided.
+The installed package loads its compiled native module. In a source checkout,
+the bindings fall back to `c-core/libebp_core.so`. Set `EBP_CORE_LIBRARY` to
+an absolute path to use a different build. The build currently targets Linux;
+no prebuilt binary distribution is provided.
 
 ```python
 import os
@@ -59,7 +62,8 @@ Use a strong password and protect it independently. Both password and AAD
 must match to decrypt. Only v4 ciphertext is accepted.
 
 The low-level `pq_keygen`, `pq_sign`, `pq_verify`, `pq_encapsulate`, and
-`pq_decapsulate` functions operate on raw keys and messages; they do not yet
+`pq_decapsulate` functions support the TypeScript-exposed ML-DSA, SLH-DSA,
+and ML-KEM variants and operate on raw keys and messages; they do not yet
 implement EBP identities or message envelopes. They require OpenSSL 3.5 or newer.
 ML-KEM decapsulation uses implicit rejection: a modified, correctly sized
 ciphertext can produce a different secret instead of an error. Authenticate
@@ -67,10 +71,10 @@ the resulting encryption; `encrypt_for_key` and `decrypt_for_key` use AES-GCM.
 
 For standard account paths, `hd_identity_seeds` derives raw signing and KEM
 seeds, and `identity_fingerprint` computes a fingerprint from raw public keys.
-These are building blocks; they do not create or store EBP identities.
+These are building blocks; they do not themselves create or store EBP identities.
 `sign_message` and `verify_message` accept raw signing keys and use the
 current purpose-bound message envelope; recipient-bound signing convenience
-functions and identity objects are not implemented.
+functions are not implemented.
 
 For low-level current-profile interoperability, a message can be signed or
 sent to an ML-KEM public key:
@@ -91,3 +95,92 @@ These raw key operations do not create signed-and-encrypted EBP payloads.
 `recipient_envelope` constructs the bytes for a recipient-bound signature;
 the caller must sign and verify those bytes with the appropriate raw key.
 Use the full TypeScript implementation for complete message workflows.
+
+Create and recover EBP-HD seed material from a mnemonic:
+
+```python
+from ebp_core import generate_mnemonic, mnemonic_to_seed, hd_identity_seeds
+
+mnemonic = generate_mnemonic()
+# Store the mnemonic securely and obtain a passphrase from your application.
+seed = mnemonic_to_seed(mnemonic, "an optional passphrase")
+signing_seed, encryption_seed = hd_identity_seeds(seed, "dilithium")
+```
+
+The mnemonic and derived seeds are secrets. Python strings and bytes cannot be
+reliably erased from memory. The library does not store them or prompt the user.
+
+## In-memory identity storage
+
+```python
+from ebp_core import Identity
+
+with Identity("dilithium") as identity:
+    public_data = identity.public_data()
+    signature = identity.sign("hello")
+    storage_json = identity.to_storage("a strong password")
+
+# The application chooses where to store the JSON and how to obtain passwords.
+with Identity.from_storage(storage_json, "a strong password") as unlocked:
+    assert unlocked.is_private
+    assert unlocked.verify("hello", signature)
+
+with Identity.from_storage(storage_json) as public_only:
+    assert not public_only.is_private
+    assert public_only.verify("hello", signature)
+```
+
+The JSON format stores public identity metadata in plaintext and encrypts the
+private keys. Loading validates the fingerprint and verifies that private keys
+match public keys. Identity storage with a JSON object key containing an embedded
+NUL is rejected because the JSON library cannot represent that key. JSON with
+unpaired Unicode surrogates is also rejected. Only the current identity storage version, protocol version
+and AES version are supported; old formats are rejected. Existing details are
+preserved. `get_detail` verifies the requested detail proof; loading an identity
+does not automatically verify all details. The object holds key
+material until closed; use a context manager or `close()`. Python and the JSON
+library may retain secret copies in memory even after cleanup.
+
+## Multi-recipient encryption
+
+`encrypt_for_recipients` takes plaintext bytes and `(fingerprint, public_key)`
+pairs; `decrypt_for_recipient` accepts the resulting dictionary, the recipient
+fingerprint, and their private key. These operations encrypt content and wrap
+keys; they do not sign the message or bind the recipient list. Use the full
+TypeScript implementation for signed multi-recipient payloads.
+
+## Payload input
+
+`parse_payload` accepts current-version EBP JSON or armored text, and
+`armor_payload` produces an armored string from a payload dictionary. These
+functions check only the type and version. They do not validate all fields,
+verify signatures or recipients, or establish authenticity.
+
+`Identity.create_detail_proof(path, detail, nonce, timestamp)` signs a detail
+proof without attaching it to the identity. `verify_detail_proof` validates a
+current-format proof against an explicit public signing key and returns its
+nonce and timestamp, or `None` if invalid. Nonces and timestamps must be safe
+integers; legacy proof signatures are not accepted.
+
+`attach_detail` creates and stores a signed detail; `get_detail` returns its
+value only after proof verification. `revoke_detail` and `revoke_identity`
+create certificates and update in-memory state. `emergency_revocation` creates
+a certificate without changing state. The application remains responsible for
+persisting the updated storage JSON.
+
+`create_hierarchy_certificate` and `verify_hierarchy_certificate` create and
+verify both signatures. Verification does not check expiration or graph
+constraints: call `hierarchy_expired` and `validate_hierarchy` separately.
+Detail, revocation and hierarchy proof timestamps and nonces are restricted to
+JavaScript safe integers; legacy formats and fractional timestamps are rejected.
+
+`Identity.from_public_data` accepts a current public export containing both
+public keys. Exports that omit a key and carry only its hash are not yet
+supported. `sign_and_encrypt` and `decrypt_and_verify` implement current
+single-recipient messages. Always check `verified` before trusting a returned
+message; decryption can succeed even if its signature is invalid.
+
+`create_file_envelope` and `parse_file_envelope` exchange file bytes and
+metadata in the current cleartext file-envelope format. They do not access the
+filesystem. Encrypting, signing, and persisting the resulting payload remain
+separate operations.
