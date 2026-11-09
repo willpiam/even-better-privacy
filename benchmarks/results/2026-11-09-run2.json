@@ -1,0 +1,330 @@
+{
+  "generated_at": "2026-11-09T21:37:55.809Z",
+  "deno": {
+    "deno": "2.9.6",
+    "v8": "15.0.245.2-rusty",
+    "typescript": "6.0.3"
+  },
+  "platform": {
+    "target": "x86_64-unknown-linux-gnu",
+    "arch": "x86_64",
+    "os": "linux",
+    "vendor": "unknown",
+    "env": "gnu",
+    "standalone": false
+  },
+  "rounds": 10,
+  "target_ms": 150,
+  "message_bytes": 1024,
+  "notes": "Deno FFI; current-format APIs; setup and process startup excluded",
+  "results": [
+    {
+      "name": "SHA-256 (1 KiB)",
+      "iterations_per_round": {
+        "typescript": 646,
+        "c": 10000
+      },
+      "samples": [
+        {
+          "typescript_ms": 0.0069879984520124895,
+          "c_ms": 0.0016403221000000031
+        },
+        {
+          "typescript_ms": 0.0071659597523220705,
+          "c_ms": 0.0013604874000000108
+        },
+        {
+          "typescript_ms": 0.008658125386997317,
+          "c_ms": 0.0013288559000000078
+        },
+        {
+          "typescript_ms": 0.00841271052631529,
+          "c_ms": 0.0014146948999999949
+        },
+        {
+          "typescript_ms": 0.007229755417956879,
+          "c_ms": 0.0013248779000000013
+        },
+        {
+          "typescript_ms": 0.01373974458204362,
+          "c_ms": 0.0017549063999999816
+        },
+        {
+          "typescript_ms": 0.00972948916408654,
+          "c_ms": 0.0013634457999999994
+        },
+        {
+          "typescript_ms": 0.007640481424148579,
+          "c_ms": 0.001328622600000017
+        },
+        {
+          "typescript_ms": 0.00865259133126948,
+          "c_ms": 0.0014322274000000107
+        },
+        {
+          "typescript_ms": 0.006353018575851966,
+          "c_ms": 0.0014130193999999847
+        }
+      ]
+    },
+    {
+      "name": "Argon2id storage key",
+      "iterations_per_round": {
+        "typescript": 1,
+        "c": 1
+      },
+      "samples": [
+        {
+          "typescript_ms": 2470.9931699999997,
+          "c_ms": 112.57871700000032
+        },
+        {
+          "typescript_ms": 2479.4093140000004,
+          "c_ms": 95.10793099999864
+        },
+        {
+          "typescript_ms": 2400.4387580000002,
+          "c_ms": 91.42151900000317
+        },
+        {
+          "typescript_ms": 2444.9901019999998,
+          "c_ms": 88.46984099999827
+        },
+        {
+          "typescript_ms": 2338.162923,
+          "c_ms": 95.04473599999983
+        },
+        {
+          "typescript_ms": 2589.0700679999973,
+          "c_ms": 93.95213299999887
+        },
+        {
+          "typescript_ms": 2294.624463,
+          "c_ms": 87.20307300000422
+        },
+        {
+          "typescript_ms": 2226.6806849999994,
+          "c_ms": 86.7621599999984
+        },
+        {
+          "typescript_ms": 2442.301593999997,
+          "c_ms": 101.50084999999672
+        },
+        {
+          "typescript_ms": 2354.883867000004,
+          "c_ms": 99.87693800000125
+        }
+      ]
+    },
+    {
+      "name": "Sign message (ML-DSA-87)",
+      "iterations_per_round": {
+        "typescript": 13,
+        "c": 77
+      },
+      "samples": [
+        {
+          "typescript_ms": 15.105953153846293,
+          "c_ms": 1.778053662337721
+        },
+        {
+          "typescript_ms": 16.35564038461542,
+          "c_ms": 1.8501029220779537
+        },
+        {
+          "typescript_ms": 20.191977307692397,
+          "c_ms": 1.656632714285727
+        },
+        {
+          "typescript_ms": 12.966143000000066,
+          "c_ms": 1.6435227402597976
+        },
+        {
+          "typescript_ms": 14.016947384615309,
+          "c_ms": 1.4891539090909267
+        },
+        {
+          "typescript_ms": 15.458525153846354,
+          "c_ms": 1.4172135454545087
+        },
+        {
+          "typescript_ms": 12.328817846153889,
+          "c_ms": 1.5954662077922628
+        },
+        {
+          "typescript_ms": 14.033910538461127,
+          "c_ms": 1.720108818181835
+        },
+        {
+          "typescript_ms": 15.621025923077049,
+          "c_ms": 1.967366051948032
+        },
+        {
+          "typescript_ms": 17.614099000000213,
+          "c_ms": 1.6245361558441753
+        }
+      ]
+    },
+    {
+      "name": "Verify message (ML-DSA-87)",
+      "iterations_per_round": {
+        "typescript": 28,
+        "c": 200
+      },
+      "samples": [
+        {
+          "typescript_ms": 5.409797178571482,
+          "c_ms": 0.3570778450000216
+        },
+        {
+          "typescript_ms": 5.040324785714412,
+          "c_ms": 0.4024425949999932
+        },
+        {
+          "typescript_ms": 4.8847249642858515,
+          "c_ms": 0.33637156000000684
+        },
+        {
+          "typescript_ms": 5.836143928571411,
+          "c_ms": 0.35169730500001606
+        },
+        {
+          "typescript_ms": 6.078278035714383,
+          "c_ms": 0.3482105050000246
+        },
+        {
+          "typescript_ms": 4.932613285714199,
+          "c_ms": 0.3527385199999844
+        },
+        {
+          "typescript_ms": 4.76541871428578,
+          "c_ms": 0.3185855150000134
+        },
+        {
+          "typescript_ms": 4.706469749999867,
+          "c_ms": 0.32011922499998036
+        },
+        {
+          "typescript_ms": 4.873329892857198,
+          "c_ms": 0.3268653700000141
+        },
+        {
+          "typescript_ms": 4.842671642857177,
+          "c_ms": 0.3259794849999889
+        }
+      ]
+    },
+    {
+      "name": "Sign + encrypt (1 recipient)",
+      "iterations_per_round": {
+        "typescript": 9,
+        "c": 71
+      },
+      "samples": [
+        {
+          "typescript_ms": 20.382103555555254,
+          "c_ms": 2.6804724084506466
+        },
+        {
+          "typescript_ms": 22.93833711111155,
+          "c_ms": 2.498757394366204
+        },
+        {
+          "typescript_ms": 21.29419644444392,
+          "c_ms": 2.343638760563434
+        },
+        {
+          "typescript_ms": 27.261968333333144,
+          "c_ms": 2.8476000281690674
+        },
+        {
+          "typescript_ms": 25.862403222222284,
+          "c_ms": 2.2208385774647468
+        },
+        {
+          "typescript_ms": 19.679837000000084,
+          "c_ms": 2.388775704225442
+        },
+        {
+          "typescript_ms": 19.044191444443843,
+          "c_ms": 2.38274423943662
+        },
+        {
+          "typescript_ms": 22.30292733333287,
+          "c_ms": 2.470527126760534
+        },
+        {
+          "typescript_ms": 18.89051033333332,
+          "c_ms": 2.542535605633789
+        },
+        {
+          "typescript_ms": 14.574861111110497,
+          "c_ms": 2.3565561267605517
+        }
+      ]
+    },
+    {
+      "name": "Decrypt + verify (1 recipient)",
+      "iterations_per_round": {
+        "typescript": 16,
+        "c": 89
+      },
+      "samples": [
+        {
+          "typescript_ms": 7.915864562500246,
+          "c_ms": 1.0912793595505699
+        },
+        {
+          "typescript_ms": 8.074743562500316,
+          "c_ms": 1.0722117752808484
+        },
+        {
+          "typescript_ms": 7.755516062500192,
+          "c_ms": 1.0253624606741365
+        },
+        {
+          "typescript_ms": 7.617356374999872,
+          "c_ms": 1.0382553146067377
+        },
+        {
+          "typescript_ms": 7.406834375000017,
+          "c_ms": 1.064065910112394
+        },
+        {
+          "typescript_ms": 7.291034000000309,
+          "c_ms": 1.076566966292069
+        },
+        {
+          "typescript_ms": 7.569349937499737,
+          "c_ms": 1.1184353033707575
+        },
+        {
+          "typescript_ms": 7.492184500000349,
+          "c_ms": 1.0625127977528086
+        },
+        {
+          "typescript_ms": 7.555469124999945,
+          "c_ms": 1.110493134831476
+        },
+        {
+          "typescript_ms": 7.479607499999929,
+          "c_ms": 1.0822422247191334
+        }
+      ]
+    }
+  ],
+  "machine": {
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14",
+    "openssl_cli": "OpenSSL 3.5.7 9 Jun 2026 (Library: OpenSSL 3.5.7 9 Jun 2026)",
+    "linked_libraries": "linux-vdso.so.1 (0x00007f6b30e52000)\n\tlibcrypto.so.3 => /lib/x86_64-linux-gnu/libcrypto.so.3 (0x00007f6b307c1000)\n\tlibargon2.so.1 => /tmp/ebp-argon2/lib/libargon2.so.1 (0x00007f6b307b6000)\n\tlibutf8proc.so.3 => /tmp/ebp-utf8proc/libutf8proc.so.3 (0x00007f6b3075e000)\n\tlibjansson.so.4 => /lib/x86_64-linux-gnu/libjansson.so.4 (0x00007f6b3074e000)\n\tlibicui18n.so.76 => /lib/x86_64-linux-gnu/libicui18n.so.76 (0x00007f6b303b0000)\n\tlibm.so.6 => /lib/x86_64-linux-gnu/libm.so.6 (0x00007f6b302c0000)\n\tlibc.so.6 => /lib/x86_64-linux-gnu/libc.so.6 (0x00007f6b300cc000)\n\tlibz.so.1 => /lib/x86_64-linux-gnu/libz.so.1 (0x00007f6b300ac000)\n\tlibzstd.so.1 => /lib/x86_64-linux-gnu/libzstd.so.1 (0x00007f6b2ffe2000)\n\tlibicuuc.so.76 => /lib/x86_64-linux-gnu/libicuuc.so.76 (0x00007f6b2fdbd000)\n\tlibstdc++.so.6 => /lib/x86_64-linux-gnu/libstdc++.so.6 (0x00007f6b2fb57000)\n\tlibgcc_s.so.1 => /lib/x86_64-linux-gnu/libgcc_s.so.1 (0x00007f6b2fb2a000)\n\t/lib64/ld-linux-x86-64.so.2 (0x00007f6b30e54000)\n\tlibicudata.so.76 => /lib/x86_64-linux-gnu/libicudata.so.76 (0x00007f6b2dcc5000)"
+  },
+  "build": {
+    "command_output": "make: Entering directory '/workspace/even-better-privacy/c-core'\ncc -Iinclude -O2 -Wall -Wextra -Werror -std=c11 -I/tmp/ebp-argon2/include -I/tmp/ebp-utf8proc -I/tmp/ebp-jansson/usr/include -I/tmp/ebp-icu/usr/include -fPIC -shared -o libebp_core.so src/ebp_core.c src/pq.c src/hd.c src/fingerprint.c src/envelope.c src/kem_cipher.c src/mnemonic.c src/multi.c src/identity.c src/payload.c src/proof.c src/file_payload.c src/multi_envelope.c src/json_compat.c -L/tmp/ebp-argon2/lib -Wl,-rpath,/tmp/ebp-argon2/lib -L/tmp/ebp-utf8proc -Wl,-rpath,/tmp/ebp-utf8proc -L/tmp/ebp-jansson/usr/lib/x86_64-linux-gnu -L/tmp/ebp-icu/usr/lib/x86_64-linux-gnu -lcrypto -largon2 -lutf8proc -ljansson -licui18n -licuuc -lm\nmake: Leaving directory '/workspace/even-better-privacy/c-core'",
+    "git_revision": "ca341539bd37b7e9fff3130194d7c5bb9af848cd",
+    "working_tree_status": "?? benchmarks/",
+    "cflags_env": "-O2 -Wall -Wextra -Werror -std=c11 -I/tmp/ebp-argon2/include -I/tmp/ebp-utf8proc -I/tmp/ebp-jansson/usr/include -I/tmp/ebp-icu/usr/include",
+    "ldflags_env": "-L/tmp/ebp-argon2/lib -Wl,-rpath,/tmp/ebp-argon2/lib -L/tmp/ebp-utf8proc -Wl,-rpath,/tmp/ebp-utf8proc -L/tmp/ebp-jansson/usr/lib/x86_64-linux-gnu -L/tmp/ebp-icu/usr/lib/x86_64-linux-gnu"
+  }
+}
