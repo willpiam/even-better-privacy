@@ -38,13 +38,12 @@ Deno.test("TypeScript and C exchange AES ciphertexts in both directions", async 
   }
 });
 
-Deno.test("C accepts legacy versions and ignores AAD as TypeScript does", async () => {
+Deno.test("C rejects older ciphertext versions", async () => {
   const encoded = AES.encryptWithKey(key, "legacy", salt);
   for (const version of [1, 2, 3]) {
     const bytes = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
     bytes[0] = version;
     const legacy = btoa(String.fromCharCode(...bytes));
-    assertEquals(AES.decryptWithKey(key, legacy, "ignored"), "legacy");
-    assertEquals((await python({ operation: "decrypt", ciphertext: legacy, key: hex(key), aad: "ignored" })).result, "legacy");
+    assertEquals((await python({ operation: "decrypt", ciphertext: legacy, key: hex(key), aad: "ignored" })).error, "invalid ciphertext");
   }
 });

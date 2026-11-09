@@ -43,13 +43,13 @@ int ebp_aes_decrypt(const uint8_t key[32], const uint8_t *blob, size_t len,
     int n = 0, written = 0, ok = 0;
     if (!out || !out_len) return 0;
     *out = NULL; *out_len = 0;
-    if (!key || !blob || (!aad && aad_len) || len < 45 || blob[0] < 1 || blob[0] > 4 || aad_len > INT_MAX) return 0;
+    if (!key || !blob || (!aad && aad_len) || len < 45 || blob[0] != 4 || aad_len > INT_MAX) return 0;
     clen = len - 45;
     if (clen > INT_MAX) return 0;
     buf = malloc(clen ? clen : 1); ctx = EVP_CIPHER_CTX_new();
     if (!buf || !ctx) goto end;
     if (EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), NULL, key, blob + 17) != 1 ||
-        (blob[0] >= 4 && aad_len && EVP_DecryptUpdate(ctx, NULL, &n, aad, (int)aad_len) != 1) ||
+        (aad_len && EVP_DecryptUpdate(ctx, NULL, &n, aad, (int)aad_len) != 1) ||
         (clen && EVP_DecryptUpdate(ctx, buf, &written, blob + 29, (int)clen) != 1) ||
         EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, 16, (void *)(blob + len - 16)) != 1 ||
         EVP_DecryptFinal_ex(ctx, buf + written, &n) != 1) goto end;

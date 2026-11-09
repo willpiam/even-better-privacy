@@ -54,7 +54,7 @@ def encrypt_with_key(key: bytes, plaintext: bytes, salt: bytes, aad: bytes = b""
 
 
 def decrypt_with_key(key: bytes, encoded: str, aad: bytes = b"") -> bytes:
-    """Decrypt an EBP v1-v4 base64 blob; raise ValueError on invalid input or authentication failure."""
+    """Decrypt an EBP v4 base64 blob; raise ValueError on invalid input or authentication failure."""
     key_buf = _key(key)
     try:
         blob = base64.b64decode(encoded, validate=True)

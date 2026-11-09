@@ -30,9 +30,9 @@ assert decrypt_with_key(key, encoded, b"context") == b"hello"
 ```
 
 `encrypt_with_key` returns the same base64 v4 format as TypeScript's
-`AES.encryptWithKey`; `decrypt_with_key` accepts versions 1–4. Supply the same
-32-byte key and UTF-8 encoded AAD on both sides; versions 1–3 ignore AAD, as in
-TypeScript. The salt is stored in the ciphertext, but these functions do not
+`AES.encryptWithKey`; `decrypt_with_key` accepts version 4 only. Supply the same
+32-byte key and UTF-8 encoded AAD on both sides. Older ciphertext versions are
+rejected. The salt is stored in the ciphertext, but these functions do not
 derive a key from a password. Use authenticated key management and never treat
 a password as a key. Invalid or unauthenticated ciphertext raises `ValueError`.
 Python `bytes` and ctypes copies cannot be reliably erased from memory.
