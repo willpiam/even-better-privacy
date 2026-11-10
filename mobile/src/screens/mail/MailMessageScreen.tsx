@@ -39,6 +39,7 @@ export default function MailMessageScreen({
   const folder = route.params.folder ?? 'INBOX';
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const [date, setDate] = useState('');
   const [body, setBody] = useState('');
   const [bodyHtml, setBodyHtml] = useState('');
@@ -86,6 +87,7 @@ export default function MailMessageScreen({
         }
         setSubject(detail.subject);
         setFrom(detail.from || '');
+        setTo(detail.to || '');
         setDate(detail.date || '');
         setBody(detail.bodyText || detail.bodyHtml || '');
         setBodyHtml(detail.bodyHtml || '');
@@ -184,6 +186,7 @@ export default function MailMessageScreen({
       <StatusBanner message={status} kind={statusKind(status)} />
       <Text style={styles.subject}>{subject || '(no subject)'}</Text>
       {from ? <Text style={styles.from}>From: {from}</Text> : null}
+      {to ? <Text style={styles.from}>To: {to}</Text> : null}
 
       {authenticity ? (
         <View style={styles.badgeWrap}>

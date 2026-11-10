@@ -2,7 +2,7 @@
 title: "Analysis: Mobile Standalone Install (Offline From Computer)"
 type: analysis
 status: active
-last_updated: 2026-07-22
+last_updated: 2026-10-30
 source_count: 5
 tags:
   - mobile
@@ -72,6 +72,12 @@ The release APK embeds the JS bundle, so Metro is not required at runtime.
 Signing remains the debug keystore until a production keystore is configured
 in `mobile/android/app/build.gradle`.
 
+On a 16GB machine, stop leftover Gradle daemons under
+`/tmp/cursor-sandbox-cache/` before building. The script pins
+`GRADLE_USER_HOME` to `~/.gradle` when the Cursor sandbox redirects it.
+A second daemon plus a leftover one fills RAM, and the kernel kills Cursor
+before `adb install`. See [[analysis-mobile-android-build-oom]].
+
 ## Still open
 
 1. **Verify** build + install + launch with Metro stopped / USB unplugged.
@@ -85,5 +91,6 @@ in `mobile/android/app/build.gradle`.
 - `mobile/MAIL.md`
 - `mobile/package.json`
 - `mobile/android/app/build.gradle`
+- [[analysis-mobile-android-build-oom]]
 - [[analysis-linux-build]]
 - [[release-process]]

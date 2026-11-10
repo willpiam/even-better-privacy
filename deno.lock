@@ -1,6 +1,7 @@
 {
   "version": "5",
   "specifiers": {
+    "jsr:@db/postgres@0.19.5": "0.19.5",
     "jsr:@db/postgres@~0.19.5": "0.19.5",
     "jsr:@db/sqlite@0.13": "0.13.0",
     "jsr:@denosaurs/plug@1": "1.1.0",

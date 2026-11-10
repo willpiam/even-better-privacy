@@ -95,7 +95,7 @@ export default function MailComposeScreen({
       const identityName = await getCurrentIdentityRequired();
       const emails = chips.map(chip => chip.email);
       if (intent.kind === 'plaintext') {
-        await sendPlainMail({
+        const sent = await sendPlainMail({
           identityName,
           to: emails.join(', '),
           recipients: emails,
@@ -109,7 +109,11 @@ export default function MailComposeScreen({
           `Sent unencrypted mail to ${emails.join(', ')}`,
           'success',
         );
-        setStatus('Unencrypted message sent');
+        setStatus(
+          sent.savedToSent
+            ? 'Message sent. Open Sent to view it.'
+            : 'Message sent, but a copy could not be saved to Sent',
+        );
         navigation.goBack();
         return;
       }
@@ -117,7 +121,7 @@ export default function MailComposeScreen({
       if (!unlocked) {
         return;
       }
-      await sendEbpMail({
+      const sent = await sendEbpMail({
         identityName: unlocked,
         subject,
         message,
@@ -134,7 +138,11 @@ export default function MailComposeScreen({
         `Sent EBP mail to ${emails.join(', ')}`,
         'success',
       );
-      setStatus('EBP message sent');
+      setStatus(
+        sent.savedToSent
+          ? 'Message sent. Open Sent to view it.'
+          : 'Message sent, but a copy could not be saved to Sent',
+      );
       navigation.goBack();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));

@@ -201,6 +201,17 @@ export function isManagedMailAddress(email: string, domain: string): boolean {
 }
 
 /**
+ * Message for a failed `GET /api/v1/identity/:fp` during mailbox restore.
+ * Server failures stay distinct from a published identity that has no mailbox.
+ */
+export function managedEmailLookupError(status: number, domain: string): string {
+  if (status >= 500) {
+    return `Key server could not look up this mailbox (HTTP ${status}).`;
+  }
+  return `this identity has no verified @${domain.toLowerCase()} mailbox on the key server`;
+}
+
+/**
  * Verified `email` detail from `GET /api/v1/identity/:fp`, or null when missing,
  * revoked, unverified, or on a different domain.
  */

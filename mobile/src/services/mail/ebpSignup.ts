@@ -24,6 +24,7 @@ import {
   buildMailPasswordResetRequest,
   buildSignupRequest,
   mailboxDeleteConfirmed,
+  managedEmailLookupError,
   parseSignupConfig,
   parseSignupResponse,
   parseVerifiedManagedEmail,
@@ -198,7 +199,7 @@ export async function fetchVerifiedManagedEmail(
     apiUrl(server, `/api/v1/identity/${encodeURIComponent(fingerprint)}`),
   );
   if (!res.ok) {
-    throw missingMailboxError(domain);
+    throw new Error(managedEmailLookupError(res.status, domain));
   }
   const email = parseVerifiedManagedEmail(await res.json(), domain);
   if (!email) {

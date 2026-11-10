@@ -42,6 +42,7 @@ export type MailMessageSummary = {
   uid: number;
   subject: string;
   from: string;
+  to: string;
   date: string;
   seen: boolean;
 };

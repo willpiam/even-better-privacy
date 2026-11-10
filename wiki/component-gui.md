@@ -44,8 +44,9 @@ The GUI includes a built-in email interface:
 - Supports OAuth with Gmail (and partially Outlook) via the local backend's authorization-code flow (`gui/local-backend/mail-oauth.ts`): browser redirect to Google, callback on `127.0.0.1`, code exchange through [[component-server]] so secrets stay server-side. Google's web-server flow, `state` CSRF parameter, offline refresh tokens, and redirect-uri registration rules are summarized in [[source-google-oauth2-web-server]]. Until the Google Cloud OAuth client completes [app verification](https://support.google.com/cloud/answer/9110914) for the scopes in use, Google may label the client **unverified**, show additional consent warnings, and cap **new** users (100 total after the unverified screen); see [[source-google-cloud-unverified-apps]]. For reacting to Google Account compromise or token revocation at scale, see [[source-google-cross-account-protection-risc]] (not yet implemented in EBP).
 - Proton Mail users need Proton Mail Bridge running.
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
-- Compose is one To field. Each address becomes a chip, resolved locally or via `GET /api/v1/contacts/resolve-verified-email` ([[analysis-pqpost-recipient-identity]]). Send encrypts when every chip resolves, and warns before a plaintext send.
+- Compose is one To field. Each address becomes a chip, resolved locally or via `GET /api/v1/contacts/resolve-verified-email` ([[analysis-pqpost-recipient-identity]]). Send encrypts when every chip resolves, and warns before a plaintext send. A copy is saved to the Sent mailbox, and the sender is included in the encryption so that copy can be opened.
 - The reader hides EBP armor until decrypt. A badge opens a sender-authenticity dialog. Authenticity rules live in `core/MailAuthenticity.ts`.
+- Chat is a separate sidebar page for one-to-one text with someone on the same mail domain. Messages are still encrypted mail with `X-EBP-Channel: chat` and subject `Chat`, and the inbox search hides them. See [[analysis-pqpost-chat-channel]].
 - Identity private keys unlock once per session (`POST /api/v1/identity/unlock`, idle timeout, Lock control). The same password tries to open stored mail secrets. See [[key-management]].
 - Managed mailboxes can be restored (`POST /api/v1/mail/ebp-reset-password`) or deleted (`POST /api/v1/mail/ebp-delete`) from the Account tab. Delete retires the username on the key server.
 
@@ -90,6 +91,7 @@ Download buttons (sign, encrypt, sign-file, encrypt-file, decrypt-file) save thr
 - [[analysis-linux-build]]
 - [[email-transport]]
 - [[analysis-ebp-managed-email-onboarding]]
+- [[analysis-pqpost-chat-channel]]
 - [[identity-model]]
 - [[password-policy]]
 - [[message-payload-formats]]

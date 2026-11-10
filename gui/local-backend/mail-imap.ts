@@ -1,5 +1,17 @@
-import { ImapFlow } from "imapflow";
+import { Buffer } from "node:buffer";
+import { ImapFlow, type SearchObject } from "imapflow";
+import {
+  EBP_CHAT_HEADER,
+  EBP_CHAT_HEADER_VALUE,
+  EBP_CHAT_UID_CAP,
+  type ChatSourceMessage,
+} from "../../common/ChatChannel.ts";
 import { extractArmoredPayload } from "../../core/Payloads.ts";
+import {
+  DEFAULT_SENT_MAILBOX,
+  isSentFolderRequest,
+  pickSentMailbox,
+} from "../../common/SentMailbox.ts";
 import type { MailAccountConfig, MailAuthSecrets } from "./mail-account.ts";
 import { HttpError, STATUS } from "./http.ts";
 
@@ -75,15 +87,80 @@ export async function withImapReconnect<T>(
   throw lastErr;
 }
 
+/**
+ * Open the requested mailbox. A Sent request follows IMAP `\Sent`, then
+ * common provider names. Returns null when that mailbox does not exist yet.
+ */
+export async function resolveMailboxFolder(
+  imap: ImapFlow,
+  folder: string,
+): Promise<string | null> {
+  if (!isSentFolderRequest(folder)) return folder;
+  const listed = await withTimeout(imap.list(), 10_000, "list-mailboxes");
+  return pickSentMailbox(
+    listed.map((box) => ({
+      path: box.path,
+      flags: box.flags,
+      specialUse: box.specialUse,
+    })),
+  );
+}
+
+/** APPEND the RFC822 bytes into the Sent mailbox, creating `Sent` if needed. */
+export async function appendSentCopy(
+  imap: ImapFlow,
+  raw: Uint8Array,
+): Promise<string> {
+  let path = await resolveMailboxFolder(imap, "Sent");
+  if (!path) {
+    await withTimeout(
+      imap.mailboxCreate(DEFAULT_SENT_MAILBOX),
+      10_000,
+      "create-sent",
+    );
+    path = DEFAULT_SENT_MAILBOX;
+  }
+  const appended = await withTimeout(
+    imap.append(path, Buffer.from(raw), ["\\Seen"]),
+    25_000,
+    "append-sent",
+  );
+  if (!appended) {
+    throw new Error("IMAP APPEND to Sent failed");
+  }
+  return path;
+}
+
+export function mailListSearchQuery(searchQuery: string): SearchObject {
+  const excludeChat: SearchObject = {
+    not: { header: { [EBP_CHAT_HEADER]: EBP_CHAT_HEADER_VALUE } },
+  };
+  const query = searchQuery.trim();
+  if (!query) return excludeChat;
+  return {
+    ...excludeChat,
+    or: [{ from: query }, { subject: query }, { body: query }],
+  };
+}
+
+export function chatHeaderSearchQuery(): SearchObject {
+  return { header: { [EBP_CHAT_HEADER]: EBP_CHAT_HEADER_VALUE } };
+}
+
+function flagsIncludeSeen(flags: unknown): boolean {
+  if (flags instanceof Set) return flags.has("\\Seen");
+  return Array.isArray(flags) && flags.includes("\\Seen");
+}
+
 export async function withMailboxLock<T>(
   imap: ImapFlow,
   folder: string,
   work: () => Promise<T>,
-  options?: { lockTimeoutMs?: number },
+  options?: { lockTimeoutMs?: number; readOnly?: boolean },
 ): Promise<T> {
   // ImapFlow recommends getMailboxLock() over mailboxOpen() for safer transactional mailbox operations.
   const lock = await withTimeout(
-    imap.getMailboxLock(folder, { readOnly: true }),
+    imap.getMailboxLock(folder, { readOnly: options?.readOnly !== false }),
     options?.lockTimeoutMs ?? 10_000,
     `mailbox-lock:${folder}`,
   );
@@ -114,6 +191,76 @@ export async function withTimeout<T>(
   } finally {
     if (timerId !== null) clearTimeout(timerId);
   }
+}
+
+async function fetchChatFolder(
+  imap: ImapFlow,
+  folder: string,
+  folderKind: ChatSourceMessage["folderKind"],
+): Promise<ChatSourceMessage[]> {
+  const rows: ChatSourceMessage[] = [];
+  await withMailboxLock(imap, folder, async () => {
+    const mailboxRaw = imap.mailbox as { exists?: number } | false | undefined;
+    const exists = mailboxRaw && typeof mailboxRaw === "object"
+      ? Number(mailboxRaw.exists ?? 0)
+      : 0;
+    if (!exists) return;
+    const uids = await withTimeout(
+      imap.search(chatHeaderSearchQuery(), { uid: true }),
+      20_000,
+      "chat-search",
+    );
+    if (!uids || uids.length === 0) return;
+    const cap = uids.slice(-EBP_CHAT_UID_CAP);
+    for await (
+      const msg of imap.fetch(cap.join(","), {
+        uid: true,
+        envelope: true,
+        internalDate: true,
+        flags: true,
+      }, { uid: true })
+    ) {
+      const internalDate = msg.internalDate;
+      rows.push({
+        uid: msg.uid,
+        folder,
+        folderKind,
+        from: getAddressText(msg.envelope?.from),
+        to: getAddressText(msg.envelope?.to),
+        date: internalDate ? new Date(internalDate).getTime() : null,
+        seen: flagsIncludeSeen(msg.flags),
+        messageId: msg.envelope?.messageId ?? null,
+      });
+    }
+  });
+  return rows;
+}
+
+/** Chat rows from INBOX and the Sent mailbox. No message bodies. */
+export async function fetchChatSourceMessages(
+  imap: ImapFlow,
+): Promise<ChatSourceMessage[]> {
+  const inbox = await fetchChatFolder(imap, "INBOX", "inbox");
+  const sentPath = await resolveMailboxFolder(imap, "Sent");
+  if (!sentPath) return inbox;
+  const sent = await fetchChatFolder(imap, sentPath, "sent");
+  return [...inbox, ...sent];
+}
+
+export async function markMessagesSeen(
+  imap: ImapFlow,
+  folder: string,
+  uids: number[],
+): Promise<void> {
+  const unique = [...new Set(uids.filter((uid) => Number.isInteger(uid) && uid > 0))];
+  if (!unique.length) return;
+  await withMailboxLock(imap, folder, async () => {
+    await withTimeout(
+      imap.messageFlagsAdd(unique, ["\\Seen"], { uid: true }),
+      15_000,
+      "mark-seen",
+    );
+  }, { readOnly: false });
 }
 
 export function getAddressText(addr: unknown): string {

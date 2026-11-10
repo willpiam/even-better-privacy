@@ -17,6 +17,7 @@ import {resolveMailTlsMode} from '../src/services/mail/tcpClient';
 type ScriptedClient = {
   written: string[];
   writeLine: (line: string) => void;
+  writeBytes: (data: string | Uint8Array) => void;
   readLine: () => Promise<string>;
   readBytes: (n: number) => Promise<string>;
   close: () => void;
@@ -31,6 +32,7 @@ function scriptedClient(lines: string[], opts?: {startTls?: boolean}): ScriptedC
     writeLine: (line: string) => {
       written.push(line);
     },
+    writeBytes: () => undefined,
     readLine: async () => {
       const line = lines[idx++];
       if (line === undefined) {

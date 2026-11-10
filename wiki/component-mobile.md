@@ -3,7 +3,7 @@ title: "EBP Mobile Component"
 type: component
 status: active
 last_updated: 2026-10-30
-source_count: 6
+source_count: 7
 tags:
   - component
   - mobile
@@ -26,9 +26,13 @@ Identity UI parity (2026-09-09): random-key create, HD change/overwrite, selecti
 
 Mail UI parity (2026-09-09): folder/search/page/limit, help screen, HTML WebView, attachments, multi-recipient. Maestro: `mail-help.yaml` (no live mailbox). Remaining untested paths (file pickers, live IMAP): [[analysis-mobile-testing-and-gui-gaps]].
 
+Android release installs go through `build_mobile_android.sh`. Stop leftover `/tmp/cursor-sandbox-cache` Gradle daemons first. The script pins `GRADLE_USER_HOME` back to `~/.gradle` so a sandboxed build does not start a second daemon and OOM-kill Cursor before `adb install` ([[analysis-mobile-android-build-oom]]).
+
 **Get started** (`OnboardingWizardScreen`): creates an [[ebp-hd]] identity and a managed mailbox via `services/mail/ebpSignup.ts`, or attaches a mailbox to the current identity. A 409 offers restore. Maestro: `mobile/e2e/onboarding.yaml` and `mobile/e2e/onboarding-existing.yaml`. See [[analysis-ebp-managed-email-onboarding]] and [[analysis-mobile-pqpost-readiness]].
 
-Compose uses one To field with a chip per address (`RecipientChipsField`). Identity unlock is once per session (`services/unlockSession.ts`, default 15 idle minutes, Lock now in Settings). Encrypted sends refuse attachments. Restore and delete for a managed mailbox are on Mail accounts.
+Compose uses one To field with a chip per address (`RecipientChipsField`). Identity unlock is once per session (`services/unlockSession.ts`, default 15 idle minutes, Lock now in Settings). Encrypted sends refuse attachments. Restore and delete for a managed mailbox are on Mail accounts. Sent mail is the IMAP `\Sent` mailbox: each send APPENDs a copy, and encrypted mail includes the sender so they can decrypt it.
+
+Chat is its own tab (`screens/chat/`). It texts one person on the account's mail domain. The message is encrypted mail with `X-EBP-Channel: chat`; the inbox search hides those messages. See [[analysis-pqpost-chat-channel]].
 
 ## Architecture
 
@@ -55,6 +59,8 @@ See [[analysis-gui-mobile-parity-deltas]] (checklist) and [[analysis-mobile-pari
 - [[analysis-mobile-encrypted-mail-reader-ux]]
 - [[analysis-mobile-mail-reply]]
 - [[analysis-ebp-managed-email-onboarding]]
+- [[analysis-pqpost-chat-channel]]
+- [[analysis-mobile-android-build-oom]]
 - [[component-gui]]
 - [[component-cli]]
 - [[identity-model]]

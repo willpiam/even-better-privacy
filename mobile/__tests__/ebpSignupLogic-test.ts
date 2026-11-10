@@ -10,6 +10,7 @@ import {
   isManagedMailAddress,
   mailboxDeleteConfirmed,
   managedMailboxRestoreHint,
+  managedEmailLookupError,
   parseSignupConfig,
   parseSignupResponse,
   parseVerifiedManagedEmail,
@@ -147,6 +148,15 @@ describe('ebpSignupLogic', () => {
     expect(isManagedMailAddress('alice@pqpost.test.evil', 'pqpost.test')).toBe(false);
     expect(isManagedMailAddress('not-an-email', 'pqpost.test')).toBe(false);
     expect(isManagedMailAddress('alice@pqpost.test', '')).toBe(false);
+  });
+
+  test('managedEmailLookupError keeps server failures distinct from a missing mailbox', () => {
+    expect(managedEmailLookupError(500, 'pqpost.com')).toBe(
+      'Key server could not look up this mailbox (HTTP 500).',
+    );
+    expect(managedEmailLookupError(400, 'pqpost.com')).toBe(
+      'this identity has no verified @pqpost.com mailbox on the key server',
+    );
   });
 
   test('parseVerifiedManagedEmail requires a verified, unrevoked managed address', () => {

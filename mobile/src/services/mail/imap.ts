@@ -1,4 +1,15 @@
 import {Buffer} from 'buffer';
+import {
+  EBP_CHAT_UID_CAP,
+  isChatChannelHeader,
+  type ChatSourceMessage,
+} from '../../../../common/ChatChannel';
+import {
+  DEFAULT_SENT_MAILBOX,
+  isSentFolderRequest,
+  parseImapListLine,
+  pickSentMailbox,
+} from '../../../../common/SentMailbox';
 import type {MailAccountConfig, MailAuthSecrets, MailMessageDetail, MailMessageSummary} from './types';
 import {
   connectMailLineClient,
@@ -76,13 +87,19 @@ export function paginateUids(
   };
 }
 
+const CHAT_HEADER_EXCLUDE = 'NOT HEADER X-EBP-Channel "chat"';
+
 export function buildUidSearchCommand(tag: string, search?: string): string {
   const q = (search ?? '').trim();
   if (!q) {
-    return `${tag} UID SEARCH ALL`;
+    return `${tag} UID SEARCH ${CHAT_HEADER_EXCLUDE}`;
   }
   const escaped = q.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `${tag} UID SEARCH TEXT "${escaped}"`;
+  return `${tag} UID SEARCH TEXT "${escaped}" ${CHAT_HEADER_EXCLUDE}`;
+}
+
+export function buildChatSearchCommand(tag: string): string {
+  return `${tag} UID SEARCH HEADER X-EBP-Channel "chat"`;
 }
 
 async function maybeImapStartTls(
@@ -160,7 +177,101 @@ export type ListMailboxMessagesResult = {
   page: number;
   totalPages: number;
   total: number;
+  /** False when a Sent request did not match any mailbox on the server. */
+  found: boolean;
 };
+
+function normalizeRfc822(mime: string): string {
+  const crlf = mime.replace(/\r?\n/g, '\r\n');
+  return crlf.endsWith('\r\n') ? crlf : `${crlf}\r\n`;
+}
+
+async function findSentMailbox(
+  client: TcpLineClient,
+  create: boolean,
+): Promise<string | null> {
+  client.writeLine('s1 LIST "" "*"');
+  const lines = await readTaggedOk(client, 's1');
+  const boxes = lines
+    .map(line => parseImapListLine(line))
+    .filter((box): box is {path: string; flags: string[]} => box !== null);
+  const picked = pickSentMailbox(boxes);
+  if (picked) {
+    return picked;
+  }
+  if (!create) {
+    return null;
+  }
+  client.writeLine(`s2 CREATE ${quoteImap(DEFAULT_SENT_MAILBOX)}`);
+  await readTaggedOk(client, 's2');
+  return DEFAULT_SENT_MAILBOX;
+}
+
+async function readAppendContinuation(client: TcpLineClient): Promise<void> {
+  let line = await client.readLine();
+  while (line.startsWith('*')) {
+    line = await client.readLine();
+  }
+  if (!line.startsWith('+')) {
+    throw new Error(`IMAP APPEND rejected: ${line}`);
+  }
+}
+
+/** Save a copy of an outbound RFC822 message in the Sent mailbox. */
+export async function appendSentCopy(
+  config: MailAccountConfig,
+  secrets: MailAuthSecrets,
+  mime: string,
+): Promise<string> {
+  await mailStub('sent.append.start', config.imapHost);
+  const client = await connectMailLineClient({
+    host: config.imapHost,
+    port: config.imapPort,
+    secure: config.imapSecure,
+  });
+  try {
+    await imapAuthenticate(client, config, secrets);
+    const mailbox = await findSentMailbox(client, true);
+    if (!mailbox) {
+      throw new Error('Sent mailbox not found');
+    }
+    const payload = normalizeRfc822(mime);
+    const octets = Buffer.byteLength(payload, 'utf8');
+    client.writeLine(
+      `s3 APPEND ${quoteImap(mailbox)} (\\Seen) {${octets}}`,
+    );
+    await readAppendContinuation(client);
+    client.writeBytes(payload);
+    // The octet count covers only the message. IMAP still needs a CRLF
+    // after the literal to finish the APPEND command.
+    client.writeBytes('\r\n');
+    await readTaggedOk(client, 's3');
+    await mailStub('sent.append.done', mailbox);
+    return mailbox;
+  } finally {
+    client.close();
+  }
+}
+
+async function selectMailbox(
+  client: TcpLineClient,
+  folder: string,
+  selectTag: string,
+): Promise<string | null> {
+  let opened = folder;
+  if (isSentFolderRequest(folder)) {
+    const picked = await findSentMailbox(client, false);
+    if (!picked) {
+      return null;
+    }
+    opened = picked;
+  }
+  await mailStub('imap.select.wait', opened);
+  client.writeLine(`${selectTag} SELECT ${quoteImap(opened)}`);
+  await readTaggedOk(client, selectTag);
+  await mailStub('imap.select.ok');
+  return opened;
+}
 
 export async function listMailboxMessages(
   config: MailAccountConfig,
@@ -181,10 +292,17 @@ export async function listMailboxMessages(
   });
   try {
     await imapAuthenticate(client, config, secrets);
-    await mailStub('imap.select.wait', folder);
-    client.writeLine(`a2 SELECT ${quoteImap(folder)}`);
-    await readTaggedOk(client, 'a2');
-    await mailStub('imap.select.ok');
+    const opened = await selectMailbox(client, folder, 'a2');
+    if (!opened) {
+      return {
+        messages: [],
+        folder,
+        page: 1,
+        totalPages: 1,
+        total: 0,
+        found: false,
+      };
+    }
     const searchTag = 'a3';
     client.writeLine(buildUidSearchCommand(searchTag, params.search));
     const searchLines = await readTaggedOk(client, searchTag);
@@ -194,7 +312,7 @@ export async function listMailboxMessages(
     for (const uid of pageInfo.uids) {
       const fetchTag = `f${uid}`;
       client.writeLine(
-        `${fetchTag} UID FETCH ${uid} (FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM DATE)])`,
+        `${fetchTag} UID FETCH ${uid} (FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])`,
       );
       const lines = await readTaggedOk(client, fetchTag);
       const blob = lines.join('\n');
@@ -202,6 +320,7 @@ export async function listMailboxMessages(
         uid,
         subject: parseHeaderField(blob, 'Subject') || '(no subject)',
         from: parseHeaderField(blob, 'From') || '',
+        to: parseHeaderField(blob, 'To') || '',
         date: parseHeaderField(blob, 'Date') || '',
         seen: /\FLAGS \([^)]*\\Seen/i.test(blob),
       });
@@ -209,11 +328,104 @@ export async function listMailboxMessages(
     await mailStub('inbox.list.done', `count=${out.length}`);
     return {
       messages: out,
-      folder,
+      folder: opened,
       page: pageInfo.page,
       totalPages: pageInfo.totalPages,
       total: pageInfo.total,
+      found: true,
     };
+  } finally {
+    client.close();
+  }
+}
+
+const CHAT_HEADER_FIELDS =
+  'SUBJECT FROM TO DATE MESSAGE-ID X-EBP-CHANNEL';
+
+async function fetchChatFolder(
+  client: TcpLineClient,
+  folder: string,
+  folderKind: ChatSourceMessage['folderKind'],
+  selectTag: string,
+  searchTag: string,
+): Promise<ChatSourceMessage[]> {
+  const opened = await selectMailbox(client, folder, selectTag);
+  if (!opened) {
+    return [];
+  }
+  client.writeLine(buildChatSearchCommand(searchTag));
+  const searchLines = await readTaggedOk(client, searchTag);
+  const uids = parseSearchUids(searchLines).slice(-EBP_CHAT_UID_CAP);
+  const rows: ChatSourceMessage[] = [];
+  for (const uid of uids) {
+    const fetchTag = `cf${folderKind}${uid}`;
+    client.writeLine(
+      `${fetchTag} UID FETCH ${uid} (FLAGS BODY.PEEK[HEADER.FIELDS (${CHAT_HEADER_FIELDS})])`,
+    );
+    const lines = await readTaggedOk(client, fetchTag);
+    const blob = lines.join('\n');
+    if (!isChatChannelHeader(parseHeaderField(blob, 'X-EBP-Channel'))) {
+      continue;
+    }
+    const parsedDate = Date.parse(parseHeaderField(blob, 'Date'));
+    const messageId = parseHeaderField(blob, 'Message-ID');
+    rows.push({
+      uid,
+      folder: opened,
+      folderKind,
+      from: parseHeaderField(blob, 'From') || '',
+      to: parseHeaderField(blob, 'To') || '',
+      date: Number.isFinite(parsedDate) ? parsedDate : null,
+      seen: /\FLAGS \([^)]*\\Seen/i.test(blob),
+      messageId: messageId || null,
+    });
+  }
+  return rows;
+}
+
+/** Chat-channel headers from INBOX and Sent. No message bodies. */
+export async function listChatMessages(
+  config: MailAccountConfig,
+  secrets: MailAuthSecrets,
+): Promise<ChatSourceMessage[]> {
+  const client = await connectMailLineClient({
+    host: config.imapHost,
+    port: config.imapPort,
+    secure: config.imapSecure,
+  });
+  try {
+    await imapAuthenticate(client, config, secrets);
+    const inbox = await fetchChatFolder(client, 'INBOX', 'inbox', 'c1', 'c2');
+    const sent = await fetchChatFolder(client, 'Sent', 'sent', 'c3', 'c4');
+    return [...inbox, ...sent];
+  } finally {
+    client.close();
+  }
+}
+
+export async function markMessagesSeen(
+  config: MailAccountConfig,
+  secrets: MailAuthSecrets,
+  folder: string,
+  uids: number[],
+): Promise<void> {
+  const unique = [...new Set(uids.filter(uid => Number.isInteger(uid) && uid > 0))];
+  if (!unique.length) {
+    return;
+  }
+  const client = await connectMailLineClient({
+    host: config.imapHost,
+    port: config.imapPort,
+    secure: config.imapSecure,
+  });
+  try {
+    await imapAuthenticate(client, config, secrets);
+    const opened = await selectMailbox(client, folder, 'd1');
+    if (!opened) {
+      throw new Error('mailbox not found');
+    }
+    client.writeLine(`d2 UID STORE ${unique.join(',')} +FLAGS (\\Seen)`);
+    await readTaggedOk(client, 'd2');
   } finally {
     client.close();
   }
@@ -248,10 +460,10 @@ export async function fetchMessageDetail(
   });
   try {
     await imapAuthenticate(client, config, secrets);
-    await mailStub('imap.select.wait', mailbox);
-    client.writeLine(`b2 SELECT ${quoteImap(mailbox)}`);
-    await readTaggedOk(client, 'b2');
-    await mailStub('imap.select.ok');
+    const opened = await selectMailbox(client, mailbox, 'b2');
+    if (!opened) {
+      throw new Error('Sent mailbox not found');
+    }
     const fetchTag = 'b3';
     client.writeLine(`${fetchTag} UID FETCH ${uid} (BODY.PEEK[])`);
     await mailStub('tcp.readLine.wait', `tag=${fetchTag} body`);

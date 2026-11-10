@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-10-30 (email experience implementation)
+Last updated: 2026-10-30 (pqpost chat shipped)
 
 ## Wiki Operations
 
@@ -110,9 +110,12 @@ Last updated: 2026-10-30 (email experience implementation)
 - [[analysis-streamline-email-experience]] - Ranked mail UX fixes: unlock once
   per session, locked-first GUI reader, one compose model, mailbox restore,
   outbound delivery.
-- [[analysis-email-backed-chat]] - Seed brainstorm: chat-like UI over SMTP/IMAP
-  with `<ebp-fingerprint>@domain` addressing (personal or product domain).
-  Related to managed signup above; fingerprint local-parts are not that design.
+- [[analysis-pqpost-chat-channel]] - Text UI on desktop and mobile for peers
+  on the same mail domain: same SMTP/IMAP and EBP payload as mail, split by
+  an `X-EBP-Channel: chat` header.
+- [[analysis-email-backed-chat]] - Earlier seed sketch: chat UI over SMTP/IMAP
+  with fingerprint local-parts. Product direction is
+  [[analysis-pqpost-chat-channel]].
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
 - [[analysis-cross-client-compatibility-tests]] - CLI, GUI, mobile, core, and
@@ -181,6 +184,8 @@ Last updated: 2026-10-30 (email experience implementation)
   for ContactPicker / Contacts / resolve / browse.
 - [[analysis-mobile-standalone-install]] - Why debug Metro installs die after
   disconnect; Android release via `build_mobile_android.sh`; iOS still open.
+- [[analysis-mobile-android-build-oom]] - Sandboxed `assembleRelease` leaves
+  extra Gradle daemons and the OOM killer kills Cursor before `adb install`.
 - [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement
   implemented: hash-check verify-email request, GUI/mobile cleartext prompts,
   `detailsMeta` for opaque paths.

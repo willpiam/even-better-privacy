@@ -9,6 +9,16 @@ import {
   sha256Hex,
 } from "../../core/MessageHash.ts";
 import { buildMailAuthenticityFields } from "../../common/MailAuthenticity.ts";
+import { includeSenderAmongRecipients } from "../../common/SentMailbox.ts";
+import {
+  chatPeerAllowed,
+  EBP_CHAT_HEADER,
+  EBP_CHAT_HEADER_VALUE,
+  EBP_CHAT_SUBJECT,
+  formatMessageId,
+  generateMessageId,
+  groupChatConversations,
+} from "../../common/ChatChannel.ts";
 import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
 import {
   createHierarchyCertificate,
@@ -137,11 +147,16 @@ import {
   getIdentityDetailMeta,
   getIdentityDetailValue,
   parseMailSourceInWorker,
+  fetchChatSourceMessages,
+  mailListSearchQuery,
+  markMessagesSeen,
+  resolveMailboxFolder,
   safeImapDisconnect,
   withImapReconnect,
   withMailboxLock,
   withTimeout,
 } from "./mail-imap.ts";
+import { deliverSmtpAndAppendSent } from "./mail-send.ts";
 import {
   exchangeOAuthCode,
   getMailOAuthRedirectUri,
@@ -361,12 +376,20 @@ async function resolveManagedEmail(
       `key server unreachable: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
+  if (!res.ok) {
+    throw new HttpError(
+      res.status >= 500 ? STATUS.BadGateway : STATUS.NotFound,
+      res.status >= 500
+        ? `key server could not look up this mailbox (HTTP ${res.status})`
+        : `this identity has no verified ${suffix} mailbox on the key server`,
+    );
+  }
   const record = await res.json().catch(() => ({})) as {
     details?: Record<string, [string, string]>;
     detailsMeta?: Record<string, { verified?: boolean }>;
     revokedDetails?: string[];
   };
-  const remote = res.ok ? record.details?.email?.[0]?.toLowerCase() : undefined;
+  const remote = record.details?.email?.[0]?.toLowerCase();
   const verified = record.detailsMeta?.email?.verified === true &&
     !(record.revokedDetails ?? []).includes("email");
   if (!remote || !verified || !remote.endsWith(suffix)) {
@@ -1108,7 +1131,25 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           account,
           secrets,
           async (imap) => {
-            return await withMailboxLock(imap, folder, async () => {
+            const opened = await resolveMailboxFolder(imap, folder);
+            if (!opened) {
+              return json({
+                accountId: resolved.account.id,
+                folder,
+                messages: [],
+                pagination: { page: 1, totalPages: 1, total: 0 },
+                _timing: {
+                  resolveMs,
+                  oauthMs: resolved.oauthRefreshMs,
+                  searchMs,
+                  fetchMs,
+                  totalMs: durationMs(requestStartedAt),
+                  mailboxExists,
+                  fetchedCount,
+                },
+              });
+            }
+            return await withMailboxLock(imap, opened, async () => {
               const mailboxRaw = imap.mailbox as
                 | { exists?: number }
                 | false
@@ -1163,48 +1204,18 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                   : null,
               });
 
-              if (searchQuery) {
-                const searchStartedAt = performance.now();
-                const uids = await imap.search(
-                  {
-                    or: [{ from: searchQuery }, { subject: searchQuery }, {
-                      body: searchQuery,
-                    }],
-                  },
-                  { uid: true },
-                );
-                searchMs = durationMs(searchStartedAt);
-                if (!uids || uids.length === 0) {
-                  return json({
-                    accountId: resolved.account.id,
-                    folder,
-                    messages: [],
-                    pagination: { page: 1, totalPages: 1, total: 0 },
-                  });
-                }
-                const total = uids.length;
-                const totalPages = Math.ceil(total / limit);
-                const page = Math.min(pageRaw, totalPages);
-                const sliceEnd = total - (page - 1) * limit;
-                const sliceStart = Math.max(0, sliceEnd - limit);
-                const uidSlice = uids.slice(sliceStart, sliceEnd);
-                const results: Array<Record<string, unknown>> = [];
-                const fetchStartedAt = performance.now();
-                for await (
-                  const msg of imap.fetch(uidSlice.join(","), fetchOpts, {
-                    uid: true,
-                  })
-                ) {
-                  results.push(buildResult(msg));
-                }
-                fetchMs = durationMs(fetchStartedAt);
-                fetchedCount = results.length;
-                results.reverse();
+              const searchStartedAt = performance.now();
+              const uids = await imap.search(
+                mailListSearchQuery(searchQuery),
+                { uid: true },
+              );
+              searchMs = durationMs(searchStartedAt);
+              if (!uids || uids.length === 0) {
                 return json({
                   accountId: resolved.account.id,
                   folder,
-                  messages: results,
-                  pagination: { page, totalPages, total },
+                  messages: [],
+                  pagination: { page: 1, totalPages: 1, total: 0 },
                   _timing: {
                     resolveMs,
                     oauthMs: resolved.oauthRefreshMs,
@@ -1216,16 +1227,19 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                   },
                 });
               }
-
-              const total = mailboxExists;
+              const total = uids.length;
               const totalPages = Math.ceil(total / limit);
               const page = Math.min(pageRaw, totalPages);
-              const end = total - (page - 1) * limit;
-              const start = Math.max(1, end - limit + 1);
-              const range = `${start}:${end}`;
+              const sliceEnd = total - (page - 1) * limit;
+              const sliceStart = Math.max(0, sliceEnd - limit);
+              const uidSlice = uids.slice(sliceStart, sliceEnd);
               const results: Array<Record<string, unknown>> = [];
               const fetchStartedAt = performance.now();
-              for await (const msg of imap.fetch(range, fetchOpts)) {
+              for await (
+                const msg of imap.fetch(uidSlice.join(","), fetchOpts, {
+                  uid: true,
+                })
+              ) {
                 results.push(buildResult(msg));
               }
               fetchMs = durationMs(fetchStartedAt);
@@ -1275,6 +1289,61 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
     }
 
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/chat") {
+      const home = url.searchParams.get("home") ?? undefined;
+      const accountId = toSafeString(url.searchParams.get("accountId"), 128) ||
+        undefined;
+      const ctx = await getContext(home ?? undefined);
+      const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+      const ownAddress = resolved.account.config.fromEmail ||
+        resolved.account.config.username;
+      const conversations = await withImapReconnect(
+        resolved.account.config,
+        resolved.secrets,
+        async (imap) => {
+          const rows = await fetchChatSourceMessages(imap);
+          return groupChatConversations(rows, ownAddress);
+        },
+      );
+      return json({
+        accountId: resolved.account.id,
+        ownAddress,
+        conversations,
+      });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/message/seen") {
+      const body = await readJson<{
+        home?: unknown;
+        accountId?: unknown;
+        folder?: unknown;
+        uids?: unknown;
+      }>(req);
+      const home = typeof body.home === "string" ? body.home : undefined;
+      const accountId = toSafeString(body.accountId, 128) || undefined;
+      const folder = toSafeString(body.folder, 128) || "INBOX";
+      const uids = Array.isArray(body.uids)
+        ? body.uids.map((uid) => Number(uid)).filter((uid) =>
+          Number.isInteger(uid) && uid > 0
+        )
+        : [];
+      if (!uids.length) return json({ ok: true, updated: 0 });
+      const ctx = await getContext(home ?? undefined);
+      const resolved = await resolveMailAccount(ctx.identityDir, accountId);
+      await withImapReconnect(
+        resolved.account.config,
+        resolved.secrets,
+        async (imap) => {
+          const opened = await resolveMailboxFolder(imap, folder);
+          if (!opened) {
+            throw new HttpError(STATUS.NotFound, "mailbox not found");
+          }
+          await markMessagesSeen(imap, opened, uids);
+        },
+      );
+      return json({ ok: true, updated: uids.length });
+    }
+
     if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
       const requestStartedAt = performance.now();
       const home = url.searchParams.get("home") ?? undefined;
@@ -1309,8 +1378,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           secrets,
           async (imap) => {
             connectMs = durationMs(requestStartedAt) - resolveMs;
+            const opened = await resolveMailboxFolder(imap, folder);
+            if (!opened) {
+              throw new HttpError(STATUS.NotFound, "Sent mailbox not found");
+            }
             const lockStartedAt = performance.now();
-            return await withMailboxLock(imap, folder, async () => {
+            return await withMailboxLock(imap, opened, async () => {
               lockMs = durationMs(lockStartedAt);
               const fetchStartedAt = performance.now();
               const one = await withTimeout(
@@ -1457,7 +1530,11 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         account,
         secrets,
         async (imap) => {
-          return await withMailboxLock(imap, folder, async () => {
+          const opened = await resolveMailboxFolder(imap, folder);
+          if (!opened) {
+            throw new HttpError(STATUS.NotFound, "Sent mailbox not found");
+          }
+          return await withMailboxLock(imap, opened, async () => {
             const fetchStartedAt = performance.now();
             const one = await withTimeout(
               imap.fetchOne(uid, {
@@ -1575,31 +1652,34 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const resolved = await resolveMailAccount(ctx.identityDir, accountId);
       const account = resolved.account.config;
       const secrets = resolved.secrets;
-      const transport = nodemailer.createTransport({
-        host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
-        auth: buildSmtpAuth(account, secrets),
-      });
       const from = account.fromName
         ? `"${account.fromName.replace(/"/g, "")}" <${account.fromEmail}>`
         : account.fromEmail;
-      const info = await transport.sendMail({
-        from,
-        to,
-        subject,
-        text: text || undefined,
-        html: htmlText || undefined,
-        attachments: attachmentsInput.map((attachment) => ({
-          filename: attachment.fileName,
-          contentType: attachment.mimeType,
-          content: attachment.fileBytes,
-        })),
+      const envelopeTo = to.split(",").map((item) => item.trim()).filter(
+        Boolean,
+      );
+      const delivered = await deliverSmtpAndAppendSent({
+        account,
+        secrets,
+        envelopeTo,
+        mail: {
+          from,
+          to,
+          subject,
+          text: text || undefined,
+          html: htmlText || undefined,
+          attachments: attachmentsInput.map((attachment) => ({
+            filename: attachment.fileName,
+            contentType: attachment.mimeType,
+            content: attachment.fileBytes,
+          })),
+        },
       });
       return json({
         ok: true,
         accountId: resolved.account.id,
-        messageId: info.messageId ?? null,
+        messageId: delivered.messageId,
+        savedToSent: delivered.savedToSent,
       });
     }
 
@@ -1616,6 +1696,10 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         password?: unknown;
         includePublicKeys?: unknown;
         attachments?: unknown;
+        channel?: unknown;
+        inReplyTo?: unknown;
+        references?: unknown;
+        messageId?: unknown;
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const accountId = toSafeString(body.accountId, 128) || undefined;
@@ -1623,8 +1707,17 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.identity
         : undefined;
       const to = toSafeString(body.to, 512);
-      const subject = toSafeString(body.subject, 512);
+      const isChat = body.channel === "chat";
+      const subject = isChat
+        ? EBP_CHAT_SUBJECT
+        : toSafeString(body.subject, 512);
       const message = typeof body.message === "string" ? body.message : "";
+      const inReplyTo = formatMessageId(
+        typeof body.inReplyTo === "string" ? body.inReplyTo : "",
+      );
+      const references = formatMessageId(
+        typeof body.references === "string" ? body.references : "",
+      );
       const recipient = typeof body.recipient === "string"
         ? body.recipient
         : undefined;
@@ -1633,12 +1726,20 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.password
         : undefined;
       const includePublicKeys = Boolean(body.includePublicKeys);
-      const attachmentsInput = parseMailAttachmentInputs(body.attachments);
+      const attachmentsInput = isChat
+        ? []
+        : parseMailAttachmentInputs(body.attachments);
       const resolvedRecipients = recipientsInput.length
         ? recipientsInput
         : (recipient && to ? [{ contact: recipient, email: to }] : []);
       if (!subject) {
         throw new HttpError(STATUS.BadRequest, "subject is required");
+      }
+      if (isChat && resolvedRecipients.length !== 1) {
+        throw new HttpError(
+          STATUS.BadRequest,
+          "chat allows one recipient",
+        );
       }
       if (!resolvedRecipients.length) {
         throw new HttpError(
@@ -1658,6 +1759,15 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const resolved = await resolveMailAccount(ctx.identityDir, accountId);
       const account = resolved.account.config;
       const secrets = resolved.secrets;
+      if (isChat) {
+        const ownAddress = account.fromEmail || account.username;
+        if (!chatPeerAllowed(ownAddress, resolvedRecipients[0].email)) {
+          throw new HttpError(
+            STATUS.BadRequest,
+            "chat is only available for addresses on your mail domain",
+          );
+        }
+      }
       const recipients = await Promise.all(
         resolvedRecipients.map(async (item) => ({
           email: item.email,
@@ -1680,14 +1790,18 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         : undefined;
       let bodyPayload: Record<string, unknown>;
       let encryptedAttachments: Array<Record<string, unknown>> = [];
-      if (recipients.length === 1 && recipientsInput.length === 0) {
-        const [single] = recipients;
+      const encryptFor = includeSenderAmongRecipients(
+        recipients.map((item) => item.contact),
+        identity.summary,
+      );
+      if (encryptFor.length === 1) {
+        const contact = encryptFor[0];
         const bodyCiphertext = identity.signAndEncryptFor(
           message,
-          single.contact,
+          contact,
         );
         bodyPayload = buildEncryptedSignedMessagePayload({
-          recipientFingerprint: single.contact.fingerprint,
+          recipientFingerprint: contact.fingerprint,
           senderFingerprint: identity.toFingerprint(),
           ciphertext: bodyCiphertext,
           senderIdentity,
@@ -1704,19 +1818,19 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           });
           const ciphertext = identity.signAndEncryptFor(
             JSON.stringify(envelope),
-            single.contact,
+            contact,
           );
           return {
             type: "ebp-encrypted-signed-email-attachment" as const,
             version: FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
-            recipientFingerprint: single.contact.fingerprint,
+            recipientFingerprint: contact.fingerprint,
             senderFingerprint: identity.toFingerprint(),
             attachmentId,
             ciphertext,
           };
         });
       } else {
-        const contacts = recipients.map((entry) => entry.contact);
+        const contacts = encryptFor;
         const provisional = identity.signAndEncryptForMany(message, contacts, {
           attachmentManifest: [],
         });
@@ -1770,30 +1884,42 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         "-----END EBP MESSAGE-----",
       ].join("\n");
 
-      const transport = nodemailer.createTransport({
-        host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
-        auth: buildSmtpAuth(account, secrets),
-      });
       const from = account.fromName
         ? `"${account.fromName.replace(/"/g, "")}" <${account.fromEmail}>`
         : account.fromEmail;
-      const info = await transport.sendMail({
-        from,
-        to: toHeader,
-        subject,
-        text: armoredBody,
-        attachments: encryptedAttachments.map((attachment, idx) => ({
-          filename: `ebp-attachment-${idx + 1}.json`,
-          contentType: EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE,
-          content: JSON.stringify(attachment, null, 2),
-        })),
+      const ownAddress = account.fromEmail || account.username;
+      const chatMessageId = isChat
+        ? (formatMessageId(
+          typeof body.messageId === "string" ? body.messageId : "",
+        ) || generateMessageId(ownAddress))
+        : undefined;
+      const delivered = await deliverSmtpAndAppendSent({
+        account,
+        secrets,
+        envelopeTo: recipients.map((item) => item.email),
+        mail: {
+          from,
+          to: toHeader,
+          subject,
+          text: armoredBody,
+          headers: isChat
+            ? { [EBP_CHAT_HEADER]: EBP_CHAT_HEADER_VALUE }
+            : undefined,
+          messageId: chatMessageId,
+          inReplyTo: inReplyTo || undefined,
+          references: references || undefined,
+          attachments: encryptedAttachments.map((attachment, idx) => ({
+            filename: `ebp-attachment-${idx + 1}.json`,
+            contentType: EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE,
+            content: new TextEncoder().encode(JSON.stringify(attachment, null, 2)),
+          })),
+        },
       });
       return json({
         ok: true,
         accountId: resolved.account.id,
-        messageId: info.messageId ?? null,
+        messageId: delivered.messageId,
+        savedToSent: delivered.savedToSent,
         attachmentCount: encryptedAttachments.length,
       });
     }

@@ -237,13 +237,14 @@ export function updateMailComposeSendState() {
 export function setMailTab(tabName) {
   const safeTab = tabName || "inbox";
   state.mailActiveTab = safeTab;
+  const panelName = safeTab === "sent" ? "inbox" : safeTab;
   document.querySelectorAll("[data-mail-tab]").forEach((btn) => {
     const active = btn.dataset.mailTab === safeTab;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-expanded", String(active));
   });
   document.querySelectorAll("[data-mail-tab-panel]").forEach((panel) => {
-    panel.classList.toggle("active", panel.dataset.mailTabPanel === safeTab);
+    panel.classList.toggle("active", panel.dataset.mailTabPanel === panelName);
   });
 }
 

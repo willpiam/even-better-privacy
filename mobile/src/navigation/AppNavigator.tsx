@@ -32,6 +32,9 @@ import MailInboxScreen from '../screens/mail/MailInboxScreen';
 import MailMessageScreen from '../screens/mail/MailMessageScreen';
 import MailSenderAuthenticityScreen from '../screens/mail/MailSenderAuthenticityScreen';
 import MailComposeScreen from '../screens/mail/MailComposeScreen';
+import ChatHomeScreen from '../screens/chat/ChatHomeScreen';
+import ChatNewScreen from '../screens/chat/ChatNewScreen';
+import ChatThreadScreen from '../screens/chat/ChatThreadScreen';
 import type {MailAuthenticitySummary} from '../services/mail/ebpMail';
 import MoreScreen from '../screens/MoreScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -98,11 +101,18 @@ export type MoreStackParamList = {
   MailTrace: undefined;
 };
 
+export type ChatStackParamList = {
+  ChatHome: undefined;
+  ChatNew: undefined;
+  ChatThread: {peer: string; contactName?: string};
+};
+
 export type RootTabParamList = {
   IdentitiesTab: NavigatorScreenParams<IdentitiesStackParamList> | undefined;
   ContactsTab: undefined;
   CryptoTab: undefined;
   MailTab: NavigatorScreenParams<MailStackParamList> | undefined;
+  ChatTab: NavigatorScreenParams<ChatStackParamList> | undefined;
   MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
@@ -118,6 +128,7 @@ const IdentitiesStack = createNativeStackNavigator<IdentitiesStackParamList>();
 const ContactsStack = createNativeStackNavigator<ContactsStackParamList>();
 const CryptoStack = createNativeStackNavigator<CryptoStackParamList>();
 const MailStack = createNativeStackNavigator<MailStackParamList>();
+const ChatStack = createNativeStackNavigator<ChatStackParamList>();
 const MoreStack = createNativeStackNavigator<MoreStackParamList>();
 
 const LightTheme = {
@@ -302,6 +313,28 @@ function MailNavigator(): JSX.Element {
   );
 }
 
+function ChatNavigator(): JSX.Element {
+  return (
+    <ChatStack.Navigator screenOptions={stackScreenOptions}>
+      <ChatStack.Screen
+        name="ChatHome"
+        component={ChatHomeScreen}
+        options={{title: 'Chat'}}
+      />
+      <ChatStack.Screen
+        name="ChatNew"
+        component={ChatNewScreen}
+        options={{title: 'New chat'}}
+      />
+      <ChatStack.Screen
+        name="ChatThread"
+        component={ChatThreadScreen}
+        options={({route}) => ({title: route.params.peer})}
+      />
+    </ChatStack.Navigator>
+  );
+}
+
 function MoreNavigator(): JSX.Element {
   return (
     <MoreStack.Navigator screenOptions={stackScreenOptions}>
@@ -395,6 +428,15 @@ export default function AppNavigator(): JSX.Element {
             title: 'Mail',
             tabBarButtonTestID: 'tab-mail',
             tabBarIcon: ({focused}) => <TabIcon label="✉" focused={focused} />,
+          }}
+        />
+        <Tab.Screen
+          name="ChatTab"
+          component={ChatNavigator}
+          options={{
+            title: 'Chat',
+            tabBarButtonTestID: 'tab-chat',
+            tabBarIcon: ({focused}) => <TabIcon label="💬" focused={focused} />,
           }}
         />
         <Tab.Screen

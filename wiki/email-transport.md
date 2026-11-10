@@ -2,8 +2,8 @@
 title: "Email Transport and Access"
 type: concept
 status: active
-last_updated: 2026-10-20
-source_count: 4
+last_updated: 2026-10-30
+source_count: 5
 tags:
   - email
   - smtp
@@ -29,6 +29,10 @@ A different historical anti-abuse idea is **hashcash**-style **CPU proof-of-work
 IMAP4rev2 lets a client access and manipulate messages stored on a mail server. It supports mailbox operations, flags, search, UIDs, and selective fetches of message text and MIME body parts.
 
 For EBP, IMAP is the mailbox access layer. The GUI may fetch the RFC 5322/MIME message through IMAP, then extract and process the EBP armored JSON described in [[message-payload-formats]].
+
+## Sent mail
+
+SMTP submission does not put a copy in the sender's mailbox. After a successful send, the GUI and mobile app APPEND the same RFC822 message to the IMAP `\Sent` mailbox (provider names such as `Sent Items` or `[Gmail]/Sent Mail`), creating `Sent` when none exists. The Sent folder in each client resolves that mailbox. Encrypted sends also wrap a copy of the content key for the sender, so the sender can decrypt the saved message. Messages sent before that change stay encrypted only to the original recipients.
 
 ## Managed mailbox
 
@@ -65,3 +69,4 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
 - `wiki/raw/hashcash.pdf` → [[source-hashcash-adam-back-2002]]
 - `mail-server/README.md`, `server/handlers/mail-signup.ts`
+- `core/SentMailbox.ts`, `gui/local-backend/mail-send.ts`, `mobile/src/services/mail/imap.ts`

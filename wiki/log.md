@@ -1,5 +1,27 @@
 # Wiki Log
 
+## [2026-10-30] query | android release build kills Cursor
+
+- Answered: the 14:52 and 16:57 crashes were the kernel OOM killer choosing Cursor (`oom_score_adj=300`) while a sandboxed `assembleRelease` set `GRADLE_USER_HOME` under `/tmp/cursor-sandbox-cache/` and left a second Gradle daemon, on top of one from the earlier crash. The phone kept the previous install. Fix: stop those daemons, pin `GRADLE_USER_HOME` to `~/.gradle`, cap Gradle workers. Rebuilt and installed; `com.mobile` `lastUpdateTime` 2026-10-30 17:27, process stayed up.
+- Filed: [[analysis-mobile-android-build-oom]].
+- Updated: [[analysis-mobile-standalone-install]], [[component-mobile]], `build_mobile_android.sh`, `.cursor/rules/mobile-android-build.mdc`.
+
+## [2026-10-30] update | pqpost chat channel
+
+- Desktop sidebar Chat and mobile Chat tab send encrypted mail with `X-EBP-Channel: chat`. Mail lists exclude that header. Grouping lives in `core/ChatChannel.ts`.
+- Updated: [[analysis-pqpost-chat-channel]], [[component-gui]], [[component-mobile]].
+
+## [2026-10-30] update | view sent mail
+
+- After SMTP send, GUI and mobile APPEND the message to the IMAP `\Sent` mailbox and resolve that mailbox when the user opens Sent. Encrypted sends include the sender so the saved copy can be decrypted.
+- Updated: [[email-transport]], [[component-gui]], [[component-mobile]].
+
+## [2026-10-30] query | pqpost chat channel
+
+- Answered: a text UI should reuse SMTP/IMAP and EBP payloads, addressed as `username@pqpost.com`, and split from Mail with an `X-EBP-Channel: chat` header.
+- Filed: [[analysis-pqpost-chat-channel]].
+- Noted on [[analysis-email-backed-chat]] that fingerprint local-parts stay an uncommitted sketch.
+
 ## [2026-10-30] update | email experience implementation
 
 - Session unlock (idle timeout, Lock) on GUI and mobile. Locked-first GUI reader. One To field with recipient chips on both clients. Managed mailbox restore and delete, including retired usernames.
