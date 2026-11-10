@@ -22,7 +22,7 @@ This supersedes the addressing sketch in [[analysis-email-backed-chat]] for prod
 
 Desktop and mobile both ship this split.
 
-- Shared rules live in `core/ChatChannel.ts` (header, subject, peer grouping, message-id helpers).
+- Shared rules live in `common/ChatChannel.ts` (header, subject, peer grouping, message-id helpers).
 - Desktop: sidebar Chat page (`gui/js/chat.js`). `GET /api/v1/mail/messages` searches with `NOT HEADER X-EBP-Channel chat`. `GET /api/v1/mail/chat` groups INBOX and Sent. `POST /api/v1/mail/send-ebp` accepts `channel: "chat"`. `POST /api/v1/mail/message/seen` sets `\Seen`.
 - Mobile: Chat tab (`mobile/src/screens/chat/`). Inbox search uses the same `NOT HEADER` exclusion. Send goes through `sendEbpMail({ channel: "chat" })`.
 - While a chat screen is open, the client refreshes about every 20 seconds. IMAP IDLE is not used.

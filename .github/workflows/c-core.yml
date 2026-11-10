@@ -43,6 +43,7 @@ jobs:
           LD_LIBRARY_PATH="$RUNNER_TEMP/openssl/lib" deno test --allow-run=python3 --allow-read --allow-env c-core/tests/interop_test.ts
           if readelf -d c-core/libebp_core.so | grep -q libjansson; then exit 1; fi
           if nm -D c-core/libebp_core.so | grep -Eq ' (json_|jsonp_|jansson_)'; then exit 1; fi
+          env -u LD_LIBRARY_PATH LD_PRELOAD=libjansson.so.4 ./c-core/build/native_test
       - name: Test the website verifier in Chromium
         run: |
           npm ci
@@ -62,4 +63,4 @@ jobs:
           wheel_native=$("$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core._native; print(ebp_core._native.__file__)')
           if readelf -d "$wheel_native" | grep -q libjansson; then exit 1; fi
           if nm -D "$wheel_native" | grep -Eq ' (json_|jsonp_|jansson_)'; then exit 1; fi
-          LD_PRELOAD=libjansson.so.4 "$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core, ebp_core._native, json; assert ebp_core.sha256(b"abc").hex().startswith("ba7816bf"); assert ebp_core.canonicalize_json("{\"2\":2,\"10\":1}") == "{\"10\":1,\"2\":2}"; envelope=ebp_core.create_file_envelope(b"abc", "a.bin"); assert ebp_core.parse_file_envelope(json.dumps(envelope))["fileBytes"] == b"abc"; a=ebp_core.Identity.from_variants(ebp_core.ML_DSA_44, ebp_core.ML_KEM_512); b=ebp_core.Identity(); packet=a.sign_and_encrypt_many("hello", [b]); assert b.decrypt_and_verify_many(packet, a)["verified"]; a.close(); b.close()'
+          env -u LD_LIBRARY_PATH LD_PRELOAD=libjansson.so.4 "$RUNNER_TEMP/ebp-wheel-test/bin/python" -c 'import ebp_core, ebp_core._native, json; assert ebp_core.sha256(b"abc").hex().startswith("ba7816bf"); assert ebp_core.canonicalize_json("{\"2\":2,\"10\":1}") == "{\"10\":1,\"2\":2}"; envelope=ebp_core.create_file_envelope(b"abc", "a.bin"); assert ebp_core.parse_file_envelope(json.dumps(envelope))["fileBytes"] == b"abc"; a=ebp_core.Identity.from_variants(ebp_core.ML_DSA_44, ebp_core.ML_KEM_512); b=ebp_core.Identity(); packet=a.sign_and_encrypt_many("hello", [b]); assert b.decrypt_and_verify_many(packet, a)["verified"]; a.close(); b.close()'

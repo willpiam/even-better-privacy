@@ -69,4 +69,4 @@ SMTP and IMAP can use transport security and provider authentication, but those 
 - `wiki/raw/rfc9051.txt` → [[source-rfc-9051]]
 - `wiki/raw/hashcash.pdf` → [[source-hashcash-adam-back-2002]]
 - `mail-server/README.md`, `server/handlers/mail-signup.ts`
-- `core/SentMailbox.ts`, `gui/local-backend/mail-send.ts`, `mobile/src/services/mail/imap.ts`
+- `common/SentMailbox.ts`, `gui/local-backend/mail-send.ts`, `mobile/src/services/mail/imap.ts`
