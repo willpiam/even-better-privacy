@@ -9,6 +9,9 @@
     "@playwright/test": "^1.58.2"
   },
   "scripts": {
-    "test:e2e": "./node_modules/@playwright/test/cli.js test gui/e2e --reporter=line"
+    "test:e2e": "./node_modules/@playwright/test/cli.js test gui/e2e --reporter=line",
+    "build:website-crypto": "node scripts/build_website_crypto.mjs",
+    "check:website-crypto": "node scripts/build_website_crypto.mjs --check",
+    "test:website-browser": "node scripts/test_website_browser.mjs"
   }
 }

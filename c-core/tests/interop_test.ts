@@ -32,8 +32,15 @@ const key = Uint8Array.from({ length: 32 }, (_, i) => i);
 const salt = Uint8Array.from({ length: 16 }, (_, i) => i + 1);
 const hex = (bytes: Uint8Array) => Array.from(bytes, (v) => v.toString(16).padStart(2, "0")).join("");
 async function python<T = string>(request: Record<string, string>): Promise<{ result: T; error?: string }> {
+  const env: Record<string, string> = {
+    PATH: Deno.env.get("PATH") ?? "/usr/bin:/bin",
+    PYTHONPATH: "python",
+    PYTHONUTF8: "1",
+  };
+  const library = Deno.env.get("EBP_CORE_LIBRARY");
+  if (library) env.EBP_CORE_LIBRARY = library;
   const command = new Deno.Command("python3", {
-    args: ["c-core/tests/interop.py"], env: { PYTHONPATH: "python" },
+    args: ["c-core/tests/interop.py"], clearEnv: true, env,
     stdin: "piped", stdout: "piped", stderr: "piped",
   });
   const child = command.spawn();
@@ -44,6 +51,12 @@ async function python<T = string>(request: Record<string, string>): Promise<{ re
   if (!result.success) throw new Error(new TextDecoder().decode(result.stderr));
   return JSON.parse(new TextDecoder().decode(result.stdout));
 }
+
+Deno.test("Python bridge loads the intended OpenSSL library", async () => {
+  const version = (await python({ operation: "openssl_version" })).result;
+  const expected = Deno.env.get("EBP_EXPECT_OPENSSL_VERSION") ?? "OpenSSL ";
+  if (!version.startsWith(expected)) throw new Error(`Expected ${expected}, loaded ${version}`);
+});
 
 Deno.test("RFC 8785 canonical JSON and state hashes agree", async () => {
   const examples: unknown[] = [

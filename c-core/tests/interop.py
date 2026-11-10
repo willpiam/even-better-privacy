@@ -1,6 +1,8 @@
 """JSON bridge used by the Deno interoperability tests."""
 import json
 import sys
+import ctypes
+import ebp_core
 from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope, multi_recipient_envelope, hd_node_from_path, canonicalize_json, parse_hd_path, build_payload
 from ebp_core import create_email_attachment, parse_email_attachment, parse_encrypted_email_attachment
 from ebp_core import unsigned_hierarchy_certificate, hierarchy_signature_payload, sign_hierarchy_part, encode_hierarchy_certificate, decode_hierarchy_certificate, decode_hierarchy_draft, unsigned_revocation_certificate, revocation_signature_payload, encode_revocation_certificate, decode_revocation_certificate
@@ -9,7 +11,12 @@ request = json.load(sys.stdin)
 key = bytes.fromhex(request.get("key", ""))
 aad = request.get("aad", "").encode("utf-8")
 try:
-    if request["operation"] == "canonical_json":
+    if request["operation"] == "openssl_version":
+        version = ebp_core._lib.OpenSSL_version
+        version.argtypes = [ctypes.c_int]
+        version.restype = ctypes.c_char_p
+        result = version(0).decode("ascii")
+    elif request["operation"] == "canonical_json":
         result = canonicalize_json(request["text"])
     elif request["operation"] == "encrypt":
         result = encrypt_with_key(key, request["text"].encode("utf-8"), bytes.fromhex(request["salt"]), aad)

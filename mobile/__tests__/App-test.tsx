@@ -19,6 +19,13 @@ jest.mock('../src/services/cryptoInit', () => ({
 
 import App from '../App';
 
-it('renders correctly', () => {
-  renderer.create(<App />);
+it('renders correctly', async () => {
+  let tree: renderer.ReactTestRenderer;
+  await renderer.act(async () => {
+    tree = renderer.create(<App />);
+  });
+  expect(tree!.root).toBeTruthy();
+  await renderer.act(async () => {
+    tree!.unmount();
+  });
 });

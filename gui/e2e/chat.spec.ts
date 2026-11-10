@@ -8,6 +8,7 @@ const BOB = {
 
 async function mockBackend(page: Page) {
   const sent: Record<string, unknown>[] = [];
+  let unlocked = false;
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -34,6 +35,11 @@ async function mockBackend(page: Page) {
     }
     if (pathname === "/api/v1/identities") {
       return json({ identities: [{ name: "me", fingerprint: "ebp1me" }], currentIdentity: "me" });
+    }
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked });
+    if (pathname === "/api/v1/identity/unlock") {
+      unlocked = true;
+      return json({ unlocked });
     }
     if (pathname === "/api/v1/contacts") return json({ contacts: [] });
     if (pathname === "/api/v1/contacts/resolve-verified-email") {
@@ -120,6 +126,9 @@ test("chat sends on the mail channel and mail keeps its own list", async ({ page
   const sent = await mockBackend(page);
   await page.goto("/");
   await page.locator(".nav-item", { hasText: "Chat" }).click();
+  await expect(page.locator("#password-modal")).toBeVisible();
+  await page.locator("#password-modal-input").fill("test-password");
+  await page.locator("#password-modal-confirm").click();
   await expect(page.locator("#chat-conversation-list")).toContainText("bob@example.com");
 
   await page.locator("#chat-conversation-list li", { hasText: "bob@example.com" }).click();

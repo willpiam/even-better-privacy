@@ -4,3 +4,4 @@ include python/native_module.c
 recursive-include c-core/include *.h
 recursive-include c-core/src *.c *.h *.inc
 recursive-include c-core/vendor/ryu *.c *.h LICENSE README
+recursive-include c-core/vendor/jansson *.c *.h LICENSE README

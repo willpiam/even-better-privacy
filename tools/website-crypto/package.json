@@ -1,0 +1,12 @@
+{
+  "name": "ebp-website-crypto-build",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "@noble/post-quantum": "0.5.4",
+    "bech32": "2.0.0",
+    "esbuild": "0.28.2"
+  }
+}

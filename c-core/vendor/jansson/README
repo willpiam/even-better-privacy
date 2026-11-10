@@ -1,0 +1,11 @@
+Jansson 2.15.1, commit dbb5fb3636e155fccfce4cd215de752779bd6971
+https://github.com/akheron/jansson
+Licensed under the MIT license; see LICENSE. dtoa.c contains additional
+upstream copyright and license notices.
+
+The Linux C11 configuration headers are supplied here. load.c is patched to
+abort lexical scanning when a token buffer allocation fails. This prevents
+truncated tokens from being accepted or read beyond the token buffer. Bounded
+error-message copies in load.c and error.c avoid GCC truncation warnings.
+Trailing whitespace in upstream lookup3.h comments is normalized.
+See c-core/tests/jansson_alloc_failure_test.c.

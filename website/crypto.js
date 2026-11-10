@@ -12,13 +12,10 @@
 // its claimed fingerprint - matching the cross-checks the GUI's
 // verify-file flow performs via `POST /identity/fingerprint-from-public`.
 //
-// Imports pull pinned-version browser ESM bundles from esm.sh. The site
-// is static, so no build step is required.
+// The checked-in bundle is built from pinned dependencies; the deployed site
+// remains static and uses the same code as the interoperability tests.
 
-import * as dsa from "https://esm.sh/@noble/post-quantum@0.5.4/ml-dsa";
-import * as slh from "https://esm.sh/@noble/post-quantum@0.5.4/slh-dsa";
-import { sha256 } from "https://esm.sh/@noble/hashes@1.8.0/sha2";
-import { bech32 } from "https://esm.sh/bech32@2.0.0";
+import { dsa, slh, sha256, bech32 } from "./vendor/crypto-deps.js";
 
 const encoder = new TextEncoder();
 

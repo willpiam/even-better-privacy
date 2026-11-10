@@ -1,3 +1,4 @@
+from glob import glob
 from setuptools import Extension, find_packages, setup
 
 setup(
@@ -24,10 +25,11 @@ setup(
                 "c-core/src/json_compat.c",
                 "c-core/src/jcs.c",
                 "c-core/vendor/ryu/ryu/d2s.c",
-            ],
-            include_dirs=["c-core/include", "c-core/vendor/ryu"],
-            libraries=["crypto", "argon2", "utf8proc", "jansson", "m"],
-            extra_compile_args=["-std=c11"],
+            ] + sorted(glob("c-core/vendor/jansson/src/*.c")),
+            include_dirs=["c-core/include", "c-core/vendor/ryu", "c-core/vendor/jansson/src"],
+            libraries=["crypto", "argon2", "utf8proc", "m"],
+            define_macros=[("HAVE_CONFIG_H", "1")],
+            extra_compile_args=["-std=c11", "-fvisibility=hidden"],
         )
     ],
 )

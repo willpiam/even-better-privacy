@@ -1915,7 +1915,7 @@ Deno.test({
         warning: string;
       };
       assertEquals(b.type, "ebp-emergency-revocation-certificate");
-      assertEquals(b.version, 1);
+      assertEquals(b.version, 2);
       assert(typeof b.fingerprint === "string");
       assert(typeof b.certificate === "string");
       assert(b.certificate.length > 0);

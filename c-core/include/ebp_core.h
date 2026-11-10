@@ -3,6 +3,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* Build bundled dependencies with hidden visibility while exporting the C API. */
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility push(default)
+#endif
+
 /* All buffers returned by this API must be freed with ebp_free. */
 void ebp_free(void *p);
 /* Current storage KDF: Argon2id v1.3, 64 MiB, 3 passes, one lane. */
@@ -268,4 +273,7 @@ int ebp_unwrap_content_key(const uint8_t *private_key, size_t private_len,
                            const uint8_t *wrapped, size_t wrapped_len, uint8_t key[32]);
 int ebp_pq_decapsulate(const uint8_t *private_key, size_t private_len,
                        const uint8_t *ciphertext, size_t ciphertext_len, uint8_t secret[32]);
+#if defined(__GNUC__) || defined(__clang__)
+#pragma GCC visibility pop
+#endif
 #endif

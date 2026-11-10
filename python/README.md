@@ -7,9 +7,10 @@ The C library uses OpenSSL for cryptographic operations and the reference Argon2
 library for password key derivation.
 
 On Linux, install a C compiler, Python development headers, OpenSSL 3.5 or
-newer, and Argon2, utf8proc, and Jansson development headers. Install from the
-repository root using `python3 -m pip install .`. The resulting platform-specific
-wheel links to those native libraries; it does not bundle them.
+newer, and Argon2 and utf8proc development headers. Install from the repository
+root using `python3 -m pip install .`. The resulting platform-specific wheel
+links to those native libraries. It includes a private, patched Jansson build
+and does not require a system Jansson installation.
 
 For source-tree development, build the shared C library and set `PYTHONPATH`:
 
