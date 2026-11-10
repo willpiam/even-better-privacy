@@ -55,6 +55,7 @@ jobs:
           python -m pip install setuptools==80.9.0 wheel==0.45.1
           python setup.py sdist --dist-dir "$RUNNER_TEMP/ebp-sdist"
           python -m pip wheel --no-build-isolation --no-deps "$RUNNER_TEMP"/ebp-sdist/ebp_core-*.tar.gz -w "$RUNNER_TEMP/ebp-wheels"
+          python -c 'import glob,sys,zipfile; w=glob.glob(sys.argv[1]+"/ebp_core-*.whl")[0]; names=zipfile.ZipFile(w).namelist(); assert all(any(n.endswith(p) for n in names) for p in ("licenses/LICENSE", "licenses/c-core/vendor/jansson/LICENSE", "licenses/c-core/vendor/ryu/LICENSE"))' "$RUNNER_TEMP/ebp-wheels"
           python -m venv "$RUNNER_TEMP/ebp-wheel-test"
           "$RUNNER_TEMP/ebp-wheel-test/bin/python" -m pip install --no-index --no-deps "$RUNNER_TEMP"/ebp-wheels/ebp_core-*.whl
           cd "$RUNNER_TEMP"
