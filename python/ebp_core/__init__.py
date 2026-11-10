@@ -14,6 +14,8 @@ _U8 = ctypes.c_ubyte
 _P = ctypes.POINTER(_U8)
 _lib.ebp_free.argtypes = [ctypes.c_void_p]
 _lib.ebp_free.restype = None
+_lib.ebp_openssl_version.argtypes = []
+_lib.ebp_openssl_version.restype = ctypes.c_char_p
 _lib.ebp_secure_free.argtypes = [ctypes.c_void_p, ctypes.c_size_t]
 _lib.ebp_secure_free.restype = None
 _lib.ebp_derive_storage_key.argtypes = [_P, ctypes.c_size_t, _P, _P]
@@ -50,6 +52,11 @@ def sha256(data: bytes) -> bytes:
     if not _lib.ebp_sha256(data_buf, len(data), digest):
         raise RuntimeError("SHA-256 failed")
     return bytes(digest)
+
+
+def openssl_version() -> str:
+    """Return the OpenSSL version used by the native EBP library."""
+    return _lib.ebp_openssl_version().decode("ascii")
 
 
 def _encode_transform(data: bytes, function) -> bytes:

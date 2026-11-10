@@ -7,7 +7,12 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 
+#if OPENSSL_VERSION_NUMBER < 0x30500000L
+#error "EBP requires OpenSSL 3.5 or newer"
+#endif
+
 void ebp_free(void *p) { free(p); }
+const char *ebp_openssl_version(void) { return OpenSSL_version(OPENSSL_VERSION); }
 int ebp_random_hex(size_t byte_len, uint8_t **out, size_t *out_len) {
     uint8_t *random=NULL; int ok=0;
     if (!out || !out_len) return 0;

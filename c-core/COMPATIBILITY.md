@@ -38,8 +38,10 @@ the identity and payload APIs when protocol handling is needed. OpenSSL 3.5+
 is required for the listed post-quantum algorithms; Argon2 is provided by the
 reference libargon2 library. The C API returns allocated output buffers to be
 released with `ebp_free`, or `ebp_secure_free` for private key material.
-The supported Linux build includes a pinned, patched Jansson parser with private
-symbols; it does not depend on or share allocator state with system Jansson.
+The supported Linux build links a position-independent OpenSSL libcrypto archive
+and the pinned, patched Jansson parser with private symbols, so libraries
+already loaded by the host process cannot replace them. `ebp_openssl_version`
+reports the OpenSSL version used by the C library.
 
 Public imports may omit one public key if its hash is supplied; verification
 requires the signing key and encryption requires the encryption key.

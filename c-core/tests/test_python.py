@@ -1,13 +1,23 @@
 import base64
 import hashlib
+import ssl
 import unittest
 from ebp_core import sha256, encrypt_with_key, decrypt_with_key, encrypt, decrypt, derive_storage_key, hd_identity_seeds, identity_fingerprint, pq_keygen, ML_DSA_87, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, generate_mnemonic, validate_mnemonic, Identity, canonicalize_json, canonical_json, compute_state_hash, decode_fingerprint, short_fingerprint, parse_hd_path, format_hd_path
 from ebp_core import hex_encode, hex_decode, base64_encode, base64_decode, random_hex, verify_detail_proof_result, create_hierarchy_certificate, verify_hierarchy_certificate_result
 from ebp_core import ML_DSA_44, ML_DSA_65, ML_KEM_512, ML_KEM_768
 from ebp_core import validate_hierarchy_result, hd_provenance, build_identity_state
+from ebp_core import openssl_version
 
 
 class CoreTests(unittest.TestCase):
+    def test_openssl_version_after_python_ssl_import(self):
+        self.assertTrue(ssl.OPENSSL_VERSION.startswith("OpenSSL "))
+        version = openssl_version()
+        self.assertTrue(version.startswith("OpenSSL "))
+        self.assertGreaterEqual(tuple(map(int, version.split()[1].split(".")[:3])), (3, 5, 0))
+        with Identity() as identity:
+            self.assertTrue(identity.public_data()["fingerprint"])
+
     def test_canonical_json(self):
         expected = '{"10":3,"2":2,"numbers":[333333333.3333333,1e+30,4.5,0.002,1e-27]}'
         self.assertEqual(canonicalize_json('{"2":2,"10":3,"numbers":[333333333.33333329,1E30,4.50,2e-3,1e-27]}'), expected)

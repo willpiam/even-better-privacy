@@ -1,5 +1,5 @@
-/* Exercise cleanup when each C-core allocation fails in turn. Link with
- * --wrap=malloc,--wrap=calloc,--wrap=realloc and run with leak detection. */
+/* Exercise cleanup when each C-core allocation fails in turn. Compile with
+ * -include tests/fault_alloc.h and run with leak detection. */
 #include "ebp_core.h"
 #include <jansson.h>
 #include <assert.h>
@@ -8,12 +8,15 @@
 #include <string.h>
 #include <stdio.h>
 
+#undef malloc
+#undef calloc
+#undef realloc
+
 static size_t fail_at, allocations;
 static int inject;
-void *__real_malloc(size_t); void *__real_calloc(size_t, size_t); void *__real_realloc(void *, size_t);
-void *__wrap_malloc(size_t n) { if (inject && ++allocations == fail_at) return NULL; return __real_malloc(n); }
-void *__wrap_calloc(size_t n, size_t s) { if (inject && ++allocations == fail_at) return NULL; return __real_calloc(n,s); }
-void *__wrap_realloc(void *p, size_t n) { if (inject && ++allocations == fail_at) return NULL; return __real_realloc(p,n); }
+void *ebp_test_malloc(size_t n) { if (inject && ++allocations == fail_at) return NULL; return malloc(n); }
+void *ebp_test_calloc(size_t n, size_t s) { if (inject && ++allocations == fail_at) return NULL; return calloc(n,s); }
+void *ebp_test_realloc(void *p, size_t n) { if (inject && ++allocations == fail_at) return NULL; return realloc(p,n); }
 static ebp_identity *alice, *bob;
 static uint8_t *pub, *storage, *file_json, *email_json, *packet;
 static size_t pub_len, storage_len, file_len, email_len, packet_len;
@@ -61,6 +64,9 @@ static int op(unsigned i) {
 }
 int main(void) {
     size_t fault_positions=0;
+    /* Jansson deliberately undefines allocator macros in memory.c, so set its
+     * private allocator explicitly to include JSON allocations in the sweep. */
+    json_set_alloc_funcs2(ebp_test_malloc,ebp_test_realloc,free);
     assert(ebp_identity_create(0,&alice)); assert(ebp_identity_create(0,&bob));
     assert(ebp_identity_public_json(alice,&pub,&pub_len)); get_fp(pub,pub_len,alice_fp);
     uint8_t *other=NULL; size_t other_len=0;

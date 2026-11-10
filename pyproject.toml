@@ -9,4 +9,4 @@ description = "Python bindings for the experimental EBP C core"
 readme = "python/README.md"
 requires-python = ">=3.10"
 license = "MIT AND Apache-2.0 AND dtoa"
-license-files = ["LICENSE", "c-core/vendor/jansson/LICENSE", "c-core/vendor/ryu/LICENSE"]
+license-files = ["LICENSE", "c-core/vendor/jansson/LICENSE", "c-core/vendor/ryu/LICENSE", "c-core/vendor/openssl/LICENSE.txt"]

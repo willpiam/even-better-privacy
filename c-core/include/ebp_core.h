@@ -10,6 +10,8 @@
 
 /* All buffers returned by this API must be freed with ebp_free. */
 void ebp_free(void *p);
+/* OpenSSL version used by this library; the returned string is not owned. */
+const char *ebp_openssl_version(void);
 /* Current storage KDF: Argon2id v1.3, 64 MiB, 3 passes, one lane. */
 int ebp_derive_storage_key(const uint8_t *password, size_t password_len,
                            const uint8_t salt[16], uint8_t out[32]);

@@ -6,11 +6,15 @@ The compatibility matrix describes the current coverage and remaining gaps.
 The C library uses OpenSSL for cryptographic operations and the reference Argon2
 library for password key derivation.
 
-On Linux, install a C compiler, Python development headers, OpenSSL 3.5 or
-newer, and Argon2 and utf8proc development headers. Install from the repository
-root using `python3 -m pip install .`. The resulting platform-specific wheel
-links to those native libraries. It includes a private, patched Jansson build
-and does not require a system Jansson installation.
+On Linux, install a C compiler, `pkg-config`, Python development headers,
+OpenSSL 3.5 or newer development files (including a position-independent
+`libcrypto.a`), and Argon2 and utf8proc development headers. Install from the
+repository root using `python3 -m pip install .`. The resulting platform-specific
+wheel links to Argon2, utf8proc, and any system libraries required by OpenSSL.
+It contains private copies of OpenSSL libcrypto and patched Jansson, so an
+OpenSSL or Jansson already loaded by Python cannot replace them. Set
+`PKG_CONFIG_PATH` to select a non-default OpenSSL installation at build time.
+`openssl_version()` reports the OpenSSL version used by EBP.
 
 For source-tree development, build the shared C library and set `PYTHONPATH`:
 
