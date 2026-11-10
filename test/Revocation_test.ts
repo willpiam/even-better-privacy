@@ -27,6 +27,7 @@ Deno.test("Revocation: createRevocationCertificate creates valid certificate", (
 
 Deno.test("Revocation: encodeRevocationCertificate and decodeRevocationCertificate round-trip", () => {
 	const cert: SignedRevocationCertificate = {
+		version: 2,
 		type: "identity",
 		fingerprint: "test-fingerprint",
 		nonce: 5,

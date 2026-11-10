@@ -1,4 +1,5 @@
 #include "ebp_core.h"
+#include "json_compat.h"
 #include <jansson.h>
 #include <limits.h>
 #include <stdio.h>
@@ -12,6 +13,7 @@
 static const uint8_t identity_aad[] = "ebp:identity-storage:v2";
 struct ebp_identity {
     int sphincs;
+    int sign_algorithm, kem_algorithm;
     uint8_t *sign_pub, *sign_priv, *kem_pub, *kem_priv;
     size_t sign_pub_len, sign_priv_len, kem_pub_len, kem_priv_len;
     json_t *public_data;
@@ -24,8 +26,32 @@ void ebp_identity_free(ebp_identity *id) {
     json_decref(id->public_data); OPENSSL_cleanse(id, sizeof(*id)); free(id);
 }
 int ebp_identity_is_private(const ebp_identity *id) { return id && id->sign_priv && id->kem_priv; }
-static const char *variant(int sphincs) { return sphincs ? "slh_dsa_sha2_256s" : "ml_dsa87"; }
 static int sign_alg(int sphincs) { return sphincs ? EBP_SLH_DSA_SHA2_256S : EBP_ML_DSA_87; }
+typedef struct { int algorithm; const char *name; size_t public_len; int sphincs; } identity_variant;
+static const identity_variant *identity_variant_info(int algorithm) {
+    static const identity_variant variants[] = {
+        {EBP_ML_DSA_44,"ml_dsa44",1312,0}, {EBP_ML_DSA_65,"ml_dsa65",1952,0}, {EBP_ML_DSA_87,"ml_dsa87",2592,0},
+        {EBP_SLH_DSA_SHA2_128F,"slh_dsa_sha2_128f",32,1}, {EBP_SLH_DSA_SHA2_128S,"slh_dsa_sha2_128s",32,1},
+        {EBP_SLH_DSA_SHA2_192F,"slh_dsa_sha2_192f",48,1}, {EBP_SLH_DSA_SHA2_192S,"slh_dsa_sha2_192s",48,1},
+        {EBP_SLH_DSA_SHA2_256F,"slh_dsa_sha2_256f",64,1}, {EBP_SLH_DSA_SHA2_256S,"slh_dsa_sha2_256s",64,1},
+        {EBP_SLH_DSA_SHAKE_128F,"slh_dsa_shake_128f",32,1}, {EBP_SLH_DSA_SHAKE_128S,"slh_dsa_shake_128s",32,1},
+        {EBP_SLH_DSA_SHAKE_192F,"slh_dsa_shake_192f",48,1}, {EBP_SLH_DSA_SHAKE_192S,"slh_dsa_shake_192s",48,1},
+        {EBP_SLH_DSA_SHAKE_256F,"slh_dsa_shake_256f",64,1}, {EBP_SLH_DSA_SHAKE_256S,"slh_dsa_shake_256s",64,1},
+        {EBP_ML_KEM_512,"ml_kem512",800,-1}, {EBP_ML_KEM_768,"ml_kem768",1184,-1}, {EBP_ML_KEM_1024,"ml_kem1024",1568,-1}
+    };
+    for (size_t i=0; i<sizeof(variants)/sizeof(variants[0]); i++) if (variants[i].algorithm==algorithm) return &variants[i];
+    return NULL;
+}
+static const identity_variant *identity_variant_by_name(const char *name, int sphincs) {
+    for (int i=EBP_ML_DSA_87; i<=EBP_SLH_DSA_SHAKE_256S; i++) {
+        const identity_variant *v=identity_variant_info(i);
+        if (v && v->sphincs==sphincs && name && strcmp(v->name,name)==0) return v;
+    }
+    return NULL;
+}
+static size_t identity_kem_ciphertext_len(int algorithm) {
+    return algorithm==EBP_ML_KEM_512?768u:algorithm==EBP_ML_KEM_768?1088u:algorithm==EBP_ML_KEM_1024?1568u:0;
+}
 static const char *strfield(const json_t *obj, const char *key) {
     const json_t *value = json_is_object(obj) ? json_object_get(obj,key) : NULL;
     const char *text = json_string_value(value);
@@ -122,6 +148,7 @@ done:
 }
 static int validate_public(ebp_identity *id) {
     json_t *pub=id->public_data, *sign_details, *kem_details;
+    const identity_variant *sign_variant,*kem_variant;
     const char *profile, *fp; uint8_t signing_leaf[32],encryption_leaf[32]; char computed[65];
     if (!json_is_object(pub)) return 0;
     profile=strfield(pub,"signingKeyType");
@@ -129,15 +156,16 @@ static int validate_public(ebp_identity *id) {
     else if (equals(profile,"sphincs")) id->sphincs=1;
     else return 0;
     sign_details=json_object_get(pub,"signingKeyDetails"); kem_details=json_object_get(pub,"encryptionKeyDetails");
+    sign_variant=identity_variant_by_name(strfield(sign_details,"variant"),id->sphincs);
+    kem_variant=identity_variant_by_name(strfield(kem_details,"variant"),-1);
     fp=strfield(pub,"fingerprint");
     if (!equals(strfield(pub,"encryptionKeyType"),"kyber") ||
-        !equals(strfield(sign_details,"variant"),variant(id->sphincs)) ||
-        !equals(strfield(kem_details,"variant"),"ml_kem1024") ||
-        !resolve_public_leaf(pub,"signingKey","signingKeyHash",1,id->sphincs?64u:2592u,&id->sign_pub,&id->sign_pub_len,signing_leaf) ||
-        !resolve_public_leaf(pub,"encryptionKey","encryptionKeyHash",0,1568u,&id->kem_pub,&id->kem_pub_len,encryption_leaf) ||
+        !sign_variant || !kem_variant ||
+        !resolve_public_leaf(pub,"signingKey","signingKeyHash",1,sign_variant->public_len,&id->sign_pub,&id->sign_pub_len,signing_leaf) ||
+        !resolve_public_leaf(pub,"encryptionKey","encryptionKeyHash",0,kem_variant->public_len,&id->kem_pub,&id->kem_pub_len,encryption_leaf) ||
         (!id->sign_pub && !id->kem_pub) ||
         !ebp_identity_fingerprint_from_leaves(id->sphincs,signing_leaf,encryption_leaf,computed) || !equals(fp,computed)) return 0;
-    return 1;
+    id->sign_algorithm=sign_variant->algorithm; id->kem_algorithm=kem_variant->algorithm; return 1;
 }
 int ebp_identity_from_public_json(const uint8_t *data, size_t len, ebp_identity **out) {
     json_error_t error; json_t *obj=NULL,*version; ebp_identity *id=NULL; int ok=0;
@@ -147,7 +175,7 @@ int ebp_identity_from_public_json(const uint8_t *data, size_t len, ebp_identity 
     obj=json_loadb((const char *)data,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(obj)) goto done;
     version=json_object_get(obj,"version");
-    if (version && (!json_is_integer(version) || json_integer_value(version)!=1)) goto done;
+    if (version && (!ebp_json_is_safe_integer(version) || ebp_json_safe_integer(version)!=1)) goto done;
     id=calloc(1,sizeof(*id)); if (!id) goto done;
     id->public_data=obj; obj=NULL;
     if (!validate_public(id)) goto done;
@@ -155,26 +183,66 @@ int ebp_identity_from_public_json(const uint8_t *data, size_t len, ebp_identity 
 done:
     json_decref(obj); ebp_identity_free(id); return ok;
 }
+int ebp_identity_from_embedded_json(const uint8_t *data, size_t len, const char *expected, ebp_identity **out) {
+    json_error_t error; json_t *obj=NULL,*sign_details,*kem_details; ebp_identity *id=NULL;
+    const char *key; void *iter, *next;
+    uint8_t *sign=NULL,*kem=NULL; size_t sign_len=0,kem_len=0; char fingerprint[65]; int sphincs,ok=0;
+    if (!out) return 0;
+    *out=NULL;
+    if (!data || !len || !(obj=json_loadb((const char *)data,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error)) || !json_is_object(obj)) goto done;
+    if ((json_object_get(obj,"signingKeyType") && !equals(strfield(obj,"signingKeyType"),"dilithium") && !equals(strfield(obj,"signingKeyType"),"sphincs")) ||
+        (json_object_get(obj,"encryptionKeyType") && !equals(strfield(obj,"encryptionKeyType"),"kyber")) ||
+        (json_object_get(obj,"fingerprint") && !strfield(obj,"fingerprint"))) goto done;
+    sphincs=equals(strfield(obj,"signingKeyType"),"sphincs");
+    if (!b64decode(strfield(obj,"signingKey"),&sign,&sign_len) || !hexdecode(strfield(obj,"encryptionKey"),&kem,&kem_len) ||
+        !ebp_identity_fingerprint(sphincs,sign,sign_len,kem,kem_len,fingerprint) || (expected && strcmp(expected,fingerprint)!=0) ||
+        (strfield(obj,"fingerprint") && *strfield(obj,"fingerprint") && strcmp(strfield(obj,"fingerprint"),fingerprint)!=0)) goto done;
+    sign_details=json_object_get(obj,"signingKeyDetails"); kem_details=json_object_get(obj,"encryptionKeyDetails");
+    if ((!sign_details || json_is_null(sign_details)) && json_object_set_new(obj,"signingKeyDetails",json_pack("{s:s}","variant",sphincs?"slh_dsa_sha2_256s":"ml_dsa87"))!=0) goto done;
+    if ((!kem_details || json_is_null(kem_details)) && json_object_set_new(obj,"encryptionKeyDetails",json_pack("{s:s}","variant","ml_kem1024"))!=0) goto done;
+    if (json_object_set_new(obj,"fingerprint",json_string(fingerprint))!=0 ||
+        json_object_set_new(obj,"signingKeyType",json_string(sphincs?"sphincs":"dilithium"))!=0 ||
+        json_object_set_new(obj,"encryptionKeyType",json_string("kyber"))!=0) goto done;
+    if ((!json_object_get(obj,"details") || json_is_null(json_object_get(obj,"details"))) && json_object_set_new(obj,"details",json_object())!=0) goto done;
+    if ((!json_object_get(obj,"detailsMeta") || json_is_null(json_object_get(obj,"detailsMeta"))) && json_object_set_new(obj,"detailsMeta",json_object())!=0) goto done;
+    iter=json_object_iter(obj);
+    while (iter) {
+        next=json_object_iter_next(obj,iter); key=json_object_iter_key(iter);
+        if (strcmp(key,"fingerprint") && strcmp(key,"signingKeyType") && strcmp(key,"encryptionKeyType") &&
+            strcmp(key,"signingKey") && strcmp(key,"encryptionKey") && strcmp(key,"signingKeyDetails") &&
+            strcmp(key,"encryptionKeyDetails") && strcmp(key,"details") && strcmp(key,"detailsMeta")) {
+            if (json_object_del(obj,key)!=0) goto done;
+        }
+        iter=next;
+    }
+    id=calloc(1,sizeof(*id)); if (!id) goto done;
+    id->public_data=obj; obj=NULL;
+    if (!validate_public(id)) goto done;
+    *out=id; id=NULL; ok=1;
+done:
+    free(sign); free(kem); json_decref(obj); ebp_identity_free(id); return ok;
+}
 static int equal_key(const uint8_t *a, size_t alen, const uint8_t *b, size_t blen) {
     return a && b && alen == blen && CRYPTO_memcmp(a,b,alen) == 0;
 }
-static int identity_create_with_seeds(int sphincs, const uint8_t *sign_seed, size_t sign_len,
-                                      const uint8_t *kem_seed, size_t kem_len, ebp_identity **out) {
+int ebp_identity_create_variants(int signing_algorithm, int kem_algorithm, const uint8_t *sign_seed, size_t sign_len,
+                                 const uint8_t *kem_seed, size_t kem_len, ebp_identity **out) {
     ebp_identity *id=NULL; char fingerprint[65], *sign=NULL, *kem=NULL; int ok=0;
+    const identity_variant *sv=identity_variant_info(signing_algorithm),*kv=identity_variant_info(kem_algorithm);
     if (!out) return 0;
     *out=NULL;
-    if (sphincs != 0 && sphincs != 1) return 0;
+    if (!sv || sv->sphincs<0 || !kv || kv->sphincs!=-1) return 0;
     id=calloc(1,sizeof(*id)); if (!id) return 0;
-    id->sphincs=sphincs;
-    if (!ebp_pq_keygen(sign_alg(sphincs),sign_seed,sign_len,&id->sign_pub,&id->sign_pub_len,&id->sign_priv,&id->sign_priv_len) ||
-        !ebp_pq_keygen(EBP_ML_KEM_1024,kem_seed,kem_len,&id->kem_pub,&id->kem_pub_len,&id->kem_priv,&id->kem_priv_len) ||
-        !ebp_identity_fingerprint(sphincs,id->sign_pub,id->sign_pub_len,id->kem_pub,id->kem_pub_len,fingerprint)) goto done;
+    id->sphincs=sv->sphincs; id->sign_algorithm=signing_algorithm; id->kem_algorithm=kem_algorithm;
+    if (!ebp_pq_keygen(signing_algorithm,sign_seed,sign_len,&id->sign_pub,&id->sign_pub_len,&id->sign_priv,&id->sign_priv_len) ||
+        !ebp_pq_keygen(kem_algorithm,kem_seed,kem_len,&id->kem_pub,&id->kem_pub_len,&id->kem_priv,&id->kem_priv_len) ||
+        !ebp_identity_fingerprint(id->sphincs,id->sign_pub,id->sign_pub_len,id->kem_pub,id->kem_pub_len,fingerprint)) goto done;
     sign=b64encode(id->sign_pub,id->sign_pub_len); kem=hexencode(id->kem_pub,id->kem_pub_len);
     if (!sign || !kem) goto done;
     id->public_data=json_pack("{s:s,s:s,s:s,s:s,s:s,s:{s:s},s:{s:s},s:{},s:i,s:s,s:{},s:i}",
-        "fingerprint",fingerprint, "signingKeyType",sphincs?"sphincs":"dilithium", "encryptionKeyType","kyber",
-        "signingKey",sign, "encryptionKey",kem, "signingKeyDetails","variant",variant(sphincs),
-        "encryptionKeyDetails","variant","ml_kem1024", "details", "detailsNonce",0,
+        "fingerprint",fingerprint, "signingKeyType",id->sphincs?"sphincs":"dilithium", "encryptionKeyType","kyber",
+        "signingKey",sign, "encryptionKey",kem, "signingKeyDetails","variant",sv->name,
+        "encryptionKeyDetails","variant",kv->name, "details", "detailsNonce",0,
         "protocolVersion",PROTOCOL_VERSION, "revokedDetails", "revocationNonce",0);
     if (!id->public_data) goto done;
     *out=id; id=NULL; ok=1;
@@ -182,7 +250,28 @@ done:
     free(sign); free(kem); ebp_identity_free(id); return ok;
 }
 int ebp_identity_create(int sphincs, ebp_identity **out) {
-    return identity_create_with_seeds(sphincs,NULL,0,NULL,0,out);
+    if (sphincs!=0 && sphincs!=1) { if (out) *out=NULL; return 0; }
+    return ebp_identity_create_variants(sign_alg(sphincs),EBP_ML_KEM_1024,NULL,0,NULL,0,out);
+}
+int ebp_identity_from_hd_node(const uint8_t node[64], const uint8_t *path, size_t path_len, ebp_identity **out) {
+    ebp_hd_path parsed; ebp_identity *id=NULL; json_t *provenance=NULL,*path_value=NULL;
+    uint8_t sign_seed[96]={0}, kem_seed[64]={0}; int sphincs,ok=0;
+    if (!out) return 0;
+    *out=NULL;
+    if (!node || !ebp_hd_parse_path(path,path_len,&parsed)) return 0;
+    sphincs=(int)parsed.indices[1];
+    if (!ebp_hd_identity_seeds(node,sphincs,sign_seed,sphincs?96:32,kem_seed) ||
+        !ebp_identity_create_variants(sign_alg(sphincs),EBP_ML_KEM_1024,sign_seed,sphincs?96:32,kem_seed,64,&id)) goto done;
+    path_value=json_stringn((const char *)path+parsed.normalized_offset,parsed.normalized_len);
+    provenance=json_pack("{s:s,s:s,s:I,s:s,s:I}","version","ebp-hd-v1",
+                         "profile",sphincs?"sphincs":"dilithium","account",(json_int_t)parsed.indices[2],
+                         "change",parsed.indices[3]?"internal":"external","index",(json_int_t)parsed.indices[4]);
+    if (!path_value || !provenance || json_object_set(provenance,"path",path_value)!=0 ||
+        json_object_set(id->public_data,"hdProvenance",provenance)!=0) goto done;
+    *out=id; id=NULL; ok=1;
+done:
+    json_decref(path_value); json_decref(provenance); ebp_identity_free(id);
+    OPENSSL_cleanse(sign_seed,sizeof(sign_seed)); OPENSSL_cleanse(kem_seed,sizeof(kem_seed)); return ok;
 }
 int ebp_identity_from_hd_seed(const uint8_t *seed, size_t seed_len, int sphincs,
                               uint32_t account, int change, uint32_t index, ebp_identity **out) {
@@ -201,7 +290,7 @@ int ebp_identity_from_hd_seed(const uint8_t *seed, size_t seed_len, int sphincs,
         memcpy(node,child,sizeof(node));
     }
     if (!ebp_hd_identity_seeds(node,sphincs,sign_seed,sphincs?96:32,kem_seed) ||
-        !identity_create_with_seeds(sphincs,sign_seed,sphincs?96:32,kem_seed,64,&id)) goto done;
+        !ebp_identity_create_variants(sign_alg(sphincs),EBP_ML_KEM_1024,sign_seed,sphincs?96:32,kem_seed,64,&id)) goto done;
     snprintf(path,sizeof(path),"m/ebp'/%s'/%u'/%d/%u",sphincs?"sphincs":"dilithium",(unsigned)account,change,(unsigned)index);
     provenance=json_pack("{s:s,s:s,s:s,s:I,s:s,s:I}","version","ebp-hd-v1","path",path,
                          "profile",sphincs?"sphincs":"dilithium","account",(json_int_t)account,
@@ -215,6 +304,44 @@ done:
 int ebp_identity_public_json(const ebp_identity *id, uint8_t **out, size_t *len) {
     if (!id || !id->public_data) return 0;
     return dump_json(id->public_data,out,len);
+}
+int ebp_identity_public_export(const ebp_identity *id, int include_signing, int include_encryption,
+                               int include_details, uint8_t **out, size_t *len) {
+    json_t *obj=NULL,*details; char *hash=NULL; uint8_t digest[32]; int ok=0;
+    if (!out || !len) return 0;
+    *out=NULL; *len=0;
+    if (!id || (include_signing!=0 && include_signing!=1) || (include_encryption!=0 && include_encryption!=1) ||
+        (include_details!=0 && include_details!=1) || (!include_signing && !include_encryption) ||
+        (include_signing && !id->sign_pub) || (include_encryption && !id->kem_pub)) return 0;
+    obj=json_object();
+    if (!obj || json_object_set_new(obj,"version",json_integer(1))!=0 ||
+        json_object_set(obj,"fingerprint",json_object_get(id->public_data,"fingerprint"))!=0 ||
+        json_object_set(obj,"signingKeyType",json_object_get(id->public_data,"signingKeyType"))!=0 ||
+        json_object_set(obj,"encryptionKeyType",json_object_get(id->public_data,"encryptionKeyType"))!=0 ||
+        json_object_set(obj,"signingKeyDetails",json_object_get(id->public_data,"signingKeyDetails"))!=0 ||
+        json_object_set(obj,"encryptionKeyDetails",json_object_get(id->public_data,"encryptionKeyDetails"))!=0) goto done;
+    if (include_signing) {
+        if (json_object_set(obj,"signingKey",json_object_get(id->public_data,"signingKey"))!=0) goto done;
+    } else if (id->sign_pub) {
+        if (!ebp_sha256(id->sign_pub,id->sign_pub_len,digest) || !(hash=hexencode(digest,32)) ||
+            json_object_set_new(obj,"signingKeyHash",json_string(hash))!=0) goto done;
+        free(hash); hash=NULL;
+    } else if (json_object_set(obj,"signingKeyHash",json_object_get(id->public_data,"signingKeyHash"))!=0) goto done;
+    if (include_encryption) {
+        if (json_object_set(obj,"encryptionKey",json_object_get(id->public_data,"encryptionKey"))!=0) goto done;
+    } else if (id->kem_pub) {
+        if (!ebp_sha256(id->kem_pub,id->kem_pub_len,digest) || !(hash=hexencode(digest,32)) ||
+            json_object_set_new(obj,"encryptionKeyHash",json_string(hash))!=0) goto done;
+        free(hash); hash=NULL;
+    } else if (json_object_set(obj,"encryptionKeyHash",json_object_get(id->public_data,"encryptionKeyHash"))!=0) goto done;
+    if (include_details) {
+        details=json_object_get(id->public_data,"details");
+        if (details) { if (json_object_set(obj,"details",details)!=0) goto done; }
+        else if (json_object_set_new(obj,"details",json_object())!=0) goto done;
+    }
+    ok=dump_json(obj,out,len);
+done:
+    free(hash); json_decref(obj); return ok;
 }
 static char *key_json(const char *name, const uint8_t *pub, size_t pub_len,
                       const uint8_t *priv, size_t priv_len, int use_hex) {
@@ -231,21 +358,20 @@ done:
     if (privstr) ebp_secure_free(privstr,strlen(privstr));
     free(pubstr); free(fp); OPENSSL_cleanse(digest,sizeof(digest)); return out;
 }
-int ebp_identity_store(const ebp_identity *id, const uint8_t *password, size_t password_len,
-                       uint8_t **out, size_t *out_len) {
+int ebp_identity_store_with_key(const ebp_identity *id, const uint8_t key[32], const uint8_t salt[16],
+                                uint8_t **out, size_t *out_len) {
     char *sign=NULL,*kem=NULL,*private_text=NULL,*encoded=NULL;
     json_t *private_obj=NULL,*storage=NULL;
-    uint8_t salt[16], key[32]={0}, *cipher=NULL; size_t cipher_len=0; int ok=0;
+    uint8_t *cipher=NULL; size_t cipher_len=0; int ok=0;
     if (!out || !out_len) return 0;
     *out=NULL; *out_len=0;
-    if (!ebp_identity_is_private(id) || (!password && password_len)) return 0;
-    sign=key_json(variant(id->sphincs),id->sign_pub,id->sign_pub_len,id->sign_priv,id->sign_priv_len,0);
-    kem=key_json("ml_kem1024",id->kem_pub,id->kem_pub_len,id->kem_priv,id->kem_priv_len,1);
+    if (!ebp_identity_is_private(id) || !key || !salt) return 0;
+    sign=key_json(identity_variant_info(id->sign_algorithm)->name,id->sign_pub,id->sign_pub_len,id->sign_priv,id->sign_priv_len,0);
+    kem=key_json(identity_variant_info(id->kem_algorithm)->name,id->kem_pub,id->kem_pub_len,id->kem_priv,id->kem_priv_len,1);
     if (!sign || !kem) goto done;
     private_obj=json_pack("{s:s,s:s,s:s,s:s}","signingKey",sign,"encryptionKey",kem,
                           "signingKeyType",id->sphincs?"sphincs":"dilithium","encryptionKeyType","kyber");
     if (!private_obj || !(private_text=json_dumps(private_obj,JSON_COMPACT | JSON_ENSURE_ASCII)) ||
-        RAND_bytes(salt,sizeof(salt)) != 1 || !ebp_derive_storage_key(password,password_len,salt,key) ||
         !ebp_aes_encrypt(key,salt,(const uint8_t *)private_text,strlen(private_text),identity_aad,sizeof(identity_aad)-1,&cipher,&cipher_len) ||
         !(encoded=b64encode(cipher,cipher_len))) goto done;
     storage=json_pack("{s:i,s:s,s:O,s:s}","version",2,"protocolVersion",PROTOCOL_VERSION,"public",id->public_data,"encrypted",encoded);
@@ -256,15 +382,25 @@ done:
     if (kem) ebp_secure_free(kem,strlen(kem));
     if (private_text) ebp_secure_free(private_text,strlen(private_text));
     if (private_obj) { wipe_json_strings(private_obj); json_decref(private_obj); }
-    json_decref(storage); free(encoded); free(cipher); OPENSSL_cleanse(key,sizeof(key)); OPENSSL_cleanse(salt,sizeof(salt)); return ok;
+    json_decref(storage); free(encoded); free(cipher); return ok;
+}
+int ebp_identity_store(const ebp_identity *id, const uint8_t *password, size_t password_len,
+                       uint8_t **out, size_t *out_len) {
+    uint8_t salt[16]={0},key[32]={0}; int ok=0;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    if ((!password && password_len) || !ebp_identity_is_private(id)) return 0;
+    if (RAND_bytes(salt,sizeof(salt))==1 && ebp_derive_storage_key(password,password_len,salt,key))
+        ok=ebp_identity_store_with_key(id,key,salt,out,out_len);
+    OPENSSL_cleanse(key,sizeof(key)); OPENSSL_cleanse(salt,sizeof(salt)); return ok;
 }
 static int validate_keypair(int alg, const uint8_t *pub, size_t pub_len, const uint8_t *priv, size_t priv_len) {
     static const uint8_t challenge[] = "ebp::identity-storage::key-check::v1";
     uint8_t *data = NULL, left[32] = {0}, right[32] = {0};
     size_t len = 0; int ok = 0;
-    if (alg == EBP_ML_KEM_1024) {
-        if (ebp_pq_encapsulate(pub,pub_len,&data,&len,left) &&
-            ebp_pq_decapsulate(priv,priv_len,data,len,right) &&
+    if (identity_kem_ciphertext_len(alg)) {
+        if (ebp_pq_encapsulate_variant(alg,pub,pub_len,&data,&len,left) &&
+            ebp_pq_decapsulate_variant(alg,priv,priv_len,data,len,right) &&
             CRYPTO_memcmp(left,right,sizeof(left)) == 0) ok = 1;
     } else {
         if (ebp_pq_sign(alg,priv,priv_len,challenge,sizeof(challenge)-1,&data,&len) &&
@@ -275,10 +411,10 @@ static int validate_keypair(int alg, const uint8_t *pub, size_t pub_len, const u
 static int import_private_json(ebp_identity *id, const char *encoded, int is_signing) {
     json_error_t error; json_t *obj=NULL;
     uint8_t *pub=NULL,*priv=NULL,*derived=NULL; size_t pub_len=0,priv_len=0,derived_len=0;
-    const char *expect_variant=is_signing?variant(id->sphincs):"ml_kem1024";
+    const char *expect_variant=identity_variant_info(is_signing?id->sign_algorithm:id->kem_algorithm)->name;
     const uint8_t *expected_pub=is_signing?id->sign_pub:id->kem_pub;
     size_t expected_len=is_signing?id->sign_pub_len:id->kem_pub_len;
-    int alg=is_signing?sign_alg(id->sphincs):EBP_ML_KEM_1024, ok=0;
+    int alg=is_signing?id->sign_algorithm:id->kem_algorithm, ok=0;
     if (!encoded || !(obj=json_loads(encoded,JSON_REJECT_DUPLICATES,&error)) ||
         !json_is_object(obj) || !equals(strfield(obj,"variant"),expect_variant)) goto done;
     if (is_signing) {
@@ -297,8 +433,8 @@ done:
     if (obj) { wipe_json_strings(obj); json_decref(obj); }
     free(pub); free(derived); ebp_secure_free(priv,priv_len); return ok;
 }
-int ebp_identity_load(const uint8_t *data, size_t len, const uint8_t *password, size_t password_len,
-                      int unlock, ebp_identity **out) {
+static int identity_load_internal(const uint8_t *data, size_t len, const uint8_t *password, size_t password_len,
+                                  const uint8_t *provided_key, int unlock, ebp_identity **out) {
     json_error_t error; json_t *root=NULL,*private_obj=NULL,*pub,*version;
     ebp_identity *id=NULL; uint8_t *cipher=NULL,*plain=NULL, key[32]={0};
     size_t cipher_len=0,plain_len=0; const char *encoded; int ok=0;
@@ -308,12 +444,14 @@ int ebp_identity_load(const uint8_t *data, size_t len, const uint8_t *password, 
     root=json_loadb((const char *)data,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(root)) goto done;
     version=json_object_get(root,"version"); pub=json_object_get(root,"public"); encoded=strfield(root,"encrypted");
-    if (!json_is_integer(version) || json_integer_value(version)!=2 || !equals(strfield(root,"protocolVersion"),PROTOCOL_VERSION) ||
+    if (!ebp_json_is_safe_integer(version) || ebp_json_safe_integer(version)!=2 || !equals(strfield(root,"protocolVersion"),PROTOCOL_VERSION) ||
         !json_is_object(pub) || !encoded) goto done;
     id=calloc(1,sizeof(*id)); if (!id || !(id->public_data=json_deep_copy(pub)) || !validate_public(id) || !id->sign_pub || !id->kem_pub) goto done;
     if (unlock) {
-        if (!b64decode(encoded,&cipher,&cipher_len) || cipher_len < 45 || cipher[0] != 4 ||
-            !ebp_derive_storage_key(password,password_len,cipher+1,key) ||
+        if (!b64decode(encoded,&cipher,&cipher_len) || cipher_len < 45 || cipher[0] != 4) goto done;
+        if (provided_key) memcpy(key,provided_key,sizeof(key));
+        else if (!ebp_derive_storage_key(password,password_len,cipher+1,key)) goto done;
+        if (
             !ebp_aes_decrypt(key,cipher,cipher_len,identity_aad,sizeof(identity_aad)-1,&plain,&plain_len)) goto done;
         private_obj=json_loadb((const char *)plain,plain_len,JSON_REJECT_DUPLICATES,&error);
         if (!json_is_object(private_obj) ||
@@ -328,20 +466,28 @@ done:
     json_decref(root); free(cipher); ebp_secure_free(plain,plain_len);
     OPENSSL_cleanse(key,sizeof(key)); ebp_identity_free(id); return ok;
 }
+int ebp_identity_load(const uint8_t *data, size_t len, const uint8_t *password, size_t password_len,
+                      int unlock, ebp_identity **out) {
+    return identity_load_internal(data,len,password,password_len,NULL,unlock,out);
+}
+int ebp_identity_load_with_key(const uint8_t *data, size_t len, const uint8_t key[32], ebp_identity **out) {
+    if (!key) { if (out) *out=NULL; return 0; }
+    return identity_load_internal(data,len,NULL,0,key,1,out);
+}
 int ebp_identity_sign(const ebp_identity *id, int purpose, const uint8_t *message, size_t message_len,
                       const uint8_t *salt, size_t salt_len, uint8_t **signature, size_t *signature_len) {
     uint8_t *envelope=NULL; size_t len=0; int ok=0;
     if (!signature || !signature_len) return 0;
     *signature=NULL; *signature_len=0;
     if (!ebp_identity_is_private(id) || !ebp_message_envelope(purpose,message,message_len,salt,salt_len,&envelope,&len)) return 0;
-    ok=ebp_pq_sign(sign_alg(id->sphincs),id->sign_priv,id->sign_priv_len,envelope,len,signature,signature_len);
+    ok=ebp_pq_sign(id->sign_algorithm,id->sign_priv,id->sign_priv_len,envelope,len,signature,signature_len);
     ebp_secure_free(envelope,len); return ok;
 }
 int ebp_identity_verify(const ebp_identity *id, int purpose, const uint8_t *message, size_t message_len,
                         const uint8_t *salt, size_t salt_len, const uint8_t *signature, size_t signature_len) {
     uint8_t *envelope=NULL; size_t len=0; int ok=0;
     if (!id || !ebp_message_envelope(purpose,message,message_len,salt,salt_len,&envelope,&len)) return 0;
-    ok=ebp_pq_verify(sign_alg(id->sphincs),id->sign_pub,id->sign_pub_len,envelope,len,signature,signature_len);
+    ok=ebp_pq_verify(id->sign_algorithm,id->sign_pub,id->sign_pub_len,envelope,len,signature,signature_len);
     ebp_secure_free(envelope,len); return ok;
 }
 int ebp_identity_sign_encrypt(const ebp_identity *sender, const ebp_identity *recipient,
@@ -353,7 +499,7 @@ int ebp_identity_sign_encrypt(const ebp_identity *sender, const ebp_identity *re
     if (!ebp_identity_is_private(sender) || !recipient || (!message && message_len)) return 0;
     fingerprint=strfield(recipient->public_data,"fingerprint");
     if (!fingerprint || !ebp_recipient_envelope((const uint8_t *)fingerprint,strlen(fingerprint),message,message_len,NULL,0,&envelope,&envelope_len) ||
-        !ebp_pq_sign(sign_alg(sender->sphincs),sender->sign_priv,sender->sign_priv_len,envelope,envelope_len,&signature,&signature_len) ||
+        !ebp_pq_sign(sender->sign_algorithm,sender->sign_priv,sender->sign_priv_len,envelope,envelope_len,&signature,&signature_len) ||
         !(sig64=b64encode(signature,signature_len))) goto done;
     inner=json_object();
     if (!inner || json_object_set_new(inner,"type",json_string("ebp-encrypted-signed-inner"))!=0 ||
@@ -362,7 +508,7 @@ int ebp_identity_sign_encrypt(const ebp_identity *sender, const ebp_identity *re
         json_object_set_new(inner,"envelopeVersion",json_integer(2))!=0 ||
         json_object_set_new(inner,"recipientFingerprint",json_string(fingerprint))!=0 ||
         !(json=json_dumps(inner,JSON_COMPACT)) ||
-        !ebp_kem_encrypt(recipient->kem_pub,recipient->kem_pub_len,(const uint8_t *)json,strlen(json),ciphertext,ciphertext_len)) goto done;
+        !ebp_kem_encrypt_variant(recipient->kem_algorithm,recipient->kem_pub,recipient->kem_pub_len,(const uint8_t *)json,strlen(json),ciphertext,ciphertext_len)) goto done;
     ok=1;
 done:
     if (inner) { wipe_json_strings(inner); json_decref(inner); }
@@ -379,7 +525,7 @@ int ebp_identity_decrypt_verify(const ebp_identity *recipient, const ebp_identit
     if (!message || !message_len || !verified) return 0;
     *message=NULL; *message_len=0; *verified=0;
     if (!ebp_identity_is_private(recipient) || !sender ||
-        !ebp_kem_decrypt(recipient->kem_priv,recipient->kem_priv_len,ciphertext,ciphertext_len,&plain,&plain_len)) goto done;
+        !ebp_kem_decrypt_variant(recipient->kem_algorithm,recipient->kem_priv,recipient->kem_priv_len,ciphertext,ciphertext_len,&plain,&plain_len)) goto done;
     inner=json_loadb((const char *)plain,plain_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(inner)) goto done;
     value=json_object_get(inner,"message"); text=json_string_value(value);
@@ -390,10 +536,10 @@ int ebp_identity_decrypt_verify(const ebp_identity *recipient, const ebp_identit
     expected=strfield(recipient->public_data,"fingerprint"); fingerprint=strfield(inner,"recipientFingerprint");
     signature64=strfield(inner,"signature"); vversion=json_object_get(inner,"envelopeVersion");
     if (equals(strfield(inner,"type"),"ebp-encrypted-signed-inner") &&
-        json_is_integer(vversion) && json_integer_value(vversion)==2 && equals(fingerprint,expected) &&
+        ebp_json_is_safe_integer(vversion) && ebp_json_safe_integer(vversion)==2 && equals(fingerprint,expected) &&
         b64decode(signature64,&signature,&signature_len) &&
         ebp_recipient_envelope((const uint8_t *)expected,strlen(expected),(const uint8_t *)text,n,NULL,0,&envelope,&envelope_len) &&
-        ebp_pq_verify(sign_alg(sender->sphincs),sender->sign_pub,sender->sign_pub_len,envelope,envelope_len,signature,signature_len)) *verified=1;
+        ebp_pq_verify(sender->sign_algorithm,sender->sign_pub,sender->sign_pub_len,envelope,envelope_len,signature,signature_len)) *verified=1;
     *message=output; *message_len=n; output=NULL; ok=1;
 done:
     if (inner) { wipe_json_strings(inner); json_decref(inner); }
@@ -406,6 +552,68 @@ static char *detail_key(const uint8_t *path, size_t len) {
     if (len) memcpy(key,path,len);
     key[len]='\0'; return key;
 }
+typedef struct { json_int_t nonce, timestamp; } detail_order;
+static int compare_detail_order(const void *a, const void *b) {
+    const detail_order *x=a,*y=b; return x->nonce<y->nonce?-1:x->nonce>y->nonce?1:0;
+}
+int ebp_identity_verify_details(const ebp_identity *id) {
+    json_t *details,*pair,*record=NULL,*path,*detail,*nonce,*timestamp,*signature,*proof;
+    const char *key,*encoded; void *it; detail_order *ordered=NULL; size_t n,i=0,len; uint8_t *raw=NULL; json_error_t error; int ok=0;
+    if (!id) return 0;
+    details=json_object_get(id->public_data,"details");
+    if (!details) return 1;
+    if (!json_is_object(details)) return 0;
+    n=json_object_size(details); if (n>SIZE_MAX/sizeof(*ordered)) return 0;
+    ordered=malloc((n?n:1)*sizeof(*ordered)); if (!ordered) return 0;
+    for (it=json_object_iter(details); it; it=json_object_iter_next(details,it)) {
+        key=json_object_iter_key(it); pair=json_object_iter_value(it);
+        if (!json_is_array(pair) || json_array_size(pair)!=2) goto done;
+        detail=json_array_get(pair,0); proof=json_array_get(pair,1); encoded=json_string_value(proof);
+        if (!json_is_string(detail) || !encoded || strlen(encoded)!=json_string_length(proof) ||
+            !hexdecode(encoded,&raw,&len)) goto done;
+        record=json_loadb((const char *)raw,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error); free(raw); raw=NULL;
+        if (!json_is_object(record) || !ebp_json_is_safe_integer(json_object_get(record,"version")) ||
+            ebp_json_safe_integer(json_object_get(record,"version"))!=2) goto done;
+        path=json_object_get(record,"path"); nonce=json_object_get(record,"nonce"); timestamp=json_object_get(record,"timestamp"); signature=json_object_get(record,"signature");
+        if (!json_is_string(path) || json_string_length(path)!=strlen(key) || memcmp(json_string_value(path),key,strlen(key))!=0 ||
+            !json_is_string(json_object_get(record,"detail")) ||
+            json_string_length(json_object_get(record,"detail"))!=json_string_length(detail) ||
+            memcmp(json_string_value(json_object_get(record,"detail")),json_string_value(detail),json_string_length(detail))!=0 ||
+            !ebp_json_is_safe_integer(nonce) || ebp_json_safe_integer(nonce)<0 || ebp_json_safe_integer(nonce)>INT64_C(9007199254740991) ||
+            !ebp_json_is_safe_integer(timestamp) || ebp_json_safe_integer(timestamp)<-INT64_C(9007199254740991) || ebp_json_safe_integer(timestamp)>INT64_C(9007199254740991) ||
+            !json_is_string(signature) || json_string_length(signature)==0) goto done;
+        ordered[i].nonce=ebp_json_safe_integer(nonce); ordered[i++].timestamp=ebp_json_safe_integer(timestamp);
+        json_decref(record); record=NULL;
+    }
+    qsort(ordered,n,sizeof(*ordered),compare_detail_order);
+    for (i=1; i<n; i++) if (ordered[i-1].nonce==ordered[i].nonce || ordered[i-1].timestamp>=ordered[i].timestamp) goto done;
+    ok=1;
+done:
+    free(raw); free(ordered); json_decref(record); return ok;
+}
+int ebp_identity_revocation_json(const ebp_identity *id, int type, const uint8_t *path, size_t path_len,
+                                 uint8_t **out, size_t *out_len) {
+    json_t *value=NULL,*record=NULL,*details; json_error_t error; char *key=NULL; const char *encoded;
+    uint8_t *raw=NULL; size_t len=0; int ok=0;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    if (!id || (type!=1 && type!=2)) return 0;
+    if (type==1) {
+        if (!(key=detail_key(path,path_len))) return 0;
+        details=json_object_get(id->public_data,"revokedDetails");
+        value=json_is_object(details)?json_object_get(details,key):NULL;
+    } else value=json_object_get(id->public_data,"revocationCertificate");
+    encoded=json_string_value(value);
+    if (!encoded || strlen(encoded)!=json_string_length(value) || !hexdecode(encoded,&raw,&len) ||
+        !(record=json_loadb((const char *)raw,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error)) || !json_is_object(record) ||
+        !ebp_json_is_safe_integer(json_object_get(record,"version")) || ebp_json_safe_integer(json_object_get(record,"version"))!=2 ||
+        !equals(strfield(record,"type"),type==1?"detail":"identity") || !strfield(record,"fingerprint") ||
+        !ebp_json_is_safe_integer(json_object_get(record,"nonce")) || !ebp_json_is_safe_integer(json_object_get(record,"timestamp")) ||
+        !strfield(record,"signature")) goto done;
+    ok=dump_json(record,out,out_len);
+done:
+    free(key); free(raw); json_decref(record); return ok;
+}
 int ebp_identity_attach_detail(ebp_identity *id, const uint8_t *path, size_t path_len,
                                const uint8_t *detail, size_t detail_len, int64_t timestamp) {
     char *key=NULL; uint8_t *proof=NULL; size_t proof_len=0; json_t *copy=NULL,*details,*nonce_value,*pair=NULL;
@@ -416,8 +624,8 @@ int ebp_identity_attach_detail(ebp_identity *id, const uint8_t *path, size_t pat
     if (!details) { if (json_object_set_new(copy,"details",json_object())!=0) goto done; details=json_object_get(copy,"details"); }
     if (!json_is_object(details)) goto done;
     nonce_value=json_object_get(copy,"detailsNonce");
-    if (nonce_value && !json_is_integer(nonce_value)) goto done;
-    nonce=nonce_value?json_integer_value(nonce_value):0;
+    if (nonce_value && !ebp_json_is_safe_integer(nonce_value)) goto done;
+    nonce=nonce_value?ebp_json_safe_integer(nonce_value):0;
     if (nonce<0 || nonce>=INT64_C(9007199254740991) ||
         !ebp_detail_proof_create(id,path,path_len,detail,detail_len,(uint64_t)nonce,timestamp,&proof,&proof_len)) goto done;
     pair=json_array();
@@ -439,7 +647,7 @@ int ebp_identity_get_detail(const ebp_identity *id, const uint8_t *path, size_t 
     detail=json_is_array(pair)?json_array_get(pair,0):NULL; proof=json_is_array(pair)?json_array_get(pair,1):NULL;
     text=json_string_value(detail); encoded=json_string_value(proof);
     if (!text || !encoded || strlen(encoded)!=json_string_length(proof) ||
-        !ebp_detail_proof_verify(sign_alg(id->sphincs),id->sign_pub,id->sign_pub_len,path,path_len,
+        !ebp_detail_proof_verify(id->sign_algorithm,id->sign_pub,id->sign_pub_len,path,path_len,
                                  (const uint8_t *)text,json_string_length(detail),(const uint8_t *)encoded,strlen(encoded),NULL,NULL)) goto done;
     n=json_string_length(detail); copy=malloc(n?n:1); if (!copy) goto done;
     if (n) memcpy(copy,text,n);
@@ -478,8 +686,8 @@ int ebp_identity_revoke(ebp_identity *id, int type, const uint8_t *target, size_
         if (json_is_string(existing) && json_string_length(existing)>0) goto done;
     }
     nonce_value=json_object_get(id->public_data,"revocationNonce");
-    if (nonce_value && !json_is_integer(nonce_value)) goto done;
-    nonce=nonce_value?json_integer_value(nonce_value):0;
+    if (nonce_value && !ebp_json_is_safe_integer(nonce_value)) goto done;
+    nonce=nonce_value?ebp_json_safe_integer(nonce_value):0;
     if (nonce<0 || nonce>=INT64_C(9007199254740991) ||
         !ebp_revocation_create(id,type,(uint64_t)nonce,timestamp,reason,reason_len,target,target_len,&encoded,&encoded_len) ||
         !(copy=json_deep_copy(id->public_data))) goto done;
@@ -497,20 +705,20 @@ done:
 }
 int ebp_identity_sign_multi(const ebp_identity *id, const uint8_t *message, size_t message_len,
                             const uint8_t *recipients, size_t recipients_len, const uint8_t *manifest, size_t manifest_len,
-                            const uint8_t *salt, size_t salt_len, const char *locale, uint8_t **signature, size_t *signature_len) {
+                            const uint8_t *salt, size_t salt_len, uint8_t **signature, size_t *signature_len) {
     uint8_t *envelope=NULL; size_t len=0; int ok=0;
     if (!signature || !signature_len) return 0;
     *signature=NULL; *signature_len=0;
-    if (!ebp_identity_is_private(id) || !ebp_multi_envelope(message,message_len,recipients,recipients_len,manifest,manifest_len,salt,salt_len,locale,&envelope,&len)) return 0;
-    ok=ebp_pq_sign(sign_alg(id->sphincs),id->sign_priv,id->sign_priv_len,envelope,len,signature,signature_len);
+    if (!ebp_identity_is_private(id) || !ebp_multi_envelope(message,message_len,recipients,recipients_len,manifest,manifest_len,salt,salt_len,&envelope,&len)) return 0;
+    ok=ebp_pq_sign(id->sign_algorithm,id->sign_priv,id->sign_priv_len,envelope,len,signature,signature_len);
     ebp_secure_free(envelope,len); return ok;
 }
 int ebp_identity_verify_multi(const ebp_identity *id, const uint8_t *message, size_t message_len,
                               const uint8_t *recipients, size_t recipients_len, const uint8_t *manifest, size_t manifest_len,
-                              const uint8_t *salt, size_t salt_len, const char *locale, const uint8_t *signature, size_t signature_len) {
+                              const uint8_t *salt, size_t salt_len, const uint8_t *signature, size_t signature_len) {
     uint8_t *envelope=NULL; size_t len=0; int ok=0;
-    if (!id || !ebp_multi_envelope(message,message_len,recipients,recipients_len,manifest,manifest_len,salt,salt_len,locale,&envelope,&len)) return 0;
-    ok=ebp_pq_verify(sign_alg(id->sphincs),id->sign_pub,id->sign_pub_len,envelope,len,signature,signature_len);
+    if (!id || !ebp_multi_envelope(message,message_len,recipients,recipients_len,manifest,manifest_len,salt,salt_len,&envelope,&len)) return 0;
+    ok=ebp_pq_verify(id->sign_algorithm,id->sign_pub,id->sign_pub_len,envelope,len,signature,signature_len);
     ebp_secure_free(envelope,len); return ok;
 }
 
@@ -525,11 +733,11 @@ static int json_object_dump(const json_t *value, uint8_t **out, size_t *len) {
     if (!text) return 0;
     *out=(uint8_t *)text; *len=strlen(text); return 1;
 }
-static json_t *normalize_multi(const json_t *recipients, const uint8_t *manifest, size_t manifest_len, const char *locale) {
+static json_t *normalize_multi(const json_t *recipients, const uint8_t *manifest, size_t manifest_len) {
     uint8_t *recipients_text=NULL,*normalized=NULL; size_t recipients_len=0,normalized_len=0;
     json_error_t error; json_t *result=NULL;
     if (!json_object_dump(recipients,&recipients_text,&recipients_len) ||
-        !ebp_multi_normalize(recipients_text,recipients_len,manifest,manifest_len,locale,&normalized,&normalized_len)) goto done;
+        !ebp_multi_normalize(recipients_text,recipients_len,manifest,manifest_len,&normalized,&normalized_len)) goto done;
     result=json_loadb((const char *)normalized,normalized_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
 done:
     free(recipients_text); free(normalized); return result;
@@ -544,7 +752,7 @@ static int fingerprint_in_array(const json_t *array, const char *fp) {
 }
 int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identity *const *recipients, size_t count,
                                    const uint8_t *message, size_t message_len, const uint8_t *manifest, size_t manifest_len,
-                                   const uint8_t *content_key, const char *locale, uint8_t **out, size_t *out_len) {
+                                   const uint8_t *content_key, uint8_t **out, size_t *out_len) {
     const ebp_identity **unique=NULL; size_t unique_count=0; json_t *fps=NULL,*norm=NULL,*normalized_fps,*normalized_manifest,*inner=NULL,*entries=NULL,*result=NULL;
     uint8_t key[32]={0},nonce[12]={0},*fps_json=NULL,*manifest_json=NULL,*signature=NULL,*cipher=NULL,*wrapped=NULL;
     size_t fps_len=0,manifest_len2=0,signature_len=0,cipher_len=0,wrapped_len=0;
@@ -562,16 +770,16 @@ int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identit
         unique[unique_count++]=recipients[i];
         if (!append_owned(fps,json_string(fp))) goto done;
     }
-    norm=normalize_multi(fps,manifest,manifest_len,locale);
+    norm=normalize_multi(fps,manifest,manifest_len);
     if (!norm || !(normalized_fps=json_object_get(norm,"recipientFingerprints")) ||
         !(normalized_manifest=json_object_get(norm,"attachmentManifest")) ||
         !json_object_dump(normalized_fps,&fps_json,&fps_len) || !json_object_dump(normalized_manifest,&manifest_json,&manifest_len2) ||
-        !ebp_identity_sign_multi(sender,message,message_len,fps_json,fps_len,manifest_json,manifest_len2,NULL,0,locale,&signature,&signature_len) ||
+        !ebp_identity_sign_multi(sender,message,message_len,fps_json,fps_len,manifest_json,manifest_len2,NULL,0,&signature,&signature_len) ||
         !(sig64=b64encode(signature,signature_len))) goto done;
     inner=json_object();
     if (!inner || !set_owned(inner,"type",json_string("ebp-encrypted-signed-inner-multi")) ||
         !set_owned(inner,"message",json_stringn((const char *)(message?message:(const uint8_t *)""),message_len)) ||
-        !set_owned(inner,"signature",json_string(sig64)) || !set_owned(inner,"envelopeVersion",json_integer(3)) ||
+        !set_owned(inner,"signature",json_string(sig64)) || !set_owned(inner,"envelopeVersion",json_integer(4)) ||
         json_object_set(inner,"recipientFingerprints",normalized_fps)!=0 || json_object_set(inner,"attachmentManifest",normalized_manifest)!=0 ||
         !(inner_text=json_dumps(inner,JSON_COMPACT))) goto done;
     if (content_key) memcpy(key,content_key,sizeof(key));
@@ -579,9 +787,10 @@ int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identit
     if (!ebp_content_encrypt(key,(const uint8_t *)inner_text,strlen(inner_text),nonce,&cipher,&cipher_len)) goto done;
     for (size_t i=0; i<unique_count; i++) {
         const char *fp=strfield(unique[i]->public_data,"fingerprint");
+        size_t kem_size=identity_kem_ciphertext_len(unique[i]->kem_algorithm);
         json_t *entry=NULL; char *kem_hex=NULL,*wrap_nonce=NULL,*wrap_cipher=NULL;
-        if (!ebp_wrap_content_key(unique[i]->kem_pub,unique[i]->kem_pub_len,key,&wrapped,&wrapped_len) || wrapped_len<1580) goto done;
-        kem_hex=hexencode(wrapped,1568); wrap_nonce=hexencode(wrapped+1568,12); wrap_cipher=hexencode(wrapped+1580,wrapped_len-1580);
+        if (!kem_size || !ebp_wrap_content_key_variant(unique[i]->kem_algorithm,unique[i]->kem_pub,unique[i]->kem_pub_len,key,&wrapped,&wrapped_len) || wrapped_len<kem_size+12) goto done;
+        kem_hex=hexencode(wrapped,kem_size); wrap_nonce=hexencode(wrapped+kem_size,12); wrap_cipher=hexencode(wrapped+kem_size+12,wrapped_len-kem_size-12);
         free(wrapped); wrapped=NULL; wrapped_len=0;
         if (!kem_hex || !wrap_nonce || !wrap_cipher) { free(kem_hex); free(wrap_nonce); free(wrap_cipher); goto done; }
         entry=json_pack("{s:s,s:s,s:s,s:s}","fingerprint",fp,"kemCiphertext",kem_hex,"keyWrapNonce",wrap_nonce,"wrappedContentKey",wrap_cipher);
@@ -611,7 +820,7 @@ static int empty_multi_result(uint8_t **out, size_t *out_len) {
     int ok=result && dump_json(result,out,out_len); json_decref(result); return ok;
 }
 int ebp_identity_decrypt_verify_many(const ebp_identity *recipient, const ebp_identity *sender,
-                                     const uint8_t *payload_json, size_t payload_len, const char *locale,
+                                     const uint8_t *payload_json, size_t payload_len,
                                      uint8_t **out, size_t *out_len) {
     json_error_t error; json_t *payload=NULL,*entries,*entry=NULL,*inner=NULL,*fps,*manifest,*norm=NULL,*normalized_fps,*normalized_manifest,*result=NULL,*version,*msg_value;
     const char *own_fp,*entry_fp,*kem_hex,*nonce_hex,*wrapped_hex,*cipher_hex,*content_nonce_hex,*signature64,*message;
@@ -633,12 +842,12 @@ int ebp_identity_decrypt_verify_many(const ebp_identity *recipient, const ebp_id
     if (!entry) { ok=empty_multi_result(out,out_len); goto done; }
     kem_hex=strfield(entry,"kemCiphertext"); nonce_hex=strfield(entry,"keyWrapNonce"); wrapped_hex=strfield(entry,"wrappedContentKey");
     content_nonce_hex=strfield(payload,"contentNonce"); cipher_hex=strfield(payload,"ciphertext");
-    if (!hexdecode(kem_hex,&kem,&kem_len) || kem_len!=1568 || !hexdecode(nonce_hex,&wrap_nonce,&wrap_nonce_len) || wrap_nonce_len!=12 ||
+    if (!hexdecode(kem_hex,&kem,&kem_len) || kem_len!=identity_kem_ciphertext_len(recipient->kem_algorithm) || !hexdecode(nonce_hex,&wrap_nonce,&wrap_nonce_len) || wrap_nonce_len!=12 ||
         !hexdecode(wrapped_hex,&wrapped_cipher,&wrapped_cipher_len) || wrapped_cipher_len>SIZE_MAX-kem_len-wrap_nonce_len ||
         !hexdecode(content_nonce_hex,&content_nonce,&content_nonce_len) || content_nonce_len!=12 || !hexdecode(cipher_hex,&cipher,&cipher_len)) goto done;
     wrapped_len=kem_len+wrap_nonce_len+wrapped_cipher_len; wrapped=malloc(wrapped_len); if (!wrapped) goto done;
     memcpy(wrapped,kem,kem_len); memcpy(wrapped+kem_len,wrap_nonce,wrap_nonce_len); memcpy(wrapped+kem_len+wrap_nonce_len,wrapped_cipher,wrapped_cipher_len);
-    if (!ebp_unwrap_content_key(recipient->kem_priv,recipient->kem_priv_len,wrapped,wrapped_len,key) ||
+    if (!ebp_unwrap_content_key_variant(recipient->kem_algorithm,recipient->kem_priv,recipient->kem_priv_len,wrapped,wrapped_len,key) ||
         !ebp_content_decrypt(key,content_nonce,cipher,cipher_len,&plain,&plain_len)) goto done;
     inner=json_loadb((const char *)plain,plain_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(inner)) goto done;
@@ -646,13 +855,13 @@ int ebp_identity_decrypt_verify_many(const ebp_identity *recipient, const ebp_id
     fps=json_object_get(inner,"recipientFingerprints"); manifest=json_object_get(inner,"attachmentManifest");
     if (!message || !json_is_array(fps) || !json_is_array(manifest) ||
         !json_object_dump(fps,&fps_json,&fps_len) || !json_object_dump(manifest,&manifest_json,&manifest_len) ||
-        !(norm=normalize_multi(fps,manifest_json,manifest_len,locale)) ||
+        !(norm=normalize_multi(fps,manifest_json,manifest_len)) ||
         !(normalized_fps=json_object_get(norm,"recipientFingerprints")) || !(normalized_manifest=json_object_get(norm,"attachmentManifest"))) goto done;
     version=json_object_get(inner,"envelopeVersion"); signature64=strfield(inner,"signature");
-    if (equals(strfield(inner,"type"),"ebp-encrypted-signed-inner-multi") && json_is_integer(version) && json_integer_value(version)==3 &&
+    if (equals(strfield(inner,"type"),"ebp-encrypted-signed-inner-multi") && ebp_json_is_safe_integer(version) && ebp_json_safe_integer(version)==4 &&
         fingerprint_in_array(fps,own_fp) && b64decode(signature64,&signature,&signature_len) &&
         ebp_identity_verify_multi(sender,(const uint8_t *)message,json_string_length(msg_value),fps_json,fps_len,manifest_json,manifest_len,
-                                  NULL,0,locale,signature,signature_len)) verified=1;
+                                  NULL,0,signature,signature_len)) verified=1;
     key_hex=hexencode(key,sizeof(key)); result=json_object();
     if (!key_hex || !result || json_object_set(result,"message",msg_value)!=0 || !set_owned(result,"verified",json_boolean(verified)) ||
         !set_owned(result,"verifyStatus",json_string(verified?"valid":"invalid")) || !set_owned(result,"contentKey",json_string(key_hex)) ||

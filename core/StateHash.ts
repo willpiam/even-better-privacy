@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import type { EncryptionKeyOptions, SigningKeyOptions } from "./Keys.ts";
 import { toHex } from "./Hex.ts";
-import { canonicalize } from "./CanonicalJson.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -20,8 +20,7 @@ export type IdentityState = {
 export { canonicalize, stableStringify } from "./CanonicalJson.ts";
 
 export function computeStateHash(state: IdentityState): string {
-  const canonical = canonicalize(state);
-  const data = textEncoder.encode(JSON.stringify(canonical));
+  const data = textEncoder.encode(canonicalJsonStringify(state));
   return toHex(sha256(data));
 }
 

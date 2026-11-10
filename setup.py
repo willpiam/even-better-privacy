@@ -22,9 +22,11 @@ setup(
                 "c-core/src/file_payload.c",
                 "c-core/src/multi_envelope.c",
                 "c-core/src/json_compat.c",
+                "c-core/src/jcs.c",
+                "c-core/vendor/ryu/ryu/d2s.c",
             ],
-            include_dirs=["c-core/include"],
-            libraries=["crypto", "argon2", "utf8proc", "jansson", "icui18n", "icuuc", "m"],
+            include_dirs=["c-core/include", "c-core/vendor/ryu"],
+            libraries=["crypto", "argon2", "utf8proc", "jansson", "m"],
             extra_compile_args=["-std=c11"],
         )
     ],

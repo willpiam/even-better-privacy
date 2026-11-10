@@ -1,10 +1,10 @@
 #include "ebp_core.h"
 #include "json_compat.h"
+#include "jcs.h"
 #include <jansson.h>
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unicode/ucol.h>
 #include <utf8proc.h>
 
 static int js_space(utf8proc_int32_t cp) {
@@ -47,18 +47,13 @@ static int compare_utf16(const json_t *a, const json_t *b) {
         if (av!=bv) return av<bv?-1:1;
     } while (1);
 }
-typedef struct { UCollator *collator; UErrorCode status; } sort_context;
-static int compare_manifest(const json_t *a, const json_t *b, sort_context *ctx) {
+static int compare_manifest(const json_t *a, const json_t *b) {
     json_t *ak=json_object_get(a,"attachmentId"), *bk=json_object_get(b,"attachmentId");
-    size_t al=json_string_length(ak),bl=json_string_length(bk);
-    UCollationResult result;
-    if (al>INT32_MAX || bl>INT32_MAX) { ctx->status=U_INDEX_OUTOFBOUNDS_ERROR; return 0; }
-    result=ucol_strcollUTF8(ctx->collator,json_string_value(ak),(int32_t)al,json_string_value(bk),(int32_t)bl,&ctx->status);
-    return result<0?-1:result>0?1:0;
+    int result=compare_utf16(ak,bk);
+    return result?result:compare_utf16(json_object_get(a,"ciphertextSha256"),json_object_get(b,"ciphertextSha256"));
 }
-static json_t *stable_sort(json_t *array, int manifest, UCollator *collator) {
+static json_t *stable_sort(json_t *array, int manifest) {
     json_t **items=NULL,**tmp=NULL,**swap,*sorted=NULL; size_t n=json_array_size(array),width;
-    sort_context ctx={collator,U_ZERO_ERROR};
     if (n>SIZE_MAX/sizeof(*items)) return NULL;
     sorted=json_array(); if (!sorted) return NULL;
     if (!n) return sorted;
@@ -70,8 +65,7 @@ static json_t *stable_sort(json_t *array, int manifest, UCollator *collator) {
             size_t mid=start+(n-start<width?n-start:width),end=mid+(n-mid<width?n-mid:width);
             size_t i=start,j=mid,k=start;
             while (i<mid && j<end) {
-                int c=manifest?compare_manifest(items[i],items[j],&ctx):compare_utf16(items[i],items[j]);
-                if (U_FAILURE(ctx.status)) goto fail;
+                int c=manifest?compare_manifest(items[i],items[j]):compare_utf16(items[i],items[j]);
                 tmp[k++]=c<=0?items[i++]:items[j++];
             }
             while (i<mid) tmp[k++]=items[i++];
@@ -88,18 +82,17 @@ fail:
     free(items); free(tmp); json_decref(sorted); return NULL;
 }
 static int normalize_arrays(const uint8_t *recipients_json, size_t recipients_len,
-                            const uint8_t *manifest_json, size_t manifest_len, const char *locale,
+                            const uint8_t *manifest_json, size_t manifest_len,
                             json_t **out_recipients, json_t **out_manifest) {
     json_error_t error; json_t *recipients=NULL,*manifest=NULL,*trimmed=NULL,*entries=NULL,*sorted_r=NULL,*sorted_m=NULL;
-    UErrorCode status=U_ZERO_ERROR; UCollator *collator=NULL; int ok=0;
+    int ok=0;
     if (!recipients_json || !manifest_json || !out_recipients || !out_manifest) return 0;
     *out_recipients=NULL; *out_manifest=NULL;
     recipients=json_loadb((const char *)recipients_json,recipients_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     manifest=json_loadb((const char *)manifest_json,manifest_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_array(recipients) || !json_is_array(manifest)) goto done;
-    collator=ucol_open(locale?locale:"en-US",&status);
     trimmed=json_array(); entries=json_array();
-    if (U_FAILURE(status) || !collator || !trimmed || !entries) goto done;
+    if (!trimmed || !entries) goto done;
     for (size_t i=0; i<json_array_size(recipients); i++) {
         json_t *value=js_trimmed(json_array_get(recipients,i));
         if (!value) goto done;
@@ -114,21 +107,20 @@ static int normalize_arrays(const uint8_t *recipients_json, size_t recipients_le
         if (json_object_set(copy,"attachmentId",id)!=0 || json_object_set(copy,"ciphertextSha256",hash)!=0) { json_decref(copy); goto done; }
         if (json_array_append_new(entries,copy)!=0) goto done;
     }
-    sorted_r=stable_sort(trimmed,0,NULL); sorted_m=stable_sort(entries,1,collator);
+    sorted_r=stable_sort(trimmed,0); sorted_m=stable_sort(entries,1);
     if (!sorted_r || !sorted_m) goto done;
     *out_recipients=sorted_r; sorted_r=NULL; *out_manifest=sorted_m; sorted_m=NULL; ok=1;
 done:
-    if (collator) ucol_close(collator);
     json_decref(sorted_r); json_decref(sorted_m); json_decref(entries); json_decref(trimmed);
     json_decref(manifest); json_decref(recipients); return ok;
 }
 int ebp_multi_normalize(const uint8_t *recipients_json, size_t recipients_len,
-                        const uint8_t *manifest_json, size_t manifest_len, const char *locale,
+                        const uint8_t *manifest_json, size_t manifest_len,
                         uint8_t **out, size_t *out_len) {
     json_t *recipients=NULL,*manifest=NULL,*obj=NULL; char *text=NULL; int ok=0;
     if (!out || !out_len) return 0;
     *out=NULL; *out_len=0;
-    if (!normalize_arrays(recipients_json,recipients_len,manifest_json,manifest_len,locale,&recipients,&manifest)) return 0;
+    if (!normalize_arrays(recipients_json,recipients_len,manifest_json,manifest_len,&recipients,&manifest)) return 0;
     obj=json_object();
     if (!obj || json_object_set(obj,"recipientFingerprints",recipients)!=0 ||
         json_object_set(obj,"attachmentManifest",manifest)!=0 || !(text=json_dumps(obj,JSON_COMPACT))) goto done;
@@ -139,21 +131,20 @@ done:
 int ebp_multi_envelope(const uint8_t *message, size_t message_len,
                        const uint8_t *recipients_json, size_t recipients_len,
                        const uint8_t *manifest_json, size_t manifest_len,
-                       const uint8_t *salt, size_t salt_len, const char *locale,
+                       const uint8_t *salt, size_t salt_len,
                        uint8_t **out, size_t *out_len) {
-    static const char prefix[]="ebp::messagehash::v3::", hex[]="0123456789abcdef";
+    static const char prefix[]="ebp::messagehash::v4::", hex[]="0123456789abcdef";
     json_t *sorted_r=NULL,*sorted_m=NULL,*obj=NULL; char *canonical=NULL; uint8_t digest[32],*result=NULL;
     size_t n,total; int ok=0;
     if (!out || !out_len) return 0;
     *out=NULL; *out_len=0;
     if ((!message && message_len) || (!salt && salt_len) || salt_len>SIZE_MAX-(sizeof(prefix)-1)-66 ||
-        !normalize_arrays(recipients_json,recipients_len,manifest_json,manifest_len,locale,&sorted_r,&sorted_m)) return 0;
+        !normalize_arrays(recipients_json,recipients_len,manifest_json,manifest_len,&sorted_r,&sorted_m)) return 0;
     obj=json_object();
-    if (!obj || json_object_set_new(obj,"tag",json_string("EBP-MULTIRECIPIENT-V3"))!=0 ||
+    if (!obj || json_object_set_new(obj,"tag",json_string("EBP-MULTIRECIPIENT-V4"))!=0 ||
         json_object_set_new(obj,"message",json_stringn((const char *)(message?message:(const uint8_t *)""),message_len))!=0 ||
         json_object_set(obj,"recipientFingerprints",sorted_r)!=0 || json_object_set(obj,"attachmentManifest",sorted_m)!=0 ||
-        !(canonical=json_dumps(obj,JSON_COMPACT))) goto done;
-    ebp_json_lowercase_escapes(canonical);
+        !(canonical=ebp_jcs_dump(obj))) goto done;
     if (!ebp_sha256((const uint8_t *)canonical,strlen(canonical),digest)) goto done;
     total=sizeof(prefix)-1+64+2+salt_len; result=malloc(total); if (!result) goto done;
     n=sizeof(prefix)-1; memcpy(result,prefix,n);

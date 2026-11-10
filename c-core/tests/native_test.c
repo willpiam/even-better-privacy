@@ -114,8 +114,8 @@ int main(void) {
         const uint8_t manifest[] = "[{\"attachmentId\":\"é\",\"ciphertextSha256\":\"aa\"},{\"attachmentId\":\"a\",\"ciphertextSha256\":\"bb\"}]";
         uint8_t *packet=NULL, *result=NULL; size_t packet_len=0, result_len=0;
         assert(ebp_identity_sign_encrypt_many(loaded, members, 2, (const uint8_t *)"hello", 5,
-                                              manifest, sizeof(manifest)-1, NULL, NULL, &packet, &packet_len));
-        assert(ebp_identity_decrypt_verify_many(child, public_only, packet, packet_len, NULL, &result, &result_len));
+                                              manifest, sizeof(manifest)-1, NULL, &packet, &packet_len));
+        assert(ebp_identity_decrypt_verify_many(child, public_only, packet, packet_len, &result, &result_len));
         ebp_secure_free(packet,packet_len); ebp_secure_free(result,result_len);
         ebp_free(proof); ebp_free(cert); ebp_free(storage); ebp_identity_free(child);
         ebp_identity_free(public_only); ebp_identity_free(loaded); ebp_identity_free(original);

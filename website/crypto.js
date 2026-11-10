@@ -15,8 +15,8 @@
 // Imports pull pinned-version browser ESM bundles from esm.sh. The site
 // is static, so no build step is required.
 
-import { ml_dsa87 } from "https://esm.sh/@noble/post-quantum@0.5.4/ml-dsa";
-import { slh_dsa_sha2_256s } from "https://esm.sh/@noble/post-quantum@0.5.4/slh-dsa";
+import * as dsa from "https://esm.sh/@noble/post-quantum@0.5.4/ml-dsa";
+import * as slh from "https://esm.sh/@noble/post-quantum@0.5.4/slh-dsa";
 import { sha256 } from "https://esm.sh/@noble/hashes@1.8.0/sha2";
 import { bech32 } from "https://esm.sh/bech32@2.0.0";
 
@@ -43,21 +43,17 @@ function hexToBytes(hex) {
 	return out;
 }
 
-// Current envelope matches `core/MessageHash.ts::buildPurposeHashEnvelope`
-// for purpose "message". The legacy envelope is still accepted, matching
-// `Identity.VerifySignature`.
+// Current envelope matches `core/MessageHash.ts::buildPurposeHashEnvelope`.
 function buildCurrentEnvelopeFromHash(messageHash, salt) {
 	return `ebp::message::v1::${messageHash}::${salt ?? ""}`;
 }
 
-function buildLegacyEnvelopeFromHash(messageHash, salt) {
-	return `ebp::messagehash::${messageHash}::${salt ?? ""}`;
-}
-
-function selectSigner(signingKeyType) {
-	if (signingKeyType === "dilithium") return ml_dsa87;
-	if (signingKeyType === "sphincs") return slh_dsa_sha2_256s;
-	throw new Error(`unsupported signing key type: ${signingKeyType}`);
+function selectSigner(signingKeyType, variant) {
+	const name = variant ?? (signingKeyType === "dilithium" ? "ml_dsa87" : "slh_dsa_sha2_256s");
+	const impl = signingKeyType === "dilithium" && name.startsWith("ml_dsa") ? dsa[name]
+		: signingKeyType === "sphincs" && name.startsWith("slh_dsa_") ? slh[name] : undefined;
+	if (!impl || typeof impl.verify !== "function") throw new Error(`unsupported signing variant: ${name}`);
+	return impl;
 }
 
 function base64ToBytes(b64) {
@@ -164,23 +160,14 @@ export function verifySignature(publicIdentity, input) {
 		throw new Error("either message or messageHash is required");
 	}
 
-	const signer = selectSigner(signingKeyType);
+	const signer = selectSigner(signingKeyType, publicIdentity.signingKeyDetails?.variant);
 	const publicKeyBytes = base64ToBytes(signingKey);
 	const signatureBytes = base64ToBytes(input.signature);
-	const envelopes = [
-		buildCurrentEnvelopeFromHash(messageHash, salt),
-		buildLegacyEnvelopeFromHash(messageHash, salt),
-	];
-	for (const envelope of envelopes) {
-		try {
-			if (signer.verify(signatureBytes, encoder.encode(envelope), publicKeyBytes)) {
-				return true;
-			}
-		} catch {
-			// A malformed signature fails closed. The legacy envelope is still tried.
-		}
+	try {
+		return signer.verify(signatureBytes, encoder.encode(buildCurrentEnvelopeFromHash(messageHash, salt)), publicKeyBytes);
+	} catch {
+		return false;
 	}
-	return false;
 }
 
 export { sha256Hex };

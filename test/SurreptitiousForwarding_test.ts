@@ -56,7 +56,7 @@ Deno.test("F-CRYPTO-02: signAndEncryptMessage also recipient-binds", () => {
 	assertEquals(charlieView.verified, false);
 });
 
-Deno.test("F-CRYPTO-02: legacy v1 signed payload decrypts as valid_unbound", () => {
+Deno.test("F-CRYPTO-02: legacy v1 signed payload is rejected", () => {
 	const alice = new Identity("dilithium", "kyber");
 	const bob = new Identity("dilithium", "kyber");
 
@@ -69,6 +69,6 @@ Deno.test("F-CRYPTO-02: legacy v1 signed payload decrypts as valid_unbound", () 
 	const ct = Identity.EncryptFor(bob.summary, legacyInner);
 
 	const view = bob.decryptAndVerify(ct, alice.summary);
-	assert(view.verified === true, "legacy v1 signature should still verify");
-	assertEquals(view.verifyStatus, "valid_unbound");
+	assert(view.verified === false, "legacy v1 signature must not verify");
+	assertEquals(view.verifyStatus, "invalid");
 });

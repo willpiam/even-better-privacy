@@ -1,10 +1,7 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import {
-  buildLegacyMessageHashEnvelopeFromHash,
-  buildPurposeHashEnvelope,
-  sha256Hex,
-} from "./MessageHash.ts";
+import { buildPurposeHashEnvelope } from "./MessageHash.ts";
 import { hexToString, stringToHex } from "./Hex.ts";
 import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
@@ -18,6 +15,7 @@ export const MAX_REVOCATION_REASON_LENGTH = 1024;
  * Base structure for a revocation certificate
  */
 export interface RevocationCertificateData {
+  version: number;
   type: RevocationType;
   fingerprint: string; // Identity fingerprint
   nonce: number; // Monotonically increasing nonce
@@ -69,6 +67,8 @@ export function createRevocationCertificate(
     target?: string;
   },
 ): RevocationCertificateData {
+  if (!Number.isSafeInteger(nonce) || nonce < 0) throw new Error("nonce must be a nonnegative safe integer");
+  if (type === "detail" && typeof options?.target !== "string") throw new Error("detail revocation must specify target path");
   if (
     options?.reason !== undefined &&
     options.reason.length > MAX_REVOCATION_REASON_LENGTH
@@ -78,6 +78,7 @@ export function createRevocationCertificate(
     );
   }
   return {
+    version: 2,
     type,
     fingerprint,
     nonce,
@@ -96,6 +97,7 @@ export function getRevocationSignaturePayload(
 ): string {
   // Create a copy with signature set to null for signing
   const payload: RevocationCertificateData = {
+    version: cert.version,
     type: cert.type,
     fingerprint: cert.fingerprint,
     nonce: cert.nonce,
@@ -124,11 +126,11 @@ export function decodeRevocationCertificate(
 ): SignedRevocationCertificate | null {
   try {
     const json = hexToString(encoded);
-    const cert = JSON.parse(json) as SignedRevocationCertificate;
+    const cert = parseStrictJson(json) as SignedRevocationCertificate;
 
     // Validate structure
     if (
-      typeof cert.type !== "string" ||
+      cert.version !== 2 || typeof cert.type !== "string" ||
       (cert.type !== "detail" && cert.type !== "identity") ||
       typeof cert.fingerprint !== "string" ||
       typeof cert.nonce !== "number" ||
@@ -156,19 +158,20 @@ export function verifyRevocationCertificate(
   signingKey: string,
   variant: string,
 ): RevocationVerifyResult {
+  if (cert.version !== 2) return {ok: false, error: "unsupported certificate version"};
   // Validate basic structure
   if (!cert.signature || typeof cert.signature !== "string") {
     return { ok: false, error: "missing signature" };
   }
 
   if (
-    typeof cert.nonce !== "number" || !Number.isInteger(cert.nonce) ||
+    typeof cert.nonce !== "number" || !Number.isSafeInteger(cert.nonce) ||
     cert.nonce < 0
   ) {
     return { ok: false, error: "invalid nonce" };
   }
 
-  if (typeof cert.timestamp !== "number" || !Number.isFinite(cert.timestamp)) {
+  if (typeof cert.timestamp !== "number" || !Number.isSafeInteger(cert.timestamp)) {
     return { ok: false, error: "invalid timestamp" };
   }
 
@@ -196,9 +199,6 @@ export function verifyRevocationCertificate(
   // Verify signature
   const payload = getRevocationSignaturePayload(cert);
   const envelope = buildPurposeHashEnvelope("revocation", payload);
-  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(
-    sha256Hex(payload),
-  );
   let verified = false;
 
   try {
@@ -209,14 +209,6 @@ export function verifyRevocationCertificate(
         cert.signature,
         signingKey,
       );
-      if (!verified) {
-        verified = DilithiumSigningKey.verify(
-          variant,
-          legacyEnvelope,
-          cert.signature,
-          signingKey,
-        );
-      }
     } else {
       verified = SphincsSigningKey.verify(
         variant,
@@ -224,14 +216,6 @@ export function verifyRevocationCertificate(
         cert.signature,
         signingKey,
       );
-      if (!verified) {
-        verified = SphincsSigningKey.verify(
-          variant,
-          legacyEnvelope,
-          cert.signature,
-          signingKey,
-        );
-      }
     }
   } catch {
     return { ok: false, error: "signature verification failed" };

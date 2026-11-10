@@ -1,3 +1,5 @@
+import { parseStrictJson } from "./StrictJson.ts";
+import { externalIdentityFromEmbeddedRecord } from "./EmbeddedIdentity.ts";
 import { AsymmetricEncryptionKey, SigningKey } from "./Keys.ts";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
@@ -8,7 +10,6 @@ import { AES, DecryptionAuthError, StorageFormatError } from "./AES.ts";
 import { hexToBytes, hexToString, stringToHex, toHex } from "./Hex.ts";
 import {
   FILE_FORMAT_VERSIONS,
-  isProtocolVersionSupported,
   PROTOCOL_VERSION,
 } from "./version.ts";
 import {
@@ -19,12 +20,11 @@ import {
   shortFingerprint,
 } from "./Fingerprint.ts";
 import {
-  buildLegacyMessageHashEnvelopeFromHash,
   buildMultiRecipientBoundEnvelope,
+  compareAttachmentEntries,
   buildPurposeHashEnvelope,
   buildRecipientBoundEnvelope,
   type MultiRecipientAttachmentManifestEntry,
-  sha256Hex,
   type SignaturePurpose,
 } from "./MessageHash.ts";
 import {
@@ -138,7 +138,7 @@ function parseIdentityStorageJson(storageData: string): {
 } {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(storageData);
+    parsed = parseStrictJson(storageData);
   } catch {
     throw new StorageFormatError("Identity file is not valid JSON");
   }
@@ -153,15 +153,15 @@ function parseIdentityStorageJson(storageData: string): {
   if (!pub || typeof pub !== "object") {
     throw new StorageFormatError("Missing public identity data");
   }
-  const fileProtocolVersion = storage.protocolVersion ?? pub.protocolVersion;
+  const fileProtocolVersion = storage.protocolVersion;
   if (!fileProtocolVersion) {
     throw new StorageFormatError(
       "Missing protocol version in identity storage format.",
     );
   }
-  if (!isProtocolVersionSupported(fileProtocolVersion)) {
+  if (fileProtocolVersion !== PROTOCOL_VERSION) {
     throw new StorageFormatError(
-      `Unsupported protocol version: ${fileProtocolVersion}. This implementation supports ${PROTOCOL_VERSION} and compatible versions.`,
+      `Unsupported protocol version: ${fileProtocolVersion}. This implementation supports ${PROTOCOL_VERSION}.`,
     );
   }
   if (pub.signingKeyType !== "dilithium" && pub.signingKeyType !== "sphincs") {
@@ -173,6 +173,10 @@ function parseIdentityStorageJson(storageData: string): {
     throw new StorageFormatError(
       `Unsupported encryption key type: ${pub.encryptionKeyType}`,
     );
+  }
+  if (typeof pub.fingerprint !== "string" || !pub.fingerprint || !pub.signingKeyDetails?.variant || !pub.encryptionKeyDetails?.variant ||
+      !externalIdentityFromEmbeddedRecord(pub as unknown as Record<string, unknown>, pub.fingerprint)) {
+    throw new StorageFormatError("Invalid public identity keys or fingerprint");
   }
   return { storage: storage as IdentityStorageFormat, pub };
 }
@@ -200,7 +204,7 @@ function applyPrivateKeysFromJson(
   identity.isPrivateLoaded = true;
   let privateData: IdentityPrivateStorageData;
   try {
-    const parsedPrivate = JSON.parse(privateJson);
+    const parsedPrivate = parseStrictJson(privateJson);
     if (
       !parsedPrivate ||
       typeof parsedPrivate !== "object" ||
@@ -212,27 +216,15 @@ function applyPrivateKeysFromJson(
       );
     }
     privateData = parsedPrivate;
-    if (
-      privateData.signingKeyType !== undefined &&
-      privateData.signingKeyType !== pub.signingKeyType
-    ) {
+    if (privateData.signingKeyType !== pub.signingKeyType) {
       throw new StorageFormatError(
         "Private identity signing key type does not match public metadata",
       );
     }
-    if (
-      privateData.encryptionKeyType !== undefined &&
-      privateData.encryptionKeyType !== pub.encryptionKeyType
-    ) {
+    if (privateData.encryptionKeyType !== pub.encryptionKeyType) {
       throw new StorageFormatError(
         "Private identity encryption key type does not match public metadata",
       );
-    }
-    if (
-      privateData.signingKeyType === undefined ||
-      privateData.encryptionKeyType === undefined
-    ) {
-      identitiesNeedingPrivateKeyTypeUpgrade.add(identity);
     }
   } catch (e) {
     if (e instanceof StorageFormatError) throw e;
@@ -269,6 +261,14 @@ function applyPrivateKeysFromJson(
         throw new StorageFormatError(
           `Unsupported encryption key type: ${pub.encryptionKeyType}`,
         );
+    }
+    const signing = identity.signingKey as DilithiumSigningKey | SphincsSigningKey;
+    const encryption = identity.encryptionKey as KyberEncryptionKey;
+    const challenge = "ebp::identity-storage::key-check::v1";
+    if (signing.variant !== pub.signingKeyDetails.variant || encryption.variant !== pub.encryptionKeyDetails.variant ||
+        signing.publicKey !== pub.signingKey || encryption.publicKey.toLowerCase() !== pub.encryptionKey.toLowerCase() ||
+        !signing.verify(challenge, signing.sign(challenge)) || encryption.decrypt(encryption.encrypt(challenge)) !== challenge) {
+      throw new StorageFormatError("Private identity keys do not match public metadata");
     }
   } catch (e) {
     if (e instanceof StorageFormatError) throw e;
@@ -342,15 +342,7 @@ export class Identity extends Key {
     purpose: SignaturePurpose = "message",
   ): boolean {
     const envelope = buildPurposeHashEnvelope(purpose, message, salt);
-    if (Identity._VerifyEnvelope(sender, envelope, signature)) return true;
-    if (purpose === "message") {
-      const legacy = buildLegacyMessageHashEnvelopeFromHash(
-        sha256Hex(message),
-        salt,
-      );
-      return Identity._VerifyEnvelope(sender, legacy, signature);
-    }
-    return false;
+    return Identity._VerifyEnvelope(sender, envelope, signature);
   }
 
   // F-CRYPTO-02: verify a signature that is bound to a specific recipient
@@ -591,7 +583,7 @@ export class Identity extends Key {
         attachmentId: entry.attachmentId,
         ciphertextSha256: entry.ciphertextSha256,
       }))
-      .sort((a, b) => a.attachmentId.localeCompare(b.attachmentId));
+      .sort(compareAttachmentEntries);
     const signature = this.signMessageForRecipients(
       message,
       recipientFingerprints,
@@ -601,7 +593,7 @@ export class Identity extends Key {
       type: "ebp-encrypted-signed-inner-multi",
       message,
       signature,
-      envelopeVersion: 3,
+      envelopeVersion: 4,
       recipientFingerprints,
       attachmentManifest,
     });
@@ -624,12 +616,7 @@ export class Identity extends Key {
     };
   }
 
-  // F-CRYPTO-02: `decryptAndVerify` now returns a `verifyStatus` that
-  // distinguishes a properly recipient-bound v2 signature (`valid`) from a
-  // legacy v1 signature that carried no recipient binding
-  // (`valid_unbound`, a WARNING state that UIs should flag). v1 messages
-  // are still accepted for backward compatibility, but cannot be treated
-  // as "delivered to me" authoritatively.
+  // Verify only the current recipient-bound signed envelope.
   decryptAndVerify(
     ciphertext: string,
     sender: ExternalIdentity,
@@ -639,7 +626,7 @@ export class Identity extends Key {
     verifyStatus: "valid" | "valid_unbound" | "invalid";
   } {
     const decrypted = this.encryptionKey.decrypt(ciphertext);
-    const parsed = JSON.parse(decrypted) as {
+    const parsed = parseStrictJson(decrypted) as {
       type?: string;
       message: string;
       signature: string;
@@ -651,7 +638,6 @@ export class Identity extends Key {
     // v2 recipient-bound envelope (preferred).
     if (parsed.envelopeVersion === 2) {
       if (
-        parsed.type !== undefined &&
         parsed.type !== "ebp-encrypted-signed-inner"
       ) {
         return { message, verified: false, verifyStatus: "invalid" };
@@ -660,7 +646,6 @@ export class Identity extends Key {
       // Fail-closed if the sender addressed a different recipient
       // (surreptitious forwarding).
       if (
-        typeof parsed.recipientFingerprint === "string" &&
         parsed.recipientFingerprint !== myFingerprint
       ) {
         return { message, verified: false, verifyStatus: "invalid" };
@@ -678,13 +663,10 @@ export class Identity extends Key {
       };
     }
 
-    // v1 legacy envelope (unbound). Accept only for decrypt; UI must
-    // warn that recipient binding is not proven.
-    const legacyVerified = Identity.VerifySignature(sender, message, signature);
     return {
       message,
-      verified: legacyVerified,
-      verifyStatus: legacyVerified ? "valid_unbound" : "invalid",
+      verified: false,
+      verifyStatus: "invalid",
     };
   }
 
@@ -729,7 +711,7 @@ export class Identity extends Key {
       payload.contentNonce,
       contentKey,
     );
-    const parsed = JSON.parse(new TextDecoder().decode(decryptedBytes)) as {
+    const parsed = parseStrictJson(new TextDecoder().decode(decryptedBytes)) as {
       type?: string;
       message: string;
       signature: string;
@@ -753,12 +735,11 @@ export class Identity extends Key {
           typeof entry.attachmentId === "string" &&
           typeof entry.ciphertextSha256 === "string"
         ))
-        .sort((a, b) => a.attachmentId.localeCompare(b.attachmentId))
+        .sort(compareAttachmentEntries)
       : [];
     if (
-      parsed.envelopeVersion !== 3 ||
-      (parsed.type !== undefined &&
-        parsed.type !== "ebp-encrypted-signed-inner-multi") ||
+      parsed.envelopeVersion !== 4 ||
+      parsed.type !== "ebp-encrypted-signed-inner-multi" ||
       !recipientFingerprints.includes(myFingerprint)
     ) {
       return {
@@ -794,19 +775,13 @@ export class Identity extends Key {
     purpose: SignaturePurpose = "message",
   ): boolean {
     const envelope = buildPurposeHashEnvelope(purpose, message, salt);
-    if (this.signingKey.verify(envelope, signature)) return true;
-    if (purpose === "message") {
-      const legacy = buildLegacyMessageHashEnvelopeFromHash(
-        sha256Hex(message),
-        salt,
-      );
-      return this.signingKey.verify(legacy, signature);
-    }
-    return false;
+    return this.signingKey.verify(envelope, signature);
   }
 
   attachDetail(path: string, detail: string) {
+    if (path.includes("\0")) throw new TypeError("Detail path contains NUL");
     const detailRecord = {
+      version: 2,
       nonce: this.detailsNonce,
       path: path,
       detail: detail,
@@ -835,7 +810,8 @@ export class Identity extends Key {
     try {
       // Decode the stored proof back into the signed record
       const recordJson = hexToString(proof);
-      const record = JSON.parse(recordJson) as {
+      const record = parseStrictJson(recordJson) as {
+        version: number;
         nonce: number;
         path: string;
         detail: string;
@@ -844,17 +820,19 @@ export class Identity extends Key {
       };
 
       // Ensure the record is consistent with the current map entry
-      if (record.path !== path || record.detail !== detail) {
+      if (record.version !== 2 || record.path !== path || record.detail !== detail) {
         return null;
       }
 
       const { nonce, timestamp, signature } = record;
-      if (typeof signature !== "string" || !signature.length) {
+      if (!Number.isSafeInteger(nonce) || nonce < 0 || !Number.isSafeInteger(timestamp) ||
+          typeof signature !== "string" || !signature.length) {
         return null;
       }
 
       // Reconstruct the original payload that was signed (with signature=null)
       const signedPayload = canonicalJsonStringify({
+        version: 2,
         nonce,
         path,
         detail,
@@ -892,7 +870,8 @@ export class Identity extends Key {
     for (const [path, [detail, proof]] of details.entries()) {
       try {
         const recordJson = hexToString(proof);
-        const record = JSON.parse(recordJson) as {
+        const record = parseStrictJson(recordJson) as {
+          version: number;
           nonce: number;
           path: string;
           detail: string;
@@ -902,8 +881,9 @@ export class Identity extends Key {
 
         // Basic structural checks
         if (
+          record.version !== 2 ||
           typeof record.nonce !== "number" ||
-          !Number.isInteger(record.nonce) ||
+          !Number.isSafeInteger(record.nonce) ||
           record.nonce < 0
         ) {
           return false;
@@ -911,7 +891,7 @@ export class Identity extends Key {
 
         if (
           typeof record.timestamp !== "number" ||
-          !Number.isFinite(record.timestamp)
+          !Number.isSafeInteger(record.timestamp)
         ) {
           return false;
         }
@@ -1229,7 +1209,7 @@ export class Identity extends Key {
   }
 
   static fromJSON(json: string): Identity {
-    const data = JSON.parse(json);
+    const data = parseStrictJson(json);
     const i = new Identity(data.signingKeyType, data.encryptionKeyType);
 
     i.signingKeyType = data.signingKeyType;
@@ -1272,7 +1252,7 @@ export class Identity extends Key {
       let maxNonce = -1;
       for (const [, [, proof]] of detailsEntries) {
         try {
-          const record = JSON.parse(hexToString(proof));
+          const record = parseStrictJson(hexToString(proof));
           if (
             typeof record.nonce === "number" && Number.isInteger(record.nonce)
           ) {
@@ -1379,7 +1359,7 @@ export class Identity extends Key {
   // current strength and rewrite the file.
   static isStorageEncryptedWithLegacyKDF(storageData: string): boolean {
     try {
-      const parsed = JSON.parse(storageData);
+      const parsed = parseStrictJson(storageData);
       if (
         parsed.version === FILE_FORMAT_VERSIONS.identityStorage &&
         typeof parsed.encrypted === "string"
@@ -1399,7 +1379,7 @@ export class Identity extends Key {
   /** Read just the public data from storage (no password needed). */
   static readPublicData(storageData: string): IdentityPublicData | null {
     try {
-      const parsed = JSON.parse(storageData);
+      const parsed = parseStrictJson(storageData);
       if (
         parsed.version === FILE_FORMAT_VERSIONS.identityStorage && parsed.public
       ) {

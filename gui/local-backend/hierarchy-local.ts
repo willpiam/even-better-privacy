@@ -5,6 +5,8 @@ import {
 	type SignedHierarchyCertificate,
 } from "../../core/HierarchyCertificate.ts";
 import { hexToString, stringToHex } from "../../core/Hex.ts";
+import { parseStrictJson } from "../../core/StrictJson.ts";
+import { validateHierarchyCertificateDraft } from "../../core/HierarchyCertificate.ts";
 import { decodeFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { toHex } from "../../core/Hex.ts";
 import type { CLIContext } from "../../cli/utils.ts";
@@ -28,10 +30,11 @@ export function getHierarchyDir(ctx: CLIContext): string {
 
 export function decodeHierarchyCertificateDraft(encoded: string): HierarchyCertificateData {
 	try {
-		const parsed = JSON.parse(hexToString(encoded)) as HierarchyCertificateData;
+		const parsed = parseStrictJson(hexToString(encoded)) as HierarchyCertificateData;
 		if (!parsed || typeof parsed !== "object") {
 			throw new Error("invalid hierarchy certificate");
 		}
+		if (!validateHierarchyCertificateDraft(parsed).ok) throw new Error("invalid hierarchy certificate");
 		if (typeof parsed.masterFingerprint !== "string" || typeof parsed.childFingerprint !== "string") {
 			throw new Error("invalid hierarchy certificate fingerprints");
 		}

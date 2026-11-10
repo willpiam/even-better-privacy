@@ -8,6 +8,14 @@
 #include <openssl/rand.h>
 
 void ebp_free(void *p) { free(p); }
+int ebp_random_hex(size_t byte_len, uint8_t **out, size_t *out_len) {
+    uint8_t *random=NULL; int ok=0;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    if (byte_len>65536 || !(random=malloc(byte_len?byte_len:1))) return 0;
+    if ((!byte_len || RAND_bytes(random,(int)byte_len)==1) && ebp_hex_encode(random,byte_len,out,out_len)) ok=1;
+    ebp_secure_free(random,byte_len); return ok;
+}
 int ebp_derive_storage_key(const uint8_t *password, size_t password_len,
                            const uint8_t salt[16], uint8_t out[32]) {
     int rc;

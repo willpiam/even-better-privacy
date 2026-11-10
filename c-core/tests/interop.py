@@ -1,16 +1,67 @@
 """JSON bridge used by the Deno interoperability tests."""
 import json
 import sys
-from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope, multi_recipient_envelope, hd_node_from_path
+from ebp_core import decrypt_with_key, encrypt_with_key, sha256, derive_storage_key, encrypt, decrypt, pq_keygen, pq_sign, pq_verify, pq_encapsulate, pq_decapsulate, hd_identity_seeds, identity_fingerprint, message_envelope, sign_message, verify_message, encrypt_for_key, decrypt_for_key, recipient_envelope, entropy_to_mnemonic, mnemonic_to_entropy, mnemonic_to_seed, encrypt_for_recipients, decrypt_for_recipient, Identity, parse_payload, armor_payload, verify_detail_proof, create_hierarchy_certificate, verify_hierarchy_certificate, validate_hierarchy, hierarchy_expired, create_file_envelope, parse_file_envelope, multi_recipient_envelope, hd_node_from_path, canonicalize_json, parse_hd_path, build_payload
+from ebp_core import create_email_attachment, parse_email_attachment, parse_encrypted_email_attachment
+from ebp_core import unsigned_hierarchy_certificate, hierarchy_signature_payload, sign_hierarchy_part, encode_hierarchy_certificate, decode_hierarchy_certificate, decode_hierarchy_draft, unsigned_revocation_certificate, revocation_signature_payload, encode_revocation_certificate, decode_revocation_certificate
 
 request = json.load(sys.stdin)
 key = bytes.fromhex(request.get("key", ""))
 aad = request.get("aad", "").encode("utf-8")
 try:
-    if request["operation"] == "encrypt":
+    if request["operation"] == "canonical_json":
+        result = canonicalize_json(request["text"])
+    elif request["operation"] == "encrypt":
         result = encrypt_with_key(key, request["text"].encode("utf-8"), bytes.fromhex(request["salt"]), aad)
     elif request["operation"] == "decrypt":
         result = decrypt_with_key(key, request["ciphertext"], aad).decode("utf-8")
+    elif request["operation"] == "hierarchy_staged":
+        with Identity.from_storage(request["master"], request["password"]) as master, Identity.from_storage(request["child"], request["password"]) as child:
+            cert = unsigned_hierarchy_certificate(master.public_data()["fingerprint"], child.public_data()["fingerprint"], int(request["timestamp"]), int(request["expiry"]), request["context"], request["salt"])
+            unsigned = dict(cert)
+            payload = hierarchy_signature_payload(cert)
+            cert = sign_hierarchy_part(master, cert)
+            draft = encode_hierarchy_certificate(cert)
+            cert = decode_hierarchy_draft(draft)
+            cert = sign_hierarchy_part(child, cert, child=True)
+            encoded = encode_hierarchy_certificate(cert)
+            result = {"unsigned": unsigned, "payload": payload, "draft": draft, "encoded": encoded, "decoded": decode_hierarchy_certificate(encoded)}
+    elif request["operation"] == "revocation_staged":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            cert = unsigned_revocation_certificate("identity", identity.public_data()["fingerprint"], 3, int(request["timestamp"]), "rotation")
+            unsigned = dict(cert)
+            payload = revocation_signature_payload(cert)
+            cert["signature"] = identity.sign(payload, purpose="revocation")
+            encoded = encode_revocation_certificate(cert)
+            result = {"unsigned": unsigned, "payload": payload, "encoded": encoded, "decoded": decode_revocation_certificate(encoded)}
+    elif request["operation"] == "email_attachment_create":
+        result = create_email_attachment(bytes.fromhex(request["file"]), request["name"], request["id"], request["mime"], request.get("body"))
+    elif request["operation"] == "email_attachment_parse":
+        result = parse_email_attachment(request["text"])
+        result["fileBytes"] = result["fileBytes"].hex()
+    elif request["operation"] == "encrypted_email_attachment_parse":
+        result = parse_encrypted_email_attachment(json.loads(request["text"]))
+    elif request["operation"] == "payload_build":
+        result = build_payload(request["type"], json.loads(request["fields"]))
+    elif request["operation"] == "identity_hd_node":
+        key_node, chain, _ = hd_node_from_path(bytes.fromhex(request["seed"]), request["path"])
+        with Identity.from_hd_node(key_node + chain, request["path"]) as identity:
+            result = {"parsed": parse_hd_path(request["path"]), "public": identity.public_data()}
+    elif request["operation"] == "public_identity_import":
+        with Identity.from_public_data(json.loads(request["public"])) as identity:
+            result = identity.public_data()["fingerprint"]
+    elif request["operation"] == "identity_variants":
+        with Identity.from_variants(int(request["signing"]), int(request["kem"])) as identity:
+            result = {"storage": identity.to_storage(request["password"]), "signature": identity.sign(request["message"])}
+    elif request["operation"] == "identity_export_options":
+        with Identity.from_storage(request["storage"]) as identity:
+            result = identity.public_export(request["signing"] == "yes", request["encryption"] == "yes", request["details"] == "yes")
+    elif request["operation"] == "identity_storage_with_key":
+        with Identity.from_storage(request["storage"], request["password"]) as identity:
+            result = identity.to_storage_with_key(bytes.fromhex(request["key"]), bytes.fromhex(request["salt"]))
+    elif request["operation"] == "identity_load_with_key":
+        with Identity.from_storage_with_key(request["storage"], bytes.fromhex(request["key"])) as identity:
+            result = identity.public_data()["fingerprint"]
     elif request["operation"] == "identity_revoke":
         with Identity.from_storage(request["storage"], request["password"]) as identity:
             certificate = identity.revoke_detail(request["path"], request.get("reason"), int(request["timestamp"])) if request["kind"] == "detail" else identity.revoke_identity(request.get("reason"), int(request["timestamp"]))
@@ -75,7 +126,7 @@ try:
         key, chain, profile = hd_node_from_path(bytes.fromhex(request["seed"]), request["path"])
         result = {"key": key.hex(), "chain": chain.hex(), "profile": profile}
     elif request["operation"] == "multi_envelope":
-        result = multi_recipient_envelope(request["message"], json.loads(request["recipients"]), json.loads(request["manifest"]), request["salt"], request.get("locale", "en-US")).decode("utf-8")
+        result = multi_recipient_envelope(request["message"], json.loads(request["recipients"]), json.loads(request["manifest"]), request["salt"]).decode("utf-8")
     elif request["operation"] == "file_create":
         result = create_file_envelope(bytes.fromhex(request["file"]), request["name"], request["mime"])
     elif request["operation"] == "file_parse":

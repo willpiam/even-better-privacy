@@ -1,4 +1,4 @@
-import { deepStrictEqual as assertEquals } from "node:assert/strict";
+import { deepStrictEqual as assertEquals, throws as assertThrows } from "node:assert/strict";
 import * as dsaVariants from "@noble/post-quantum/ml-dsa";
 import * as slhVariants from "@noble/post-quantum/slh-dsa";
 import * as kemVariants from "@noble/post-quantum/ml-kem";
@@ -10,9 +10,10 @@ import { computeIdentityFingerprint } from "../../core/Fingerprint.ts";
 import { bytesToBase64 } from "../../core/Base64.ts";
 import { BIP39_ENGLISH_WORDLIST } from "../../core/bip39-english.ts";
 import { entropyToMnemonic, mnemonicToSeed } from "../../core/Mnemonic.ts";
-import { armorPayload, buildSignedMessagePayload, buildEncryptedSignedMessageMultiPayload } from "../../core/Payloads.ts";
+import { armorPayload, buildDetachedSignaturePayload, buildSignedMessagePayload, buildEncryptedMessagePayload, buildEncryptedSignedMessagePayload, buildEncryptedSignedMessageMultiPayload } from "../../core/Payloads.ts";
 import { parseEbpPayloadInput } from "../../core/PayloadInput.ts";
-import { createFileCleartextEnvelope, parseFileCleartextEnvelope } from "../../core/FilePayload.ts";
+import { createFileCleartextEnvelope, parseFileCleartextEnvelope, buildEncryptedFilePayload, buildEncryptedSignedFilePayload } from "../../core/FilePayload.ts";
+import { createEmailAttachmentCleartextEnvelope, parseEmailAttachmentCleartextEnvelope, parseEncryptedEmailAttachmentPayload } from "../../core/EmailAttachmentPayload.ts";
 import { parseHdPath } from "../../core/HdPath.ts";
 import { AES } from "../../core/AES.ts";
 import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
@@ -23,6 +24,9 @@ import { createHierarchyCertificate, getHierarchySignaturePayload, encodeHierarc
 import { Identity } from "../../core/Identity.ts";
 import { buildPurposeHashEnvelope, buildRecipientBoundEnvelope, buildMultiRecipientBoundEnvelope, type SignaturePurpose } from "../../core/MessageHash.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
+import { canonicalJsonStringify } from "../../core/CanonicalJson.ts";
+import { parseStrictJson } from "../../core/StrictJson.ts";
+import { computeStateHash } from "../../core/StateHash.ts";
 
 const key = Uint8Array.from({ length: 32 }, (_, i) => i);
 const salt = Uint8Array.from({ length: 16 }, (_, i) => i + 1);
@@ -40,6 +44,44 @@ async function python<T = string>(request: Record<string, string>): Promise<{ re
   if (!result.success) throw new Error(new TextDecoder().decode(result.stderr));
   return JSON.parse(new TextDecoder().decode(result.stdout));
 }
+
+Deno.test("RFC 8785 canonical JSON and state hashes agree", async () => {
+  const examples: unknown[] = [
+    {numbers: [333333333.33333329, 1e30, 4.5, 0.002, 1e-27], string: "€$\u000f\nA'B\"\\\"/", literals: [null, true, false]},
+    {"2": true, "10": false, "\u20ac": 1, "\r": 2, "\ufb33": 3, "😀": 4, "\u0080": 5, "ö": 6},
+    [0, -0, 1e-6, 1e-7, 1e20, 1e21, 1.7976931348623157e308, 5e-324, 9007199254740992],
+  ];
+  for (const value of examples) {
+    const actual = (await python<string>({operation: "canonical_json", text: JSON.stringify(value)})).result;
+    assertEquals(actual, canonicalJsonStringify(value));
+  }
+  const state = {fingerprint: "f", signingKeyType: "dilithium", encryptionKeyType: "kyber", signingKey: "s", encryptionKey: "e", details: {}};
+  const serialized = (await python<string>({operation: "canonical_json", text: JSON.stringify(state)})).result;
+  assertEquals(computeStateHash(state), sha256Hex(serialized));
+  for (const text of ['{"a":1,"a":2}', '{"\\u0000":0}', '"\\ud800"', '1e999']) {
+    assertThrows(() => parseStrictJson(text));
+    assertEquals((await python({operation: "canonical_json", text})).error, "invalid ciphertext");
+  }
+});
+
+Deno.test("RFC 8785 Appendix B binary64 examples match", async () => {
+  const samples = [
+    ["0000000000000000", "0"], ["8000000000000000", "0"], ["0000000000000001", "5e-324"], ["8000000000000001", "-5e-324"],
+    ["7fefffffffffffff", "1.7976931348623157e+308"], ["ffefffffffffffff", "-1.7976931348623157e+308"],
+    ["4340000000000000", "9007199254740992"], ["c340000000000000", "-9007199254740992"], ["4430000000000000", "295147905179352830000"],
+    ["44b52d02c7e14af5", "9.999999999999997e+22"], ["44b52d02c7e14af6", "1e+23"], ["44b52d02c7e14af7", "1.0000000000000001e+23"],
+    ["444b1ae4d6e2ef4e", "999999999999999700000"], ["444b1ae4d6e2ef4f", "999999999999999900000"], ["444b1ae4d6e2ef50", "1e+21"],
+    ["3eb0c6f7a0b5ed8c", "9.999999999999997e-7"], ["3eb0c6f7a0b5ed8d", "0.000001"],
+    ["41b3de4355555553", "333333333.3333332"], ["41b3de4355555554", "333333333.33333325"], ["41b3de4355555555", "333333333.3333333"],
+    ["41b3de4355555556", "333333333.3333334"], ["41b3de4355555557", "333333333.33333343"],
+    ["becbf647612f3696", "-0.0000033333333333333333"], ["43143ff3c1cb0959", "1424953923781206.2"],
+  ];
+  const view = new DataView(new ArrayBuffer(8));
+  const values = samples.map(([bits]) => { view.setBigUint64(0, BigInt(`0x${bits}`)); return view.getFloat64(0); });
+  const expected = `[${samples.map(([, text]) => text).join(",")}]`;
+  assertEquals(canonicalJsonStringify(values), expected);
+  assertEquals((await python({operation: "canonical_json", text: JSON.stringify(values)})).result, expected);
+});
 
 Deno.test("C and TypeScript SHA-256 match", async () => {
   for (const text of ["", "abc", "Unicode ☃ 🔐", "x".repeat(10000)]) {
@@ -305,9 +347,15 @@ Deno.test("other exposed signature variants agree across implementations", async
   ] as const;
   const fromHex = (value: string) => Uint8Array.from(value.match(/../g) ?? [], (x) => parseInt(x, 16));
   const message = new TextEncoder().encode("EBP variant compatibility");
+  const encryptionKey = hex(ml_kem1024.keygen(Uint8Array.from({length: 64}, (_, i) => i)).publicKey);
+  const names: Record<number, string> = {4: "ml_dsa44", 5: "ml_dsa65", 8: "slh_dsa_sha2_128f", 9: "slh_dsa_sha2_128s", 10: "slh_dsa_sha2_192f", 11: "slh_dsa_sha2_192s", 12: "slh_dsa_sha2_256f", 13: "slh_dsa_shake_128f", 14: "slh_dsa_shake_128s", 15: "slh_dsa_shake_192f", 16: "slh_dsa_shake_192s", 17: "slh_dsa_shake_256f", 18: "slh_dsa_shake_256s"};
   for (const [algorithm, implementation, seedLength] of variants) {
     const seed = Uint8Array.from({length: seedLength}, (_, i) => i);
     const ts = implementation.keygen(seed);
+    const signingKeyType = algorithm < 8 ? "dilithium" : "sphincs", signingKey = bytesToBase64(ts.publicKey);
+    const fingerprint = computeIdentityFingerprint({signingKeyType, encryptionKeyType: "kyber", signingKey, encryptionKey});
+    const publicData = {fingerprint, signingKeyType, encryptionKeyType: "kyber", signingKey, encryptionKey, signingKeyDetails: {variant: names[algorithm]}, encryptionKeyDetails: {variant: "ml_kem1024"}};
+    assertEquals((await python({operation: "public_identity_import", public: JSON.stringify(publicData)})).result, fingerprint);
     const c = (await python<{public: string; private: string}>({operation: "pq_keygen", algorithm: String(algorithm), seed: hex(seed)})).result;
     assertEquals(c.public, hex(ts.publicKey));
     assertEquals(c.private, hex(ts.secretKey));
@@ -382,16 +430,23 @@ Deno.test("multi-recipient encryption supports mixed ML-KEM variants", async () 
 
 Deno.test("current JSON and armored payloads are exchanged without authentication", async () => {
   const payloads = [
+    buildDetachedSignaturePayload({fingerprint: "f", messageHash: "ab", salt: "", signature: "abc", identity: {name: "snow ☃"}}),
     buildSignedMessagePayload({fingerprint: "f", message: "hello ☃", messageHash: "ab", salt: "", signature: "abc"}),
+    buildEncryptedMessagePayload({recipientFingerprint: "r", ciphertext: "aabb"}),
+    buildEncryptedSignedMessagePayload({recipientFingerprint: "r", senderFingerprint: "s", ciphertext: "aabb", senderIdentity: {name: "sender"}}),
     buildEncryptedSignedMessageMultiPayload({senderFingerprint: "sender", recipients: [{fingerprint: "f", kemCiphertext: "ab", keyWrapNonce: "cd", wrappedContentKey: "ef"}], contentNonce: "00", ciphertext: "aa"}),
+    buildEncryptedFilePayload({recipientFingerprint: "r", fileName: "f", mimeType: "text/plain", fileSize: 3, ciphertext: "aabb"}),
+    buildEncryptedSignedFilePayload({recipientFingerprint: "r", senderFingerprint: "s", fileName: "f", mimeType: "text/plain", fileSize: 3, ciphertext: "aabb"}),
   ];
   for (const payload of payloads) {
+    assertEquals((await python({operation: "payload_build", type: payload.type, fields: JSON.stringify(payload)})).result, JSON.parse(JSON.stringify(payload)));
     const fromTs = armorPayload(payload);
     assertEquals((await python<Record<string, unknown>>({operation: "payload_parse", text: fromTs})).result, JSON.parse(JSON.stringify(payload)));
     const fromC = (await python({operation: "payload_armor", payload: JSON.stringify(payload)})).result;
     assertEquals(parseEbpPayloadInput(fromC), JSON.parse(JSON.stringify(payload)));
   }
-  for (const bad of ['{"type":"ebp-signed-message","version":1}', '{"type":"unknown","version":1}', '{"type":"ebp-signed-message","version":2,"version":1}']) {
+  for (const bad of ['{"type":"ebp-signed-message","version":1}', '{"type":"unknown","version":1}', '{"type":"ebp-encrypted-signed-message-multi","version":1}', '{"type":"ebp-signed-message","version":2,"version":1}']) {
+    assertThrows(() => parseEbpPayloadInput(bad));
     assertEquals((await python({operation: "payload_parse", text: bad})).error, "invalid ciphertext");
   }
 });
@@ -418,6 +473,13 @@ Deno.test("signed detail proofs interoperate without accepting tampered details"
   const publicHex = hex(Uint8Array.from(atob(identity.publicKeys.signingKey), (ch) => ch.charCodeAt(0)));
   const verified = (await python<number[]>({operation: "verify_detail_proof", algorithm: "1", public: publicHex, path, detail, proof})).result;
   assertEquals(verified[0], 0);
+  const oldRecord = JSON.parse(new TextDecoder().decode(Uint8Array.from(proof.match(/../g) ?? [], (part) => parseInt(part, 16))));
+  const numericProof = hex(new TextEncoder().encode(JSON.stringify(oldRecord).replace('"version":2', '"version":2.0').replace('"nonce":0', '"nonce":0.0')));
+  assertEquals((await python<number[]>({operation: "verify_detail_proof", algorithm: "1", public: publicHex, path, detail, proof: numericProof})).result[0], 0);
+  delete oldRecord.version;
+  const oldProof = hex(new TextEncoder().encode(JSON.stringify(oldRecord)));
+  assertEquals((await python({operation: "verify_detail_proof", algorithm: "1", public: publicHex, path, detail, proof: oldProof})).result, null);
+  assertEquals(verifyDetailProof({signingKeyType: "dilithium", signingKey: identity.publicKeys.signingKey, signingVariant: "ml_dsa87", path, detail, proof: oldProof}).ok, false);
   assertEquals((await python({operation: "verify_detail_proof", algorithm: "1", public: publicHex, path, detail: detail + "x", proof})).result, null);
   const cProof = (await python({operation: "create_detail_proof", storage: identity.toStorageFormat(password), password, path, detail, nonce: "7", timestamp: "1700000000123"})).result;
   const cVerified = verifyDetailProof({signingKeyType: "dilithium", signingKey: identity.publicKeys.signingKey, signingVariant: "ml_dsa87", path, detail, proof: cProof});
@@ -426,7 +488,7 @@ Deno.test("signed detail proofs interoperate without accepting tampered details"
 
 Deno.test("detail proof canonicalization handles Unicode and control characters", async () => {
   const identity = new Identity("dilithium", "kyber"), password = "secret";
-  const path = "quote/\"\\" + String.fromCharCode(0) + "\u2028";
+  const path = "quote/\"\\" + "\u2028";
   const detail = "emoji 🔐 / newline\n" + String.fromCharCode(0, 15, 31) + " literal\\u001F é";
   const cleanStorage = identity.toStorageFormat(password);
   identity.attachDetail(path, detail);
@@ -440,8 +502,10 @@ Deno.test("detail proof canonicalization handles Unicode and control characters"
 
 Deno.test("identity storage rejects detail keys containing embedded NUL", async () => {
   const identity = new Identity("dilithium", "kyber"), password = "storage-password";
-  identity.attachDetail("key" + String.fromCharCode(0) + "suffix", "value");
-  const storage = identity.toStorageFormat(password);
+  assertThrows(() => identity.attachDetail("key" + String.fromCharCode(0) + "suffix", "value"));
+  const parsed = JSON.parse(identity.toStorageFormat(password));
+  parsed.public.details["key" + String.fromCharCode(0) + "suffix"] = ["value", "proof"];
+  const storage = JSON.stringify(parsed);
   assertEquals((await python({operation: "identity_load", storage, password, unlock: "yes"})).error, "invalid ciphertext");
 });
 
@@ -453,6 +517,11 @@ Deno.test("revocation certificates interoperate and bind identity and target", a
     cert.signature = identity.signMessage(getRevocationSignaturePayload(cert), undefined, "revocation");
     const encoded = encodeRevocationCertificate({...cert, signature: cert.signature});
     assertEquals((await python<boolean>({operation: "verify_revocation", storage, certificate: encoded, expected_type: kind, ...(kind === "detail" ? {expected_target: target} : {})})).result, true);
+    const old = {...cert} as Record<string, unknown>;
+    delete old.version;
+    const oldEncoded = hex(new TextEncoder().encode(JSON.stringify(old)));
+    assertEquals((await python<boolean>({operation: "verify_revocation", storage, certificate: oldEncoded, expected_type: kind})).result, false);
+    assertEquals(decodeAndVerifyRevocationCertificate(oldEncoded, {signingKeyType: "dilithium", signingKey: identity.publicKeys.signingKey, variant: "ml_dsa87"}).ok, false);
     if (kind === "detail") {
       assertEquals((await python<boolean>({operation: "verify_revocation", storage, certificate: encoded, expected_type: kind, expected_target: "different"})).result, false);
     }
@@ -479,6 +548,28 @@ Deno.test("hierarchy certificates exchange and bind both identities", async () =
   tampered.context = "changed";
   const altered = hex(new TextEncoder().encode(JSON.stringify(tampered)));
   assertEquals((await python<boolean>({operation: "verify_hierarchy", master: masterStorage, child: childStorage, certificate: altered})).result, false);
+});
+
+Deno.test("staged hierarchy and revocation signing interoperates", async () => {
+  const master = new Identity("dilithium", "kyber"), child = new Identity("dilithium", "kyber"), password = "secret", timestamp = 1700000000000;
+  const result = (await python<{unsigned: Record<string, unknown>; payload: string; draft: string; encoded: string; decoded: Record<string, unknown>}>({
+    operation: "hierarchy_staged", master: master.toStorageFormat(password), child: child.toStorageFormat(password), password,
+    timestamp: String(timestamp), expiry: "0", context: "team", salt: "salt",
+  })).result;
+  const expected = createHierarchyCertificate(master.toFingerprint(), child.toFingerprint(), {timestamp, expiry: 0, context: "team", salt: "salt"});
+  assertEquals(result.unsigned, expected);
+  assertEquals(result.payload, getHierarchySignaturePayload(expected));
+  const draft = JSON.parse(new TextDecoder().decode(Uint8Array.from(result.draft.match(/../g) ?? [], (part) => parseInt(part, 16))));
+  assertEquals(draft.childSignature, null);
+  assertEquals(master.verifyMessage(result.payload, draft.masterSignature, undefined, "hierarchy"), true);
+  assertEquals(decodeAndVerifyHierarchyCertificate(result.encoded, master.summary, child.summary).ok, true);
+  assertEquals(result.decoded.version, 2);
+  const rev = (await python<{unsigned: Record<string, unknown>; payload: string; encoded: string; decoded: Record<string, unknown>}>({operation: "revocation_staged", storage: master.toStorageFormat(password), password, timestamp: String(timestamp)})).result;
+  const expectedRev = {...createRevocationCertificate("identity", master.toFingerprint(), 3, {reason: "rotation"}), timestamp};
+  assertEquals(rev.unsigned, JSON.parse(JSON.stringify(expectedRev)));
+  assertEquals(rev.payload, getRevocationSignaturePayload(expectedRev));
+  assertEquals(decodeAndVerifyRevocationCertificate(rev.encoded, {signingKeyType: "dilithium", signingKey: master.publicKeys.signingKey, variant: "ml_dsa87"}).ok, true);
+  assertEquals(rev.decoded.version, 2);
 });
 
 Deno.test("recipient-bound signed encryption exchanges with TypeScript identities", async () => {
@@ -583,6 +674,38 @@ Deno.test("public identity exports verify and receive encrypted messages", async
   }
 });
 
+Deno.test("public identity export options match TypeScript", async () => {
+  const identity = new Identity("dilithium", "kyber"), storage = identity.toStorageFormat("password");
+  for (const [signing, encryption, details] of [[true, true, true], [true, false, false], [false, true, true]] as const) {
+    const actual = (await python({operation: "identity_export_options", storage, signing: signing ? "yes" : "no", encryption: encryption ? "yes" : "no", details: details ? "yes" : "no"})).result;
+    assertEquals(actual, identity.toPublicExport({includeSigningKey: signing, includeEncryptionKey: encryption, includeDetails: details}));
+  }
+});
+
+Deno.test("identity storage with derived keys interoperates", async () => {
+  const identity = new Identity("dilithium", "kyber"), password = "password", storage = identity.toStorageFormat(password);
+  const ts = identity.toStorageFormatWithKey(key, salt);
+  assertEquals((await python({operation: "identity_load_with_key", storage: ts, key: hex(key)})).result, identity.toFingerprint());
+  const c = (await python({operation: "identity_storage_with_key", storage, password, key: hex(key), salt: hex(salt)})).result;
+  assertEquals(Identity.fromStorageFormatWithKey(c, key).toFingerprint(), identity.toFingerprint());
+  assertEquals((await python({operation: "identity_load_with_key", storage: ts, key: hex(new Uint8Array(32))})).error, "invalid ciphertext");
+});
+
+Deno.test("non-default identity key variants interoperate", async () => {
+  const password = "password", message = "variant interoperability";
+  for (const [signing, kem] of [[4, 6], [5, 7], [8, 6], [14, 7]]) {
+    const created = (await python<{storage: string; signature: string}>({operation: "identity_variants", signing: String(signing), kem: String(kem), password, message})).result;
+    const ts = Identity.fromStorageFormat(created.storage, password);
+    assertEquals(ts.verifyMessage(message, created.signature), true);
+    const signature = ts.signMessage(message);
+    assertEquals((await python<boolean>({operation: "public_identity_verify", public: JSON.stringify(ts.toPublicExport()), text: message, signature, salt: ""})).result, true);
+    const c = (await python({operation: "identity_sign_encrypt", sender: created.storage, recipient: created.storage, password, text: message})).result;
+    assertEquals(ts.decryptAndVerify(c, ts.summary).verified, true);
+    const fromTs = ts.signAndEncryptMessage(message, ts);
+    assertEquals((await python<{verified: boolean}>({operation: "identity_decrypt_verify", recipient: created.storage, sender: created.storage, password, ciphertext: fromTs})).result.verified, true);
+  }
+});
+
 Deno.test("file cleartext envelopes exchange bytes and metadata", async () => {
   const data = Uint8Array.from({length: 256}, (_, i) => i), name = "report ☃" + String.fromCharCode(0) + ".bin", mime = "application/octet-stream";
   const ts = createFileCleartextEnvelope(data, name, mime);
@@ -609,6 +732,23 @@ Deno.test("file envelope parsing follows TypeScript base64 rules", async () => {
   }
 });
 
+Deno.test("email attachment formats interoperate and validate fields", async () => {
+  const fileBytes = Uint8Array.from({length: 32}, (_, i) => i), fileName = "report ☃.txt", mimeType = "text/plain", attachmentId = "a-123", bodyPayloadHash = "0123";
+  const ts = createEmailAttachmentCleartextEnvelope({fileBytes, fileName, mimeType, attachmentId, bodyPayloadHash});
+  const c = (await python({operation: "email_attachment_create", file: hex(fileBytes), name: fileName, id: attachmentId, mime: mimeType, body: bodyPayloadHash})).result;
+  assertEquals(c, ts);
+  const actual = (await python({operation: "email_attachment_parse", text: JSON.stringify(ts)})).result;
+  assertEquals(actual, {...parseEmailAttachmentCleartextEnvelope(JSON.stringify(ts)), fileBytes: hex(fileBytes)});
+  for (const payload of [
+    {type: "ebp-encrypted-email-attachment", version: 1, recipientFingerprint: "r", attachmentId, ciphertext: "a"},
+    {type: "ebp-encrypted-signed-email-attachment", version: 1, recipientFingerprint: "r", senderFingerprint: "s", attachmentId, ciphertext: "a"},
+    {type: "ebp-encrypted-signed-email-attachment-multi", version: 1, senderFingerprint: "s", attachmentId, contentNonce: "b", ciphertext: "a"},
+  ]) {
+    assertEquals((await python({operation: "encrypted_email_attachment_parse", text: JSON.stringify(payload)})).result, parseEncryptedEmailAttachmentPayload(payload));
+    assertEquals((await python({operation: "encrypted_email_attachment_parse", text: JSON.stringify({...payload, attachmentId: "  "})})).error, "invalid ciphertext");
+  }
+});
+
 Deno.test("multi-recipient signature envelopes match Unicode sorting and JSON", async () => {
   const cases = [
     {message: "", recipients: [], manifest: [], salt: ""},
@@ -622,7 +762,7 @@ Deno.test("multi-recipient signature envelopes match Unicode sorting and JSON", 
   }
 });
 
-Deno.test("v3 signatures bind recipients and attachment manifests across implementations", async () => {
+Deno.test("v4 signatures bind recipients and attachment manifests across implementations", async () => {
   const sender = new Identity("dilithium", "kyber"), password = "secret", storage = sender.toStorageFormat(password);
   const message = "signed ☃", recipients = ["recipient-b", "recipient-a"], manifest = [{attachmentId: "é", ciphertextSha256: "34"}, {attachmentId: "a", ciphertextSha256: "12"}], salt = "salt";
   const ts = sender.signMessageForRecipients(message, recipients, manifest, salt);
@@ -631,6 +771,10 @@ Deno.test("v3 signatures bind recipients and attachment manifests across impleme
   assertEquals(Identity.VerifyMultiRecipientBoundSignature(sender.summary, recipients, message, c, manifest, salt), true);
   assertEquals(Identity.VerifyMultiRecipientBoundSignature(sender.summary, ["recipient-a"], message, c, manifest, salt), false);
   assertEquals((await python<boolean>({operation: "identity_verify_multi", storage, message, recipients: JSON.stringify(recipients), manifest: JSON.stringify([{...manifest[0], ciphertextSha256: "changed"}, manifest[1]]), salt, signature: ts})).result, false);
+  const tied = [{attachmentId: "same", ciphertextSha256: "z"}, {attachmentId: "same", ciphertextSha256: "a"}];
+  assertEquals(buildMultiRecipientBoundEnvelope(recipients, message, tied, salt), buildMultiRecipientBoundEnvelope(recipients, message, [...tied].reverse(), salt));
+  assertEquals((await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(tied), salt})).result,
+    buildMultiRecipientBoundEnvelope(recipients, message, [...tied].reverse(), salt));
 });
 
 Deno.test("complete signed multi-recipient messages exchange and reject tampering", async () => {
@@ -669,6 +813,10 @@ Deno.test("complete signed multi-recipient messages exchange and reject tamperin
   assertEquals(forwardedResult.verified, false);
   assertEquals(forwardedResult.verifyStatus, "invalid");
   const inner = JSON.parse(new TextDecoder().decode(MultiRecipientCipher.decryptWithContentKey(fromC.ciphertext, fromC.contentNonce, key)));
+  const oldEncrypted = MultiRecipientCipher.encryptWithContentKey(new TextEncoder().encode(JSON.stringify({...inner, envelopeVersion: 3})), key);
+  const oldPacket = {...fromC, ...oldEncrypted};
+  assertEquals(alice.decryptAndVerifyMulti(oldPacket, sender.summary).verified, false);
+  assertEquals((await python<Result>({operation: "multi_signed_decrypt", recipient: aliceStorage, sender: senderStorage, password, payload: JSON.stringify(oldPacket)})).result.verified, false);
   inner.attachmentManifest[0].ciphertextSha256 = "modified";
   const reencrypted = MultiRecipientCipher.encryptWithContentKey(new TextEncoder().encode(JSON.stringify(inner)), key);
   const changed = {...fromC, ...reencrypted};
@@ -698,13 +846,13 @@ Deno.test("multi-recipient canonical bytes cover all JSON control escapes", asyn
   assertEquals(actual, buildMultiRecipientBoundEnvelope(recipients, message, manifest, salt));
 });
 
-Deno.test("multi-recipient manifest collation can match a specified locale", async () => {
-  const locale = "sv-SE", message = "message", recipients = ["b", "a"], salt = "";
+Deno.test("multi-recipient manifest ordering is deterministic", async () => {
+  const message = "message", recipients = ["b", "a"], salt = "";
   const manifest = ["ä", "z", "å", "a", "ö"].map((attachmentId) => ({attachmentId, ciphertextSha256: "hash"}));
-  const canonicalManifest = [...manifest].sort((a, b) => a.attachmentId.localeCompare(b.attachmentId, locale));
-  const canonical = JSON.stringify({tag: "EBP-MULTIRECIPIENT-V3", message, recipientFingerprints: [...recipients].sort(), attachmentManifest: canonicalManifest});
-  const actual = (await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt, locale})).result;
-  assertEquals(actual, `ebp::messagehash::v3::${sha256Hex(canonical)}::`);
+  const canonicalManifest = [...manifest].sort((a, b) => a.attachmentId < b.attachmentId ? -1 : a.attachmentId > b.attachmentId ? 1 : a.ciphertextSha256 < b.ciphertextSha256 ? -1 : a.ciphertextSha256 > b.ciphertextSha256 ? 1 : 0);
+  const canonical = canonicalJsonStringify({tag: "EBP-MULTIRECIPIENT-V4", message, recipientFingerprints: [...recipients].sort(), attachmentManifest: canonicalManifest});
+  const actual = (await python({operation: "multi_envelope", message, recipients: JSON.stringify(recipients), manifest: JSON.stringify(manifest), salt})).result;
+  assertEquals(actual, `ebp::messagehash::v4::${sha256Hex(canonical)}::`);
 });
 
 Deno.test("multi-recipient canonical JSON covers Unicode scalar ranges", async () => {
@@ -725,5 +873,16 @@ Deno.test("arbitrary supported HD paths match TypeScript derivation", async () =
   }
   for (const path of ["m", "m/ebp/0'/0'/0/0", "m/ebp'/dilithium/0'/0/0", "m/ebp'/2'/0'/0/0", "m/ebp'/0/0/0/0", "m/ebp'/0/0'/2/0", "m/ebp'/0/0'/0/2147483648", "m/ebp'/0/0'/0/0/1"]) {
     assertEquals((await python({operation: "hd_path", seed: hex(seed), path})).error, "invalid ciphertext");
+  }
+});
+
+Deno.test("identity creation from arbitrary HD nodes matches TypeScript", async () => {
+  const seed = Uint8Array.from({length: 64}, (_, i) => i);
+  for (const path of ["m/ebp'/dilithium'/03'/1'/0005'", " m/ebp'/0'/4'/0/9 "]) {
+    const node = deriveNode(seed, path), ts = Identity.fromHdNode(node, "dilithium", path);
+    const c = (await python<{parsed: unknown; public: {fingerprint: string; hdProvenance: unknown}}>({operation: "identity_hd_node", seed: hex(seed), path})).result;
+    assertEquals(c.parsed, parseHdPath(path));
+    assertEquals(c.public.fingerprint, ts.toFingerprint());
+    assertEquals(c.public.hdProvenance, ts.publicData.hdProvenance);
   }
 });

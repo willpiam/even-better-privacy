@@ -1,4 +1,30 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { extractArmoredPayload } from "./Payloads.ts";
+import { FILE_FORMAT_VERSIONS } from "./version.ts";
+
+function currentPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  // The current signed-file object is produced without a version field.
+  if (payload.type === "ebp-signed-file" && payload.version === undefined) return payload;
+  const versions: Record<string, number> = {
+    "ebp-signature": FILE_FORMAT_VERSIONS.signature,
+    "ebp-signed-message": FILE_FORMAT_VERSIONS.signedMessage,
+    "ebp-encrypted-message": FILE_FORMAT_VERSIONS.encryptedMessage,
+    "ebp-encrypted-signed-message": FILE_FORMAT_VERSIONS.encryptedSignedMessage,
+    "ebp-encrypted-signed-message-multi": FILE_FORMAT_VERSIONS.encryptedSignedMessageMulti,
+    "ebp-file-cleartext-envelope": FILE_FORMAT_VERSIONS.fileCleartextEnvelope,
+    "ebp-encrypted-file": FILE_FORMAT_VERSIONS.encryptedFile,
+    "ebp-encrypted-signed-file": FILE_FORMAT_VERSIONS.encryptedSignedFile,
+    "ebp-email-attachment-cleartext-envelope": FILE_FORMAT_VERSIONS.emailAttachmentCleartextEnvelope,
+    "ebp-encrypted-email-attachment": FILE_FORMAT_VERSIONS.encryptedEmailAttachment,
+    "ebp-encrypted-signed-email-attachment": FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachment,
+    "ebp-encrypted-signed-email-attachment-multi": FILE_FORMAT_VERSIONS.encryptedSignedEmailAttachmentMulti,
+    "ebp-emergency-revocation-certificate": FILE_FORMAT_VERSIONS.emergencyRevocationCertificate,
+  };
+  if (typeof payload.type !== "string" || !Object.prototype.hasOwnProperty.call(versions, payload.type) || payload.version !== versions[payload.type]) {
+    throw new Error("Unsupported payload type or version");
+  }
+  return payload;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -18,12 +44,12 @@ export function parseEbpPayloadInput(text: string): Record<string, unknown> {
     if (typeof armored.type !== "string") {
       throw new Error("Armored payload missing type field");
     }
-    return armored;
+    return currentPayload(armored);
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(trimmed);
+    parsed = parseStrictJson(trimmed);
   } catch {
     throw new Error("Invalid JSON payload");
   }
@@ -34,7 +60,7 @@ export function parseEbpPayloadInput(text: string): Record<string, unknown> {
   if (typeof parsed.type !== "string") {
     throw new Error("Payload missing type field");
   }
-  return parsed;
+  return currentPayload(parsed);
 }
 
 export type ParsedRecipientEncapsulation = {

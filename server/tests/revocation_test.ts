@@ -18,6 +18,7 @@ function createSignedRevocationCertificate(
   },
 ): string {
   const payload = {
+    version: 2,
     type: data.type,
     fingerprint: data.fingerprint,
     nonce: data.nonce,
@@ -145,6 +146,7 @@ Deno.test("verifyRevocationCertificate rejects invalid signature", () => {
   const { identity } = createSphincsIdentity();
 
   const invalidCert = {
+    version: 2,
     type: "identity",
     fingerprint: identity.fingerprint,
     nonce: 0,
@@ -181,6 +183,7 @@ Deno.test("verifyRevocationCertificate rejects detail revocation without target"
 
   // Create a detail revocation without target
   const payload = {
+    version: 2,
     type: "detail",
     fingerprint: identity.fingerprint,
     nonce: 0,
@@ -206,6 +209,7 @@ Deno.test("verifyRevocationCertificate rejects invalid nonce", () => {
   const { identity, signingKey } = createSphincsIdentity();
 
   const payload = {
+    version: 2,
     type: "identity" as const,
     fingerprint: identity.fingerprint,
     nonce: -1, // Invalid negative nonce

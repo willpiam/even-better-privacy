@@ -1,14 +1,13 @@
-# Python bindings for the C core (partial)
+# Python bindings for the C core
 
 These bindings expose hashing, current-format encryption, post-quantum keys,
 mnemonics, HD derivation, identity storage, and message-signing operations.
-They are **not a replacement for the TypeScript core**: some data-format
-operations, canonical JSON behavior, and other APIs remain incomplete.
+The compatibility matrix describes the current coverage and remaining gaps.
 The C library uses OpenSSL for cryptographic operations and the reference Argon2
 library for password key derivation.
 
 On Linux, install a C compiler, Python development headers, OpenSSL 3.5 or
-newer, and Argon2, utf8proc, Jansson, and ICU development headers. Install from the
+newer, and Argon2, utf8proc, and Jansson development headers. Install from the
 repository root using `python3 -m pip install .`. The resulting platform-specific
 wheel links to those native libraries; it does not bundle them.
 
@@ -63,8 +62,8 @@ must match to decrypt. Only v4 ciphertext is accepted.
 
 The low-level `pq_keygen`, `pq_sign`, `pq_verify`, `pq_encapsulate`, and
 `pq_decapsulate` functions support the TypeScript-exposed ML-DSA, SLH-DSA,
-and ML-KEM variants and operate on raw keys and messages; they do not yet
-implement EBP identities or message envelopes. They require OpenSSL 3.5 or newer.
+and ML-KEM variants and operate on raw keys and messages, without managing
+identities. They require OpenSSL 3.5 or newer.
 ML-KEM decapsulation uses implicit rejection: a modified, correctly sized
 ciphertext can produce a different secret instead of an error. Authenticate
 the resulting encryption; `encrypt_for_key` and `decrypt_for_key` use AES-GCM.
@@ -74,8 +73,8 @@ seeds. `hd_node_from_path` derives a node from a supported five-segment path,
 and `identity_fingerprint` computes a fingerprint from raw public keys.
 These are building blocks; they do not themselves create or store EBP identities.
 `sign_message` and `verify_message` accept raw signing keys and use the
-current purpose-bound message envelope; recipient-bound signing convenience
-functions are not implemented.
+current purpose-bound message envelope. The `Identity` API also provides
+recipient-bound signed encryption.
 
 For low-level current-profile interoperability, a message can be signed or
 sent to an ML-KEM public key:
@@ -95,7 +94,7 @@ assert decrypt_for_key(encryption_private, ciphertext) == b"hello"
 These raw key operations do not create signed-and-encrypted EBP payloads.
 `recipient_envelope` constructs the bytes for a recipient-bound signature;
 the caller must sign and verify those bytes with the appropriate raw key.
-Use the full TypeScript implementation for complete message workflows.
+Use the `Identity` methods below for signed message workflows.
 
 Create and recover EBP-HD seed material from a mnemonic:
 
@@ -171,6 +170,10 @@ value only after proof verification. `revoke_detail` and `revoke_identity`
 create certificates and update in-memory state. `emergency_revocation` creates
 a certificate without changing state. The application remains responsible for
 persisting the updated storage JSON.
+`verify_detail_proof_result`, `identity.verify_revocation_result`, and
+`verify_hierarchy_certificate_result` return dictionaries with an `ok` flag
+and a failure reason. The simpler boolean/optional-result functions remain
+available.
 
 `create_hierarchy_certificate` and `verify_hierarchy_certificate` create and
 verify both signatures. Verification does not check expiration or graph
@@ -185,14 +188,92 @@ and encryption requires the encryption key.
 single-recipient messages. Always check `verified` before trusting a returned
 message; decryption can succeed even if its signature is invalid.
 
+Use `identity.public_export(include_signing_key=False)` to export an encryption
+key and a hash of the signing key. To store with a pre-derived AES key, call
+`identity.to_storage_with_key(key, salt)` and load with
+`Identity.from_storage_with_key(json_text, key)`. The key must be 32 bytes and
+the salt must be 16 bytes. The caller is responsible for deriving and protecting
+the key and for retaining the salt when needed.
+
+`Identity.from_variants(signing_algorithm, kem_algorithm)` creates identities
+using the supported raw signing and ML-KEM variants. `parse_hd_path`,
+`format_hd_path`, and `Identity.from_hd_node` cover arbitrary supported paths.
+`decode_fingerprint` validates a fingerprint and returns its profile and raw
+root. `Identity.verify_details()` checks structure and ordering only; use
+`get_detail` to verify an individual signature.
+
 `create_file_envelope` and `parse_file_envelope` exchange file bytes and
 metadata in the current cleartext file-envelope format. They do not access the
 filesystem. Encrypting, signing, and persisting the resulting payload remain
 separate operations.
 
-Signed multi-recipient messages use ICU collation for attachment identifiers.
-The default locale is `en-US`; pass the same `locale` used by the TypeScript
-runtime when its default differs. Different ICU versions can also order some
-Unicode strings differently. Decryption returns the content key and can return
+Signed multi-recipient messages use v4 envelopes and deterministic UTF-16
+ordering of attachment identifiers and ciphertext hashes. Decryption returns the content key and can return
 plaintext with `verified` set to `False`; treat the key as secret and always
 check verification before trusting the message or attachment manifest.
+
+```python
+from ebp_core import Identity
+
+with Identity() as sender, Identity() as alice, Identity() as bob:
+    packet = sender.sign_and_encrypt_many("hello", [alice, bob])
+    received = alice.decrypt_and_verify_many(packet, sender)
+    if not received["verified"]:
+        raise ValueError("invalid sender signature or recipient binding")
+    assert received["message"] == "hello"
+```
+
+For a single recipient, use `sender.sign_and_encrypt(message, recipient)` and
+`recipient.decrypt_and_verify(ciphertext, sender)` and check `verified`.
+
+`canonicalize_json` canonicalizes JSON text using RFC 8785. `canonical_json`
+does the same for a Python JSON value, and `compute_state_hash` returns the
+SHA-256 hash of its canonical bytes. Duplicate keys, NUL object keys, unpaired
+surrogates, and non-finite numbers are rejected. The current signed proof,
+revocation, hierarchy, and multi-recipient formats use these canonical rules;
+older versions are not accepted.
+Identity storage itself retains its v2 format. Stored detail proofs and
+revocation certificates created under the former canonicalization rules must
+be recreated; old signed multi-recipient messages cannot be verified by the
+new v4 workflow. Deploy updated server and clients together because state hashes
+also use the new canonicalization.
+
+`build_payload` builds supported current message and file payloads.
+`create_email_attachment`, `parse_email_attachment`, and
+`parse_encrypted_email_attachment` operate on attachment bytes and metadata in
+memory. Parsing validates the format, not the authenticity of ciphertext.
+For separately held hierarchy signers, use `unsigned_hierarchy_certificate`,
+`hierarchy_signature_payload`, `sign_hierarchy_part`, and
+`encode_hierarchy_certificate`; verify the completed certificate before use.
+
+```python
+import time
+from ebp_core import (Identity, unsigned_hierarchy_certificate,
+                      sign_hierarchy_part, encode_hierarchy_certificate,
+                      decode_hierarchy_draft, verify_hierarchy_certificate)
+
+with Identity() as master, Identity() as child:
+    draft = unsigned_hierarchy_certificate(
+        master.public_data()["fingerprint"], child.public_data()["fingerprint"],
+        timestamp=int(time.time() * 1000), context="team")
+    draft = sign_hierarchy_part(master, draft)
+    # The encoded draft can be sent to the separately held child identity.
+    draft = decode_hierarchy_draft(encode_hierarchy_certificate(draft))
+    completed = sign_hierarchy_part(child, draft, child=True)
+    certificate = encode_hierarchy_certificate(completed)
+    assert verify_hierarchy_certificate(master, child, certificate)
+```
+
+For pre-derived-key storage, retain the salt with your key-management metadata:
+
+```python
+import os
+from ebp_core import Identity, derive_storage_key
+
+salt = os.urandom(16)
+key = derive_storage_key("a strong password", salt)
+with Identity() as identity:
+    stored = identity.to_storage_with_key(key, salt)
+with Identity.from_storage_with_key(stored, key) as unlocked:
+    assert unlocked.is_private
+```

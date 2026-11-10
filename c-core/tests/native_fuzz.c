@@ -13,7 +13,10 @@ int main(void) {
         if (ebp_payload_parse(input,len,&out,&out_len)) ebp_free(out);
         else assert(out==NULL && out_len==0);
         out=NULL; out_len=0;
-        if (ebp_multi_envelope(input,len,input,len,input,len,NULL,0,NULL,&out,&out_len)) ebp_secure_free(out,out_len);
+        if (ebp_multi_envelope(input,len,input,len,input,len,NULL,0,&out,&out_len)) ebp_secure_free(out,out_len);
+        else assert(out==NULL && out_len==0);
+        out=NULL; out_len=0;
+        if (ebp_json_canonical(input,len,&out,&out_len)) ebp_free(out);
         else assert(out==NULL && out_len==0);
         if (ebp_mnemonic_to_entropy(input,len,&data,&data_len)) ebp_secure_free(data,data_len);
         else assert(data==NULL && data_len==0);

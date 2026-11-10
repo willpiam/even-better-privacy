@@ -1,6 +1,7 @@
 import { DilithiumSigningKey } from "../../core/Dilithium.ts";
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
+import { externalIdentityFromEmbeddedRecord } from "../../core/EmbeddedIdentity.ts";
 import {
   buildMessageHashEnvelopeFromHash,
   sha256Hex,
@@ -130,6 +131,10 @@ export async function handlePostIdentity(
   if (!validatePostQuantumSigningKey(signingKeyType, signingKey)) {
     return invalidIdentitySubmission();
   }
+  if (!externalIdentityFromEmbeddedRecord({
+    signingKeyType, encryptionKeyType, signingKey, encryptionKey,
+    signingKeyDetails, encryptionKeyDetails, ...(providedFingerprint ? {fingerprint: providedFingerprint} : {}),
+  }, providedFingerprint)) return invalidIdentitySubmission();
 
   let fingerprint: string;
   try {

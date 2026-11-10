@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
@@ -89,7 +90,7 @@ export function buildEncryptedSignedFilePayload(input: {
 export function parseFileCleartextEnvelope(
 	input: string,
 ): { fileName: string; mimeType: string; fileSize: number; fileBytes: Uint8Array } {
-	const raw = JSON.parse(input) as Partial<FileCleartextEnvelope>;
+	const raw = parseStrictJson(input) as Partial<FileCleartextEnvelope>;
 	if (raw.type !== "ebp-file-cleartext-envelope") {
 		throw new Error("Invalid file envelope type");
 	}

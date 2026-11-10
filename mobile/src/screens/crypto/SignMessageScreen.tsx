@@ -107,7 +107,7 @@ export default function SignMessageScreen(): JSX.Element {
         />
       </View>
       <Text style={cryptoStyles.helpText}>
-        Signs ebp::messagehash::&lt;sha256&gt;::&lt;optional salt&gt; rather than
+        Signs ebp::message::v1::&lt;sha256&gt;::&lt;optional salt&gt; rather than
         the raw message body.
       </Text>
       <View style={cryptoStyles.signActions}>

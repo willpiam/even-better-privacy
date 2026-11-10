@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { AsymmetricEncryptionKey } from "./Keys.ts";
 import * as kyber from "@noble/post-quantum/ml-kem";
 import { randomBytes } from "@noble/hashes/utils";
@@ -153,7 +154,7 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
   }
 
   static fromJSON(json: string): KyberEncryptionKey {
-    const data = JSON.parse(json);
+    const data = parseStrictJson(json);
     const instance = new KyberEncryptionKey(data.variant);
     instance.key = {
       publicKey: hexToBytes(data.publicKey),

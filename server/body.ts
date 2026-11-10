@@ -1,3 +1,5 @@
+import { parseStrictJson } from "../core/StrictJson.ts";
+
 // =============================================================================
 // Security Limits
 // =============================================================================
@@ -64,11 +66,11 @@ export async function readJsonBody<T>(req: Request): Promise<{ ok: true; data: T
       offset += chunk.length;
     }
     
-    const text = new TextDecoder().decode(combined);
-    const data = JSON.parse(text) as T;
+    const text = new TextDecoder("utf-8", {fatal: true}).decode(combined);
+    const data = parseStrictJson(text) as T;
     return { ok: true, data };
   } catch (e) {
-    if (e instanceof SyntaxError) {
+    if (e instanceof SyntaxError || e instanceof TypeError) {
       return { ok: false, error: "invalid json", status: 400 };
     }
     return { ok: false, error: "failed to read request body", status: 400 };

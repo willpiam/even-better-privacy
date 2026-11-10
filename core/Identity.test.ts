@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert";
+import { assert, assertEquals, assertThrows } from "jsr:@std/assert";
 import { Identity } from "./Identity.ts";
 import type { MultiRecipientAttachmentManifestEntry } from "./MessageHash.ts";
 import {
@@ -109,12 +109,10 @@ Deno.test("Identity storage private payload binds key types to public metadata",
   }
 
   assert(error instanceof StorageFormatError);
-  assert(
-    error.message.includes("signing key type does not match"),
-  );
+  assert(error.message.includes("Invalid public identity"));
 });
 
-Deno.test("Identity storage legacy private payload loads and requests upgrade", () => {
+Deno.test("Identity storage rejects private payload without key types", () => {
   const original = new Identity("dilithium", "kyber");
   const password = "correct horse battery staple";
   const storage = JSON.parse(original.toStorageFormat(password));
@@ -128,10 +126,7 @@ Deno.test("Identity storage legacy private payload loads and requests upgrade", 
     "ebp:identity-storage:v2",
   );
 
-  const loaded = Identity.fromStorageFormat(JSON.stringify(storage), password);
-
-  assertEquals(loaded.toFingerprint(), original.toFingerprint());
-  assertEquals(Identity.needsPrivateKeyTypeStorageUpgrade(loaded), true);
+  assertThrows(() => Identity.fromStorageFormat(JSON.stringify(storage), password), StorageFormatError);
 });
 
 Deno.test("Identity multi-recipient inner payload includes explicit type tag", () => {
@@ -150,7 +145,7 @@ Deno.test("Identity multi-recipient inner payload includes explicit type tag", (
   const parsed = JSON.parse(new TextDecoder().decode(decrypted));
 
   assertEquals(parsed.type, "ebp-encrypted-signed-inner-multi");
-  assertEquals(parsed.envelopeVersion, 3);
+  assertEquals(parsed.envelopeVersion, 4);
   assertEquals(parsed.message, "hello");
 });
 

@@ -11,6 +11,7 @@ import type { CLIContext } from "../cli/utils.ts";
 
 function sampleDraft(overrides: Record<string, unknown> = {}) {
   return {
+    version: 2,
     masterFingerprint: "fp_master",
     childFingerprint: "fp_child",
     timestamp: 1,
@@ -41,6 +42,8 @@ Deno.test("gui hierarchy-local: decodeHierarchyCertificateDraft rejects bad enco
     HttpError,
     "invalid hierarchy certificate encoding",
   );
+  assertThrows(() => decodeHierarchyCertificateDraft(stringToHex(JSON.stringify(sampleDraft({version: 1})))), HttpError);
+  assertThrows(() => decodeHierarchyCertificateDraft(stringToHex(JSON.stringify(sampleDraft({timestamp: 1.5})))), HttpError);
 });
 
 Deno.test("gui hierarchy-local: path helpers and fingerprintColor fallback", () => {

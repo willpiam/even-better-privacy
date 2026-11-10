@@ -4,8 +4,10 @@
 #include <openssl/kdf.h>
 #include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <utf8proc.h>
+#include <jansson.h>
 
 static int hkdf_sha512(const uint8_t *key, size_t key_len, const uint8_t *salt, size_t salt_len,
                        const char *info, uint8_t *out, size_t out_len) {
@@ -89,29 +91,59 @@ static int segment(const uint8_t *text, size_t len, size_t position, uint32_t *i
     if ((position==1 || position==3) && value>1) return 0;
     *index=value; return 1;
 }
-int ebp_hd_derive_path(const uint8_t *seed, size_t seed_len, const uint8_t *path, size_t path_len,
-                       uint8_t node[64], int *profile) {
-    uint32_t indices[5]; int hardened[5], which=0, ok=0; uint8_t current[64], next[64];
+int ebp_hd_parse_path(const uint8_t *path, size_t path_len, ebp_hd_path *parsed) {
+    const uint8_t *original=path;
     size_t start=2, count=0;
-    if (!node || !profile) return 0;
-    OPENSSL_cleanse(node,64); *profile=0;
-    if ((!seed && seed_len) || !trim_path(&path,&path_len) || path_len<3 || path[0]!='m' || path[1]!='/') return 0;
+    if (!parsed) return 0;
+    memset(parsed,0,sizeof(*parsed));
+    if (!trim_path(&path,&path_len) || path_len<3 || path[0]!='m' || path[1]!='/') return 0;
+    parsed->normalized_offset=(size_t)(path-original); parsed->normalized_len=path_len;
     for (size_t i=2; i<=path_len; i++) {
         if (i==path_len || path[i]=='/') {
-            if (count>=5 || !segment(path+start,i-start,count,&indices[count],&hardened[count])) goto done;
+            if (count>=5 || !segment(path+start,i-start,count,&parsed->indices[count],&parsed->hardened[count])) return 0;
             count++; start=i+1;
         }
     }
-    if (count!=5) goto done;
-    which=(int)indices[1];
+    return count==5;
+}
+int ebp_hd_format_path(int sphincs, uint32_t account, int change, uint32_t index, uint8_t **out, size_t *out_len) {
+    char path[96]; int n; uint8_t *copy;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    if ((sphincs!=0 && sphincs!=1) || (change!=0 && change!=1) || account>=0x80000000u || index>=0x80000000u) return 0;
+    n=snprintf(path,sizeof(path),"m/ebp'/%s'/%u'/%d/%u",sphincs?"sphincs":"dilithium",(unsigned)account,change,(unsigned)index);
+    if (n<0 || (size_t)n>=sizeof(path) || !(copy=malloc((size_t)n))) return 0;
+    memcpy(copy,path,(size_t)n); *out=copy; *out_len=(size_t)n; return 1;
+}
+int ebp_hd_provenance(const uint8_t *path, size_t path_len, uint8_t **out, size_t *out_len) {
+    ebp_hd_path p; json_t *obj=NULL; char *text=NULL; int ok=0;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    if (!ebp_hd_parse_path(path,path_len,&p)) return 0;
+    obj=json_pack("{s:s,s:s,s:I,s:s,s:I}","version","ebp-hd-v1",
+                  "profile",p.indices[1]?"sphincs":"dilithium","account",(json_int_t)p.indices[2],
+                  "change",p.indices[3]?"internal":"external","index",(json_int_t)p.indices[4]);
+    if (!obj || json_object_set_new(obj,"path",json_stringn((const char *)path+p.normalized_offset,p.normalized_len))!=0 ||
+        !(text=json_dumps(obj,JSON_COMPACT))) goto done;
+    *out=(uint8_t *)text; *out_len=strlen(text); text=NULL; ok=1;
+done:
+    free(text); json_decref(obj); return ok;
+}
+int ebp_hd_derive_path(const uint8_t *seed, size_t seed_len, const uint8_t *path, size_t path_len,
+                       uint8_t node[64], int *profile) {
+    ebp_hd_path parsed; int which=0, ok=0; uint8_t current[64], next[64];
+    if (!node || !profile) return 0;
+    OPENSSL_cleanse(node,64); *profile=0;
+    if ((!seed && seed_len) || !ebp_hd_parse_path(path,path_len,&parsed)) return 0;
+    which=(int)parsed.indices[1];
     if (!ebp_hd_master(seed,seed_len,current)) goto done;
     for (size_t i=0; i<5; i++) {
-        uint32_t child=indices[i]+(hardened[i]?0x80000000u:0u);
+        uint32_t child=parsed.indices[i]+(parsed.hardened[i]?0x80000000u:0u);
         if (!ebp_hd_child(current,child,(uint32_t)i+1,next)) goto done;
         memcpy(current,next,sizeof(current));
     }
     memcpy(node,current,64); *profile=which; ok=1;
 done:
     OPENSSL_cleanse(current,sizeof(current)); OPENSSL_cleanse(next,sizeof(next));
-    OPENSSL_cleanse(indices,sizeof(indices)); return ok;
+    OPENSSL_cleanse(&parsed,sizeof(parsed)); return ok;
 }

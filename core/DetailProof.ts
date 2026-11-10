@@ -1,14 +1,12 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import {
-  buildLegacyMessageHashEnvelopeFromHash,
-  buildPurposeHashEnvelope,
-  sha256Hex,
-} from "./MessageHash.ts";
+import { buildPurposeHashEnvelope } from "./MessageHash.ts";
 import { hexToString } from "./Hex.ts";
 import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 export type DetailProofRecord = {
+  version: number;
   nonce: number;
   path: string;
   detail: string;
@@ -26,20 +24,20 @@ export function verifyDetailProof(input: {
 }): { ok: true; record: { nonce: number; timestamp: number } } | { ok: false; error?: string } {
   let record: DetailProofRecord;
   try {
-    record = JSON.parse(hexToString(input.proof));
+    record = parseStrictJson(hexToString(input.proof));
   } catch {
     return { ok: false, error: "invalid proof encoding" };
   }
 
-  if (record.path !== input.path || record.detail !== input.detail) {
+  if (record.version !== 2 || record.path !== input.path || record.detail !== input.detail) {
     return { ok: false, error: "proof mismatch" };
   }
 
-  if (typeof record.nonce !== "number" || !Number.isInteger(record.nonce) || record.nonce < 0) {
+  if (typeof record.nonce !== "number" || !Number.isSafeInteger(record.nonce) || record.nonce < 0) {
     return { ok: false, error: "invalid nonce" };
   }
 
-  if (typeof record.timestamp !== "number" || !Number.isFinite(record.timestamp)) {
+  if (typeof record.timestamp !== "number" || !Number.isSafeInteger(record.timestamp)) {
     return { ok: false, error: "invalid timestamp" };
   }
 
@@ -48,6 +46,7 @@ export function verifyDetailProof(input: {
   }
 
   const signedPayload = canonicalJsonStringify({
+    version: 2,
     nonce: record.nonce,
     path: record.path,
     detail: record.detail,
@@ -55,20 +54,13 @@ export function verifyDetailProof(input: {
     signature: null,
   });
   const envelope = buildPurposeHashEnvelope("detail-proof", signedPayload);
-  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(signedPayload));
 
   let verified = false;
   try {
     if (input.signingKeyType === "dilithium") {
       verified = DilithiumSigningKey.verify(input.signingVariant, envelope, record.signature, input.signingKey);
-      if (!verified) {
-        verified = DilithiumSigningKey.verify(input.signingVariant, legacyEnvelope, record.signature, input.signingKey);
-      }
     } else {
       verified = SphincsSigningKey.verify(input.signingVariant, envelope, record.signature, input.signingKey);
-      if (!verified) {
-        verified = SphincsSigningKey.verify(input.signingVariant, legacyEnvelope, record.signature, input.signingKey);
-      }
     }
   } catch {
     return { ok: false, error: "failed to verify signature" };

@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
 export const EBP_MESSAGE_ARMOR_START = "-----BEGIN EBP MESSAGE-----";
@@ -158,7 +159,7 @@ export function extractArmoredPayload(text: string): Record<string, unknown> | n
   if (s < 0 || e < 0 || e <= s) return null;
   const raw = text.slice(s + EBP_MESSAGE_ARMOR_START.length, e).trim();
   try {
-    const parsed = JSON.parse(raw);
+    const parsed = parseStrictJson(raw);
     return isRecord(parsed) ? parsed : null;
   } catch {
     return null;

@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import * as slh_dsa from "@noble/post-quantum/slh-dsa";
 import { sha256 } from "@noble/hashes/sha2";
 import { SigningKey } from "./Keys.ts";
@@ -79,7 +80,7 @@ export class SphincsSigningKey extends SigningKey {
     }
 
     static fromJSON(json: string): SphincsSigningKey {
-        const data = JSON.parse(json);
+        const data = parseStrictJson(json);
         const instance = new SphincsSigningKey(data.variant);
         instance.key = {
             publicKey: base64ToBytes(data.publicKey),

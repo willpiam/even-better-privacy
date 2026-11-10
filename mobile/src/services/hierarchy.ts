@@ -5,6 +5,8 @@ import {
   encodeHierarchyCertificate,
   getHierarchySignaturePayload,
   hexToString,
+  parseStrictJson,
+  validateHierarchyCertificateDraft,
   stableStringify,
   stringToHex,
   type SignedHierarchyCertificate,
@@ -261,10 +263,13 @@ export async function acceptProposal(params: {
   if (proposal.proposerFingerprint === myFingerprint) {
     throw new Error('Proposer cannot accept their own pending entry');
   }
-  const certDraft = JSON.parse(hexToString(proposal.certificate)) as Record<
+  const certDraft = parseStrictJson(hexToString(proposal.certificate)) as Record<
     string,
     unknown
   >;
+  if (!validateHierarchyCertificateDraft(certDraft as never).ok) {
+    throw new Error('Invalid hierarchy certificate');
+  }
   const payload = getHierarchySignaturePayload(certDraft as never);
   const sig = identity.signMessage(payload, undefined, 'hierarchy');
   if (myFingerprint === certDraft.masterFingerprint) {

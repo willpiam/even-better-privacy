@@ -1,4 +1,5 @@
 import { SphincsSigningKey } from "../../core/Sphincs.ts";
+import { KyberEncryptionKey } from "../../core/Kyber.ts";
 import {
   computeIdentityFingerprint,
   computeStateHash,
@@ -20,7 +21,7 @@ type SigningKeyLike = {
 
 export function createSphincsIdentity(): { identity: IdentityRow; signingKey: SphincsSigningKey } {
   const signingKey = new SphincsSigningKey();
-  const encryptionKey = "deadbeef".repeat(8);
+  const encryptionKey = new KyberEncryptionKey().publicKey;
   const createdAt = Date.now();
 
   const identity: IdentityRow = {
@@ -54,9 +55,7 @@ export function createIdentityPayload(): {
   signingKey: SphincsSigningKey;
 } {
   const signingKey = new SphincsSigningKey();
-  const encryptionBytes = new Uint8Array(32);
-  crypto.getRandomValues(encryptionBytes);
-  const encryptionKey = toHex(encryptionBytes);
+  const encryptionKey = new KyberEncryptionKey().publicKey;
 
   const fingerprint = computeIdentityFingerprint({
     signingKeyType: "sphincs",
@@ -102,6 +101,7 @@ export function createSignedProof(
   record: { nonce: number; path: string; detail: string; timestamp: number },
 ): { proof: string; record: Record<string, unknown> } {
   const payload = {
+    version: 2,
     nonce: record.nonce,
     path: record.path,
     detail: record.detail,
@@ -129,6 +129,7 @@ export function createRevocationCertificate(
   },
 ): string {
   const payload = {
+    version: 2,
     type: data.type,
     fingerprint: data.fingerprint,
     nonce: data.nonce,

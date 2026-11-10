@@ -4,15 +4,13 @@ import {
   getHierarchySignaturePayload,
   isHierarchyCertificateExpired,
   validateHierarchy,
+  validateHierarchyCertificateDraft,
   type HierarchyCertificateData,
   type SignedHierarchyCertificate,
 } from "../core/HierarchyCertificate.ts";
 import { hexToString } from "../core/Hex.ts";
-import {
-  buildLegacyMessageHashEnvelopeFromHash,
-  buildPurposeHashEnvelope,
-  sha256Hex,
-} from "../core/MessageHash.ts";
+import { buildPurposeHashEnvelope } from "../core/MessageHash.ts";
+import { parseStrictJson } from "../core/StrictJson.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
 import {
@@ -215,13 +213,15 @@ type PendingHierarchyCertificate = Omit<HierarchyCertificateData, "masterSignatu
 
 function decodePendingHierarchyCertificate(encoded: string): PendingHierarchyCertificate | null {
   try {
-    const parsed = JSON.parse(hexToString(encoded)) as PendingHierarchyCertificate;
+    const parsed = parseStrictJson(hexToString(encoded)) as PendingHierarchyCertificate;
     if (!parsed || typeof parsed !== "object") return null;
+    if (parsed.version !== 2) return null;
+    if (!validateHierarchyCertificateDraft(parsed).ok) return null;
     if (typeof parsed.masterFingerprint !== "string" || parsed.masterFingerprint.length === 0) return null;
     if (typeof parsed.childFingerprint !== "string" || parsed.childFingerprint.length === 0) return null;
     if (parsed.masterFingerprint === parsed.childFingerprint) return null;
-    if (typeof parsed.timestamp !== "number" || !Number.isFinite(parsed.timestamp) || parsed.timestamp < 0) return null;
-    if (typeof parsed.expiry !== "number" || !Number.isFinite(parsed.expiry) || parsed.expiry < 0) return null;
+    if (typeof parsed.timestamp !== "number" || !Number.isSafeInteger(parsed.timestamp) || parsed.timestamp < 0) return null;
+    if (typeof parsed.expiry !== "number" || !Number.isSafeInteger(parsed.expiry) || parsed.expiry < 0) return null;
     if (typeof parsed.context !== "string") return null;
     if (typeof parsed.salt !== "string" || parsed.salt.length === 0) return null;
     const masterSigOk = parsed.masterSignature === null || typeof parsed.masterSignature === "string";
@@ -239,14 +239,11 @@ function verifySignerEnvelope(
   signature: string,
 ): boolean {
   const envelope = buildPurposeHashEnvelope("hierarchy", payload);
-  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(payload));
   try {
     if (signer.signingKeyType === "dilithium") {
-      return DilithiumSigningKey.verify(signer.variant, envelope, signature, signer.signingKey)
-        || DilithiumSigningKey.verify(signer.variant, legacyEnvelope, signature, signer.signingKey);
+      return DilithiumSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
     }
-    return SphincsSigningKey.verify(signer.variant, envelope, signature, signer.signingKey)
-      || SphincsSigningKey.verify(signer.variant, legacyEnvelope, signature, signer.signingKey);
+    return SphincsSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
   } catch {
     return false;
   }

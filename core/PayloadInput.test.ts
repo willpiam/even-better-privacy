@@ -4,7 +4,7 @@ import { parseEbpPayloadInput } from "./PayloadInput.ts";
 
 Deno.test("parseEbpPayloadInput: parses raw JSON", () => {
   const payload = parseEbpPayloadInput(
-    JSON.stringify({ type: "ebp-signed-message", message: "hi" }),
+    JSON.stringify({ type: "ebp-signed-message", version: 2, message: "hi" }),
   );
   assertEquals(payload.type, "ebp-signed-message");
 });

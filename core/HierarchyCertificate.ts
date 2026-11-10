@@ -1,12 +1,10 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { DilithiumSigningKey } from "./Dilithium.ts";
 import { SphincsSigningKey } from "./Sphincs.ts";
-import {
-  buildLegacyMessageHashEnvelopeFromHash,
-  buildPurposeHashEnvelope,
-  sha256Hex,
-} from "./MessageHash.ts";
+import { buildPurposeHashEnvelope } from "./MessageHash.ts";
 import { stringToHex, hexToString, toHex } from "./Hex.ts";
 import { canonicalJsonStringify } from "./CanonicalJson.ts";
+import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -14,6 +12,7 @@ export const MAX_CONTEXT_LENGTH = 256;
 export const HIERARCHY_CERTIFICATE_PREFIX = "HierarchyCertificate";
 
 export interface HierarchyCertificateData {
+  version: number;
   masterFingerprint: string;
   childFingerprint: string;
   timestamp: number;
@@ -55,16 +54,17 @@ export function createHierarchyCertificate(
   }
 
   const expiry = options?.expiry ?? 0;
-  if (!Number.isFinite(expiry) || expiry < 0) {
+  if (!Number.isSafeInteger(expiry) || expiry < 0) {
     throw new Error("expiry must be 0 or a positive unix timestamp in milliseconds");
   }
 
   const timestamp = options?.timestamp ?? Date.now();
-  if (!Number.isFinite(timestamp) || timestamp < 0) {
+  if (!Number.isSafeInteger(timestamp) || timestamp < 0) {
     throw new Error("timestamp must be a positive unix timestamp in milliseconds");
   }
 
   return {
+    version: FILE_FORMAT_VERSIONS.hierarchyCertificate,
     masterFingerprint,
     childFingerprint,
     timestamp,
@@ -78,9 +78,10 @@ export function createHierarchyCertificate(
 
 export function getHierarchySignaturePayload(cert: Pick<
   HierarchyCertificateData,
-  "masterFingerprint" | "childFingerprint" | "timestamp" | "expiry" | "context" | "salt"
+  "version" | "masterFingerprint" | "childFingerprint" | "timestamp" | "expiry" | "context" | "salt"
 >): string {
   return canonicalJsonStringify({
+    version: cert.version,
     type: HIERARCHY_CERTIFICATE_PREFIX,
     masterFingerprint: cert.masterFingerprint,
     childFingerprint: cert.childFingerprint,
@@ -98,12 +99,16 @@ export function encodeHierarchyCertificate(cert: SignedHierarchyCertificate): st
 export function decodeHierarchyCertificate(encoded: string): SignedHierarchyCertificate | null {
   try {
     const json = hexToString(encoded);
-    const cert = JSON.parse(json) as SignedHierarchyCertificate;
+    const cert = parseStrictJson(json) as SignedHierarchyCertificate;
     const valid = validateCertificateShape(cert, true);
     return valid.ok ? cert : null;
   } catch {
     return null;
   }
+}
+
+export function validateHierarchyCertificateDraft(cert: HierarchyCertificateData): HierarchyValidationResult {
+  return validateCertificateShape(cert, false);
 }
 
 export function verifyHierarchyCertificate(
@@ -129,13 +134,11 @@ export function verifyHierarchyCertificate(
 
   const payload = getHierarchySignaturePayload(cert);
   const envelope = buildPurposeHashEnvelope("hierarchy", payload);
-  const legacyEnvelope = buildLegacyMessageHashEnvelopeFromHash(sha256Hex(payload));
 
   const masterOk = verifySignature(
     masterIdentity.signingKeyType,
     masterVariant,
     envelope,
-    legacyEnvelope,
     cert.masterSignature,
     masterIdentity.signingKey,
   );
@@ -147,7 +150,6 @@ export function verifyHierarchyCertificate(
     childIdentity.signingKeyType,
     childVariant,
     envelope,
-    legacyEnvelope,
     cert.childSignature,
     childIdentity.signingKey,
   );
@@ -230,17 +232,14 @@ function verifySignature(
   signingKeyType: "dilithium" | "sphincs",
   variant: string,
   envelope: string,
-  legacyEnvelope: string,
   signature: string,
   signingKey: string,
 ): boolean {
   try {
     if (signingKeyType === "dilithium") {
-      return DilithiumSigningKey.verify(variant, envelope, signature, signingKey)
-        || DilithiumSigningKey.verify(variant, legacyEnvelope, signature, signingKey);
+      return DilithiumSigningKey.verify(variant, envelope, signature, signingKey);
     }
-    return SphincsSigningKey.verify(variant, envelope, signature, signingKey)
-      || SphincsSigningKey.verify(variant, legacyEnvelope, signature, signingKey);
+    return SphincsSigningKey.verify(variant, envelope, signature, signingKey);
   } catch {
     return false;
   }
@@ -253,6 +252,7 @@ function validateCertificateShape(
   if (!cert || typeof cert !== "object") {
     return { ok: false, error: "certificate must be an object" };
   }
+  if (cert.version !== FILE_FORMAT_VERSIONS.hierarchyCertificate) return {ok: false, error: "unsupported certificate version"};
   if (typeof cert.masterFingerprint !== "string" || cert.masterFingerprint.length === 0) {
     return { ok: false, error: "missing master fingerprint" };
   }
@@ -262,10 +262,10 @@ function validateCertificateShape(
   if (cert.masterFingerprint === cert.childFingerprint) {
     return { ok: false, error: "master and child fingerprints must differ" };
   }
-  if (typeof cert.timestamp !== "number" || !Number.isFinite(cert.timestamp) || cert.timestamp < 0) {
+  if (typeof cert.timestamp !== "number" || !Number.isSafeInteger(cert.timestamp) || cert.timestamp < 0) {
     return { ok: false, error: "invalid timestamp" };
   }
-  if (typeof cert.expiry !== "number" || !Number.isFinite(cert.expiry) || cert.expiry < 0) {
+  if (typeof cert.expiry !== "number" || !Number.isSafeInteger(cert.expiry) || cert.expiry < 0) {
     return { ok: false, error: "invalid expiry" };
   }
   if (typeof cert.context !== "string" || cert.context.length > MAX_CONTEXT_LENGTH) {

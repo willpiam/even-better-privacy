@@ -19,6 +19,9 @@ imjp:
 
 EBP defines a family of JSON payload types for signed and encrypted messages. These payloads are used by the [[component-gui|GUI's native email system]] and the [[component-cli|CLI]]. This page documents their structure, what they contain, and what they deliberately omit.
 
+See [[current-core-format]] for canonical JSON, identity state hashes and the
+signed detail, revocation and hierarchy record formats.
+
 ## Armor Wrapping
 
 All payloads are transmitted as JSON wrapped in PEM-style armor markers:
@@ -76,10 +79,10 @@ AES itself is specified by [[source-fips-197]], while GCM is specified by [[sour
 Decrypting the AES ciphertext yields a JSON string:
 
 ```json
-{ "message": "<plaintext>", "signature": "<hex signature>" }
+{ "type": "ebp-encrypted-signed-inner", "message": "<plaintext>", "signature": "<base64 signature>", "envelopeVersion": 2, "recipientFingerprint": "<fingerprint>" }
 ```
 
-The `signature` is produced by signing `buildMessageHashEnvelope(message)` with the sender's signing key ([[ml-dsa]] or [[slh-dsa]]). Verification requires the sender's public signing key, resolved from the `senderFingerprint`.
+The `signature` binds the message to `recipientFingerprint` using the current recipient-bound envelope. Verification requires the sender's public signing key, resolved from the `senderFingerprint`.
 
 ### `ebp-encrypted-message` (version 1)
 
@@ -94,14 +97,14 @@ Encryption-only payload (no signature). Used when `sign: false` is passed to the
 
 The ciphertext structure is identical to the encrypted-signed variant, but the inner payload is the raw message string (not wrapped in a `{ message, signature }` JSON object). No sender fingerprint is included since there is no signer.
 
-### `ebp-encrypted-signed-message-multi` (version 1)
+### `ebp-encrypted-signed-message-multi` (version 2)
 
 Multi-recipient encrypted+signed payload used by GUI native email when more than one recipient is selected.
 
 | Field | Type | Description |
 |---|---|---|
 | `type` | string | `"ebp-encrypted-signed-message-multi"` |
-| `version` | number | `1` |
+| `version` | number | `2` |
 | `senderFingerprint` | string | Bech32 fingerprint of sender/signer |
 | `recipients` | array | Per-recipient content-key encapsulations: `{ fingerprint, kemCiphertext, keyWrapNonce, wrappedContentKey }` |
 | `contentNonce` | string | Hex-encoded AES-GCM nonce for the body ciphertext |
@@ -112,9 +115,10 @@ The inner JSON (after decrypting `ciphertext` with the unwrapped content key) is
 
 ```json
 {
+  "type": "ebp-encrypted-signed-inner-multi",
   "message": "<plaintext>",
-  "signature": "<hex signature>",
-  "envelopeVersion": 3,
+  "signature": "<base64 signature>",
+  "envelopeVersion": 4,
   "recipientFingerprints": ["ebp..."],
   "attachmentManifest": [{ "attachmentId": "...", "ciphertextSha256": "..." }]
 }
@@ -127,6 +131,12 @@ The inner JSON (after decrypting `ciphertext` with the unwrapped content key) is
 - sorted attachment manifest
 
 This preserves recipient-intent binding while allowing one signature for many recipients.
+The signed object contains `tag: "EBP-MULTIRECIPIENT-V4"`, `message`,
+`recipientFingerprints`, and `attachmentManifest`; it is serialized using RFC 8785.
+Recipient fingerprints are trimmed and sorted by UTF-16 code units. Manifest
+entries are sorted by attachment ID and then ciphertext hash, using the same
+ordering. The signed message is `ebp::messagehash::v4::<sha256-hex>::<salt>`.
+The superseded v3 signed envelope is rejected by the current implementation.
 
 ### `ebp-signed-message` (version 2)
 

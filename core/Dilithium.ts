@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { sha256 } from "@noble/hashes/sha2";
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { SigningKey } from "./Keys.ts";
@@ -52,7 +53,7 @@ export class DilithiumSigningKey  extends SigningKey {
     }
 
     static fromJSON(json: string): DilithiumSigningKey {
-        const data = JSON.parse(json);
+        const data = parseStrictJson(json);
         const instance = new DilithiumSigningKey(data.variant);
         instance.key = {
             publicKey: base64ToBytes(data.publicKey),

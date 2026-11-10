@@ -1,3 +1,4 @@
+import { parseStrictJson } from "./StrictJson.ts";
 import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
 
@@ -76,7 +77,7 @@ export function parseEmailAttachmentCleartextEnvelope(
 	fileBytes: Uint8Array;
 	bodyPayloadHash?: string;
 } {
-	const raw = JSON.parse(input) as Partial<EmailAttachmentCleartextEnvelope>;
+	const raw = parseStrictJson(input) as Partial<EmailAttachmentCleartextEnvelope>;
 	if (raw.type !== "ebp-email-attachment-cleartext-envelope") {
 		throw new Error("Invalid email attachment envelope type");
 	}

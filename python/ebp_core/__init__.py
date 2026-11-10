@@ -2,6 +2,7 @@
 import base64
 import ctypes
 import importlib.util
+import json
 import os
 from pathlib import Path
 
@@ -19,6 +20,17 @@ _lib.ebp_derive_storage_key.argtypes = [_P, ctypes.c_size_t, _P, _P]
 _lib.ebp_derive_storage_key.restype = ctypes.c_int
 _lib.ebp_sha256.argtypes = [_P, ctypes.c_size_t, _P]
 _lib.ebp_sha256.restype = ctypes.c_int
+_lib.ebp_verify_status_message.argtypes = [ctypes.c_int]
+_lib.ebp_verify_status_message.restype = ctypes.c_char_p
+_lib.ebp_random_hex.argtypes = [ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_random_hex.restype = ctypes.c_int
+_lib.ebp_json_canonical.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_json_canonical.restype = ctypes.c_int
+_lib.ebp_identity_state_from_external.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_state_from_external.restype = ctypes.c_int
+for _name in ("ebp_hex_encode", "ebp_hex_decode", "ebp_base64_encode", "ebp_base64_decode"):
+    getattr(_lib, _name).argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+    getattr(_lib, _name).restype = ctypes.c_int
 _lib.ebp_aes_encrypt.argtypes = [_P, _P, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_aes_encrypt.restype = ctypes.c_int
 _lib.ebp_aes_decrypt.argtypes = [_P, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
@@ -38,6 +50,92 @@ def sha256(data: bytes) -> bytes:
     if not _lib.ebp_sha256(data_buf, len(data), digest):
         raise RuntimeError("SHA-256 failed")
     return bytes(digest)
+
+
+def _encode_transform(data: bytes, function) -> bytes:
+    buf, out, length = _buffer(data), _P(), ctypes.c_size_t()
+    try:
+        if not function(buf, len(data), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid encoding")
+        return ctypes.string_at(out, length.value)
+    finally:
+        _lib.ebp_free(out)
+
+
+def hex_encode(data: bytes) -> str:
+    return _encode_transform(data, _lib.ebp_hex_encode).decode("ascii")
+
+
+def hex_decode(text: str) -> bytes:
+    return _encode_transform(text.encode("ascii"), _lib.ebp_hex_decode)
+
+
+def base64_encode(data: bytes) -> str:
+    return _encode_transform(data, _lib.ebp_base64_encode).decode("ascii")
+
+
+def base64_decode(text: str) -> bytes:
+    return _encode_transform(text.encode("ascii"), _lib.ebp_base64_decode)
+
+
+def random_hex(byte_length: int = 16) -> str:
+    if not isinstance(byte_length, int) or isinstance(byte_length, bool) or byte_length < 0 or byte_length > 65536:
+        raise ValueError("invalid byte length")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_random_hex(byte_length, ctypes.byref(out), ctypes.byref(length)):
+            raise RuntimeError("random generation failed")
+        return ctypes.string_at(out, length.value).decode("ascii")
+    finally:
+        _lib.ebp_free(out)
+
+
+def _verification_failure(code: int) -> dict:
+    return {"ok": False, "error": _lib.ebp_verify_status_message(code).decode("utf-8")}
+
+
+def canonicalize_json(text: str) -> str:
+    """Canonicalize JSON using RFC 8785 and the EBP input restrictions."""
+    if not isinstance(text, str):
+        raise TypeError("JSON input must be text")
+    try:
+        encoded = text.encode("utf-16-le", "surrogatepass").decode("utf-16-le").encode("utf-8")
+    except UnicodeError as exc:
+        raise ValueError("invalid Unicode in JSON") from exc
+    buf, out, length = _buffer(encoded), _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_json_canonical(buf, len(encoded), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid JSON or unsupported JSON value")
+        return ctypes.string_at(out, length.value).decode("utf-8")
+    finally:
+        _lib.ebp_free(out)
+
+
+def canonical_json(value) -> str:
+    """Serialize a Python JSON value using RFC 8785 canonical bytes."""
+    try:
+        text = json.dumps(value, ensure_ascii=True, allow_nan=False, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("value is not valid JSON") from exc
+    return canonicalize_json(text)
+
+
+def compute_state_hash(state) -> str:
+    """Return the SHA-256 hex digest of the canonical identity state."""
+    return sha256(canonical_json(state).encode("utf-8")).hex()
+
+
+def build_identity_state(external: dict, details: dict) -> dict:
+    """Build the identity state whose canonical bytes are hashed."""
+    ext = json.dumps(external, ensure_ascii=True, allow_nan=False).encode("utf-8")
+    det = json.dumps(details, ensure_ascii=True, allow_nan=False).encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_identity_state_from_external(_buffer(ext), len(ext), _buffer(det), len(det), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid identity state")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
 
 
 def _key(key):
@@ -205,10 +303,58 @@ _lib.ebp_hd_master.argtypes = [_P, ctypes.c_size_t, _P]
 _lib.ebp_hd_master.restype = ctypes.c_int
 _lib.ebp_hd_child.argtypes = [_P, ctypes.c_uint32, ctypes.c_uint32, _P]
 _lib.ebp_hd_child.restype = ctypes.c_int
+
+class _HdPath(ctypes.Structure):
+    _fields_ = [("indices", ctypes.c_uint32 * 5), ("hardened", ctypes.c_int * 5),
+                ("normalized_offset", ctypes.c_size_t), ("normalized_len", ctypes.c_size_t)]
+
+_lib.ebp_hd_parse_path.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_HdPath)]
+_lib.ebp_hd_parse_path.restype = ctypes.c_int
+_lib.ebp_hd_format_path.argtypes = [ctypes.c_int, ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hd_format_path.restype = ctypes.c_int
+_lib.ebp_hd_provenance.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hd_provenance.restype = ctypes.c_int
 _lib.ebp_hd_derive_path.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.POINTER(ctypes.c_int)]
 _lib.ebp_hd_derive_path.restype = ctypes.c_int
 _lib.ebp_hd_identity_seeds.argtypes = [_P, ctypes.c_int, _P, ctypes.c_size_t, _P]
 _lib.ebp_hd_identity_seeds.restype = ctypes.c_int
+
+
+def parse_hd_path(path: str) -> dict:
+    """Parse a supported EBP-HD path, preserving normalized segment labels."""
+    data = path.encode("utf-8")
+    parsed = _HdPath()
+    if not _lib.ebp_hd_parse_path(_buffer(data), len(data), ctypes.byref(parsed)):
+        raise ValueError("invalid HD path")
+    normalized = data[parsed.normalized_offset:parsed.normalized_offset + parsed.normalized_len].decode("utf-8")
+    labels = normalized[2:].split("/")
+    return {"path": normalized, "segments": [{"label": label[:-1] if hardened else label, "index": index, "hardened": bool(hardened)}
+            for label, index, hardened in zip(labels, parsed.indices, parsed.hardened)],
+            "profile": "sphincs" if parsed.indices[1] else "dilithium", "account": parsed.indices[2],
+            "change": "internal" if parsed.indices[3] else "external", "index": parsed.indices[4]}
+
+
+def format_hd_path(profile: str, account: int, change: str, index: int) -> str:
+    if profile not in ("dilithium", "sphincs") or change not in ("external", "internal") or any(not isinstance(n, int) or isinstance(n, bool) or n < 0 or n >= 2**31 for n in (account, index)):
+        raise ValueError("invalid HD path fields")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_hd_format_path(int(profile == "sphincs"), account, int(change == "internal"), index, ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid HD path fields")
+        return ctypes.string_at(out, length.value).decode("utf-8")
+    finally:
+        _lib.ebp_free(out)
+
+
+def hd_provenance(path: str) -> dict:
+    data = path.encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_hd_provenance(_buffer(data), len(data), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid HD path")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
 
 
 def hd_node_from_path(seed: bytes, path: str) -> tuple[bytes, bytes, str]:
@@ -251,6 +397,10 @@ def hd_identity_seeds(seed: bytes, profile: str, account: int = 0, change: str =
 
 _lib.ebp_identity_fingerprint.argtypes = [ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(ctypes.c_char)]
 _lib.ebp_identity_fingerprint.restype = ctypes.c_int
+_lib.ebp_fingerprint_decode.argtypes = [ctypes.c_char_p, ctypes.POINTER(ctypes.c_int), _P]
+_lib.ebp_fingerprint_decode.restype = ctypes.c_int
+_lib.ebp_short_fingerprint.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_short_fingerprint.restype = ctypes.c_int
 
 
 def identity_fingerprint(profile: str, signing_key: bytes, encryption_key: bytes) -> str:
@@ -263,8 +413,42 @@ def identity_fingerprint(profile: str, signing_key: bytes, encryption_key: bytes
         raise ValueError("invalid public keys")
     return result.value.decode("ascii")
 
+
+def decode_fingerprint(fingerprint: str) -> tuple[str, bytes]:
+    """Decode and validate an EBP identity fingerprint."""
+    encoded = fingerprint.encode("ascii")
+    if b"\0" in encoded: raise ValueError("invalid fingerprint")
+    profile, root = ctypes.c_int(), (_U8 * 32)()
+    if not _lib.ebp_fingerprint_decode(encoded, ctypes.byref(profile), root):
+        raise ValueError("invalid fingerprint")
+    return ("sphincs" if profile.value else "dilithium", bytes(root))
+
+
+def short_fingerprint(fingerprint: str) -> str:
+    encoded = fingerprint.encode("ascii")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_short_fingerprint(_buffer(encoded), len(encoded), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid fingerprint")
+        return ctypes.string_at(out, length.value).decode("utf-8")
+    finally:
+        _lib.ebp_free(out)
+
 _lib.ebp_message_envelope.argtypes = [ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_message_envelope.restype = ctypes.c_int
+_lib.ebp_file_sign_message.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_file_sign_message.restype = ctypes.c_int
+
+
+def build_file_sign_message(file_hash: str, salt: str = "", context: str = "") -> str:
+    hash_bytes, salt_bytes, context_bytes = file_hash.encode("utf-8"), salt.encode("utf-8"), context.encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_file_sign_message(_buffer(hash_bytes), len(hash_bytes), _buffer(salt_bytes), len(salt_bytes), _buffer(context_bytes), len(context_bytes), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid file signing message")
+        return ctypes.string_at(out, length.value).decode("utf-8")
+    finally:
+        _lib.ebp_free(out)
 
 
 def message_envelope(message: str, salt: str = "", purpose: str = "message") -> bytes:
@@ -517,16 +701,28 @@ def decrypt_for_recipient(encrypted: dict, fingerprint: str, private_key: bytes)
 # Identity objects handle JSON and cryptographic operations in memory only.
 _lib.ebp_identity_create.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
 _lib.ebp_identity_create.restype = ctypes.c_int
+_lib.ebp_identity_create_variants.argtypes = [ctypes.c_int, ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+_lib.ebp_identity_create_variants.restype = ctypes.c_int
 _lib.ebp_identity_from_hd_seed.argtypes = [_P, ctypes.c_size_t, ctypes.c_int, ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32, ctypes.POINTER(ctypes.c_void_p)]
 _lib.ebp_identity_from_hd_seed.restype = ctypes.c_int
+_lib.ebp_identity_from_hd_node.argtypes = [_P, _P, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
+_lib.ebp_identity_from_hd_node.restype = ctypes.c_int
 _lib.ebp_identity_public_json.argtypes = [ctypes.c_void_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_public_json.restype = ctypes.c_int
+_lib.ebp_identity_public_export.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_public_export.restype = ctypes.c_int
 _lib.ebp_identity_from_public_json.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(ctypes.c_void_p)]
 _lib.ebp_identity_from_public_json.restype = ctypes.c_int
+_lib.ebp_identity_from_embedded_json.argtypes = [_P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(ctypes.c_void_p)]
+_lib.ebp_identity_from_embedded_json.restype = ctypes.c_int
 _lib.ebp_identity_store.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_store.restype = ctypes.c_int
+_lib.ebp_identity_store_with_key.argtypes = [ctypes.c_void_p, _P, _P, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_store_with_key.restype = ctypes.c_int
 _lib.ebp_identity_load.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_int, ctypes.POINTER(ctypes.c_void_p)]
 _lib.ebp_identity_load.restype = ctypes.c_int
+_lib.ebp_identity_load_with_key.argtypes = [_P, ctypes.c_size_t, _P, ctypes.POINTER(ctypes.c_void_p)]
+_lib.ebp_identity_load_with_key.restype = ctypes.c_int
 _lib.ebp_identity_sign.argtypes = [ctypes.c_void_p, ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_sign.restype = ctypes.c_int
 _lib.ebp_identity_verify.argtypes = [ctypes.c_void_p, ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t]
@@ -535,21 +731,35 @@ _lib.ebp_detail_proof_create.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _
 _lib.ebp_detail_proof_create.restype = ctypes.c_int
 _lib.ebp_detail_proof_verify.argtypes = [ctypes.c_int, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(ctypes.c_uint64), ctypes.POINTER(ctypes.c_int64)]
 _lib.ebp_detail_proof_verify.restype = ctypes.c_int
+_lib.ebp_detail_proof_verify_ex.argtypes = _lib.ebp_detail_proof_verify.argtypes
+_lib.ebp_detail_proof_verify_ex.restype = ctypes.c_int
 _lib.ebp_revocation_create.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_uint64, ctypes.c_int64, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_revocation_create.restype = ctypes.c_int
 _lib.ebp_revocation_verify.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.c_int, _P, ctypes.c_size_t]
 _lib.ebp_revocation_verify.restype = ctypes.c_int
+_lib.ebp_revocation_verify_ex.argtypes = _lib.ebp_revocation_verify.argtypes
+_lib.ebp_revocation_verify_ex.restype = ctypes.c_int
+_lib.ebp_revocation_unsigned.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_int64, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_revocation_unsigned.restype = ctypes.c_int
+_lib.ebp_revocation_signature_payload.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_revocation_signature_payload.restype = ctypes.c_int
+_lib.ebp_revocation_encode.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_revocation_encode.restype = ctypes.c_int
+_lib.ebp_revocation_decode.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_revocation_decode.restype = ctypes.c_int
 _lib.ebp_identity_attach_detail.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_int64]
 _lib.ebp_identity_attach_detail.restype = ctypes.c_int
 _lib.ebp_identity_get_detail.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_get_detail.restype = ctypes.c_int
-_lib.ebp_identity_sign_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_verify_details.argtypes = [ctypes.c_void_p]
+_lib.ebp_identity_verify_details.restype = ctypes.c_int
+_lib.ebp_identity_sign_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_sign_multi.restype = ctypes.c_int
-_lib.ebp_identity_verify_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, _P, ctypes.c_size_t]
+_lib.ebp_identity_verify_multi.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t]
 _lib.ebp_identity_verify_multi.restype = ctypes.c_int
-_lib.ebp_identity_sign_encrypt_many.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_sign_encrypt_many.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_void_p), ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_sign_encrypt_many.restype = ctypes.c_int
-_lib.ebp_identity_decrypt_verify_many.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_decrypt_verify_many.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_decrypt_verify_many.restype = ctypes.c_int
 _lib.ebp_identity_sign_encrypt.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_identity_sign_encrypt.restype = ctypes.c_int
@@ -561,6 +771,8 @@ _lib.ebp_identity_is_revoked.argtypes = [ctypes.c_void_p]
 _lib.ebp_identity_is_revoked.restype = ctypes.c_int
 _lib.ebp_identity_is_detail_revoked.argtypes = [ctypes.c_void_p, _P, ctypes.c_size_t]
 _lib.ebp_identity_is_detail_revoked.restype = ctypes.c_int
+_lib.ebp_identity_revocation_json.argtypes = [ctypes.c_void_p, ctypes.c_int, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_identity_revocation_json.restype = ctypes.c_int
 _lib.ebp_identity_is_private.argtypes = [ctypes.c_void_p]
 _lib.ebp_identity_is_private.restype = ctypes.c_int
 _lib.ebp_identity_free.argtypes = [ctypes.c_void_p]
@@ -576,6 +788,42 @@ class Identity:
         self._handle = ctypes.c_void_p()
         if not _lib.ebp_identity_create(int(profile == "sphincs"), ctypes.byref(self._handle)):
             raise RuntimeError("identity creation failed")
+
+    @classmethod
+    def from_variants(cls, signing_algorithm: int, kem_algorithm: int,
+                      signing_seed: bytes | None = None, kem_seed: bytes | None = None) -> "Identity":
+        """Create an identity using supported signing and ML-KEM variants."""
+        if signing_seed is not None and not isinstance(signing_seed, bytes):
+            raise TypeError("signing seed must be bytes")
+        if kem_seed is not None and not isinstance(kem_seed, bytes):
+            raise TypeError("KEM seed must be bytes")
+        sign_buf = _buffer(signing_seed) if signing_seed is not None else None
+        kem_buf = _buffer(kem_seed) if kem_seed is not None else None
+        handle = ctypes.c_void_p()
+        try:
+            if not _lib.ebp_identity_create_variants(signing_algorithm, kem_algorithm, sign_buf, len(signing_seed or b""), kem_buf, len(kem_seed or b""), ctypes.byref(handle)):
+                raise ValueError("invalid identity variants or seeds")
+            obj = cls.__new__(cls)
+            obj._handle = handle
+            return obj
+        finally:
+            if sign_buf is not None: ctypes.memset(sign_buf, 0, len(sign_buf))
+            if kem_buf is not None: ctypes.memset(kem_buf, 0, len(kem_buf))
+
+    @classmethod
+    def from_hd_node(cls, node: bytes, path: str) -> "Identity":
+        """Create an identity from a 64-byte HD node and its path."""
+        if not isinstance(node, bytes) or len(node) != 64:
+            raise ValueError("HD node must be 64 bytes")
+        path_bytes, node_buf, handle = path.encode("utf-8"), _buffer(node), ctypes.c_void_p()
+        try:
+            if not _lib.ebp_identity_from_hd_node(node_buf, _buffer(path_bytes), len(path_bytes), ctypes.byref(handle)):
+                raise ValueError("invalid HD node or path")
+            obj = cls.__new__(cls)
+            obj._handle = handle
+            return obj
+        finally:
+            ctypes.memset(node_buf, 0, len(node_buf))
 
     @classmethod
     def from_hd_seed(cls, seed: bytes, profile: str = "dilithium", account: int = 0, change: str = "external", index: int = 0) -> "Identity":
@@ -598,10 +846,23 @@ class Identity:
     def from_public_data(cls, data: dict) -> "Identity":
         """Load a public export containing at least one public key."""
         import json
-        encoded = json.dumps(data, ensure_ascii=False).encode("utf-8")
+        encoded = json.dumps(data, ensure_ascii=True).encode("utf-8")
         handle = ctypes.c_void_p()
         if not _lib.ebp_identity_from_public_json(_buffer(encoded), len(encoded), ctypes.byref(handle)):
             raise ValueError("invalid or incomplete public identity")
+        obj = cls.__new__(cls)
+        obj._handle = handle
+        return obj
+
+    @classmethod
+    def from_embedded_data(cls, data: dict, expected_fingerprint: str | None = None) -> "Identity":
+        """Validate an embedded identity and optionally bind its expected fingerprint."""
+        encoded = json.dumps(data, ensure_ascii=True, allow_nan=False).encode("utf-8")
+        expected = None if expected_fingerprint is None else expected_fingerprint.encode("utf-8")
+        if expected is not None and b"\0" in expected: raise ValueError("invalid expected fingerprint")
+        handle = ctypes.c_void_p()
+        if not _lib.ebp_identity_from_embedded_json(_buffer(encoded), len(encoded), expected, ctypes.byref(handle)):
+            raise ValueError("invalid embedded identity or fingerprint")
         obj = cls.__new__(cls)
         obj._handle = handle
         return obj
@@ -622,6 +883,19 @@ class Identity:
         finally:
             ctypes.memset(password_buf, 0, len(password_buf))
 
+    @classmethod
+    def from_storage_with_key(cls, data: str, key: bytes) -> "Identity":
+        """Load an identity using its pre-derived AES key."""
+        encoded, key_buf, handle = data.encode("utf-8"), _key(key), ctypes.c_void_p()
+        try:
+            if not _lib.ebp_identity_load_with_key(_buffer(encoded), len(encoded), key_buf, ctypes.byref(handle)):
+                raise ValueError("invalid identity storage, key, or identity keys")
+            obj = cls.__new__(cls)
+            obj._handle = handle
+            return obj
+        finally:
+            ctypes.memset(key_buf, 0, len(key_buf))
+
     def _get_handle(self):
         if not getattr(self, "_handle", None) or not self._handle.value:
             raise ValueError("identity is closed")
@@ -641,6 +915,16 @@ class Identity:
         finally:
             _lib.ebp_free(out)
 
+    def public_export(self, include_signing_key: bool = True, include_encryption_key: bool = True, include_details: bool = True) -> dict:
+        """Export public identity data, optionally replacing one key with its hash."""
+        out, length = _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_public_export(self._get_handle(), int(include_signing_key), int(include_encryption_key), int(include_details), ctypes.byref(out), ctypes.byref(length)):
+                raise ValueError("invalid public export options or required key unavailable")
+            return json.loads(ctypes.string_at(out, length.value))
+        finally:
+            _lib.ebp_free(out)
+
     def to_storage(self, password: str) -> str:
         """Return current-format identity JSON, with private keys password-encrypted."""
         password_bytes = password.encode("utf-8")
@@ -652,6 +936,19 @@ class Identity:
         finally:
             _lib.ebp_free(out)
             ctypes.memset(password_buf, 0, len(password_buf))
+
+    def to_storage_with_key(self, key: bytes, salt: bytes) -> str:
+        """Return encrypted identity JSON using a pre-derived AES key and salt."""
+        if not isinstance(salt, bytes) or len(salt) != 16:
+            raise ValueError("salt must be 16 bytes")
+        key_buf, out, length = _key(key), _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_store_with_key(self._get_handle(), key_buf, _buffer(salt), ctypes.byref(out), ctypes.byref(length)):
+                raise ValueError("private identity required or storage encryption failed")
+            return ctypes.string_at(out, length.value).decode("utf-8")
+        finally:
+            _lib.ebp_free(out)
+            ctypes.memset(key_buf, 0, len(key_buf))
 
     def sign(self, message: str, salt: str = "", purpose: str = "message") -> str:
         purposes = {"message": 1, "detail-proof": 2, "revocation": 3, "hierarchy": 4}
@@ -693,42 +990,57 @@ class Identity:
         finally:
             _lib.ebp_secure_free(out, length.value)
 
-    def sign_for_recipients(self, message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> str:
+    def verify_details(self) -> bool:
+        """Check detail structure and ordering; this does not verify signatures."""
+        return bool(_lib.ebp_identity_verify_details(self._get_handle()))
+
+    def revocation_certificate(self, path: str | None = None) -> dict | None:
+        """Decode a stored identity or detail revocation without verifying its signature."""
+        encoded = path.encode("utf-8") if path is not None else b""
+        out, length = _P(), ctypes.c_size_t()
+        try:
+            if not _lib.ebp_identity_revocation_json(self._get_handle(), 1 if path is not None else 2, _buffer(encoded), len(encoded), ctypes.byref(out), ctypes.byref(length)):
+                return None
+            return json.loads(ctypes.string_at(out, length.value))
+        finally:
+            _lib.ebp_free(out)
+
+    def sign_for_recipients(self, message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "") -> str:
         """Sign the v3 recipient set and attachment manifest."""
         import json
-        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
-        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=True).encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=True).encode("utf-8")
         salt_bytes = salt.encode("utf-8")
         out, length = _P(), ctypes.c_size_t()
         try:
-            if not _lib.ebp_identity_sign_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+            if not _lib.ebp_identity_sign_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), ctypes.byref(out), ctypes.byref(length)):
                 raise ValueError("multi-recipient signing failed")
             return base64.b64encode(ctypes.string_at(out, length.value)).decode("ascii")
         finally:
             _lib.ebp_free(out)
 
-    def verify_for_recipients(self, message: str, signature: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> bool:
+    def verify_for_recipients(self, message: str, signature: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "") -> bool:
         """Verify the v3 recipient set and attachment manifest signature."""
         import json
         try:
             signature_bytes = base64.b64decode(signature, validate=True)
         except (ValueError, TypeError):
             return False
-        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
-        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        text, recipients = message.encode("utf-8"), json.dumps(recipient_fingerprints, ensure_ascii=True).encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=True).encode("utf-8")
         salt_bytes = salt.encode("utf-8")
-        return bool(_lib.ebp_identity_verify_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), _buffer(signature_bytes), len(signature_bytes)))
+        return bool(_lib.ebp_identity_verify_multi(self._get_handle(), _buffer(text), len(text), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), _buffer(signature_bytes), len(signature_bytes)))
 
-    def sign_and_encrypt_many(self, message: str, recipients: list["Identity"], attachment_manifest: list[dict] | None = None, locale: str = "en-US", content_key: bytes | None = None) -> dict:
+    def sign_and_encrypt_many(self, message: str, recipients: list["Identity"], attachment_manifest: list[dict] | None = None, content_key: bytes | None = None) -> dict:
         """Create a current signed, recipient-bound multi-recipient message."""
         import json
         text = message.encode("utf-8")
-        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+        manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=True).encode("utf-8")
         handles = (ctypes.c_void_p * len(recipients))(*(recipient._get_handle().value for recipient in recipients))
         key_buf = None if content_key is None else _key(content_key)
         out, length = _P(), ctypes.c_size_t()
         try:
-            if not _lib.ebp_identity_sign_encrypt_many(self._get_handle(), handles, len(recipients), _buffer(text), len(text), _buffer(manifest), len(manifest), key_buf, locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+            if not _lib.ebp_identity_sign_encrypt_many(self._get_handle(), handles, len(recipients), _buffer(text), len(text), _buffer(manifest), len(manifest), key_buf, ctypes.byref(out), ctypes.byref(length)):
                 raise ValueError("multi-recipient signing or encryption failed")
             return json.loads(ctypes.string_at(out, length.value))
         finally:
@@ -736,13 +1048,13 @@ class Identity:
             if key_buf is not None:
                 ctypes.memset(key_buf, 0, len(key_buf))
 
-    def decrypt_and_verify_many(self, payload: dict, sender: "Identity", locale: str = "en-US") -> dict:
+    def decrypt_and_verify_many(self, payload: dict, sender: "Identity") -> dict:
         """Decrypt and verify a v3 message; callers must inspect `verified`."""
         import json
-        encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        encoded = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         out, length = _P(), ctypes.c_size_t()
         try:
-            if not _lib.ebp_identity_decrypt_verify_many(self._get_handle(), sender._get_handle(), _buffer(encoded), len(encoded), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+            if not _lib.ebp_identity_decrypt_verify_many(self._get_handle(), sender._get_handle(), _buffer(encoded), len(encoded), ctypes.byref(out), ctypes.byref(length)):
                 raise ValueError("multi-recipient decryption failed or invalid payload")
             return json.loads(ctypes.string_at(out, length.value))
         finally:
@@ -824,6 +1136,19 @@ class Identity:
         target_buf = None if target_bytes is None else _buffer(target_bytes)
         return bool(_lib.ebp_revocation_verify(self._get_handle(), _buffer(encoded), len(encoded), kinds[expected_type], target_buf, len(target_bytes or b"")))
 
+    def verify_revocation_result(self, certificate: str, expected_type: str | None = None, expected_target: str | None = None) -> dict:
+        """Verify a certificate and return a structured result and failure reason."""
+        kinds = {None: 0, "detail": 1, "identity": 2}
+        if expected_type not in kinds: raise ValueError("invalid expected revocation type")
+        try:
+            encoded = certificate.encode("ascii")
+        except UnicodeError:
+            return _verification_failure(1)
+        target = None if expected_target is None else expected_target.encode("utf-8")
+        status = _lib.ebp_revocation_verify_ex(self._get_handle(), _buffer(encoded), len(encoded), kinds[expected_type],
+                                                None if target is None else _buffer(target), len(target or b""))
+        return {"ok": True, "certificate": decode_revocation_certificate(certificate)} if status == 0 else _verification_failure(status)
+
     def _revoke(self, kind: int, target: str | None, reason: str | None, timestamp: int | None) -> str:
         if timestamp is None:
             import time
@@ -898,6 +1223,28 @@ _lib.ebp_payload_parse.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctyp
 _lib.ebp_payload_parse.restype = ctypes.c_int
 _lib.ebp_payload_armor.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_payload_armor.restype = ctypes.c_int
+_lib.ebp_payload_build.argtypes = [ctypes.c_char_p, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_payload_build.restype = ctypes.c_int
+_lib.ebp_multi_recipient_entries_parse.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_multi_recipient_entries_parse.restype = ctypes.c_int
+
+
+def build_payload(payload_type: str, fields: dict) -> dict:
+    """Build a current message or file payload; this does not authenticate it."""
+    encoded = json.dumps(fields, ensure_ascii=True, allow_nan=False).encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_payload_build(payload_type.encode("ascii"), _buffer(encoded), len(encoded), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid payload fields or type")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
+
+
+def parse_multi_recipient_entries(value) -> list[dict]:
+    """Extract complete recipient entries; this does not authenticate them."""
+    text = json.dumps(value, ensure_ascii=True, allow_nan=False)
+    return json.loads(_payload_transform(text, _lib.ebp_multi_recipient_entries_parse))
 
 
 def _payload_transform(text: str, function) -> str:
@@ -911,6 +1258,41 @@ def _payload_transform(text: str, function) -> str:
         _lib.ebp_free(out)
 
 
+def unsigned_revocation_certificate(kind: str, fingerprint: str, nonce: int, timestamp: int,
+                                    reason: str | None = None, target: str | None = None) -> dict:
+    """Construct an unsigned revocation certificate."""
+    if kind not in ("identity", "detail") or not isinstance(nonce, int) or isinstance(nonce, bool) or not 0 <= nonce <= 9007199254740991:
+        raise ValueError("invalid revocation type or nonce")
+    if not isinstance(timestamp, int) or isinstance(timestamp, bool) or not -9007199254740991 <= timestamp <= 9007199254740991:
+        raise ValueError("timestamp must be a safe integer")
+    fp = fingerprint.encode("utf-8")
+    if b"\0" in fp: raise ValueError("invalid fingerprint")
+    reason_bytes = None if reason is None else reason.encode("utf-8")
+    target_bytes = None if target is None else target.encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_revocation_unsigned(1 if kind == "detail" else 2, fp, nonce, timestamp,
+                                             _buffer(reason_bytes) if reason_bytes is not None else None, len(reason_bytes or b""),
+                                             _buffer(target_bytes) if target_bytes is not None else None, len(target_bytes or b""),
+                                             ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid revocation fields")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
+
+
+def revocation_signature_payload(certificate: dict) -> str:
+    return _payload_transform(json.dumps(certificate, ensure_ascii=True, allow_nan=False), _lib.ebp_revocation_signature_payload)
+
+
+def encode_revocation_certificate(certificate: dict) -> str:
+    return _payload_transform(json.dumps(certificate, ensure_ascii=True, allow_nan=False), _lib.ebp_revocation_encode)
+
+
+def decode_revocation_certificate(certificate: str) -> dict:
+    return json.loads(_payload_transform(certificate, _lib.ebp_revocation_decode))
+
+
 def parse_payload(text: str) -> dict:
     """Parse a current-version EBP JSON or armored payload without authenticating it."""
     import json
@@ -920,7 +1302,7 @@ def parse_payload(text: str) -> dict:
 def armor_payload(payload: dict) -> str:
     """Armor a current-version EBP payload without authenticating it."""
     import json
-    return _payload_transform(json.dumps(payload, ensure_ascii=False), _lib.ebp_payload_armor)
+    return _payload_transform(json.dumps(payload, ensure_ascii=True), _lib.ebp_payload_armor)
 
 
 def verify_detail_proof(algorithm: int, public_key: bytes, path: str, detail: str, proof: str) -> tuple[int, int] | None:
@@ -940,10 +1322,24 @@ def verify_detail_proof(algorithm: int, public_key: bytes, path: str, detail: st
         ctypes.memset(detail_buf, 0, len(detail_buf))
         ctypes.memset(proof_buf, 0, len(proof_buf))
 
+
+def verify_detail_proof_result(algorithm: int, public_key: bytes, path: str, detail: str, proof: str) -> dict:
+    try:
+        encoded = proof.encode("ascii")
+    except UnicodeError:
+        return _verification_failure(1)
+    path_bytes, detail_bytes = path.encode("utf-8"), detail.encode("utf-8")
+    nonce, timestamp = ctypes.c_uint64(), ctypes.c_int64()
+    status = _lib.ebp_detail_proof_verify_ex(algorithm, _buffer(public_key), len(public_key), _buffer(path_bytes), len(path_bytes),
+                                              _buffer(detail_bytes), len(detail_bytes), _buffer(encoded), len(encoded), ctypes.byref(nonce), ctypes.byref(timestamp))
+    return {"ok": True, "record": {"nonce": nonce.value, "timestamp": timestamp.value}} if status == 0 else _verification_failure(status)
+
 _lib.ebp_hierarchy_create.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_uint64, ctypes.c_uint64, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_hierarchy_create.restype = ctypes.c_int
 _lib.ebp_hierarchy_verify.argtypes = [ctypes.c_void_p, ctypes.c_void_p, _P, ctypes.c_size_t]
 _lib.ebp_hierarchy_verify.restype = ctypes.c_int
+_lib.ebp_hierarchy_verify_ex.argtypes = _lib.ebp_hierarchy_verify.argtypes
+_lib.ebp_hierarchy_verify_ex.restype = ctypes.c_int
 
 
 def create_hierarchy_certificate(master: Identity, child: Identity, timestamp: int, expiry: int = 0, context: str = "", salt: str | None = None) -> str:
@@ -970,14 +1366,84 @@ def verify_hierarchy_certificate(master: Identity, child: Identity, certificate:
         return False
     return bool(_lib.ebp_hierarchy_verify(master._get_handle(), child._get_handle(), _buffer(encoded), len(encoded)))
 
+
+def verify_hierarchy_certificate_result(master: Identity, child: Identity, certificate: str) -> dict:
+    """Return verification status; expiration and graph validation are separate."""
+    try:
+        encoded = certificate.encode("ascii")
+    except UnicodeError:
+        return _verification_failure(1)
+    status = _lib.ebp_hierarchy_verify_ex(master._get_handle(), child._get_handle(), _buffer(encoded), len(encoded))
+    return {"ok": True, "certificate": decode_hierarchy_certificate(certificate)} if status == 0 else _verification_failure(status)
+
 class _HierarchyEdge(ctypes.Structure):
     _fields_ = [("master", ctypes.c_char_p), ("child", ctypes.c_char_p)]
 
 
 _lib.ebp_hierarchy_validate.argtypes = [ctypes.POINTER(_HierarchyEdge), ctypes.c_size_t, ctypes.POINTER(_HierarchyEdge)]
 _lib.ebp_hierarchy_validate.restype = ctypes.c_int
+_lib.ebp_hierarchy_validate_ex.argtypes = _lib.ebp_hierarchy_validate.argtypes
+_lib.ebp_hierarchy_validate_ex.restype = ctypes.c_int
 _lib.ebp_hierarchy_expired.argtypes = [ctypes.c_uint64, ctypes.c_uint64]
 _lib.ebp_hierarchy_expired.restype = ctypes.c_int
+_lib.ebp_hierarchy_unsigned.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint64, ctypes.c_uint64, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hierarchy_unsigned.restype = ctypes.c_int
+_lib.ebp_hierarchy_signature_payload.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hierarchy_signature_payload.restype = ctypes.c_int
+_lib.ebp_hierarchy_sign_part.argtypes = [ctypes.c_void_p, ctypes.c_int, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hierarchy_sign_part.restype = ctypes.c_int
+_lib.ebp_hierarchy_encode.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hierarchy_encode.restype = ctypes.c_int
+_lib.ebp_hierarchy_decode.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_hierarchy_decode.restype = ctypes.c_int
+_lib.ebp_hierarchy_decode_draft.argtypes = _lib.ebp_hierarchy_decode.argtypes
+_lib.ebp_hierarchy_decode_draft.restype = ctypes.c_int
+
+
+def unsigned_hierarchy_certificate(master: str, child: str, timestamp: int, expiry: int = 0, context: str = "", salt: str | None = None) -> dict:
+    """Create an unsigned hierarchy certificate for separately held signers."""
+    if any(not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 9007199254740991 for v in (timestamp, expiry)):
+        raise ValueError("timestamp and expiry must be nonnegative safe integers")
+    if salt is None: salt = os.urandom(16).hex()
+    master_bytes, child_bytes, ctx, salt_bytes = master.encode("utf-8"), child.encode("utf-8"), context.encode("utf-8"), salt.encode("utf-8")
+    if b"\0" in master_bytes or b"\0" in child_bytes: raise ValueError("invalid fingerprint")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_hierarchy_unsigned(master_bytes, child_bytes, timestamp, expiry, _buffer(ctx), len(ctx), _buffer(salt_bytes), len(salt_bytes), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid hierarchy fields")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
+
+
+def hierarchy_signature_payload(certificate: dict) -> str:
+    """Return the canonical message signed by each hierarchy participant."""
+    return _payload_transform(json.dumps(certificate, ensure_ascii=True, allow_nan=False), _lib.ebp_hierarchy_signature_payload)
+
+
+def sign_hierarchy_part(signer: Identity, certificate: dict, child: bool = False) -> dict:
+    """Add one participant's signature without requiring the other private key."""
+    encoded = json.dumps(certificate, ensure_ascii=True, allow_nan=False).encode("utf-8")
+    out, length = _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_hierarchy_sign_part(signer._get_handle(), int(child), _buffer(encoded), len(encoded), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid hierarchy certificate or signer")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        _lib.ebp_free(out)
+
+
+def encode_hierarchy_certificate(certificate: dict) -> str:
+    return _payload_transform(json.dumps(certificate, ensure_ascii=True, allow_nan=False), _lib.ebp_hierarchy_encode)
+
+
+def decode_hierarchy_certificate(certificate: str) -> dict:
+    return json.loads(_payload_transform(certificate, _lib.ebp_hierarchy_decode))
+
+
+def decode_hierarchy_draft(certificate: str) -> dict:
+    """Decode a hierarchy record that may be awaiting either signature."""
+    return json.loads(_payload_transform(certificate, _lib.ebp_hierarchy_decode_draft))
 
 
 def validate_hierarchy(edges: list[tuple[str, str]], proposed: tuple[str, str] | None = None) -> bool:
@@ -992,6 +1458,18 @@ def validate_hierarchy(edges: list[tuple[str, str]], proposed: tuple[str, str] |
     return bool(_lib.ebp_hierarchy_validate(entries, len(edges), ctypes.byref(extra) if extra is not None else None))
 
 
+def validate_hierarchy_result(edges: list[tuple[str, str]], proposed: tuple[str, str] | None = None) -> dict:
+    """Validate graph structure and return a structured failure reason."""
+    def edge(pair):
+        master, child = (value.encode("utf-8") for value in pair)
+        if b"\0" in master or b"\0" in child: raise ValueError("fingerprints cannot contain NUL")
+        return _HierarchyEdge(master, child)
+    entries = (_HierarchyEdge * len(edges))(*(edge(pair) for pair in edges))
+    extra = None if proposed is None else edge(proposed)
+    status = _lib.ebp_hierarchy_validate_ex(entries, len(edges), ctypes.byref(extra) if extra is not None else None)
+    return {"ok": True} if status == 0 else _verification_failure(status)
+
+
 def hierarchy_expired(expiry: int, now: int) -> bool:
     """Return whether a nonzero hierarchy expiry is at or before now."""
     if any(not isinstance(value, int) or isinstance(value, bool) or not 0 <= value <= 9007199254740991 for value in (expiry, now)):
@@ -1002,6 +1480,12 @@ _lib.ebp_file_envelope_create.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size
 _lib.ebp_file_envelope_create.restype = ctypes.c_int
 _lib.ebp_file_envelope_parse.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_file_envelope_parse.restype = ctypes.c_int
+_lib.ebp_email_attachment_create.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_email_attachment_create.restype = ctypes.c_int
+_lib.ebp_email_attachment_parse.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t), ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_email_attachment_parse.restype = ctypes.c_int
+_lib.ebp_encrypted_email_attachment_parse.argtypes = [_P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+_lib.ebp_encrypted_email_attachment_parse.restype = ctypes.c_int
 
 
 def create_file_envelope(file_bytes: bytes, file_name: str, mime_type: str = "application/octet-stream") -> dict:
@@ -1033,19 +1517,58 @@ def parse_file_envelope(data: str) -> dict:
         _lib.ebp_free(name)
         _lib.ebp_free(mime)
 
-_lib.ebp_multi_envelope.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.c_char_p, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
+
+def create_email_attachment(file_bytes: bytes, file_name: str, attachment_id: str,
+                            mime_type: str = "application/octet-stream", body_payload_hash: str | None = None) -> dict:
+    """Create a cleartext email-attachment envelope without reading a file."""
+    name, mime, attachment = file_name.encode("utf-8"), mime_type.encode("utf-8"), attachment_id.encode("utf-8")
+    body = None if body_payload_hash is None else body_payload_hash.encode("utf-8")
+    file_buf, out, length = _buffer(file_bytes), _P(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_email_attachment_create(file_buf, len(file_bytes), _buffer(name), len(name), _buffer(mime), len(mime),
+                                                _buffer(attachment), len(attachment), _buffer(body) if body is not None else None,
+                                                len(body or b""), ctypes.byref(out), ctypes.byref(length)):
+            raise ValueError("invalid email attachment")
+        return json.loads(ctypes.string_at(out, length.value))
+    finally:
+        ctypes.memset(file_buf, 0, len(file_buf))
+        _lib.ebp_secure_free(out, length.value)
+
+
+def parse_email_attachment(data: str) -> dict:
+    """Parse a cleartext email-attachment envelope and return bytes and metadata."""
+    encoded = data.encode("utf-8")
+    file, metadata = _P(), _P()
+    file_len, metadata_len = ctypes.c_size_t(), ctypes.c_size_t()
+    try:
+        if not _lib.ebp_email_attachment_parse(_buffer(encoded), len(encoded), ctypes.byref(file), ctypes.byref(file_len), ctypes.byref(metadata), ctypes.byref(metadata_len)):
+            raise ValueError("invalid email attachment")
+        result = json.loads(ctypes.string_at(metadata, metadata_len.value))
+        result["fileBytes"] = ctypes.string_at(file, file_len.value)
+        return result
+    finally:
+        _lib.ebp_secure_free(file, file_len.value)
+        _lib.ebp_free(metadata)
+
+
+def parse_encrypted_email_attachment(payload: dict) -> dict:
+    """Validate attachment metadata; this does not authenticate ciphertext."""
+    encoded = json.dumps(payload, ensure_ascii=True, allow_nan=False).encode("utf-8")
+    return json.loads(_payload_transform(encoded.decode("utf-8"), _lib.ebp_encrypted_email_attachment_parse))
+
+_lib.ebp_multi_envelope.argtypes = [_P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, _P, ctypes.c_size_t, ctypes.POINTER(_P), ctypes.POINTER(ctypes.c_size_t)]
 _lib.ebp_multi_envelope.restype = ctypes.c_int
 
 
-def multi_recipient_envelope(message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "", locale: str = "en-US") -> bytes:
+def multi_recipient_envelope(message: str, recipient_fingerprints: list[str], attachment_manifest: list[dict] | None = None, salt: str = "") -> bytes:
     """Construct the current v3 recipient-set and attachment-bound signature envelope."""
     import json
     message_bytes, salt_bytes = message.encode("utf-8"), salt.encode("utf-8")
-    recipients = json.dumps(recipient_fingerprints, ensure_ascii=False).encode("utf-8")
-    manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=False).encode("utf-8")
+    recipients = json.dumps(recipient_fingerprints, ensure_ascii=True).encode("utf-8")
+    manifest = json.dumps([] if attachment_manifest is None else attachment_manifest, ensure_ascii=True).encode("utf-8")
     out, length = _P(), ctypes.c_size_t()
     try:
-        if not _lib.ebp_multi_envelope(_buffer(message_bytes), len(message_bytes), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), locale.encode("ascii"), ctypes.byref(out), ctypes.byref(length)):
+        if not _lib.ebp_multi_envelope(_buffer(message_bytes), len(message_bytes), _buffer(recipients), len(recipients), _buffer(manifest), len(manifest), _buffer(salt_bytes), len(salt_bytes), ctypes.byref(out), ctypes.byref(length)):
             raise ValueError("invalid multi-recipient envelope input")
         return ctypes.string_at(out, length.value)
     finally:

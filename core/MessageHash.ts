@@ -1,5 +1,6 @@
 import { sha256 } from "@noble/hashes/sha2";
 import { toHex } from "./Hex.ts";
+import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 const textEncoder = new TextEncoder();
 
@@ -14,11 +15,11 @@ function purposePrefix(purpose: SignaturePurpose): string {
 		case "message":
 			return "ebp::message::v1::";
 		case "detail-proof":
-			return "ebp::detail-proof::v1::";
+			return "ebp::detail-proof::v2::";
 		case "revocation":
-			return "ebp::revocation::v1::";
+			return "ebp::revocation::v2::";
 		case "hierarchy":
-			return "ebp::hierarchy::v1::";
+			return "ebp::hierarchy::v2::";
 	}
 }
 
@@ -75,6 +76,11 @@ export type MultiRecipientAttachmentManifestEntry = {
 	ciphertextSha256: string;
 };
 
+export function compareAttachmentEntries(a: MultiRecipientAttachmentManifestEntry, b: MultiRecipientAttachmentManifestEntry): number {
+  const compare = (x: string, y: string) => x < y ? -1 : x > y ? 1 : 0;
+  return compare(a.attachmentId, b.attachmentId) || compare(a.ciphertextSha256, b.ciphertextSha256);
+}
+
 export function buildMultiRecipientBoundEnvelope(
 	recipientFingerprints: string[],
 	message: string,
@@ -90,13 +96,13 @@ export function buildMultiRecipientBoundEnvelope(
 			attachmentId: item.attachmentId,
 			ciphertextSha256: item.ciphertextSha256,
 		}))
-		.sort((a, b) => a.attachmentId.localeCompare(b.attachmentId));
-	const canonicalJson = JSON.stringify({
-		tag: "EBP-MULTIRECIPIENT-V3",
+		.sort(compareAttachmentEntries);
+	const canonicalJson = canonicalJsonStringify({
+		tag: "EBP-MULTIRECIPIENT-V4",
 		message,
 		recipientFingerprints: canonicalRecipients,
 		attachmentManifest: canonicalManifest,
 	});
 	const canonicalHash = sha256Hex(canonicalJson);
-	return `ebp::messagehash::v3::${canonicalHash}::${salt ?? ""}`;
+	return `ebp::messagehash::v4::${canonicalHash}::${salt ?? ""}`;
 }

@@ -1,5 +1,7 @@
 export {MAX_ENCRYPTED_FILE_BYTES} from '../../common/FileLimits';
 export {Identity} from '../../core/Identity';
+export {parseStrictJson} from '../../core/StrictJson';
+export {validateHierarchyCertificateDraft} from '../../core/HierarchyCertificate';
 export type {
   IdentityPublicData,
   IdentityPublicExport,

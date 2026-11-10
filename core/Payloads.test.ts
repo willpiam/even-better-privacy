@@ -28,7 +28,7 @@ Deno.test("Payloads: multi-recipient encrypted signed payload round-trips throug
 	const armored = armorPayload(payload);
 	const parsed = extractArmoredPayload(armored);
 	assertEquals(parsed?.type, "ebp-encrypted-signed-message-multi");
-	assertEquals(parsed?.version, 1);
+	assertEquals(parsed?.version, 2);
 	assertEquals(Array.isArray(parsed?.recipients), true);
 	assertEquals((parsed?.recipients as unknown[])?.length, 2);
 });
