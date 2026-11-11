@@ -40,7 +40,8 @@ import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
-import {colors, radius, spacing, typography} from '../../theme/tokens';
+import {radius, spacing, typography} from '../../theme/tokens';
+import {mailColors as colors} from './MailAppearance';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailAccounts'>;
 
@@ -257,14 +258,19 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   };
 
   return (
-    <Screen scroll>
+    <Screen scroll style={styles.screen}>
       {secretPrompt}
       {unlockPrompt}
       <BusyOverlay
         visible={unlocking || busyMessage !== null}
         message={busyMessage ?? 'Unlocking mail secrets…'}
       />
-      <Text style={styles.header}>Mail accounts ({identityName || '…'})</Text>
+      <Text style={styles.eyebrow}>CURRENT IDENTITY · {identityName || '…'}</Text>
+      <Text style={styles.header}>Your mail accounts</Text>
+      {accounts.length > 0 ? (
+        <AppButton title="Open inbox" style={styles.primary}
+          onPress={() => navigation.navigate('MailInbox')} />
+      ) : null}
       <StatusBanner message={status} kind={statusKind(status)} />
 
       {secretsLocked ? (
@@ -355,11 +361,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         }}
       />
       <AppButton
-        title="Open inbox"
-        variant="secondary"
-        onPress={() => navigation.navigate('MailInbox')}
-      />
-      <AppButton
         title="Mail help"
         variant="secondary"
         onPress={() => navigation.navigate('MailHelp')}
@@ -369,9 +370,12 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  screen: {backgroundColor: colors.page},
+  primary: {backgroundColor: colors.accent},
+  eyebrow: {fontSize: 10, letterSpacing: 1.4, color: colors.muted, marginTop: 8},
   header: {
     fontWeight: '700',
-    fontSize: typography.title,
+    fontSize: 26,
     color: colors.text,
   },
   empty: {

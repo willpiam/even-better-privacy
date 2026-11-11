@@ -8,6 +8,7 @@ import {
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
 import {colors} from '../theme/tokens';
+import {mailColors} from '../screens/mail/MailAppearance';
 import IdentitiesHomeScreen from '../screens/IdentitiesHomeScreen';
 import HdCreateScreen from '../screens/HdCreateScreen';
 import RandomCreateScreen from '../screens/RandomCreateScreen';
@@ -266,7 +267,13 @@ function CryptoNavigator(): JSX.Element {
 
 function MailNavigator(): JSX.Element {
   return (
-    <MailStack.Navigator screenOptions={stackScreenOptions}>
+    <MailStack.Navigator screenOptions={{
+      ...stackScreenOptions,
+      headerStyle: {backgroundColor: mailColors.page},
+      headerTintColor: mailColors.accent,
+      headerTitleStyle: {color: mailColors.text, fontWeight: '600'},
+      contentStyle: {backgroundColor: mailColors.page},
+    }}>
       <MailStack.Screen
         name="MailAccounts"
         component={MailAccountsScreen}
@@ -307,7 +314,7 @@ function MailNavigator(): JSX.Element {
       <MailStack.Screen
         name="MailCompose"
         component={MailComposeScreen}
-        options={{title: 'Compose'}}
+        options={{title: 'New message'}}
       />
     </MailStack.Navigator>
   );

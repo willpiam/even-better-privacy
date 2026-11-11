@@ -9,7 +9,6 @@ import StatusBanner from '../../components/StatusBanner';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
-import SectionTitle from '../../components/SectionTitle';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {sendEbpMail, sendPlainMail} from '../../services/mail/ebpMail';
 import {ENCRYPTED_MAIL_ATTACHMENT_ERROR} from '../../services/mail/ebpMailLogic';
@@ -22,7 +21,7 @@ import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import type {MailAttachmentPart} from '../../services/mail/mime';
 import {appendActivityLog} from '../../services/activityLog';
 import {statusKind} from '../../theme/statusKind';
-import {colors, typography} from '../../theme/tokens';
+import {MailIcon, mailColors} from './MailAppearance';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
@@ -45,7 +44,9 @@ export default function MailComposeScreen({
 }: Props): JSX.Element {
   const params = route.params;
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [chips, setChips] = useState<RecipientChip[]>(() => initialChips(params));
+  const [chips, setChips] = useState<RecipientChip[]>(() =>
+    initialChips(params),
+  );
   const [subject, setSubject] = useState(params?.subject ?? '');
   const [message, setMessage] = useState(params?.message ?? '');
   const [status, setStatus] = useState('');
@@ -153,25 +154,31 @@ export default function MailComposeScreen({
     intent.kind === 'encrypted'
       ? 'Send EBP encrypted mail'
       : intent.kind === 'plaintext'
-        ? 'Send unencrypted mail'
-        : 'Send';
+      ? 'Send unencrypted mail'
+      : 'Send';
   const sendHint =
     intent.kind === 'encrypted'
-      ? `The message body is encrypted for ${chips.length === 1 ? 'the selected contact' : 'the selected contacts'}.`
+      ? `The message body is encrypted for ${
+          chips.length === 1 ? 'the selected contact' : 'the selected contacts'
+        }.`
       : intent.kind === 'plaintext'
-        ? 'Sending as plaintext. Tap a recipient to choose a contact and encrypt instead.'
-        : intent.kind === 'blocked'
-          ? intent.message
-          : 'Add recipients. Separate addresses with a comma.';
+      ? 'Sending as plaintext. Tap a recipient to choose a contact and encrypt instead.'
+      : intent.kind === 'blocked'
+      ? intent.message
+      : 'Add recipients. Separate addresses with a comma.';
 
   return (
-    <Screen scroll>
+    <Screen scroll style={styles.screen} contentStyle={styles.content}>
       {unlockPrompt}
-      <Text style={styles.note}>
-        Type or paste addresses. Each one becomes a chip and is checked against
-        your contacts, then the key server. Encrypted by default when every
-        recipient resolves.
-      </Text>
+      <View style={styles.composeHeading}>
+        <MailIcon name="compose" />
+        <View style={styles.headingCopy}>
+          <Text style={styles.title}>A new conversation</Text>
+          <Text style={styles.note}>
+            Encrypted when every recipient has a contact identity.
+          </Text>
+        </View>
+      </View>
 
       {intent.kind === 'plaintext' ? (
         <StatusBanner
@@ -189,28 +196,29 @@ export default function MailComposeScreen({
         }
       />
 
-      <SectionTitle>Recipients</SectionTitle>
-      <RecipientChipsField chips={chips} onChange={setChips} />
+      <View style={styles.editor}>
+        <RecipientChipsField chips={chips} onChange={setChips} />
 
-      <SectionTitle>Message</SectionTitle>
-      <TextField
-        label="Subject"
-        value={subject}
-        onChangeText={setSubject}
-        placeholder="Subject"
-        accessibilityLabel="Subject"
-      />
-      <TextField
-        label="Body"
-        value={message}
-        onChangeText={setMessage}
-        placeholder="Write your message..."
-        multiline
-        accessibilityLabel="Message body"
-        style={styles.bodyField}
-      />
-
-      <SectionTitle>Attachments</SectionTitle>
+        <TextField
+          label="Subject"
+          value={subject}
+          onChangeText={setSubject}
+          placeholder="Subject"
+          accessibilityLabel="Subject"
+        />
+        <TextField
+          label="Message"
+          value={message}
+          onChangeText={setMessage}
+          placeholder="Write your message…"
+          multiline
+          accessibilityLabel="Message body"
+          style={styles.bodyField}
+        />
+      </View>
+      {attachments.length > 0 ? (
+        <Text style={styles.sectionLabel}>ATTACHMENTS</Text>
+      ) : null}
       {attachments.map((item, index) => (
         <View key={`${item.filename}-${index}`} style={styles.attachmentRow}>
           <Text style={styles.attachmentName}>{item.filename}</Text>
@@ -235,10 +243,17 @@ export default function MailComposeScreen({
         </Text>
       ) : null}
 
-      <SectionTitle>Send</SectionTitle>
-      <Text style={styles.hint}>{sendHint}</Text>
+      <View style={styles.sendContext}>
+        <MailIcon name={intent.kind === 'encrypted' ? 'lock' : 'mail'} />
+        <Text style={styles.sendHint}>{sendHint}</Text>
+      </View>
       <AppButton
         title={sendTitle}
+        style={
+          intent.kind === 'encrypted' || intent.kind === 'plaintext'
+            ? styles.primary
+            : undefined
+        }
         onPress={onSend}
         disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
       />
@@ -247,16 +262,57 @@ export default function MailComposeScreen({
 }
 
 const styles = StyleSheet.create({
+  screen: {backgroundColor: mailColors.page},
+  content: {padding: 20, paddingBottom: 40, gap: 16},
+  composeHeading: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  headingCopy: {flex: 1, gap: 6},
+  title: {
+    fontSize: 23,
+    color: mailColors.text,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+  },
+  editor: {
+    backgroundColor: mailColors.surface,
+    padding: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: mailColors.border,
+    borderRadius: 16,
+  },
+  sectionLabel: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    color: mailColors.muted,
+    fontWeight: '600',
+  },
+  sendContext: {
+    flexDirection: 'row',
+    gap: 10,
+    padding: 14,
+    backgroundColor: mailColors.soft,
+    borderRadius: 12,
+  },
+  sendHint: {flex: 1, fontSize: 13, lineHeight: 20, color: mailColors.muted},
+  primary: {backgroundColor: mailColors.accent},
   note: {
     fontSize: 13,
-    color: colors.muted,
+    color: mailColors.muted,
   },
   hint: {
-    fontSize: typography.caption,
-    color: colors.muted,
+    fontSize: 13,
+    color: mailColors.muted,
   },
   bodyField: {
-    minHeight: 120,
+    minHeight: 180,
+    maxHeight: 360,
+    lineHeight: 25,
+    color: mailColors.text,
   },
   attachmentRow: {
     flexDirection: 'row',
@@ -266,7 +322,7 @@ const styles = StyleSheet.create({
   },
   attachmentName: {
     flex: 1,
-    color: colors.text,
-    fontSize: typography.body,
+    color: mailColors.text,
+    fontSize: 15,
   },
 });
