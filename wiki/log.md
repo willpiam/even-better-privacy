@@ -1,5 +1,10 @@
 # Wiki Log
 
+## [2026-11-10] update | drop chat interface
+
+- Removed the Chat tab on mobile and the Chat page on desktop, including the design prototype. Mail lists no longer hide `X-EBP-Channel: chat`. `common/ChatChannel.ts` and `GET /api/v1/mail/chat` are gone.
+- Updated: [[analysis-pqpost-chat-channel]], [[analysis-email-backed-chat]], [[component-gui]], [[component-mobile]].
+
 ## [2026-10-30] query | android release build kills Cursor
 
 - Answered: the 14:52 and 16:57 crashes were the kernel OOM killer choosing Cursor (`oom_score_adj=300`) while a sandboxed `assembleRelease` set `GRADLE_USER_HOME` under `/tmp/cursor-sandbox-cache/` and left a second Gradle daemon, on top of one from the earlier crash. The phone kept the previous install. Fix: stop those daemons, pin `GRADLE_USER_HOME` to `~/.gradle`, cap Gradle workers. Rebuilt and installed; `com.mobile` `lastUpdateTime` 2026-10-30 17:27, process stayed up.

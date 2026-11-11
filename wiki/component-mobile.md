@@ -2,7 +2,7 @@
 title: "EBP Mobile Component"
 type: component
 status: active
-last_updated: 2026-10-30
+last_updated: 2026-11-10
 source_count: 7
 tags:
   - component
@@ -32,7 +32,7 @@ Android release installs go through `build_mobile_android.sh`. Stop leftover `/t
 
 Compose uses one To field with a chip per address (`RecipientChipsField`). Identity unlock is once per session (`services/unlockSession.ts`, default 15 idle minutes, Lock now in Settings). Encrypted sends refuse attachments. Restore and delete for a managed mailbox are on Mail accounts. Sent mail is the IMAP `\Sent` mailbox: each send APPENDs a copy, and encrypted mail includes the sender so they can decrypt it.
 
-Chat is its own tab (`screens/chat/`). It texts one person on the account's mail domain. The message is encrypted mail with `X-EBP-Channel: chat`; the inbox search hides those messages. See [[analysis-pqpost-chat-channel]].
+Mail is the messaging surface. The Chat tab was removed on 2026-11-10. See [[analysis-pqpost-chat-channel]].
 
 ## Architecture
 

@@ -12,7 +12,6 @@ jest.mock('../src/services/mail/mailTrace', () => ({
 }));
 
 import {
-  buildChatSearchCommand,
   buildUidSearchCommand,
   clampMailLimit,
   paginateUids,
@@ -69,21 +68,11 @@ describe('mail list helpers', () => {
     expect(quoteImap('Sent Mail')).toBe('"Sent Mail"');
   });
 
-  it('buildUidSearchCommand excludes the chat channel', () => {
-    expect(buildUidSearchCommand('a3')).toBe(
-      'a3 UID SEARCH NOT HEADER X-EBP-Channel "chat"',
-    );
-    expect(buildUidSearchCommand('a3', '  ')).toBe(
-      'a3 UID SEARCH NOT HEADER X-EBP-Channel "chat"',
-    );
+  it('buildUidSearchCommand searches the whole mailbox or a text query', () => {
+    expect(buildUidSearchCommand('a3')).toBe('a3 UID SEARCH ALL');
+    expect(buildUidSearchCommand('a3', '  ')).toBe('a3 UID SEARCH ALL');
     expect(buildUidSearchCommand('a3', 'hello "world"')).toBe(
-      'a3 UID SEARCH TEXT "hello \\"world\\"" NOT HEADER X-EBP-Channel "chat"',
-    );
-  });
-
-  it('buildChatSearchCommand matches the chat header', () => {
-    expect(buildChatSearchCommand('c2')).toBe(
-      'c2 UID SEARCH HEADER X-EBP-Channel "chat"',
+      'a3 UID SEARCH TEXT "hello \\"world\\""',
     );
   });
 

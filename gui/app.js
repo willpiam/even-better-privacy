@@ -53,7 +53,6 @@ import {
   loadStoredMailCredentials,
   renderStoredMailCredentials,
 } from "./js/mail.js";
-import { initChatPage, openChatPage } from "./js/chat.js";
 import { updateRevokeDetailPathOptions } from "./js/revocation.js";
 import { initOnboarding, maybeOpenOnboardingOnFirstRun } from "./js/onboarding.js";
 
@@ -90,9 +89,6 @@ function navigateTo(pageId) {
         });
       }
     });
-  }
-  if (pageId === "chat") {
-    void openChatPage();
   }
   if (pageId === "certificates") {
     void renderCertificatesPage();
@@ -1772,7 +1768,6 @@ initNavigation();
 initCollapsibleSections();
 initContactSearch();
 initMailPage();
-initChatPage();
 initUnlockUi();
 initOnboarding({ navigateTo });
 renderToastLogs();

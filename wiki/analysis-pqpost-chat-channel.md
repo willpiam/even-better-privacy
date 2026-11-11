@@ -2,7 +2,7 @@
 title: "pqpost Chat Channel"
 type: analysis
 status: active
-last_updated: 2026-10-30
+last_updated: 2026-11-10
 source_count: 0
 tags:
   - chat
@@ -14,13 +14,17 @@ tags:
 
 # pqpost Chat Channel
 
-A text-message UI on desktop and mobile, for `username@pqpost.com` peers, carried by the existing SMTP/IMAP path. The message stays an ordinary EBP email. A channel marker tells EBP clients to file it in Chat instead of Mail.
+**Removed 2026-11-10.** Desktop and mobile no longer ship a Chat surface. Mail is the messaging interface. Inbox and Sent searches no longer hide `X-EBP-Channel: chat`, so any message that already carries that header shows up as ordinary email. `common/ChatChannel.ts`, the Chat screens, `GET /api/v1/mail/chat`, and `POST /api/v1/mail/message/seen` are gone.
+
+The notes below record the design that shipped briefly and was then dropped.
+
+A text-message UI on desktop and mobile, for `username@pqpost.com` peers, carried by the existing SMTP/IMAP path. The message stayed an ordinary EBP email. A channel marker told EBP clients to file it in Chat instead of Mail.
 
 This supersedes the addressing sketch in [[analysis-email-backed-chat]] for product work. That page used a fingerprint as the SMTP local-part. Managed mailboxes already bind one `username@<MAIL_DOMAIN>` to one identity ([[analysis-ebp-managed-email-onboarding]], [[analysis-pqpost-recipient-identity]]). Chat should use that address.
 
 ## Implementation
 
-Desktop and mobile both ship this split.
+Historical. Desktop and mobile both shipped this split until 2026-11-10.
 
 - Shared rules live in `common/ChatChannel.ts` (header, subject, peer grouping, message-id helpers).
 - Desktop: sidebar Chat page (`gui/js/chat.js`). `GET /api/v1/mail/messages` searches with `NOT HEADER X-EBP-Channel chat`. `GET /api/v1/mail/chat` groups INBOX and Sent. `POST /api/v1/mail/send-ebp` accepts `channel: "chat"`. `POST /api/v1/mail/message/seen` sets `\Seen`.

@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-10-30
+last_updated: 2026-11-10
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-10-30 (pqpost chat shipped)
+Last updated: 2026-11-10 (chat interface removed)
 
 ## Wiki Operations
 
@@ -110,12 +110,10 @@ Last updated: 2026-10-30 (pqpost chat shipped)
 - [[analysis-streamline-email-experience]] - Ranked mail UX fixes: unlock once
   per session, locked-first GUI reader, one compose model, mailbox restore,
   outbound delivery.
-- [[analysis-pqpost-chat-channel]] - Text UI on desktop and mobile for peers
-  on the same mail domain: same SMTP/IMAP and EBP payload as mail, split by
-  an `X-EBP-Channel: chat` header.
+- [[analysis-pqpost-chat-channel]] - Chat UI that briefly shipped on desktop
+  and mobile, then was removed on 2026-11-10. Mail is the messaging surface.
 - [[analysis-email-backed-chat]] - Earlier seed sketch: chat UI over SMTP/IMAP
-  with fingerprint local-parts. Product direction is
-  [[analysis-pqpost-chat-channel]].
+  with fingerprint local-parts. Not the product direction.
 - [[analysis-hierarchy-gui-e2e-coverage]] - GUI Playwright and mobile Maestro cover
   same-client hierarchy; no GUI↔mobile hierarchy E2E.
 - [[analysis-cross-client-compatibility-tests]] - CLI, GUI, mobile, core, and

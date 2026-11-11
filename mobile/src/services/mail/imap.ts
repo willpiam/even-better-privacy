@@ -1,10 +1,5 @@
-import {readMailboxHeaders, readHeaderRecords} from './imapHeaders';
+import {readMailboxHeaders} from './imapHeaders';
 import {Buffer} from 'buffer';
-import {
-  EBP_CHAT_UID_CAP,
-  isChatChannelHeader,
-  type ChatSourceMessage,
-} from '../../../../common/ChatChannel';
 import {
   DEFAULT_SENT_MAILBOX,
   isSentFolderRequest,
@@ -88,19 +83,13 @@ export function paginateUids(
   };
 }
 
-const CHAT_HEADER_EXCLUDE = 'NOT HEADER X-EBP-Channel "chat"';
-
 export function buildUidSearchCommand(tag: string, search?: string): string {
   const q = (search ?? '').trim();
   if (!q) {
-    return `${tag} UID SEARCH ${CHAT_HEADER_EXCLUDE}`;
+    return `${tag} UID SEARCH ALL`;
   }
   const escaped = q.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `${tag} UID SEARCH TEXT "${escaped}" ${CHAT_HEADER_EXCLUDE}`;
-}
-
-export function buildChatSearchCommand(tag: string): string {
-  return `${tag} UID SEARCH HEADER X-EBP-Channel "chat"`;
+  return `${tag} UID SEARCH TEXT "${escaped}"`;
 }
 
 async function maybeImapStartTls(
@@ -325,98 +314,6 @@ export async function listMailboxMessages(
       total: pageInfo.total,
       found: true,
     };
-  } finally {
-    client.close();
-  }
-}
-
-const CHAT_HEADER_FIELDS =
-  'SUBJECT FROM TO DATE MESSAGE-ID X-EBP-CHANNEL';
-
-async function fetchChatFolder(
-  client: TcpLineClient,
-  folder: string,
-  folderKind: ChatSourceMessage['folderKind'],
-  selectTag: string,
-  searchTag: string,
-): Promise<ChatSourceMessage[]> {
-  const opened = await selectMailbox(client, folder, selectTag);
-  if (!opened) {
-    return [];
-  }
-  client.writeLine(buildChatSearchCommand(searchTag));
-  const searchLines = await readTaggedOk(client, searchTag);
-  const uids = parseSearchUids(searchLines).slice(-EBP_CHAT_UID_CAP);
-  const rows: ChatSourceMessage[] = [];
-  if (!uids.length) return rows;
-  const fetchTag = `cf${folderKind}`;
-  client.writeLine(
-    `${fetchTag} UID FETCH ${uids.join(',')} (UID FLAGS BODY.PEEK[HEADER.FIELDS (${CHAT_HEADER_FIELDS})])`,
-  );
-  const records = await readHeaderRecords(client, fetchTag, uids);
-  for (const {uid, headers: blob, seen} of records) {
-    if (!isChatChannelHeader(parseHeaderField(blob, 'X-EBP-Channel'))) {
-      continue;
-    }
-    const parsedDate = Date.parse(parseHeaderField(blob, 'Date'));
-    const messageId = parseHeaderField(blob, 'Message-ID');
-    rows.push({
-      uid,
-      folder: opened,
-      folderKind,
-      from: parseHeaderField(blob, 'From') || '',
-      to: parseHeaderField(blob, 'To') || '',
-      date: Number.isFinite(parsedDate) ? parsedDate : null,
-      seen,
-      messageId: messageId || null,
-    });
-  }
-  return rows;
-}
-
-/** Chat-channel headers from INBOX and Sent. No message bodies. */
-export async function listChatMessages(
-  config: MailAccountConfig,
-  secrets: MailAuthSecrets,
-): Promise<ChatSourceMessage[]> {
-  const client = await connectMailLineClient({
-    host: config.imapHost,
-    port: config.imapPort,
-    secure: config.imapSecure,
-  });
-  try {
-    await imapAuthenticate(client, config, secrets);
-    const inbox = await fetchChatFolder(client, 'INBOX', 'inbox', 'c1', 'c2');
-    const sent = await fetchChatFolder(client, 'Sent', 'sent', 'c3', 'c4');
-    return [...inbox, ...sent];
-  } finally {
-    client.close();
-  }
-}
-
-export async function markMessagesSeen(
-  config: MailAccountConfig,
-  secrets: MailAuthSecrets,
-  folder: string,
-  uids: number[],
-): Promise<void> {
-  const unique = [...new Set(uids.filter(uid => Number.isInteger(uid) && uid > 0))];
-  if (!unique.length) {
-    return;
-  }
-  const client = await connectMailLineClient({
-    host: config.imapHost,
-    port: config.imapPort,
-    secure: config.imapSecure,
-  });
-  try {
-    await imapAuthenticate(client, config, secrets);
-    const opened = await selectMailbox(client, folder, 'd1');
-    if (!opened) {
-      throw new Error('mailbox not found');
-    }
-    client.writeLine(`d2 UID STORE ${unique.join(',')} +FLAGS (\\Seen)`);
-    await readTaggedOk(client, 'd2');
   } finally {
     client.close();
   }

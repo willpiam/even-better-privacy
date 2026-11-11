@@ -2346,63 +2346,6 @@
         display: block;
       }
 
-      .chat-layout {
-        display: grid;
-        grid-template-columns: minmax(240px, 300px) 1fr;
-        gap: 16px;
-        align-items: start;
-      }
-
-      .chat-thread {
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-height: 280px;
-        max-height: 480px;
-        overflow: auto;
-        padding: 8px;
-        border: 1px solid var(--border);
-        border-radius: var(--radius-sm);
-        background: var(--bg-base);
-        margin-bottom: 12px;
-      }
-
-      .chat-bubble {
-        max-width: 75%;
-        padding: 8px 12px;
-        border-radius: 12px;
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-
-      .chat-bubble.outbound {
-        align-self: flex-end;
-        background: var(--accent-bg);
-      }
-
-      .chat-bubble.inbound {
-        align-self: flex-start;
-        border: 1px solid var(--border);
-      }
-
-      .chat-bubble.error {
-        align-self: stretch;
-        max-width: none;
-        border: 1px solid var(--border);
-        color: var(--text-secondary);
-      }
-
-      .chat-bubble time {
-        display: block;
-        margin-top: 4px;
-        font-size: 0.75rem;
-        color: var(--text-secondary);
-      }
-
-      #chat-conversation-list .current {
-        border-left: 3px solid var(--accent);
-      }
-
       .mail-inbox-layout {
         display: grid;
         grid-template-columns: minmax(300px, 340px) 1fr;
@@ -2673,8 +2616,7 @@
           grid-template-columns: 1fr;
         }
 
-        .mail-inbox-layout,
-        .chat-layout {
+        .mail-inbox-layout {
           grid-template-columns: 1fr;
         }
 
@@ -2716,10 +2658,6 @@
           <div class="nav-item" data-page="mail">
             <span class="nav-item-icon">📧</span>
             Mail
-          </div>
-          <div class="nav-item" data-page="chat">
-            <span class="nav-item-icon">💬</span>
-            Chat
           </div>
         </div>
         <div class="nav-section">
@@ -3967,50 +3905,6 @@
                   placeholder="No decrypted file loaded yet..."
                 />
               </label>
-            </form>
-          </section>
-        </div>
-      </div>
-
-      <!-- Page: Chat -->
-      <div class="page" id="page-chat">
-        <div class="page-header">
-          <h2>Chat</h2>
-          <p>
-            Text someone on your mail domain. Each message is encrypted email,
-            shown here instead of in Mail.
-          </p>
-        </div>
-        <div class="chat-layout">
-          <section class="chat-list-panel">
-            <form id="chat-new-form">
-              <label>New chat
-                <input
-                  id="chat-new-address"
-                  type="email"
-                  placeholder="name@your-domain"
-                  autocomplete="off"
-                />
-              </label>
-              <p id="chat-new-status" class="small muted"></p>
-              <button type="submit" id="chat-new-btn">Start</button>
-            </form>
-            <ul id="chat-conversation-list" class="small"></ul>
-          </section>
-          <section class="chat-thread-panel">
-            <div id="chat-thread-header" class="mail-reader-header">
-              Select a conversation
-            </div>
-            <div id="chat-thread" class="chat-thread"></div>
-            <form id="chat-compose-form">
-              <label>Message
-                <textarea
-                  id="chat-compose-body"
-                  rows="3"
-                  placeholder="Write a message"
-                ></textarea>
-              </label>
-              <button type="submit" id="chat-send-btn" disabled>Send</button>
             </form>
           </section>
         </div>

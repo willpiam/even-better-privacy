@@ -183,39 +183,3 @@ test('cached pages remain available after a failed refresh', async () => {
   expect(getCachedMailPage('alice', context, params)).toEqual(result);
   expect(fetch).toHaveBeenCalledTimes(2);
 });
-
-test('chat batches headers and preserves channel, message ID and seen flags', async () => {
-  const client = {
-    ...headerClient(
-      [
-        '* 1 FETCH (UID 1 FLAGS (\\Seen) BODY[HEADER.FIELDS (SUBJECT FROM TO DATE MESSAGE-ID X-EBP-CHANNEL)] {80}',
-        ')',
-        '* 2 FETCH (UID 2 FLAGS () BODY[HEADER.FIELDS (SUBJECT FROM TO DATE MESSAGE-ID X-EBP-CHANNEL)] {80}',
-        ')',
-        'cfinbox OK Done',
-      ],
-      [
-        'X-EBP-Channel: chat\r\nMessage-ID: <one@test>\r\nFrom: alice@test\r\nDate: 01 Jan 2026 12:00:00 +0000\r\n\r\n',
-        'X-EBP-Channel: other\r\nMessage-ID: <two@test>\r\n\r\n',
-      ],
-    ),
-    writeLine: jest.fn(),
-    close: jest.fn(),
-  };
-  client.readLine.mockResolvedValueOnce('* OK Ready');
-  (connectMailLineClient as jest.Mock).mockResolvedValue(client);
-  (readTaggedOk as jest.Mock).mockImplementation(async (_client, tag) =>
-    tag === 'c2' ? ['* SEARCH 1 2'] : [],
-  );
-  const result = await imap.listChatMessages(DEFAULT_MAIL_ACCOUNT, secrets);
-  expect(result).toHaveLength(1);
-  expect(result[0]).toMatchObject({
-    uid: 1,
-    seen: true,
-    messageId: '<one@test>',
-    from: 'alice@test',
-  });
-  expect(
-    client.writeLine.mock.calls.filter(([line]) => line.includes('UID FETCH')),
-  ).toHaveLength(1);
-});

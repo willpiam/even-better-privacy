@@ -8,16 +8,15 @@ Open **index.html** in a browser for the prototype studio. If your browser restr
 python3 -m http.server 8000 --bind 127.0.0.1 --directory mockups
 ```
 
-Then visit http://127.0.0.1:8000/ . Open **app.html** directly for the responsive interface without the studio. `app.html?screen=contacts` (or `mail`, `chat`, `identities`, `tools`, `settings`) opens a particular screen.
+Then visit http://127.0.0.1:8000/ . Open **app.html** directly for the responsive interface without the studio. `app.html?screen=contacts` (or `mail`, `identities`, `tools`, `settings`) opens a particular screen.
 
 ## Review the design
 
 - **Desktop / Mobile / Compare** switch the preview layout. Compare presents two independent, scrollable artboards.
 - The screen selector navigates both artboards. Design notes explain the direction and available interactions.
 - Mail: open a message, search, filter unread/starred/sent, star, archive, inspect security, reply, or compose a preview. Preview sends appear in Sent.
-- Chat: open a conversation and send a simulated message. New chat opens the contact picker.
 - Identities: switch Personal/Work, inspect details, and preview the creation/backup handoff.
-- Contacts: search, add an unverified sample contact, inspect details, and start a conversation.
+- Contacts: search, add an unverified sample contact, inspect details, and start an email.
 - Tools: preview encrypt/decrypt/sign/verify workflows with explicit simulated result states.
 - Settings: change appearance and the sample notification preference. On mobile, open the profile circle, then **Workspace settings**.
 

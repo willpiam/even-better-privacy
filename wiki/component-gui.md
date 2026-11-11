@@ -2,7 +2,7 @@
 title: "EBP GUI Component"
 type: component
 status: active
-last_updated: 2026-10-30
+last_updated: 2026-11-10
 source_count: 9
 tags:
   - component
@@ -46,7 +46,6 @@ The GUI includes a built-in email interface:
 - Email operations integrate with EBP sign/encrypt/decrypt/verify flows. Message selection now uses bounded/cancelable load behavior plus lazy encrypted-attachment payload fetch to reduce reader stalls. See [[message-payload-formats]] for the wire format.
 - Compose is one To field. Each address becomes a chip, resolved locally or via `GET /api/v1/contacts/resolve-verified-email` ([[analysis-pqpost-recipient-identity]]). Send encrypts when every chip resolves, and warns before a plaintext send. A copy is saved to the Sent mailbox, and the sender is included in the encryption so that copy can be opened.
 - The reader hides EBP armor until decrypt. A badge opens a sender-authenticity dialog. Authenticity rules live in `core/MailAuthenticity.ts`.
-- Chat is a separate sidebar page for one-to-one text with someone on the same mail domain. Messages are still encrypted mail with `X-EBP-Channel: chat` and subject `Chat`, and the inbox search hides them. See [[analysis-pqpost-chat-channel]].
 - Identity private keys unlock once per session (`POST /api/v1/identity/unlock`, idle timeout, Lock control). The same password tries to open stored mail secrets. See [[key-management]].
 - Managed mailboxes can be restored (`POST /api/v1/mail/ebp-reset-password`) or deleted (`POST /api/v1/mail/ebp-delete`) from the Account tab. Delete retires the username on the key server.
 

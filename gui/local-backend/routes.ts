@@ -10,15 +10,6 @@ import {
 } from "../../core/MessageHash.ts";
 import { buildMailAuthenticityFields } from "../../common/MailAuthenticity.ts";
 import { includeSenderAmongRecipients } from "../../common/SentMailbox.ts";
-import {
-  chatPeerAllowed,
-  EBP_CHAT_HEADER,
-  EBP_CHAT_HEADER_VALUE,
-  EBP_CHAT_SUBJECT,
-  formatMessageId,
-  generateMessageId,
-  groupChatConversations,
-} from "../../common/ChatChannel.ts";
 import { MultiRecipientCipher } from "../../core/MultiRecipientCipher.ts";
 import {
   createHierarchyCertificate,
@@ -147,9 +138,7 @@ import {
   getIdentityDetailMeta,
   getIdentityDetailValue,
   parseMailSourceInWorker,
-  fetchChatSourceMessages,
   mailListSearchQuery,
-  markMessagesSeen,
   resolveMailboxFolder,
   safeImapDisconnect,
   withImapReconnect,
@@ -279,6 +268,13 @@ function parseMailRecipientsInput(input: unknown): MailRecipientInput[] {
     }
     return { contact, email };
   });
+}
+
+function formatMessageId(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (trimmed.startsWith("<") && trimmed.endsWith(">")) return trimmed;
+  return `<${trimmed.replace(/^<|>$/g, "")}>`;
 }
 
 function hashPayload(payload: unknown): string {
@@ -1289,61 +1285,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
     }
 
-    if (req.method === "GET" && url.pathname === "/api/v1/mail/chat") {
-      const home = url.searchParams.get("home") ?? undefined;
-      const accountId = toSafeString(url.searchParams.get("accountId"), 128) ||
-        undefined;
-      const ctx = await getContext(home ?? undefined);
-      const resolved = await resolveMailAccount(ctx.identityDir, accountId);
-      const ownAddress = resolved.account.config.fromEmail ||
-        resolved.account.config.username;
-      const conversations = await withImapReconnect(
-        resolved.account.config,
-        resolved.secrets,
-        async (imap) => {
-          const rows = await fetchChatSourceMessages(imap);
-          return groupChatConversations(rows, ownAddress);
-        },
-      );
-      return json({
-        accountId: resolved.account.id,
-        ownAddress,
-        conversations,
-      });
-    }
-
-    if (req.method === "POST" && url.pathname === "/api/v1/mail/message/seen") {
-      const body = await readJson<{
-        home?: unknown;
-        accountId?: unknown;
-        folder?: unknown;
-        uids?: unknown;
-      }>(req);
-      const home = typeof body.home === "string" ? body.home : undefined;
-      const accountId = toSafeString(body.accountId, 128) || undefined;
-      const folder = toSafeString(body.folder, 128) || "INBOX";
-      const uids = Array.isArray(body.uids)
-        ? body.uids.map((uid) => Number(uid)).filter((uid) =>
-          Number.isInteger(uid) && uid > 0
-        )
-        : [];
-      if (!uids.length) return json({ ok: true, updated: 0 });
-      const ctx = await getContext(home ?? undefined);
-      const resolved = await resolveMailAccount(ctx.identityDir, accountId);
-      await withImapReconnect(
-        resolved.account.config,
-        resolved.secrets,
-        async (imap) => {
-          const opened = await resolveMailboxFolder(imap, folder);
-          if (!opened) {
-            throw new HttpError(STATUS.NotFound, "mailbox not found");
-          }
-          await markMessagesSeen(imap, opened, uids);
-        },
-      );
-      return json({ ok: true, updated: uids.length });
-    }
-
     if (req.method === "GET" && url.pathname === "/api/v1/mail/message") {
       const requestStartedAt = performance.now();
       const home = url.searchParams.get("home") ?? undefined;
@@ -1696,10 +1637,8 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         password?: unknown;
         includePublicKeys?: unknown;
         attachments?: unknown;
-        channel?: unknown;
         inReplyTo?: unknown;
         references?: unknown;
-        messageId?: unknown;
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const accountId = toSafeString(body.accountId, 128) || undefined;
@@ -1707,10 +1646,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.identity
         : undefined;
       const to = toSafeString(body.to, 512);
-      const isChat = body.channel === "chat";
-      const subject = isChat
-        ? EBP_CHAT_SUBJECT
-        : toSafeString(body.subject, 512);
+      const subject = toSafeString(body.subject, 512);
       const message = typeof body.message === "string" ? body.message : "";
       const inReplyTo = formatMessageId(
         typeof body.inReplyTo === "string" ? body.inReplyTo : "",
@@ -1726,20 +1662,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         ? body.password
         : undefined;
       const includePublicKeys = Boolean(body.includePublicKeys);
-      const attachmentsInput = isChat
-        ? []
-        : parseMailAttachmentInputs(body.attachments);
+      const attachmentsInput = parseMailAttachmentInputs(body.attachments);
       const resolvedRecipients = recipientsInput.length
         ? recipientsInput
         : (recipient && to ? [{ contact: recipient, email: to }] : []);
       if (!subject) {
         throw new HttpError(STATUS.BadRequest, "subject is required");
-      }
-      if (isChat && resolvedRecipients.length !== 1) {
-        throw new HttpError(
-          STATUS.BadRequest,
-          "chat allows one recipient",
-        );
       }
       if (!resolvedRecipients.length) {
         throw new HttpError(
@@ -1759,15 +1687,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const resolved = await resolveMailAccount(ctx.identityDir, accountId);
       const account = resolved.account.config;
       const secrets = resolved.secrets;
-      if (isChat) {
-        const ownAddress = account.fromEmail || account.username;
-        if (!chatPeerAllowed(ownAddress, resolvedRecipients[0].email)) {
-          throw new HttpError(
-            STATUS.BadRequest,
-            "chat is only available for addresses on your mail domain",
-          );
-        }
-      }
       const recipients = await Promise.all(
         resolvedRecipients.map(async (item) => ({
           email: item.email,
@@ -1887,12 +1806,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const from = account.fromName
         ? `"${account.fromName.replace(/"/g, "")}" <${account.fromEmail}>`
         : account.fromEmail;
-      const ownAddress = account.fromEmail || account.username;
-      const chatMessageId = isChat
-        ? (formatMessageId(
-          typeof body.messageId === "string" ? body.messageId : "",
-        ) || generateMessageId(ownAddress))
-        : undefined;
       const delivered = await deliverSmtpAndAppendSent({
         account,
         secrets,
@@ -1902,10 +1815,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           to: toHeader,
           subject,
           text: armoredBody,
-          headers: isChat
-            ? { [EBP_CHAT_HEADER]: EBP_CHAT_HEADER_VALUE }
-            : undefined,
-          messageId: chatMessageId,
           inReplyTo: inReplyTo || undefined,
           references: references || undefined,
           attachments: encryptedAttachments.map((attachment, idx) => ({

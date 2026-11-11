@@ -1,9 +1,4 @@
 import {armorPayload, parseEbpPayloadInput} from '../../ebpCore';
-import {
-  chatPeerAllowed,
-  EBP_CHAT_SUBJECT,
-  generateMessageId,
-} from '../../../../common/ChatChannel';
 import {includeSenderAmongRecipients} from '../../../../common/SentMailbox';
 import {
   buildEncryptedSignedMessageMultiPayload,
@@ -62,7 +57,6 @@ export async function sendEbpMail(params: {
   /** Multi-recipient: each row needs email + contact name. */
   recipients?: EbpMailRecipient[];
   sign?: boolean;
-  channel?: 'chat';
   messageId?: string;
   inReplyTo?: string;
   references?: string;
@@ -125,35 +119,17 @@ export async function sendEbpMail(params: {
   const fromName = resolved.account.config.fromName || identity.toShortFingerprint();
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
-  const chat = params.channel === 'chat';
-  if (chat) {
-    if (recipientRows.length !== 1) {
-      throw new Error('Chat allows one recipient');
-    }
-    if (!(params.sign ?? true)) {
-      throw new Error('Chat messages are signed');
-    }
-    if (params.attachments?.length) {
-      throw new Error('Chat messages cannot include attachments');
-    }
-    if (!chatPeerAllowed(fromEmail, recipientRows[0].email)) {
-      throw new Error('Chat is only available for addresses on your mail domain');
-    }
-  }
   const toHeader = recipientRows.map(r => r.email.trim()).join(', ');
   const mime = buildMultipartMimeMessage({
     from: formatFromHeader(fromName, fromEmail),
     to: toHeader,
-    subject: chat ? EBP_CHAT_SUBJECT : params.subject,
+    subject: params.subject,
     plainBody: ebpMailPlainIntro(includePublicKeys),
     ebpArmor: armor,
-    channel: chat ? 'chat' : undefined,
-    messageId: chat
-      ? params.messageId || generateMessageId(fromEmail)
-      : params.messageId,
+    messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
-    attachments: chat ? undefined : params.attachments,
+    attachments: params.attachments,
   });
   await sendMimeMessage(
     resolved.account.config,
