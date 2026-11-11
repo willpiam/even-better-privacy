@@ -175,3 +175,162 @@ test("locked reader hides armor until decrypt, then shows body, badge, and techn
   await expect(page.locator("#mail-technical-armor")).toBeVisible();
   await expect(page.locator("#mail-technical-armor")).toHaveValue(ARMOR);
 });
+
+// These tests exercise the real frontend with deterministic mail responses.
+async function openResponsiveMail(page: Page) {
+  await mockBackend(page);
+  await page.route("**/api/v1/identity/unlock-status", (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({ unlocked: true }),
+  }));
+  await page.goto("/");
+  await page.locator('.nav-item[data-page="mail"]').click();
+  await expect(page.locator("#mail-message-list")).toContainText("Encrypted hello");
+}
+
+test("responsiveness: cached inbox renders while refresh is pending and survives failure", async ({ page }) => {
+  await openResponsiveMail(page);
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  let refreshing = false;
+  await page.route("**/api/v1/mail/messages?**", async (route) => {
+    refreshing = true;
+    await pending;
+    await route.fulfill({ status: 502, contentType: "application/json", body: '{"error":"offline"}' });
+  });
+  await page.evaluate(() => {
+    // Empty the DOM to prove cached data is rendered before the network returns.
+    document.getElementById("mail-message-list")!.innerHTML = "";
+    return import("/js/mail.js").then(({ loadMailMessages }) => {
+      (window as any).refreshDone = loadMailMessages(1).catch(() => {});
+    });
+  });
+  await expect.poll(() => refreshing).toBe(true);
+  await expect(page.locator("#mail-message-list")).toContainText("Encrypted hello");
+  release();
+  await page.evaluate(() => (window as any).refreshDone);
+  await expect(page.locator("#mail-message-list")).toContainText("Encrypted hello");
+});
+
+test("responsiveness: reopening uses body cache, refresh and lock invalidate it", async ({ page }) => {
+  let requests = 0;
+  page.on("request", (req) => { if (new URL(req.url()).pathname === "/api/v1/mail/message") requests++; });
+  await openResponsiveMail(page);
+  const message = page.locator("#mail-message-list li", { hasText: "Encrypted hello" });
+  await message.click();
+  await expect(page.locator("#mail-message-body")).toHaveValue("secret body");
+  await message.click();
+  await expect(page.locator("#mail-message-body")).toHaveValue("secret body");
+  expect(requests).toBe(1);
+  await page.locator('#mail-inbox-form button[type="submit"]').click();
+  await message.click();
+  await expect(page.locator("#mail-message-body")).toHaveValue("secret body");
+  expect(requests).toBe(2);
+  await page.evaluate(async () => { await (await import("/js/unlock.js")).lockIdentity(); });
+  await expect(page.locator("#mail-message-body")).toHaveValue("");
+  await page.evaluate(async () => {
+    const { state } = await import("/js/state.js");
+    return state.selectedMailDecryptResult;
+  }).then((result) => expect(result).toBeNull());
+  await page.evaluate(async () => { await (await import("/js/mail.js")).loadMailMessages(1); });
+  await message.click();
+  await expect.poll(() => requests).toBe(3);
+});
+
+test("responsiveness: late folder responses cannot replace the current inbox", async ({ page }) => {
+  await openResponsiveMail(page);
+  await page.evaluate(async () => {
+    const nativeFetch = window.fetch.bind(window);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    // Deliberately ignore AbortSignal to exercise the request-id guard too.
+    window.fetch = async (input, init) => {
+      if (String(input).includes("/mail/messages?") && String(input).includes("folder=Sent")) {
+        await gate;
+        return new Response(JSON.stringify({ messages: [{ uid: 7, subject: "Late sent message" }] }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return nativeFetch(input, init);
+    };
+    const { loadMailMessages } = await import("/js/mail.js");
+    (document.getElementById("mail-folder") as HTMLSelectElement).value = "Sent";
+    const sent = loadMailMessages(1);
+    (document.getElementById("mail-folder") as HTMLSelectElement).value = "INBOX";
+    await loadMailMessages(1);
+    release();
+    await sent;
+    window.fetch = nativeFetch;
+  });
+  await expect(page.locator("#mail-message-list")).toContainText("Encrypted hello");
+  await expect(page.locator("#mail-message-list")).not.toContainText("Late sent message");
+});
+
+test("responsiveness: cache expires, evicts least recently used entries and bounds large bodies", async ({ page }) => {
+  await openResponsiveMail(page);
+  const result = await page.evaluate(async () => {
+    const { createMailCache } = await import("/js/mail-cache.js");
+    const cache = createMailCache(2, 100, 1000);
+    cache.set("a", "A"); cache.set("b", "B"); cache.get("a"); cache.set("c", "C");
+    const evicted = cache.get("b") === undefined && cache.get("a") === "A";
+    cache.set("huge", "x".repeat(100));
+    const bounded = cache.get("huge") === undefined;
+    const now = Date.now;
+    Date.now = () => now() + 1001;
+    const expired = cache.get("a") === undefined;
+    Date.now = now;
+    return { evicted, bounded, expired };
+  });
+  expect(result).toEqual({ evicted: true, bounded: true, expired: true });
+});
+
+test("responsiveness: lock rejects in-flight message data and clears it from the cache", async ({ page }) => {
+  await openResponsiveMail(page);
+  const result = await page.evaluate(async () => {
+    const nativeFetch = window.fetch.bind(window);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    window.fetch = async (input, init) => {
+      if (String(input).includes("/mail/message?")) {
+        await gate;
+        return new Response(JSON.stringify({ uid: 7, subject: "Late private message", text: "private" }), {
+          headers: { "content-type": "application/json" },
+        });
+      }
+      return nativeFetch(input, init);
+    };
+    const { openMailMessage } = await import("/js/mail.js");
+    const { lockIdentity } = await import("/js/unlock.js");
+    const { state } = await import("/js/state.js");
+    const { mailCacheScope, mailBodyCache } = await import("/js/mail-cache.js");
+    const scope = mailCacheScope();
+    const pending = openMailMessage("INBOX", 7);
+    await lockIdentity();
+    release();
+    await pending;
+    window.fetch = nativeFetch;
+    return {
+      selected: state.selectedMailMessage,
+      cached: mailBodyCache.get(JSON.stringify([scope, "INBOX", "7"])) ?? null,
+    };
+  });
+  expect(result).toEqual({ selected: null, cached: null });
+  await expect(page.locator("#mail-message-body")).toHaveValue("");
+});
+
+test("responsiveness: account changes isolate messages with the same UID", async ({ page }) => {
+  await openResponsiveMail(page);
+  await page.locator("#mail-message-list li", { hasText: "Encrypted hello" }).click();
+  await expect(page.locator("#mail-message-body")).toHaveValue("secret body");
+  await page.route("**/api/v1/mail/account", (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({ selectedAccountId: "second-account", accounts: [] }),
+  }));
+  await page.route("**/api/v1/mail/message?**", (route) => route.fulfill({
+    contentType: "application/json", body: JSON.stringify({ uid: 7, text: "Second account body" }),
+  }));
+  await page.evaluate(async () => {
+    const { loadMailAccount, openMailMessage } = await import("/js/mail.js");
+    await loadMailAccount();
+    await openMailMessage("INBOX", 7);
+  });
+  await expect(page.locator("#mail-message-body")).toHaveValue("Second account body");
+});

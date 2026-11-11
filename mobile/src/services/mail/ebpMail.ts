@@ -17,7 +17,8 @@ import {listContacts, getDetailValue, loadContact} from '../contacts';
 import {loadIdentityForUse} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
 import {resolveSelectedAccount} from './accountStore';
-import {appendSentCopy, fetchMessageDetail} from './imap';
+import {appendSentCopy} from './imap';
+import {loadMailMessage} from './mailData';
 import {
   buildMultipartMimeMessage,
   buildSimpleMimeMessage,
@@ -223,9 +224,9 @@ export async function decryptMailBody(params: {
   if (!resolved) {
     throw new Error('No mail account configured');
   }
-  const detail = await fetchMessageDetail(
-    resolved.account.config,
-    resolved.secrets,
+  const detail = await loadMailMessage(
+    params.identityName,
+    resolved,
     params.uid,
     params.folder ?? 'INBOX',
   );

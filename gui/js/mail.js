@@ -1,3 +1,4 @@
+import { mailPageCache, mailBodyCache, mailCacheScope, clearMailCache, onMailCacheClear, resetMailReader } from "./mail-cache.js";
 import { state, saveBooleanPreference, MAIL_RENDER_HTML_PREF_KEY, MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY, LOCAL_BACKEND_ORIGIN } from "./state.js";
 import { api, setStatus, setButtonLoading, withLoading, escapeHtml } from "./ui.js";
 import { requestPassword, requestTextInput } from "./modals.js";
@@ -25,6 +26,31 @@ let mailMessageAbortController = null;
 let mailMessageTimeoutId = null;
 let mailMessageAbortReason = "";
 const MAIL_MESSAGE_TIMEOUT_MS = 30_000;
+let mailListAbortController = null;
+let mailListRequestId = 0;
+let mailListFolder = null;
+onMailCacheClear(() => {
+  cancelMailMessageRequest();
+  mailListAbortController?.abort();
+  mailListRequestId += 1;
+  setMailMessageLoading(false);
+  renderMailMessages();
+  renderMailPagination();
+  renderSelectedMailMessageBody();
+  updateVerifyResult("mail-verify-result", null, null);
+  renderMailVerifyMeta(null);
+});
+
+async function loadMailMessageDetail(folder, uid, signal) {
+  const scope = mailCacheScope();
+  const key = JSON.stringify([scope, folder, String(uid)]);
+  const cached = mailBodyCache.get(key);
+  if (cached) return cached;
+  const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+  const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(uid))}${accountQ}`, { signal });
+  if (scope === mailCacheScope() && !signal?.aborted) mailBodyCache.set(key, detail);
+  return detail;
+}
 
 function cancelMailMessageRequest(reason = "request aborted") {
   if (mailMessageTimeoutId !== null) {
@@ -42,7 +68,10 @@ export async function loadMailAccount() {
   try {
     const res = await api("/mail/account");
     state.mailAccounts = res?.accounts || [];
-    state.selectedMailAccountId = res?.selectedAccountId || res?.accountId || null;
+    const nextAccountId = res?.selectedAccountId || res?.accountId || null;
+    if (nextAccountId !== state.selectedMailAccountId
+      || JSON.stringify(res?.account || null) !== JSON.stringify(state.mailAccount)) clearMailCache();
+    state.selectedMailAccountId = nextAccountId;
     state.mailCreatingNewAccount = false;
     state.mailSecretsInMemory = Boolean(res?.secretsInMemory);
     state.mailSecretsLocked = Boolean(res?.secretsLocked);
@@ -194,9 +223,7 @@ async function deleteEbpMailbox() {
     }),
   }), "Enter your identity password to delete this mailbox");
   setStatus(`Deleted mailbox ${result?.email || email}`, "success");
-  state.mailMessages = [];
-  state.selectedMailMessage = null;
-  state.selectedMailDecryptResult = null;
+  clearMailCache();
   await loadMailAccount();
   renderMailMessages();
   renderSelectedMailMessageBody();
@@ -591,6 +618,8 @@ function renderMailReaderAttachments() {
       decryptBtn.className = "secondary";
       decryptBtn.textContent = decrypted ? "Decrypt Again" : "Decrypt";
       decryptBtn.addEventListener("click", async () => {
+        const scope = mailCacheScope();
+        const requestId = state.mailMessageLoadRequestId;
         try {
           const folder = getSelectedMailFolder();
           const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
@@ -599,6 +628,7 @@ function renderMailReaderAttachments() {
           let payload = attachment.ebpPayload || null;
           if (!payload) {
             const detail = await api(`/mail/message/attachment?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(uid))}&index=${encodeURIComponent(String(index))}${accountQ}`);
+            if (scope !== mailCacheScope() || requestId !== state.mailMessageLoadRequestId) return;
             payload = detail?.ebpPayload || null;
             if (!payload) throw new Error("Attachment payload is unavailable");
             attachment.ebpPayload = payload;
@@ -617,6 +647,7 @@ function renderMailReaderAttachments() {
               ).find((entry) => entry.attachmentId === payload?.attachmentId)?.ciphertextSha256 || undefined,
             }),
           }), "Enter password to decrypt encrypted attachment");
+          if (scope !== mailCacheScope() || requestId !== state.mailMessageLoadRequestId) return;
           state.decryptedMailAttachments[key] = res;
           renderMailReaderAttachments();
           setStatus(`Attachment decrypted: ${res.fileName}`, "success");
@@ -706,6 +737,8 @@ function renderMailTechnicalDetails(payload) {
   const details = document.getElementById("mail-technical-details");
   if (!details) return;
   if (!payload) {
+    const armorEl = document.getElementById("mail-technical-armor");
+    if (armorEl) armorEl.value = "";
     details.style.display = "none";
     details.open = false;
     return;
@@ -776,6 +809,8 @@ function renderSelectedMailMessageBody() {
 async function decryptSelectedMailMessage() {
   const detail = state.selectedMailMessage;
   const payload = getSelectedMailPayload();
+  const scope = mailCacheScope();
+  const requestId = state.mailMessageLoadRequestId;
   if (!detail || !payload) throw new Error("Selected message has no EBP payload");
   const sender = document.getElementById("mail-sender-contact")?.value.trim() || "";
   const res = await withIdentity(async () => api("/decrypt", {
@@ -786,6 +821,7 @@ async function decryptSelectedMailMessage() {
       messageFrom: detail.from || undefined,
     }),
   }), "Enter your identity password to decrypt this message");
+  if (scope !== mailCacheScope() || requestId !== state.mailMessageLoadRequestId) return;
   state.selectedMailDecryptResult = res;
   state.selectedMailMessageContentKey = typeof res?.contentKey === "string" ? res.contentKey : null;
   state.selectedMailMessageAttachmentManifest = Array.isArray(res?.attachmentManifest)
@@ -861,7 +897,6 @@ function renderMailMessages() {
       renderMailMessages();
       try {
         const folder = getSelectedMailFolder();
-        const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
         mailMessageAbortController = new AbortController();
         mailMessageAbortReason = "";
         mailMessageTimeoutId = setTimeout(() => {
@@ -869,9 +904,8 @@ function renderMailMessages() {
           mailMessageAbortReason = "timeout";
           mailMessageAbortController.abort("mail message load timeout");
         }, MAIL_MESSAGE_TIMEOUT_MS);
-        const detail = await api(`/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(msg.uid))}${accountQ}`, {
-          signal: mailMessageAbortController.signal,
-        });
+        const detail = await loadMailMessageDetail(folder, msg.uid, mailMessageAbortController.signal);
+        if (requestId !== state.mailMessageLoadRequestId) return;
         if (mailMessageTimeoutId !== null) {
           clearTimeout(mailMessageTimeoutId);
           mailMessageTimeoutId = null;
@@ -899,6 +933,7 @@ function renderMailMessages() {
           await decryptSelectedMailMessage();
         }
       } catch (err) {
+        if (requestId !== state.mailMessageLoadRequestId) return;
         if (mailMessageTimeoutId !== null) {
           clearTimeout(mailMessageTimeoutId);
           mailMessageTimeoutId = null;
@@ -950,12 +985,8 @@ export async function openMailMessage(folder, uid) {
   renderSelectedMailMessageBody();
   setMailMessageLoading(true);
   try {
-    const accountQ = state.selectedMailAccountId
-      ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}`
-      : "";
-    const detail = await api(
-      `/mail/message?folder=${encodeURIComponent(folder)}&uid=${encodeURIComponent(String(uid))}${accountQ}`,
-    );
+    mailMessageAbortController = new AbortController();
+    const detail = await loadMailMessageDetail(folder, uid, mailMessageAbortController.signal);
     if (requestId !== state.mailMessageLoadRequestId) return;
     state.selectedMailMessage = detail;
     if (detail?.uid != null) state.selectedMailMessageUid = String(detail.uid);
@@ -973,18 +1004,7 @@ export async function openMailMessage(folder, uid) {
   }
 }
 
-export async function loadMailMessages(page = 1) {
-  cancelMailMessageRequest();
-  const folder = getSelectedMailFolder();
-  const limit = Number(document.getElementById("mail-limit").value || 20);
-  const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
-  const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
-  const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
-  const pageQ = `&page=${encodeURIComponent(String(page))}`;
-  const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}${pageQ}`);
-  if (res?._timing) {
-    console.warn("mail/messages timing", res._timing);
-  }
+function applyMailPage(res, folder, page) {
   state.mailMessages = res?.messages || [];
   const heading = document.getElementById("mail-list-heading");
   if (heading) {
@@ -1001,6 +1021,47 @@ export async function loadMailMessages(page = 1) {
   }
   renderMailMessages();
   renderMailPagination();
+}
+
+export async function loadMailMessages(page = 1, { refresh = false } = {}) {
+  cancelMailMessageRequest();
+  state.mailMessageLoadRequestId += 1;
+  setMailMessageLoading(false);
+  mailListAbortController?.abort();
+  const controller = new AbortController();
+  mailListAbortController = controller;
+  const requestId = ++mailListRequestId;
+  const scope = mailCacheScope();
+  const folder = getSelectedMailFolder();
+  const limit = Number(document.getElementById("mail-limit").value || 20);
+  const searchRaw = (document.getElementById("mail-search")?.value ?? "").trim();
+  if (folder !== mailListFolder) {
+    resetMailReader();
+    renderSelectedMailMessageBody();
+    updateVerifyResult("mail-verify-result", null, null);
+    renderMailVerifyMeta(null);
+    mailListFolder = folder;
+  }
+  if (refresh) mailBodyCache.clear();
+  const key = JSON.stringify([scope, folder, limit, searchRaw, page]);
+  const cached = mailPageCache.get(key);
+  // Render cached (including empty) pages before the refresh request completes.
+  applyMailPage(cached || { messages: [] }, folder, page);
+  const accountQ = state.selectedMailAccountId ? `&accountId=${encodeURIComponent(state.selectedMailAccountId)}` : "";
+  const searchQ = searchRaw ? `&search=${encodeURIComponent(searchRaw)}` : "";
+  try {
+    const res = await api(`/mail/messages?folder=${encodeURIComponent(folder)}&limit=${encodeURIComponent(String(limit))}${accountQ}${searchQ}&page=${encodeURIComponent(String(page))}`, { signal: controller.signal });
+    if (requestId !== mailListRequestId || scope !== mailCacheScope()) return;
+    mailPageCache.set(key, res);
+    applyMailPage(res, folder, page);
+    if (res?._timing) console.warn("mail/messages timing", res._timing);
+  } catch (err) {
+    if (requestId !== mailListRequestId || controller.signal.aborted || scope !== mailCacheScope()) return;
+    // Keep the cached page visible on refresh failure, but report the error.
+    throw err;
+  } finally {
+    if (requestId === mailListRequestId) mailListAbortController = null;
+  }
 }
 
 function renderMailPagination() {
@@ -1169,6 +1230,7 @@ export function initMailPage() {
   if (newAccountBtn) {
     newAccountBtn.addEventListener("click", () => {
       setMailTab("account");
+      clearMailCache();
       state.selectedMailAccountId = null;
       state.mailCreatingNewAccount = true;
       if (accountSelect) accountSelect.value = "";
@@ -1244,6 +1306,7 @@ export function initMailPage() {
               smtpPassword: smtpPassword || undefined,
             }),
           });
+          clearMailCache();
           setStatus("Mail account saved", "success");
           document.getElementById("mail-imap-password").value = "";
           document.getElementById("mail-smtp-password").value = "";
@@ -1307,7 +1370,7 @@ export function initMailPage() {
       const btn = e.target.querySelector('button[type="submit"]');
       await withLoading(btn, async () => {
         try {
-          await loadMailMessages(1);
+          await loadMailMessages(1, { refresh: true });
           setStatus("Inbox refreshed", "success");
         } catch (err) {
           setStatus(err.message, "error");

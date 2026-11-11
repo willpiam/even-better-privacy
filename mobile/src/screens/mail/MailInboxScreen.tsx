@@ -1,11 +1,11 @@
-import React, {useCallback, useLayoutEffect, useMemo, useState} from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
@@ -15,10 +15,14 @@ import {
   resolveSelectedAccount,
 } from '../../services/mail/accountStore';
 import {isSentFolderRequest} from '../../../../common/SentMailbox';
+import {clampMailLimit} from '../../services/mail/imap';
 import {
-  clampMailLimit,
-  listMailboxMessages,
-} from '../../services/mail/imap';
+  getCachedMailPage,
+  refreshMailPage,
+  invalidateMailBodies,
+} from '../../services/mail/mailData';
+import {onMailCacheCleared} from '../../services/mail/mailCache';
+import type {ListMailboxMessagesResult} from '../../services/mail/imap';
 import type {MailMessageSummary} from '../../services/mail/types';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
@@ -35,9 +39,7 @@ type Props = NativeStackScreenProps<MailStackParamList, 'MailInbox'>;
 
 function emptyMailboxStatus(folder: string, found: boolean): string {
   if (isSentFolderRequest(folder)) {
-    return found
-      ? 'No sent messages'
-      : 'No Sent mailbox on this account yet';
+    return found ? 'No sent messages' : 'No Sent mailbox on this account yet';
   }
   return 'Mailbox empty';
 }
@@ -51,6 +53,27 @@ const FOLDER_PRESETS = [
   'Custom',
 ] as const;
 
+const MailSummaryRow = React.memo(function MailSummaryRow({
+  item,
+  sent,
+  onOpen,
+}: {
+  item: MailMessageSummary;
+  sent: boolean;
+  onOpen: (uid: number) => void;
+}) {
+  return (
+    <ListRow
+      title={item.subject || '(no subject)'}
+      subtitle={`${sent ? `To: ${item.to || '(unknown)'}` : item.from} · ${
+        item.date
+      }`}
+      onPress={() => onOpen(item.uid)}
+    />
+  );
+});
+const messageKey = (item: MailMessageSummary) => String(item.uid);
+
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
@@ -63,9 +86,13 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const [folderPreset, setFolderPreset] =
     useState<(typeof FOLDER_PRESETS)[number]>('INBOX');
   const [customFolder, setCustomFolder] = useState('');
+  const [customFolderDraft, setCustomFolderDraft] = useState('');
   const [search, setSearch] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [limitText, setLimitText] = useState('20');
+  const [limit, setLimit] = useState(20);
+  const requestId = useRef(0);
+  const pageRef = useRef(1);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
@@ -77,40 +104,29 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     return folderPreset;
   }, [folderPreset, customFolder]);
 
-  const limit = clampMailLimit(Number(limitText) || 20);
+  React.useEffect(
+    () =>
+      onMailCacheCleared(() => {
+        requestId.current++;
+        setMessages([]);
+        setAccountEmail('');
+        setTotal(0);
+        setTotalPages(1);
+        setLoading(false);
+      }),
+    [],
+  );
 
   const load = useCallback(
-    async (pageOverride?: number) => {
-      const nextPage = pageOverride ?? page;
-      setLoading(true);
-      setLoadError(null);
-      try {
-        const identityName = await getCurrentIdentityRequired();
-        const secretStatus = await getMailSecretsStatus(identityName);
-        const locked = secretStatus.locked && !secretStatus.inMemory;
-        setSecretsLocked(locked);
-        if (locked) {
-          throw new Error('Mail secrets locked; unlock your identity first');
-        }
-        const resolved = await resolveSelectedAccount(identityName);
-        if (!resolved) {
-          throw new Error('Configure a mail account first');
-        }
-        setAccountEmail(
-          resolved.account.config.fromEmail || resolved.account.config.username,
-        );
-        const result = await listMailboxMessages(
-          resolved.account.config,
-          resolved.secrets,
-          {
-            folder,
-            search,
-            page: nextPage,
-            limit,
-          },
-        );
+    async (pageOverride?: number, refresh = false) => {
+      const currentRequest = ++requestId.current;
+      const current = () => currentRequest === requestId.current;
+      const nextPage = pageOverride ?? pageRef.current;
+      let cached: ListMailboxMessagesResult | undefined;
+      const applyResult = (result: ListMailboxMessagesResult) => {
         setMessages(result.messages);
         setOpenedFolder(result.folder);
+        pageRef.current = result.page;
         setPage(result.page);
         setTotalPages(result.totalPages);
         setTotal(result.total);
@@ -119,38 +135,73 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
             ? emptyMailboxStatus(folder, result.found)
             : `Loaded ${result.messages.length} of ${result.total} (page ${result.page}/${result.totalPages})`,
         );
+      };
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const identityName = await getCurrentIdentityRequired();
+        const secretStatus = await getMailSecretsStatus(identityName);
+        if (!current()) return;
+        const locked = secretStatus.locked && !secretStatus.inMemory;
+        setSecretsLocked(locked);
+        if (locked) {
+          throw new Error('Mail secrets locked; unlock your identity first');
+        }
+        const resolved = await resolveSelectedAccount(identityName);
+        if (!current()) return;
+        if (!resolved) {
+          throw new Error('Configure a mail account first');
+        }
+        setAccountEmail(
+          resolved.account.config.fromEmail || resolved.account.config.username,
+        );
+        const params = {folder, search, page: nextPage, limit};
+        cached = getCachedMailPage(identityName, resolved, params);
+        if (cached) applyResult(cached);
+        else {
+          setMessages([]);
+          setTotal(0);
+          setTotalPages(1);
+        }
+        if (refresh) invalidateMailBodies();
+        const result = await refreshMailPage(identityName, resolved, params);
+        if (current()) applyResult(result);
       } catch (error) {
+        if (!current()) return;
         const message = error instanceof Error ? error.message : String(error);
         setLoadError(message);
         setStatus(message);
-        setMessages([]);
-        setAccountEmail('');
-        setTotal(0);
-        setTotalPages(1);
+        if (!cached) {
+          setMessages([]);
+          setAccountEmail('');
+          setTotal(0);
+          setTotalPages(1);
+        }
         if (message.toLowerCase().includes('mail secrets locked')) {
           setSecretsLocked(true);
         }
       } finally {
-        setLoading(false);
+        if (current()) setLoading(false);
       }
     },
-    [folder, search, limit, page],
+    [folder, search, limit],
   );
 
   useFocusEffect(
     useCallback(() => {
-      void load(1);
-      // Intentionally re-run when folder/search/limit change via dedicated handlers.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [folder, search, limit]),
+      void load(pageRef.current);
+      return () => {
+        requestId.current++;
+      };
+    }, [load]),
   );
 
   useLayoutEffect(() => {
     const title = isSentFolderRequest(folder)
       ? 'Sent'
       : folder === 'INBOX'
-        ? 'Inbox'
-        : folder;
+      ? 'Inbox'
+      : folder;
     navigation.setOptions({
       title,
       headerRight: () => (
@@ -173,9 +224,21 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     }
   };
 
-  const emptyLabel = loadError
-    ? loadError
-    : status || 'Mailbox empty.';
+  const openMessage = useCallback(
+    (uid: number) => {
+      navigation.navigate('MailMessage', {uid, folder: openedFolder});
+    },
+    [navigation, openedFolder],
+  );
+  const sent = isSentFolderRequest(folder);
+  const renderMessage = useCallback(
+    ({item}: {item: MailMessageSummary}) => (
+      <MailSummaryRow item={item} sent={sent} onOpen={openMessage} />
+    ),
+    [sent, openMessage],
+  );
+
+  const emptyLabel = loadError ? loadError : status || 'Mailbox empty.';
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
@@ -192,6 +255,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
               key={name}
               onPress={() => {
                 setFolderPreset(name);
+                pageRef.current = 1;
                 setPage(1);
               }}
               style={[styles.folderChip, selected && styles.folderChipSelected]}
@@ -213,9 +277,12 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           label="Custom folder"
           autoCapitalize="none"
           autoCorrect={false}
-          value={customFolder}
-          onChangeText={setCustomFolder}
-          onBlur={() => void load(1)}
+          value={customFolderDraft}
+          onChangeText={setCustomFolderDraft}
+          onBlur={() => {
+            pageRef.current = 1;
+            setCustomFolder(customFolderDraft);
+          }}
           placeholder="[Gmail]/Sent Mail"
         />
       ) : null}
@@ -227,6 +294,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         value={searchDraft}
         onChangeText={setSearchDraft}
         onSubmitEditing={() => {
+          pageRef.current = 1;
           setSearch(searchDraft.trim());
           setPage(1);
         }}
@@ -237,6 +305,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         title="Search"
         variant="secondary"
         onPress={() => {
+          pageRef.current = 1;
           setSearch(searchDraft.trim());
           setPage(1);
         }}
@@ -252,6 +321,8 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         onBlur={() => {
           const clamped = String(clampMailLimit(Number(limitText) || 20));
           setLimitText(clamped);
+          pageRef.current = 1;
+          setLimit(Number(clamped));
           setPage(1);
         }}
       />
@@ -274,7 +345,11 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         />
       </View>
 
-      <AppButton title="Refresh" variant="secondary" onPress={() => void load()} />
+      <AppButton
+        title="Refresh"
+        variant="secondary"
+        onPress={() => void load(undefined, true)}
+      />
       <StatusBanner message={status} kind={statusKind(status)} />
 
       {secretsLocked ? (
@@ -292,35 +367,18 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       ) : null}
 
       {loading ? <InlineBusy message="Loading messages…" /> : null}
-      {!loading ? (
-        <Card style={styles.listCard}>
-          <FlatList
-            data={messages}
-            keyExtractor={item => String(item.uid)}
-            ListEmptyComponent={
-              <Text style={[styles.empty, loadError ? styles.emptyError : null]}>
-                {emptyLabel}
-              </Text>
-            }
-            renderItem={({item}) => (
-              <ListRow
-                title={item.subject || '(no subject)'}
-                subtitle={`${
-                  isSentFolderRequest(folder)
-                    ? `To: ${item.to || '(unknown)'}`
-                    : item.from
-                } · ${item.date}`}
-                onPress={() =>
-                  navigation.navigate('MailMessage', {
-                    uid: item.uid,
-                    folder: openedFolder,
-                  })
-                }
-              />
-            )}
-          />
-        </Card>
-      ) : null}
+      <Card style={styles.listCard}>
+        <FlatList
+          data={messages}
+          keyExtractor={messageKey}
+          ListEmptyComponent={
+            <Text style={[styles.empty, loadError ? styles.emptyError : null]}>
+              {emptyLabel}
+            </Text>
+          }
+          renderItem={renderMessage}
+        />
+      </Card>
     </Screen>
   );
 }

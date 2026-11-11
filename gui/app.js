@@ -84,7 +84,7 @@ function navigateTo(pageId) {
 
   if (pageId === "mail") {
     void ensureMailPageUnlocked().then((unlocked) => {
-      if (unlocked && state.mailMessages.length === 0) {
+      if (unlocked) {
         loadMailMessages(1).catch((err) => {
           setStatus(err.message, "error");
         });

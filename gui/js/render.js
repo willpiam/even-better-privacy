@@ -1,3 +1,4 @@
+import { clearMailCache } from "./mail-cache.js";
 import { state, getDetailValue, getDetailMeta, isOpaqueDetailPath, formatOpaqueHash, DEFAULT_SERVER_URL, LOCAL_BACKEND_ORIGIN, STARTUP_RETRY_ATTEMPTS, STARTUP_RETRY_DELAY_MS } from "./state.js";
 import { api, sleep, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
 import { showConfirmModal, requestTextInput } from "./modals.js";
@@ -864,7 +865,10 @@ export async function loadAll() {
           api("/contacts"),
         ]);
         startupError = null;
-        state.currentIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
+        const nextIdentity = ids?.currentIdentity ?? ctx?.currentIdentity ?? null;
+        const nextDir = ctx?.identityDirLabel ?? "";
+        if (nextIdentity !== state.currentIdentity || nextDir !== state.identityDirLabel) clearMailCache();
+        state.currentIdentity = nextIdentity;
         state.server = ctx?.server ?? null;
         state.identityDirLabel = ctx?.identityDirLabel ?? "";
         state.protocolVersion = ctx?.protocolVersion ?? null;

@@ -104,20 +104,11 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
       'a2 OK SELECT completed',
       '* SEARCH 10 11 12',
       'a3 OK SEARCH completed',
-      '* 1 FETCH (FLAGS (\\Seen) BODY[HEADER.FIELDS (SUBJECT FROM DATE)] {52}',
-      'Subject: Newest',
-      'From: n@e',
-      'Date: today',
-      '',
+      '* 1 FETCH (UID 12 FLAGS (\\Seen) BODY[HEADER.FIELDS (SUBJECT FROM DATE)] {52}',
       ')',
-      'f12 OK FETCH completed',
-      '* 1 FETCH (FLAGS () BODY[HEADER.FIELDS (SUBJECT FROM DATE)] {48}',
-      'Subject: Mid',
-      'From: m@e',
-      'Date: yesterday',
-      '',
+      '* 2 FETCH (UID 11 FLAGS () BODY[HEADER.FIELDS (SUBJECT FROM DATE)] {48}',
       ')',
-      'f11 OK FETCH completed',
+      'a4 OK FETCH completed',
     ];
     let idx = 0;
     const client = {
@@ -131,9 +122,9 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
         }
         return line;
       },
-      readBytes: async () => {
-        throw new Error('unexpected readBytes');
-      },
+      readBytes: jest.fn()
+        .mockResolvedValueOnce('Subject: Newest\r\nFrom: n@e\r\nDate: today\r\n\r\n')
+        .mockResolvedValueOnce('Subject: Mid\r\nFrom: m@e\r\nDate: yesterday\r\n\r\n'),
       writeBytes: () => undefined,
       close: () => undefined,
     };

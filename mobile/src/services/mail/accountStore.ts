@@ -1,3 +1,4 @@
+import {clearMailDataCache} from './mailCache';
 import RNFS from 'react-native-fs';
 import {gcm} from '@noble/ciphers/aes';
 import {randomBytes} from '../../ebpCore';
@@ -79,6 +80,7 @@ export function getMailPinInMemory(identityName: string): string | null {
 
 /** Drop decrypted mail secrets and the remembered PIN for one identity, or all. */
 export function clearMailSecretsMemory(identityName?: string): void {
+  clearMailDataCache();
   if (!identityName) {
     secretsMemory.clear();
     pinMemory.clear();
@@ -275,6 +277,7 @@ export async function writeMailStore(
   identityName: string,
   store: MailAccountStore,
 ): Promise<void> {
+  clearMailDataCache();
   await ensureIdentityMailDir(identityName);
   await RNFS.writeFile(
     mailAccountPath(identityName),
@@ -326,6 +329,7 @@ export function setMailSecretsInMemory(
   accountId: string,
   secrets: MailAuthSecrets,
 ): void {
+  clearMailDataCache();
   secretsMemory.set(mailSecretsStoreKey(identityName, accountId), secrets);
 }
 

@@ -1,11 +1,12 @@
-import React, {useEffect, useState} from 'react';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {WebView} from 'react-native-webview';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {resolveSelectedAccount} from '../../services/mail/accountStore';
-import {fetchMessageDetail} from '../../services/mail/imap';
+import {loadMailMessage} from '../../services/mail/mailData';
+import {onMailCacheCleared} from '../../services/mail/mailCache';
 import {
   decryptMailBody,
   type MailAuthenticitySummary,
@@ -36,6 +37,7 @@ export default function MailMessageScreen({
   navigation,
 }: Props): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
+  const generation = useRef(0);
   const folder = route.params.folder ?? 'INBOX';
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
@@ -54,7 +56,26 @@ export default function MailMessageScreen({
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    const invalidate = () => {
+      generation.current++;
+    };
+    invalidate();
     let cancelled = false;
+    const unsubscribe = onMailCacheCleared(() => {
+      invalidate();
+      cancelled = true;
+      setSubject('');
+      setFrom('');
+      setTo('');
+      setDate('');
+      setBody('');
+      setBodyHtml('');
+      setRawSource('');
+      setHasEbp(false);
+      setAuthenticity(null);
+      setLoaded(false);
+      setStatus('Mail session changed; reopen the message to continue');
+    });
     void (async () => {
       setStatus('Loading message…');
       setLoaded(false);
@@ -70,16 +91,12 @@ export default function MailMessageScreen({
       try {
         const identityName = await getCurrentIdentityRequired();
         const resolved = await resolveSelectedAccount(identityName);
+        if (cancelled) return;
         if (!resolved) {
           throw new Error('No mail account');
         }
         const [detail, htmlSetting] = await Promise.all([
-          fetchMessageDetail(
-            resolved.account.config,
-            resolved.secrets,
-            route.params.uid,
-            folder,
-          ),
+          loadMailMessage(identityName, resolved, route.params.uid, folder),
           getMailRenderHtml(),
         ]);
         if (cancelled) {
@@ -96,11 +113,7 @@ export default function MailMessageScreen({
         const ebp = Boolean(detail.ebpPayload);
         setHasEbp(ebp);
         setLoaded(true);
-        setStatus(
-          ebp
-            ? 'Encrypted with EBP — decrypt to read'
-            : '',
-        );
+        setStatus(ebp ? 'Encrypted with EBP — decrypt to read' : '');
       } catch (error) {
         if (!cancelled) {
           setStatus(error instanceof Error ? error.message : String(error));
@@ -108,7 +121,9 @@ export default function MailMessageScreen({
       }
     })();
     return () => {
+      invalidate();
       cancelled = true;
+      unsubscribe();
     };
   }, [route.params.uid, folder]);
 
@@ -119,19 +134,21 @@ export default function MailMessageScreen({
       if (!identityName) {
         return;
       }
+      const currentGeneration = generation.current;
       setBusyMessage('Decrypting…');
       const result = await decryptMailBody({
         identityName,
         uid: route.params.uid,
         folder,
       });
+      if (currentGeneration !== generation.current) return;
       setAuthenticity(result);
       setStatus(
         result.verified
           ? 'Decrypted and verified'
           : result.verified === null
-            ? 'Decrypted (unsigned)'
-            : 'Decrypted (signature invalid)',
+          ? 'Decrypted (unsigned)'
+          : 'Decrypted (signature invalid)',
       );
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -171,13 +188,16 @@ export default function MailMessageScreen({
     }
   };
 
+  const htmlSource = useMemo(
+    () => ({html: buildSandboxedEmailSrcDoc(bodyHtml)}),
+    [bodyHtml],
+  );
   const busy = busyMessage !== null;
   const decrypted = authenticity?.plaintext ?? '';
   const locked = hasEbp && !decrypted;
   const canReply =
     loaded && !locked && (Boolean(body) || Boolean(decrypted) || !hasEbp);
-  const showHtml =
-    !hasEbp && renderHtml && Boolean(bodyHtml.trim());
+  const showHtml = !hasEbp && renderHtml && Boolean(bodyHtml.trim());
 
   return (
     <Screen scroll>
@@ -229,7 +249,7 @@ export default function MailMessageScreen({
         <Card padded style={styles.htmlCard}>
           <WebView
             originWhitelist={['*']}
-            source={{html: buildSandboxedEmailSrcDoc(bodyHtml)}}
+            source={htmlSource}
             javaScriptEnabled={false}
             style={styles.webview}
             nestedScrollEnabled

@@ -1,3 +1,4 @@
+import {clearMailDataCache} from './mail/mailCache';
 import RNFS from 'react-native-fs';
 import {DecryptionAuthError} from '../../../core/AES';
 import {
@@ -398,6 +399,7 @@ export function getPendingCertificatesFile(): string {
 }
 
 export async function setCurrentIdentity(name: string | null): Promise<void> {
+  clearMailDataCache();
   await ensureBaseDir();
   const payload: AppState = {currentIdentity: name};
   await RNFS.writeFile(STATE_FILE, JSON.stringify(payload), 'utf8');

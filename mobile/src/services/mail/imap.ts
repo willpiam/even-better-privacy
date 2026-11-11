@@ -1,3 +1,4 @@
+import {readMailboxHeaders, readHeaderRecords} from './imapHeaders';
 import {Buffer} from 'buffer';
 import {
   EBP_CHAT_UID_CAP,
@@ -308,22 +309,12 @@ export async function listMailboxMessages(
     const searchLines = await readTaggedOk(client, searchTag);
     const uids = parseSearchUids(searchLines);
     const pageInfo = paginateUids(uids, pageRaw, limit);
-    const out: MailMessageSummary[] = [];
-    for (const uid of pageInfo.uids) {
-      const fetchTag = `f${uid}`;
+    let out: MailMessageSummary[] = [];
+    if (pageInfo.uids.length) {
       client.writeLine(
-        `${fetchTag} UID FETCH ${uid} (FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])`,
+        `a4 UID FETCH ${pageInfo.uids.join(',')} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])`,
       );
-      const lines = await readTaggedOk(client, fetchTag);
-      const blob = lines.join('\n');
-      out.push({
-        uid,
-        subject: parseHeaderField(blob, 'Subject') || '(no subject)',
-        from: parseHeaderField(blob, 'From') || '',
-        to: parseHeaderField(blob, 'To') || '',
-        date: parseHeaderField(blob, 'Date') || '',
-        seen: /\FLAGS \([^)]*\\Seen/i.test(blob),
-      });
+      out = await readMailboxHeaders(client, 'a4', pageInfo.uids);
     }
     await mailStub('inbox.list.done', `count=${out.length}`);
     return {
@@ -357,13 +348,13 @@ async function fetchChatFolder(
   const searchLines = await readTaggedOk(client, searchTag);
   const uids = parseSearchUids(searchLines).slice(-EBP_CHAT_UID_CAP);
   const rows: ChatSourceMessage[] = [];
-  for (const uid of uids) {
-    const fetchTag = `cf${folderKind}${uid}`;
-    client.writeLine(
-      `${fetchTag} UID FETCH ${uid} (FLAGS BODY.PEEK[HEADER.FIELDS (${CHAT_HEADER_FIELDS})])`,
-    );
-    const lines = await readTaggedOk(client, fetchTag);
-    const blob = lines.join('\n');
+  if (!uids.length) return rows;
+  const fetchTag = `cf${folderKind}`;
+  client.writeLine(
+    `${fetchTag} UID FETCH ${uids.join(',')} (UID FLAGS BODY.PEEK[HEADER.FIELDS (${CHAT_HEADER_FIELDS})])`,
+  );
+  const records = await readHeaderRecords(client, fetchTag, uids);
+  for (const {uid, headers: blob, seen} of records) {
     if (!isChatChannelHeader(parseHeaderField(blob, 'X-EBP-Channel'))) {
       continue;
     }
@@ -376,7 +367,7 @@ async function fetchChatFolder(
       from: parseHeaderField(blob, 'From') || '',
       to: parseHeaderField(blob, 'To') || '',
       date: Number.isFinite(parsedDate) ? parsedDate : null,
-      seen: /\FLAGS \([^)]*\\Seen/i.test(blob),
+      seen,
       messageId: messageId || null,
     });
   }

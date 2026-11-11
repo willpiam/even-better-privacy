@@ -1,3 +1,4 @@
+import { clearMailCache } from "./mail-cache.js";
 import {
   AUTO_LOCK_MINUTES_PREF_KEY,
   DEFAULT_AUTO_LOCK_MINUTES,
@@ -47,6 +48,7 @@ function applyStatus(status) {
   const unlocked = Boolean(status?.unlocked);
   const changed = unlocked !== state.identityUnlocked;
   state.identityUnlocked = unlocked;
+  if (changed && !unlocked) clearMailCache();
   if (expiryTimer) clearTimeout(expiryTimer);
   expiryTimer = null;
   if (unlocked && typeof status.remainingMs === "number") {
@@ -147,6 +149,7 @@ export async function lockIdentity() {
     body: JSON.stringify({ all: true }),
   });
   applyStatus(status);
+  clearMailCache();
   state.mailSecretsInMemory = false;
   return status;
 }
