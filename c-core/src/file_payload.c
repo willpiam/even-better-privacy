@@ -120,8 +120,8 @@ int ebp_file_envelope_parse(const uint8_t *input, size_t len, uint8_t **file, si
         memcmp(json_string_value(type),"ebp-file-cleartext-envelope",strlen("ebp-file-cleartext-envelope"))!=0 ||
         !json_is_number(version) || json_number_value(version)!=1 || !json_is_number(fsize) ||
         !isfinite(json_number_value(fsize)) || json_number_value(fsize)<0 || floor(json_number_value(fsize))!=json_number_value(fsize) ||
-        !json_is_string(fdata) || !json_string_length(fdata) ||
-        !decode_b64(json_string_value(fdata),json_string_length(fdata),&data,&data_len) ||
+        !json_is_string(fdata) ||
+        !ebp_base64_decode((const uint8_t *)json_string_value(fdata),json_string_length(fdata),&data,&data_len) ||
         (double)data_len!=json_number_value(fsize) || !copy_string(fname,&name_data,&name_n) || !copy_string(ftype,&mime_data,&mime_n)) goto done;
     *file=data; *file_len=data_len; data=NULL; *name=name_data; *name_len=name_n; name_data=NULL;
     *mime=mime_data; *mime_len=mime_n; mime_data=NULL; ok=1;

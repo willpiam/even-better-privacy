@@ -140,9 +140,7 @@ export async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLICont
 	
 	// Verify fingerprint matches
 	if (sender.fingerprint !== fingerprint) {
-		console.error(`Warning: Fingerprint mismatch!`);
-		console.error(`  Expected: ${sender.fingerprint}`);
-		console.error(`  Got: ${fingerprint}`);
+		throw new Error("Fingerprint mismatch between the signature and selected contact");
 	}
 	
 	const verified = Identity.VerifySignature(sender, message, signature, salt);

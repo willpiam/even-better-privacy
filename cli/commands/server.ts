@@ -1,5 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { ExternalIdentity } from "../../core/Identity.ts";
+import { validateContact, validateContactName } from "./contacts.ts";
 import {
   apiUrl,
   buildStateFromExternal,
@@ -182,8 +183,9 @@ export async function cmdFetchIdentity(
 
   if (b?.fingerprint && b.fingerprint !== fingerprint) {
     console.error(
-      "Warning: server fingerprint mismatch; storing as returned value.",
+      "Server fingerprint mismatch.",
     );
+    Deno.exit(1);
   }
 
   if (b?.signingKeyType !== "dilithium" && b?.signingKeyType !== "sphincs") {
@@ -215,8 +217,9 @@ export async function cmdFetchIdentity(
     Deno.exit(1);
   }
 
+  validateContact(external);
+  const contactName = validateContactName(name ?? external.fingerprint.substring(0, 16));
   await ensurePrivateDir(ctx.contactsDir);
-  const contactName = name ?? external.fingerprint.substring(0, 16);
   const contactPath = `${ctx.contactsDir}/${contactName}.json`;
   try {
     const existingRaw = await Deno.readTextFile(contactPath);

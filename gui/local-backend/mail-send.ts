@@ -24,6 +24,17 @@ export type OutboundMail = {
   }>;
 };
 
+/** Sending and account connection checks use the same mandatory TLS policy. */
+export function buildSmtpTransport(account: MailAccountConfig, secrets: MailAuthSecrets) {
+  return nodemailer.createTransport({
+    host: account.smtpHost,
+    port: account.smtpPort,
+    secure: account.smtpSecure,
+    requireTLS: !account.smtpSecure,
+    auth: buildSmtpAuth(account, secrets),
+  });
+}
+
 export async function compileRawMessage(mail: OutboundMail): Promise<Uint8Array> {
   const composer = nodemailer.createTransport({
     streamTransport: true,
@@ -60,12 +71,7 @@ export async function deliverSmtpAndAppendSent(params: {
 }): Promise<{ messageId: string | null; savedToSent: boolean }> {
   const raw = await compileRawMessage(params.mail);
   const from = params.account.fromEmail || params.account.username;
-  const transport = nodemailer.createTransport({
-    host: params.account.smtpHost,
-    port: params.account.smtpPort,
-    secure: params.account.smtpSecure,
-    auth: buildSmtpAuth(params.account, params.secrets),
-  });
+  const transport = buildSmtpTransport(params.account, params.secrets);
   const info = await transport.sendMail({
     envelope: { from, to: params.envelopeTo },
     raw,

@@ -20,7 +20,8 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     sql: string,
     params: DatabaseQueryParams = [],
   ): Promise<T[]> {
-    const stmt = this.db.prepare(sql);
+    // Return safe integers as numbers and larger values as bigint, never int32.
+    const stmt = this.db.prepare(sql).enableInt64();
     const bound = Array.isArray(params)
       ? params.map((value) => {
         // @db/sqlite truncates JS numbers/BigInts to 32-bit on bind/read.

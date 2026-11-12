@@ -14,7 +14,6 @@ import {
 } from './tcpClient';
 import {
   messageDetailFromRfc822,
-  parseHeaderField,
   readFetchRfc822Source,
 } from './imapFetchBody';
 import {mailStub} from './mailTrace';
@@ -32,7 +31,11 @@ function xoauth2String(user: string, accessToken: string): string {
 }
 
 export function quoteImap(value: string): string {
-  if (!/[ "]/.test(value)) {
+  for (const ch of value) {
+    const code = ch.charCodeAt(0);
+    if (code < 32 || code === 127) throw new Error('IMAP strings cannot contain control characters');
+  }
+  if (value.length > 0 && !/[ (){%*"\\\]]/.test(value)) {
     return value;
   }
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;

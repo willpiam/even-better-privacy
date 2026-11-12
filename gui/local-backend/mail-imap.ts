@@ -20,6 +20,7 @@ export function buildImapClient(
     host: config.imapHost,
     port: config.imapPort,
     secure: config.imapSecure,
+    doSTARTTLS: !config.imapSecure,
     auth,
     // Deno's node:zlib compatibility can intermittently fail with COMPRESS=DEFLATE on some providers.
     // Keep transport uncompressed for stability when fetching full message bodies.
@@ -35,6 +36,13 @@ export function buildImapClient(
     // Swallow here; request handlers surface operation failures via caught await errors.
   });
   return client;
+}
+
+export function isMessageSeen(flags?: Iterable<string>): boolean {
+  for (const flag of flags ?? []) {
+    if (flag.toLowerCase() === "\\seen") return true;
+  }
+  return false;
 }
 
 export function safeImapDisconnect(imap: ImapFlow): void {

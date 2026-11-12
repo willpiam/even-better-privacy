@@ -1,9 +1,25 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals, assertThrows } from "jsr:@std/assert";
 import {
   buildEncryptedFilePayload,
   buildEncryptedSignedFilePayload,
+  createFileCleartextEnvelope,
+  parseFileCleartextEnvelope,
 } from "./FilePayload.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
+
+Deno.test("empty files round-trip without accepting mismatched declared sizes", () => {
+  const envelope = createFileCleartextEnvelope(new Uint8Array(0), "empty.txt");
+  const result = parseFileCleartextEnvelope(JSON.stringify(envelope));
+  assertEquals(result.fileName, "empty.txt");
+  assertEquals(result.fileSize, 0);
+  assertEquals(result.fileBytes, new Uint8Array(0));
+  assertThrows(
+    () =>
+      parseFileCleartextEnvelope(JSON.stringify({ ...envelope, fileSize: 1 })),
+    Error,
+    "size mismatch",
+  );
+});
 
 Deno.test("FilePayload builders include version fields", () => {
   const encrypted = buildEncryptedFilePayload({

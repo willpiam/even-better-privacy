@@ -68,6 +68,24 @@ describe('mail list helpers', () => {
     expect(quoteImap('Sent Mail')).toBe('"Sent Mail"');
   });
 
+  it.each([
+    ['pass)word', '"pass)word"'],
+    ['pass(word', '"pass(word"'],
+    ['pass{word', '"pass{word"'],
+    ['pass]word', '"pass]word"'],
+    ['pass%word', '"pass%word"'],
+    ['pass*word', '"pass*word"'],
+    ['pass\\word', '"pass\\\\word"'],
+    ['pass"word', '"pass\\"word"'],
+    ['', '""'],
+  ])('quoteImap safely encodes %j', (value, expected) => {
+    expect(quoteImap(value)).toBe(expected);
+  });
+
+  it.each(['a\rb', 'a\nb', 'a\0b', 'a\tb'])('rejects IMAP control characters in %j', value => {
+    expect(() => quoteImap(value)).toThrow('control characters');
+  });
+
   it('buildUidSearchCommand searches the whole mailbox or a text query', () => {
     expect(buildUidSearchCommand('a3')).toBe('a3 UID SEARCH ALL');
     expect(buildUidSearchCommand('a3', '  ')).toBe('a3 UID SEARCH ALL');

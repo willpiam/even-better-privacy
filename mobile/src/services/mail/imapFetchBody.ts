@@ -1,4 +1,6 @@
 import type {MailMessageDetail} from './types';
+import {Buffer} from 'buffer';
+import {MAX_MAIL_SOURCE_BYTES} from '../../../../common/MailLimits';
 
 export type FetchBodyClient = {
   readLine: () => Promise<string>;
@@ -57,6 +59,7 @@ export async function readFetchRfc822Source(
   fetchTag: string,
 ): Promise<string> {
   let rfc822 = '';
+  let totalBytes = 0;
   while (true) {
     const line = await client.readLine();
     if (line.startsWith(`${fetchTag} `)) {
@@ -68,11 +71,22 @@ export async function readFetchRfc822Source(
     const lit = line.match(BODY_LITERAL_RE);
     if (lit) {
       const n = Number(lit[1]);
+      if (
+        !Number.isSafeInteger(n) ||
+        n < 0 ||
+        totalBytes + n > MAX_MAIL_SOURCE_BYTES
+      ) {
+        throw new Error('Mail message exceeds size limit');
+      }
+      totalBytes += n;
       rfc822 = await client.readBytes(n);
       continue;
     }
     const quoted = line.match(BODY_QUOTED_RE);
     if (quoted) {
+      totalBytes += Buffer.byteLength(quoted[1], 'utf8');
+      if (totalBytes > MAX_MAIL_SOURCE_BYTES)
+        throw new Error('Mail message exceeds size limit');
       rfc822 = quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
     }
   }

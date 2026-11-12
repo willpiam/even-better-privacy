@@ -1,4 +1,5 @@
 import {Buffer} from 'buffer';
+import {MAX_MAIL_SOURCE_BYTES} from '../../common/MailLimits';
 import {
   takeBytesFromBuffer,
   takeLineFromBuffer,
@@ -24,7 +25,9 @@ function scriptedClient(chunks: string[]): FetchBodyClient {
     readBytes: async (n: number) => {
       const taken = takeBytesFromBuffer(buffer, n);
       if (!taken) {
-        throw new Error(`scriptedClient: need ${n} bytes, have ${buffer.length}`);
+        throw new Error(
+          `scriptedClient: need ${n} bytes, have ${buffer.length}`,
+        );
       }
       buffer = taken.rest;
       return taken.chunk;
@@ -33,10 +36,34 @@ function scriptedClient(chunks: string[]): FetchBodyClient {
 }
 
 describe('IMAP BODY literal parsing', () => {
+  it.each([MAX_MAIL_SOURCE_BYTES + 1, Number.MAX_SAFE_INTEGER + 1])(
+    'rejects an oversized literal before reading %d bytes',
+    async n => {
+      const client = {
+        readLine: jest.fn(async () => `* 1 FETCH (BODY[] {${n}}`),
+        readBytes: jest.fn(async () => ''),
+      };
+      await expect(readFetchRfc822Source(client, 'b3')).rejects.toThrow(
+        'size limit',
+      );
+      expect(client.readBytes).not.toHaveBeenCalled();
+    },
+  );
+
+  it('limits the total of multiple BODY literals in a single response', async () => {
+    const n = Math.floor(MAX_MAIL_SOURCE_BYTES / 2) + 1;
+    const client = {
+      readLine: jest.fn(async () => `* 1 FETCH (BODY[] {${n}}`),
+      readBytes: jest.fn(async () => 'probe'),
+    };
+    await expect(readFetchRfc822Source(client, 'b3')).rejects.toThrow(
+      'size limit',
+    );
+    expect(client.readBytes).toHaveBeenCalledTimes(1);
+  });
   it('decodes greeting as UTF-8 text, not comma-separated byte values', () => {
     // Regression: Uint8Array#toString() returns "42,32,79,75,..." for "* OK".
-    const greeting =
-      '* OK [CAPABILITY IMAP4rev1 SASL-IR] Dovecot ready.\r\n';
+    const greeting = '* OK [CAPABILITY IMAP4rev1 SASL-IR] Dovecot ready.\r\n';
     const asUint8 = Uint8Array.from(Buffer.from(greeting, 'utf8'));
     const taken = takeLineFromBuffer(Buffer.from(asUint8));
     expect(taken).not.toBeNull();
@@ -46,10 +73,12 @@ describe('IMAP BODY literal parsing', () => {
   });
 
   it('takeLineFromBuffer and takeBytesFromBuffer preserve literal octets', () => {
-    const rfc822 =
-      'From: a@test\r\nSubject: Hello\r\n\r\nbody text\r\n';
+    const rfc822 = 'From: a@test\r\nSubject: Hello\r\n\r\nbody text\r\n';
     const wire = Buffer.from(
-      `* 1 FETCH (UID 42 BODY[] {${Buffer.byteLength(rfc822, 'utf8')}}\r\n${rfc822})\r\nb3 OK FETCH completed\r\n`,
+      `* 1 FETCH (UID 42 BODY[] {${Buffer.byteLength(
+        rfc822,
+        'utf8',
+      )}}\r\n${rfc822})\r\nb3 OK FETCH completed\r\n`,
       'utf8',
     );
     const line1 = takeLineFromBuffer(wire);
@@ -138,9 +167,9 @@ describe('IMAP BODY literal parsing', () => {
       '',
     ].join('\r\n');
     expect(parseHeaderField(rfc822, 'From')).toBe('willdoyle422@gmail.com');
-    expect(messageDetailFromRfc822(1, rfc822, {text: '', html: ''}, null).from).toBe(
-      'willdoyle422@gmail.com',
-    );
+    expect(
+      messageDetailFromRfc822(1, rfc822, {text: '', html: ''}, null).from,
+    ).toBe('willdoyle422@gmail.com');
   });
 
   it('parseHeaderField unfolds continued header lines', () => {

@@ -1,7 +1,7 @@
 import TcpSocket from 'react-native-tcp-socket';
 import {Buffer} from 'buffer';
 import {mailStub} from './mailTrace';
-import {takeBytesFromBuffer, takeLineFromBuffer} from './tcpBuffer';
+import {MailByteBuffer} from './tcpBuffer';
 
 export {takeBytesFromBuffer, takeLineFromBuffer} from './tcpBuffer';
 
@@ -50,7 +50,10 @@ type AnySocket = {
   destroy: () => void;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
   once?: (event: string, listener: (...args: unknown[]) => void) => void;
-  removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
+  removeListener?: (
+    event: string,
+    listener: (...args: unknown[]) => void,
+  ) => void;
 };
 
 function dataPreview(text: string): string {
@@ -66,7 +69,7 @@ function attachLineClient(
     allowStartTls: boolean;
   },
 ): TcpLineClient {
-  let buffer = Buffer.alloc(0);
+  const buffer = new MailByteBuffer();
   const waiters: Waiter[] = [];
   let closed = false;
   let sawData = false;
@@ -87,23 +90,21 @@ function attachLineClient(
     while (waiters.length > 0) {
       const head = waiters[0];
       if (head.kind === 'line') {
-        const taken = takeLineFromBuffer(buffer);
-        if (!taken) {
+        const taken = buffer.takeLine();
+        if (taken === null) {
           break;
         }
-        buffer = taken.rest;
         waiters.shift();
         clearTimeout(head.timer);
-        head.resolve(taken.line);
+        head.resolve(taken);
       } else {
-        const taken = takeBytesFromBuffer(buffer, head.n);
-        if (!taken) {
+        const taken = buffer.takeBytes(head.n);
+        if (taken === null) {
           break;
         }
-        buffer = taken.rest;
         waiters.shift();
         clearTimeout(head.timer);
-        head.resolve(taken.chunk);
+        head.resolve(taken);
       }
     }
   };
@@ -112,26 +113,37 @@ function attachLineClient(
     const chunk =
       typeof data === 'string'
         ? Buffer.from(data, 'binary')
-        : Buffer.from(data as Buffer);
+        : Buffer.isBuffer(data)
+        ? data
+        : Buffer.from(data as Uint8Array);
     if (!sawData) {
       sawData = true;
       void mailStub(
         'tcp.data',
-        `bytes≈${chunk.length} preview=${dataPreview(chunk.toString('binary'))}`,
+        `bytes≈${chunk.length} preview=${dataPreview(
+          chunk.toString('binary', 0, 80),
+        )}`,
       );
     }
-    buffer = Buffer.concat([Buffer.from(buffer), Buffer.from(chunk)]);
-    tryDeliver();
+    try {
+      buffer.push(chunk);
+      tryDeliver();
+    } catch (error) {
+      failWaiters(error instanceof Error ? error : new Error(String(error)));
+      destroySocket();
+    }
   };
 
   const onError = (err: unknown) => {
     closed = true;
     const error = err instanceof Error ? err : new Error(String(err));
+    buffer.clear();
     failWaiters(error);
   };
 
   const onClose = () => {
     closed = true;
+    buffer.clear();
     failWaiters(new Error('TCP connection closed'));
   };
 
@@ -144,14 +156,15 @@ function attachLineClient(
 
   bindSocket(socket);
 
-  const destroySocket = () => {
+  function destroySocket() {
     closed = true;
+    buffer.clear();
     try {
       activeSocket.destroy();
     } catch {
       // ignore
     }
-  };
+  }
 
   const client: TcpLineClient = {
     writeLine: (line: string) => {
@@ -161,7 +174,10 @@ function attachLineClient(
     },
     writeBytes: (data: string | Uint8Array) => {
       if (!closed) {
-        const buf = typeof data === 'string' ? Buffer.from(data, 'utf8') : Buffer.from(data);
+        const buf =
+          typeof data === 'string'
+            ? Buffer.from(data, 'utf8')
+            : Buffer.from(data);
         activeSocket.write(buf);
       }
     },
@@ -171,10 +187,9 @@ function attachLineClient(
           rej(new Error('TCP connection closed'));
           return;
         }
-        const taken = takeLineFromBuffer(buffer);
-        if (taken) {
-          buffer = taken.rest;
-          res(taken.line);
+        const taken = buffer.takeLine();
+        if (taken !== null) {
+          res(taken);
           return;
         }
         const timer = setTimeout(() => {
@@ -200,10 +215,9 @@ function attachLineClient(
           rej(new Error('readBytes count must be non-negative'));
           return;
         }
-        const taken = takeBytesFromBuffer(buffer, n);
-        if (taken) {
-          buffer = taken.rest;
-          res(taken.chunk);
+        const taken = buffer.takeBytes(n);
+        if (taken !== null) {
+          res(taken);
           return;
         }
         const timer = setTimeout(() => {
@@ -254,8 +268,7 @@ function attachLineClient(
           void mailStub('tcp.starttls.ok', params.endpoint);
           resolve();
         } catch (error) {
-          const err =
-            error instanceof Error ? error : new Error(String(error));
+          const err = error instanceof Error ? error : new Error(String(error));
           void mailStub('tcp.starttls.error', err.message);
           reject(err);
         }
@@ -427,7 +440,10 @@ export async function readTaggedOk(
     lines.push(line);
     if (line.startsWith(`${tag} `)) {
       if (!line.includes(' OK')) {
-        await mailStub('tcp.readLine.ok', `tag=${tag} fail=${line.slice(0, 80)}`);
+        await mailStub(
+          'tcp.readLine.ok',
+          `tag=${tag} fail=${line.slice(0, 80)}`,
+        );
         throw new Error(line);
       }
       await mailStub('tcp.readLine.ok', `tag=${tag}`);

@@ -8,6 +8,96 @@
  */
 
 import {Buffer} from 'buffer';
+import {MAX_MAIL_SOURCE_BYTES} from '../../../../common/MailLimits';
+
+/** A bounded octet queue. Incoming chunks are never re-copied on arrival. */
+export class MailByteBuffer {
+  private chunks: (Buffer | undefined)[] = [];
+  private head = 0;
+  private offset = 0;
+  private scanChunk = 0;
+  private scanOffset = 0;
+  private scanned = 0;
+  length = 0;
+
+  constructor(private maxBytes = MAX_MAIL_SOURCE_BYTES + 64 * 1024) {}
+
+  push(chunk: Uint8Array): void {
+    if (this.length + chunk.byteLength > this.maxBytes) {
+      throw new Error('Mail receive buffer exceeds size limit');
+    }
+    if (!chunk.byteLength) return;
+    this.chunks.push(asBuffer(chunk));
+    this.length += chunk.byteLength;
+  }
+
+  clear(): void {
+    this.chunks = [];
+    this.head =
+      this.offset =
+      this.scanChunk =
+      this.scanOffset =
+      this.scanned =
+      this.length =
+        0;
+  }
+
+  private consume(n: number): Buffer {
+    const out = Buffer.allocUnsafe(n);
+    let written = 0;
+    while (written < n) {
+      const chunk = this.chunks[this.head]!;
+      const count = Math.min(n - written, chunk.length - this.offset);
+      out.set(chunk.subarray(this.offset, this.offset + count), written);
+      this.offset += count;
+      written += count;
+      if (this.offset === chunk.length) {
+        this.chunks[this.head] = undefined;
+        this.head++;
+        this.offset = 0;
+      }
+    }
+    this.length -= n;
+    // Release consumed chunks, amortizing array compaction across reads.
+    if (this.head === this.chunks.length) {
+      this.clear();
+    } else {
+      if (this.head > 64 && this.head * 2 >= this.chunks.length) {
+        this.chunks = this.chunks.slice(this.head);
+        this.head = 0;
+      }
+      this.scanChunk = this.head;
+      this.scanOffset = this.offset;
+      this.scanned = 0;
+    }
+    return out;
+  }
+
+  takeLine(): string | null {
+    while (this.scanChunk < this.chunks.length) {
+      const chunk = this.chunks[this.scanChunk]!;
+      const lf = chunk.indexOf(0x0a, this.scanOffset);
+      if (lf >= 0) {
+        const line = this.consume(this.scanned + lf - this.scanOffset + 1);
+        let end = line.length - 1;
+        if (end > 0 && line[end - 1] === 0x0d) end--;
+        return line.toString('utf8', 0, end);
+      }
+      this.scanned += chunk.length - this.scanOffset;
+      this.scanChunk++;
+      this.scanOffset = 0;
+    }
+    return null;
+  }
+
+  takeBytes(n: number): string | null {
+    if (!Number.isSafeInteger(n) || n < 0 || n > this.maxBytes) {
+      throw new Error('Invalid or oversized mail literal length');
+    }
+    if (this.length < n) return null;
+    return this.consume(n).toString('utf8');
+  }
+}
 
 function asBuffer(view: Uint8Array): Buffer {
   return Buffer.isBuffer(view) ? view : Buffer.from(view);

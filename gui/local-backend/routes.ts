@@ -1,5 +1,4 @@
 import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
-import nodemailer from "nodemailer";
 import { type ExternalIdentity, Identity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
@@ -113,7 +112,6 @@ import {
 import { resolveVerifiedEmailContact } from "./resolve-verified-email.ts";
 import { tryResolveSenderForCtx } from "./sender-context.ts";
 import {
-  buildSmtpAuth,
   DEFAULT_MAIL_ACCOUNT,
   getMailSecretsStatus,
   getMailSecretsStore,
@@ -137,6 +135,7 @@ import {
   getAddressText,
   getIdentityDetailMeta,
   getIdentityDetailValue,
+  isMessageSeen,
   parseMailSourceInWorker,
   mailListSearchQuery,
   resolveMailboxFolder,
@@ -145,7 +144,7 @@ import {
   withMailboxLock,
   withTimeout,
 } from "./mail-imap.ts";
-import { deliverSmtpAndAppendSent } from "./mail-send.ts";
+import { buildSmtpTransport, deliverSmtpAndAppendSent } from "./mail-send.ts";
 import {
   exchangeOAuthCode,
   getMailOAuthRedirectUri,
@@ -1084,12 +1083,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         safeImapDisconnect(imap);
       }
 
-      const transport = nodemailer.createTransport({
-        host: account.smtpHost,
-        port: account.smtpPort,
-        secure: account.smtpSecure,
-        auth: buildSmtpAuth(account, secrets),
-      });
+      const transport = buildSmtpTransport(account, secrets);
       await transport.verify();
       return json({ ok: true });
     }
@@ -1192,9 +1186,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                     (msg as { internalDate: string | Date }).internalDate,
                   ).getTime()
                   : null,
-                seen: Array.isArray((msg as { flags?: string[] }).flags)
-                  ? (msg as { flags: string[] }).flags.includes("\\Seen")
-                  : false,
+                seen: isMessageSeen((msg as { flags?: Iterable<string> }).flags),
                 size: typeof (msg as { size?: number }).size === "number"
                   ? (msg as { size: number }).size
                   : null,

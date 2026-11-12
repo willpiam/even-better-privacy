@@ -70,6 +70,10 @@ int main(void) {
         assert(ebp_file_envelope_parse(file_json,file_json_len,&file_data,&file_len,&filename,&filename_len,&mime,&mime_len));
         assert(file_len==sizeof(msg) && memcmp(file_data,msg,file_len)==0);
         ebp_secure_free(file_json,file_json_len); ebp_secure_free(file_data,file_len); ebp_free(filename); ebp_free(mime);
+        assert(ebp_file_envelope_create(NULL,0,(const uint8_t *)"empty.txt",9,(const uint8_t *)"text/plain",10,&file_json,&file_json_len));
+        assert(ebp_file_envelope_parse(file_json,file_json_len,&file_data,&file_len,&filename,&filename_len,&mime,&mime_len));
+        assert(file_len==0 && filename_len==9 && memcmp(filename,"empty.txt",9)==0);
+        ebp_secure_free(file_json,file_json_len); ebp_secure_free(file_data,file_len); ebp_free(filename); ebp_free(mime);
         assert(ebp_entropy_to_mnemonic(input_entropy, sizeof(input_entropy), &phrase, &phrase_len));
         assert(ebp_mnemonic_to_entropy(phrase, phrase_len, &entropy, &entropy_len));
         assert(entropy_len == sizeof(input_entropy) && memcmp(input_entropy, entropy, entropy_len) == 0);

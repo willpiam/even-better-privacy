@@ -106,7 +106,7 @@ export function parseFileCleartextEnvelope(
 	if (typeof raw.fileSize !== "number" || !Number.isInteger(raw.fileSize) || raw.fileSize < 0) {
 		throw new Error("Invalid file envelope fileSize");
 	}
-	if (typeof raw.fileDataBase64 !== "string" || raw.fileDataBase64.length === 0) {
+	if (typeof raw.fileDataBase64 !== "string") {
 		throw new Error("Invalid file envelope fileDataBase64");
 	}
 	const fileBytes = base64ToBytes(raw.fileDataBase64);

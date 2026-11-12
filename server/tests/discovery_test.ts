@@ -48,7 +48,7 @@ async function withDiscoveryDb(run: (db: CountingDatabase) => Promise<void>) {
         encryptionKey: "key",
         signingKeyDetails: null,
         encryptionKeyDetails: null,
-        createdAt: i,
+        createdAt: verifiedAt + i,
       });
       await insertDetail(db, {
         fingerprint,
@@ -101,6 +101,7 @@ Deno.test("list and search hydrate small and large pages with bounded queries an
         const body = await res.json();
         assertEquals(res.status, 200);
         assertEquals(body.identities.length, limit);
+        assertEquals(body.identities[0].createdAt, verifiedAt);
         assertEquals(body.pagination.total, 100);
         assert(db.queries <= 3, `page of ${limit} used ${db.queries} queries`);
         assertEquals(body.identities[0].revokedDetails, ["email"]);
