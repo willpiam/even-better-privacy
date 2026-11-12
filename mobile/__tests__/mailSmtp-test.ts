@@ -11,8 +11,9 @@ jest.mock('../src/services/mail/mailTrace', () => ({
   mailStub: jest.fn(async () => undefined),
 }));
 
-import {parseRecipientAddresses} from '../src/services/mail/smtp';
+import {parseRecipientAddresses, smtpAuth} from '../src/services/mail/smtp';
 import {resolveMailTlsMode} from '../src/services/mail/tcpClient';
+import {DEFAULT_MAIL_ACCOUNT} from '../src/services/mail/types';
 
 type ScriptedClient = {
   written: string[];
@@ -50,6 +51,36 @@ function scriptedClient(lines: string[], opts?: {startTls?: boolean}): ScriptedC
   }
   return client;
 }
+
+describe('SMTP error replies', () => {
+  it.each<[string, string[], string]>([
+    ['EHLO', ['550 5.5.1 EHLO rejected'], '550 5.5.1 EHLO rejected'],
+    ['AUTH command', ['250 ok', '504 5.5.4 AUTH unsupported'], '504 5.5.4 AUTH unsupported'],
+    ['password', ['250 ok', '334 username', '334 password', '535 5.7.8 Invalid credentials'], '535 5.7.8 Invalid credentials'],
+    ['temporary failure', ['250 ok', '454 4.7.0 Temporary authentication failure'], '454 4.7.0 Temporary authentication failure'],
+    ['multiline failure', ['451-4.3.0 Service unavailable'], '451-4.3.0 Service unavailable'],
+  ])('surfaces %s failures immediately instead of reading until timeout', async (_step, lines, error) => {
+    const client = scriptedClient(lines);
+    await expect(smtpAuth(client, {
+      ...DEFAULT_MAIL_ACCOUNT, smtpSecure: true, username: 'user@example.test',
+    }, {imapPassword: 'imap', smtpPassword: 'smtp'})).rejects.toThrow(error);
+  });
+
+  it('surfaces a rejected STARTTLS upgrade before authentication', async () => {
+    const client = scriptedClient(['250 ok', '454 4.7.0 TLS unavailable']);
+    await expect(smtpAuth(client, {
+      ...DEFAULT_MAIL_ACCOUNT, smtpSecure: false,
+    }, {imapPassword: 'imap', smtpPassword: 'smtp'})).rejects.toThrow('454 4.7.0 TLS unavailable');
+    expect(client.written).toEqual(['EHLO ebp-mobile', 'STARTTLS']);
+  });
+
+  it('surfaces a rejected OAuth token', async () => {
+    const client = scriptedClient(['250 ok', '334 challenge', '535 5.7.8 Invalid OAuth token']);
+    await expect(smtpAuth(client, {
+      ...DEFAULT_MAIL_ACCOUNT, smtpSecure: true, authType: 'oauth', username: 'user@example.test',
+    }, {imapPassword: '', smtpPassword: '', accessToken: 'token'})).rejects.toThrow('535 5.7.8 Invalid OAuth token');
+  });
+});
 
 describe('SMTP send multi RCPT', () => {
   it('issues RCPT TO for each recipient and uses STARTTLS when insecure', async () => {

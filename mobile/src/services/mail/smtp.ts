@@ -17,6 +17,10 @@ async function readSmtpUntil(client: TcpLineClient, code: string): Promise<void>
   await mailStub('tcp.readLine.wait', `smtp=${code}`);
   while (true) {
     const line = await client.readLine();
+    if (/^[45]\d{2}(?:[ -]|$)/.test(line)) {
+      await mailStub('tcp.readLine.ok', `smtp=${code} fail=${line.slice(0, 80)}`);
+      throw new Error(line);
+    }
     if (!line.startsWith(code)) {
       continue;
     }
@@ -24,11 +28,6 @@ async function readSmtpUntil(client: TcpLineClient, code: string): Promise<void>
       continue;
     }
     if (line.length >= 3 && (line.length === 3 || line[3] === ' ')) {
-      const status = Number(line.slice(0, 3));
-      if (status >= 400) {
-        await mailStub('tcp.readLine.ok', `smtp=${code} fail=${line.slice(0, 80)}`);
-        throw new Error(line);
-      }
       await mailStub('tcp.readLine.ok', `smtp=${code}`);
       return;
     }

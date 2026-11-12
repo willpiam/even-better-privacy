@@ -964,7 +964,7 @@ export async function searchIdentities(
   const like = `%${escapeLikePattern(query.toLowerCase())}%`;
 
   const baseJoin =
-    "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email')";
+    "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email') AND d.revoked_at IS NULL";
   const matchClause =
     "(LOWER(i.fingerprint) LIKE ? ESCAPE '\\' OR LOWER(d.detail) LIKE ? ESCAPE '\\')";
   const revokedFilter = includeRevoked

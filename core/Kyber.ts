@@ -155,7 +155,13 @@ export class KyberEncryptionKey extends AsymmetricEncryptionKey {
 
   static fromJSON(json: string): KyberEncryptionKey {
     const data = parseStrictJson(json);
-    const instance = new KyberEncryptionKey(data.variant);
+    const variant = data.variant === undefined ? "ml_kem1024" : data.variant;
+    if (!KyberEncryptionKey.listVariants().includes(variant)) {
+      throw new Error(`Invalid Kyber KEM variant: ${variant}`);
+    }
+    const instance = Object.create(KyberEncryptionKey.prototype) as KyberEncryptionKey;
+    instance.variant = variant;
+    instance.seed = new Uint8Array(0);
     instance.key = {
       publicKey: hexToBytes(data.publicKey),
       secretKey: hexToBytes(data.secretKey),

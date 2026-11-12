@@ -81,7 +81,12 @@ export class SphincsSigningKey extends SigningKey {
 
     static fromJSON(json: string): SphincsSigningKey {
         const data = parseStrictJson(json);
-        const instance = new SphincsSigningKey(data.variant);
+        const variant = data.variant === undefined ? "slh_dsa_sha2_256s" : data.variant;
+        if (!SphincsSigningKey.listVariants().includes(variant)) {
+            throw new Error(`Invalid Sphincs variant: ${variant}`);
+        }
+        const instance = Object.create(SphincsSigningKey.prototype) as SphincsSigningKey;
+        instance.variant = variant;
         instance.key = {
             publicKey: base64ToBytes(data.publicKey),
             secretKey: base64ToBytes(data.secretKey),

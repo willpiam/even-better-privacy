@@ -216,6 +216,15 @@ export function parseVerifyInput(
       }
     }
 
+    // A claimed fingerprint must be derived from the supplied signing key,
+    // including when the claim appears only in the outer payload.
+    if ((providedIdentityFingerprint || payloadFingerprint) && !computedFingerprint) {
+      return {
+        ok: false,
+        error: "publicIdentity requires an encryption key or encryption key hash to verify its fingerprint",
+      };
+    }
+
     if (
       providedIdentityFingerprint && computedFingerprint &&
       providedIdentityFingerprint !== computedFingerprint
@@ -227,8 +236,9 @@ export function parseVerifyInput(
       };
     }
 
-    const resolvedFingerprint = providedIdentityFingerprint ??
-      computedFingerprint;
+    // Only the computed value is authoritative. An empty embedded fingerprint
+    // must not suppress comparison with a claim in the outer payload.
+    const resolvedFingerprint = computedFingerprint;
     if (
       resolvedFingerprint && payloadFingerprint &&
       resolvedFingerprint !== payloadFingerprint

@@ -55,6 +55,11 @@ export type { ExternalIdentity } from "./ExternalIdentity.ts";
 type SigningKeyOptions = "dilithium" | "sphincs";
 type EncryptionKeyOptions = "kyber";
 
+type IdentityKeys = {
+  signingKey: SigningKey;
+  encryptionKey: AsymmetricEncryptionKey;
+};
+
 /** Public portion of an identity - safe to store unencrypted */
 export type IdentityPublicData = {
   fingerprint: string;
@@ -182,7 +187,10 @@ function parseIdentityStorageJson(storageData: string): {
 }
 
 function buildIdentityShell(pub: IdentityPublicData): Identity {
-  const identity = new Identity(pub.signingKeyType, pub.encryptionKeyType);
+  const identity = new Identity(pub.signingKeyType, pub.encryptionKeyType, {
+    keys: readPublicOnlyKeys(pub),
+  });
+  identity.isPrivateLoaded = false;
   identity.details = new Map(
     Object.entries(pub.details ?? {}) as [string, [string, string]][],
   );
@@ -278,30 +286,36 @@ function applyPrivateKeysFromJson(
   }
 }
 
-function applyPublicOnlyKeys(identity: Identity, pub: IdentityPublicData): void {
-  identity.isPrivateLoaded = false;
+function readPublicOnlyKeys(pub: IdentityPublicData): IdentityKeys {
+  let signingKey: SigningKey;
   switch (pub.signingKeyType) {
     case "dilithium":
-      identity.signingKey = DilithiumSigningKey.fromPublicKey(
+      signingKey = DilithiumSigningKey.fromPublicKey(
         pub.signingKey,
         pub.signingKeyDetails.variant,
       );
       break;
     case "sphincs":
-      identity.signingKey = SphincsSigningKey.fromPublicKey(
+      signingKey = SphincsSigningKey.fromPublicKey(
         pub.signingKey,
         pub.signingKeyDetails.variant,
       );
       break;
+    default:
+      throw new StorageFormatError(`Unsupported signing key type: ${pub.signingKeyType}`);
   }
 
   switch (pub.encryptionKeyType) {
     case "kyber":
-      identity.encryptionKey = KyberEncryptionKey.fromPublicKey(
-        pub.encryptionKey,
-        pub.encryptionKeyDetails.variant,
-      );
-      break;
+      return {
+        signingKey,
+        encryptionKey: KyberEncryptionKey.fromPublicKey(
+          pub.encryptionKey,
+          pub.encryptionKeyDetails.variant,
+        ),
+      };
+    default:
+      throw new StorageFormatError(`Unsupported encryption key type: ${pub.encryptionKeyType}`);
   }
 }
 
@@ -415,6 +429,8 @@ export class Identity extends Key {
       signingSeed?: Uint8Array;
       encryptionSeed?: Uint8Array;
       hdProvenance?: HdProvenance;
+      /** Restore existing keys while retaining normal identity initialization. */
+      keys?: IdentityKeys;
     },
   ) {
     super();
@@ -425,12 +441,12 @@ export class Identity extends Key {
     this.encryptionKeyType = encryptionKeyType;
     switch (signingKeyType) {
       case "dilithium":
-        this.signingKey = new DilithiumSigningKey("ml_dsa87", {
+        this.signingKey = options?.keys?.signingKey ?? new DilithiumSigningKey("ml_dsa87", {
           seed: options?.signingSeed,
         });
         break;
       case "sphincs":
-        this.signingKey = new SphincsSigningKey("slh_dsa_sha2_256s", {
+        this.signingKey = options?.keys?.signingKey ?? new SphincsSigningKey("slh_dsa_sha2_256s", {
           seed: options?.signingSeed,
         });
         break;
@@ -439,7 +455,7 @@ export class Identity extends Key {
     }
     switch (encryptionKeyType) {
       case "kyber":
-        this.encryptionKey = new KyberEncryptionKey("ml_kem1024", {
+        this.encryptionKey = options?.keys?.encryptionKey ?? new KyberEncryptionKey("ml_kem1024", {
           seed: options?.encryptionSeed,
         });
         break;
@@ -1210,30 +1226,32 @@ export class Identity extends Key {
 
   static fromJSON(json: string): Identity {
     const data = parseStrictJson(json);
-    const i = new Identity(data.signingKeyType, data.encryptionKeyType);
-
-    i.signingKeyType = data.signingKeyType;
-    i.encryptionKeyType = data.encryptionKeyType;
+    let signingKey: SigningKey;
     switch (data.signingKeyType) {
       case "dilithium":
-        i.signingKey = DilithiumSigningKey.fromJSON(data.signingKey);
+        signingKey = DilithiumSigningKey.fromJSON(data.signingKey);
         break;
       case "sphincs":
-        i.signingKey = SphincsSigningKey.fromJSON(data.signingKey);
+        signingKey = SphincsSigningKey.fromJSON(data.signingKey);
         break;
       default:
-        throw new Error(`Unsupported signing key type: ${i.signingKeyType}`);
+        throw new Error(`Unsupported signing key type: ${data.signingKeyType}`);
     }
 
+    let encryptionKey: AsymmetricEncryptionKey;
     switch (data.encryptionKeyType) {
       case "kyber":
-        i.encryptionKey = KyberEncryptionKey.fromJSON(data.encryptionKey);
+        encryptionKey = KyberEncryptionKey.fromJSON(data.encryptionKey);
         break;
       default:
         throw new Error(
-          `Unsupported encryption key type: ${i.encryptionKeyType}`,
+          `Unsupported encryption key type: ${data.encryptionKeyType}`,
         );
     }
+
+    const i = new Identity(data.signingKeyType, data.encryptionKeyType, {
+      keys: { signingKey, encryptionKey },
+    });
 
     const detailsEntries = Object.entries(data.details ?? {}) as [
       string,
@@ -1458,8 +1476,6 @@ export class Identity extends Key {
         );
       }
       applyPrivateKeysFromJson(identity, pub, privateJson);
-    } else {
-      applyPublicOnlyKeys(identity, pub);
     }
 
     return identity as PrivateIdentity | PublicIdentity;

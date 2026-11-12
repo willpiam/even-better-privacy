@@ -1,11 +1,6 @@
 import { LIMITS } from "../body.ts";
 import { json } from "../response.ts";
-import {
-  escapeLikePattern,
-  getIdentity,
-  getRevokedDetailPaths,
-  isIdentityRevoked,
-} from "../db/index.ts";
+import { escapeLikePattern } from "../db/index.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 
 export const DEFAULT_PAGE_SIZE = 5;
@@ -18,6 +13,97 @@ export function coerceNumber(
   if (typeof value === "bigint") return Number(value);
   if (typeof value === "string") return Number(value);
   return Number(value);
+}
+
+type DbNumber = number | string | bigint;
+type IdentitySummaryRow = [
+  string,
+  string,
+  string,
+  DbNumber,
+  DbNumber | null,
+  string | null,
+];
+
+type IdentitySummary = {
+  fingerprint: string;
+  signingKeyType: string;
+  encryptionKeyType: string;
+  createdAt: number;
+  details: Record<string, [string, string]>;
+  detailsMeta: Record<string, { verified: boolean; verifiedAt: number | null }>;
+  revoked: boolean;
+  revokedDetails: string[];
+  revocationCertificate: string | null;
+};
+
+/** Hydrate a whole page with one detail query, including revocation metadata. */
+async function hydrateIdentitySummaries(
+  db: DatabaseAdapter,
+  identityRows: IdentitySummaryRow[],
+): Promise<IdentitySummary[]> {
+  const rows = identityRows.map(
+    (
+      [
+        fingerprint,
+        signingKeyType,
+        encryptionKeyType,
+        createdAt,
+        revokedAt,
+        certificate,
+      ],
+    ): IdentitySummary => {
+      const revoked = coerceNumber(revokedAt) !== null;
+      return {
+        fingerprint,
+        signingKeyType,
+        encryptionKeyType,
+        createdAt: coerceNumber(createdAt) ?? 0,
+        details: {},
+        detailsMeta: {},
+        revoked,
+        revokedDetails: [],
+        revocationCertificate: revoked ? certificate : null,
+      };
+    },
+  );
+  if (rows.length === 0) return rows;
+
+  const byFingerprint = new Map(rows.map((row) => [row.fingerprint, row]));
+  const fingerprints = rows.map((row) => row.fingerprint);
+  const placeholders = fingerprints.map(() => "?").join(",");
+  const details = await db.query<
+    [string, string, string, string, DbNumber | null, DbNumber | null]
+  >(
+    `SELECT identity_fingerprint, path, detail, proof, CAST(verified_at AS TEXT), CAST(revoked_at AS TEXT)
+     FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
+    fingerprints,
+  );
+  for (
+    const [fingerprint, path, detail, proof, verifiedAtRaw, revokedAt]
+      of details
+  ) {
+    const row = byFingerprint.get(fingerprint)!;
+    if (coerceNumber(revokedAt) !== null) {
+      row.revokedDetails.push(path);
+      continue;
+    }
+    const verifiedAt = coerceNumber(verifiedAtRaw);
+    // Detail paths are user-defined, including names such as "__proto__".
+    Object.defineProperty(row.details, path, {
+      value: [detail, proof],
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+    Object.defineProperty(row.detailsMeta, path, {
+      value: { verified: verifiedAt !== null, verifiedAt },
+      enumerable: true,
+      writable: true,
+      configurable: true,
+    });
+  }
+  return rows;
 }
 
 export async function handleListIdentities(
@@ -48,94 +134,14 @@ export async function handleListIdentities(
   const totalCount = coerceNumber(totalCountRows[0]?.[0] ?? null) ?? 0;
 
   const listQuery = includeRevoked
-    ? "SELECT fingerprint, signing_key_type, encryption_key_type, created_at FROM identities ORDER BY created_at ASC LIMIT ? OFFSET ?"
-    : "SELECT fingerprint, signing_key_type, encryption_key_type, created_at FROM identities i WHERE NOT EXISTS (SELECT 1 FROM revocations r WHERE r.identity_fingerprint = i.fingerprint AND r.type = 'identity') ORDER BY created_at ASC LIMIT ? OFFSET ?";
-  const identityRows = await db.query<
-    [string, string, string, number | string | bigint]
-  >(listQuery, [limit, offset]);
+    ? "SELECT fingerprint, signing_key_type, encryption_key_type, created_at, CAST(revoked_at AS TEXT), revocation_certificate FROM identities ORDER BY created_at ASC LIMIT ? OFFSET ?"
+    : "SELECT fingerprint, signing_key_type, encryption_key_type, created_at, CAST(revoked_at AS TEXT), revocation_certificate FROM identities i WHERE NOT EXISTS (SELECT 1 FROM revocations r WHERE r.identity_fingerprint = i.fingerprint AND r.type = 'identity') ORDER BY created_at ASC LIMIT ? OFFSET ?";
+  const identityRows = await db.query<IdentitySummaryRow>(listQuery, [
+    limit,
+    offset,
+  ]);
 
-  const fingerprints: string[] = [];
-  const rows: Array<{
-    fingerprint: string;
-    signingKeyType: string;
-    encryptionKeyType: string;
-    createdAt: number;
-    details: Record<string, [string, string]>;
-    detailsMeta: Record<
-      string,
-      { verified: boolean; verifiedAt: number | null }
-    >;
-    revoked: boolean;
-    revokedDetails: string[];
-    revocationCertificate?: string | null;
-  }> = [];
-
-  for (const [fp, skt, ekt, createdAt] of identityRows) {
-    const createdAtNumber = coerceNumber(createdAt) ?? 0;
-    fingerprints.push(fp);
-    rows.push({
-      fingerprint: fp,
-      signingKeyType: skt,
-      encryptionKeyType: ekt,
-      createdAt: createdAtNumber,
-      details: {},
-      detailsMeta: {},
-      revoked: false,
-      revokedDetails: [],
-      revocationCertificate: null,
-    });
-  }
-
-  if (fingerprints.length > 0) {
-    const placeholders = fingerprints.map(() => "?").join(",");
-    const detailRows = await db.query<
-      [string, string, string, string, number | string | bigint | null]
-    >(
-      `SELECT identity_fingerprint, path, detail, proof, verified_at FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
-      fingerprints,
-    );
-
-    const detailsByFp: Record<string, Record<string, [string, string]>> = {};
-    const detailsMetaByFp: Record<
-      string,
-      Record<string, { verified: boolean; verifiedAt: number | null }>
-    > = {};
-    for (const [identityFp, path, detail, proof, verified_at] of detailRows) {
-      if (!detailsByFp[identityFp]) {
-        detailsByFp[identityFp] = {};
-      }
-      if (!detailsMetaByFp[identityFp]) {
-        detailsMetaByFp[identityFp] = {};
-      }
-      detailsByFp[identityFp][path] = [detail, proof];
-      const verifiedAt = coerceNumber(verified_at);
-      detailsMetaByFp[identityFp][path] = {
-        verified: verifiedAt !== null,
-        verifiedAt,
-      };
-    }
-
-    for (const row of rows) {
-      row.details = detailsByFp[row.fingerprint] ?? {};
-      row.detailsMeta = detailsMetaByFp[row.fingerprint] ?? {};
-    }
-
-    for (const row of rows) {
-      const revokedDetails = await getRevokedDetailPaths(db, row.fingerprint);
-      row.revokedDetails = revokedDetails;
-      for (const path of revokedDetails) {
-        delete row.details[path];
-        delete row.detailsMeta[path];
-      }
-
-      const revoked = await isIdentityRevoked(db, row.fingerprint);
-      row.revoked = revoked;
-      if (revoked) {
-        const identityRow = await getIdentity(db, row.fingerprint);
-        row.revocationCertificate = identityRow?.revocation_certificate ?? null;
-      }
-    }
-  }
+  const rows = await hydrateIdentitySummaries(db, identityRows);
 
   const totalPages = Math.ceil(totalCount / limit);
 
@@ -197,7 +203,7 @@ export async function handleSearchIdentities(
   const like = `%${escapeLikePattern(rawQuery)}%`;
 
   const baseJoin =
-    "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email')";
+    "FROM identities i LEFT JOIN details d ON d.identity_fingerprint = i.fingerprint AND d.path IN ('name', 'email') AND d.revoked_at IS NULL";
   const matchClause =
     "(LOWER(i.fingerprint) LIKE ? ESCAPE '\\' OR LOWER(d.detail) LIKE ? ESCAPE '\\')";
   const revokedFilter = includeRevoked
@@ -213,94 +219,16 @@ export async function handleSearchIdentities(
   const totalCount = coerceNumber(totalCountRows[0]?.[0] ?? null) ?? 0;
 
   const listQuery =
-    `SELECT DISTINCT i.fingerprint, i.signing_key_type, i.encryption_key_type, i.created_at ` +
+    `SELECT DISTINCT i.fingerprint, i.signing_key_type, i.encryption_key_type, i.created_at, CAST(i.revoked_at AS TEXT), i.revocation_certificate ` +
     `${baseJoin} WHERE ${matchClause} ${revokedFilter} ORDER BY i.created_at ASC LIMIT ? OFFSET ?`;
-  const identityRows = await db.query<
-    [string, string, string, number | string | bigint]
-  >(listQuery, [like, like, limit, offset]);
+  const identityRows = await db.query<IdentitySummaryRow>(listQuery, [
+    like,
+    like,
+    limit,
+    offset,
+  ]);
 
-  const fingerprints: string[] = [];
-  const rows: Array<{
-    fingerprint: string;
-    signingKeyType: string;
-    encryptionKeyType: string;
-    createdAt: number;
-    details: Record<string, [string, string]>;
-    detailsMeta: Record<
-      string,
-      { verified: boolean; verifiedAt: number | null }
-    >;
-    revoked: boolean;
-    revokedDetails: string[];
-    revocationCertificate?: string | null;
-  }> = [];
-
-  for (const [fp, skt, ekt, createdAt] of identityRows) {
-    const createdAtNumber = coerceNumber(createdAt) ?? 0;
-    fingerprints.push(fp);
-    rows.push({
-      fingerprint: fp,
-      signingKeyType: skt,
-      encryptionKeyType: ekt,
-      createdAt: createdAtNumber,
-      details: {},
-      detailsMeta: {},
-      revoked: false,
-      revokedDetails: [],
-      revocationCertificate: null,
-    });
-  }
-
-  if (fingerprints.length > 0) {
-    const placeholders = fingerprints.map(() => "?").join(",");
-    const detailRows = await db.query<
-      [string, string, string, string, number | string | bigint | null]
-    >(
-      `SELECT identity_fingerprint, path, detail, proof, verified_at FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
-      fingerprints,
-    );
-
-    const detailsByFp: Record<string, Record<string, [string, string]>> = {};
-    const detailsMetaByFp: Record<
-      string,
-      Record<string, { verified: boolean; verifiedAt: number | null }>
-    > = {};
-    for (const [identityFp, path, detail, proof, verified_at] of detailRows) {
-      if (!detailsByFp[identityFp]) {
-        detailsByFp[identityFp] = {};
-      }
-      if (!detailsMetaByFp[identityFp]) {
-        detailsMetaByFp[identityFp] = {};
-      }
-      detailsByFp[identityFp][path] = [detail, proof];
-      const verifiedAt = coerceNumber(verified_at);
-      detailsMetaByFp[identityFp][path] = {
-        verified: verifiedAt !== null,
-        verifiedAt,
-      };
-    }
-
-    for (const row of rows) {
-      row.details = detailsByFp[row.fingerprint] ?? {};
-      row.detailsMeta = detailsMetaByFp[row.fingerprint] ?? {};
-    }
-
-    for (const row of rows) {
-      const revokedDetails = await getRevokedDetailPaths(db, row.fingerprint);
-      row.revokedDetails = revokedDetails;
-      for (const path of revokedDetails) {
-        delete row.details[path];
-        delete row.detailsMeta[path];
-      }
-
-      const revoked = await isIdentityRevoked(db, row.fingerprint);
-      row.revoked = revoked;
-      if (revoked) {
-        const identityRow = await getIdentity(db, row.fingerprint);
-        row.revocationCertificate = identityRow?.revocation_certificate ?? null;
-      }
-    }
-  }
+  const rows = await hydrateIdentitySummaries(db, identityRows);
 
   const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / limit);
 

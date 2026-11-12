@@ -1,5 +1,6 @@
 import {Linking} from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {randomBytes} from '@noble/hashes/utils.js';
 import {getServerUrl} from '../settings';
 import {
   MAIL_OAUTH_REDIRECT_URI,
@@ -7,6 +8,7 @@ import {
 } from './types';
 
 const PENDING_KEY = 'ebp.mail.oauth.pending';
+export const MAIL_OAUTH_PENDING_TTL_MS = 10 * 60 * 1000;
 
 export type MailOauthServerProviderConfig = {
   clientId: string;
@@ -131,11 +133,6 @@ export async function startMailOAuth(
   provider: Exclude<MailOauthProvider, ''>,
   clientId?: string,
 ): Promise<{state: string; authUrl: string}> {
-  const state = `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-  await AsyncStorage.setItem(
-    PENDING_KEY,
-    JSON.stringify({state, provider, createdAt: Date.now()}),
-  );
   const cfg = getOAuthProviderConfig(provider);
   const id = clientId?.trim() || cfg.clientId;
   if (!id) {
@@ -143,6 +140,13 @@ export async function startMailOAuth(
       'OAuth client ID required (configure on key server or in Settings → Advanced)',
     );
   }
+  const state = Array.from(randomBytes(32), byte =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('');
+  await AsyncStorage.setItem(
+    PENDING_KEY,
+    JSON.stringify({state, provider, createdAt: Date.now()}),
+  );
   const url = new URL(cfg.authUrl);
   url.searchParams.set('client_id', id);
   url.searchParams.set('redirect_uri', MAIL_OAUTH_REDIRECT_URI);
@@ -184,7 +188,15 @@ export async function completeMailOAuthFromUrl(
   const pending = JSON.parse(pendingRaw) as {
     state: string;
     provider: Exclude<MailOauthProvider, ''>;
+    createdAt?: number;
   };
+  const age = typeof pending?.createdAt === 'number'
+    ? Date.now() - pending.createdAt
+    : NaN;
+  if (!Number.isFinite(age) || age < 0 || age >= MAIL_OAUTH_PENDING_TTL_MS) {
+    await AsyncStorage.removeItem(PENDING_KEY);
+    throw new Error('OAuth session expired; start again');
+  }
   if (pending.state !== state) {
     throw new Error('OAuth state mismatch');
   }

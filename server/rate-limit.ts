@@ -8,6 +8,12 @@ export const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number
   "POST /api/v1/detail": { windowMs: 60_000, maxRequests: 30 },
   "POST /api/v1/revoke": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/verify-email/request": { windowMs: 60_000, maxRequests: 15 },
+  "POST /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
+  "POST /api/v1/verify-signature": { windowMs: 60_000, maxRequests: 30 },
+  "POST /api/v1/hierarchy": { windowMs: 60_000, maxRequests: 10 },
+  "POST /api/v1/hierarchy/propose": { windowMs: 60_000, maxRequests: 10 },
+  "POST /api/v1/hierarchy/accept": { windowMs: 60_000, maxRequests: 10 },
+  "POST /api/v1/hierarchy/reject": { windowMs: 60_000, maxRequests: 10 },
   "GET /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
   "POST /api/v1/mail/oauth/exchange": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/mail/oauth/refresh": { windowMs: 60_000, maxRequests: 20 },
@@ -15,6 +21,7 @@ export const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number
   "POST /api/v1/mail/reset-password": { windowMs: 3_600_000, maxRequests: 5 },
   "POST /api/v1/mail/delete": { windowMs: 3_600_000, maxRequests: 5 },
   "GET /api/v1/mail/username-available": { windowMs: 60_000, maxRequests: 60 },
+  "POST *": { windowMs: 60_000, maxRequests: 30 },
   "GET *": { windowMs: 60_000, maxRequests: 200 },
 };
 

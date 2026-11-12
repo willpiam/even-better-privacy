@@ -54,7 +54,12 @@ export class DilithiumSigningKey  extends SigningKey {
 
     static fromJSON(json: string): DilithiumSigningKey {
         const data = parseStrictJson(json);
-        const instance = new DilithiumSigningKey(data.variant);
+        const variant = data.variant === undefined ? "ml_dsa87" : data.variant;
+        if (!DilithiumSigningKey.listVariants().includes(variant)) {
+            throw new Error(`Invalid Dilithium variant: ${variant}`);
+        }
+        const instance = Object.create(DilithiumSigningKey.prototype) as DilithiumSigningKey;
+        instance.variant = variant;
         instance.key = {
             publicKey: base64ToBytes(data.publicKey),
             secretKey: base64ToBytes(data.secretKey),
