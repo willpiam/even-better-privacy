@@ -45,6 +45,52 @@ function parseEbpArmor(text: string): Record<string, unknown> | null {
 }
 
 describe('mime decode for EBP armor', () => {
+  it('rejects control characters in every outgoing header', () => {
+    const base = {
+      from: 'alice@example.test',
+      to: 'bob@example.test',
+      subject: 'hello',
+      body: 'body',
+      plainBody: 'body',
+    };
+    for (const field of [
+      'from',
+      'to',
+      'subject',
+      'messageId',
+      'inReplyTo',
+      'references',
+    ] as const) {
+      for (const control of ['\r\n', '\r', '\n', '\0']) {
+        const params = {...base, [field]: `value${control}X-Injected: yes`};
+        expect(() => buildSimpleMimeMessage(params)).toThrow(
+          'invalid control characters',
+        );
+        expect(() => buildMultipartMimeMessage(params)).toThrow(
+          'invalid control characters',
+        );
+      }
+    }
+    for (const field of ['filename', 'contentType'] as const) {
+      const attachment = {
+        filename: 'note.txt',
+        contentType: 'text/plain',
+        contentBase64: 'aGVsbG8=',
+        [field]: 'value\r\nX-Injected: yes',
+      };
+      expect(() =>
+        buildMultipartMimeMessage({...base, attachments: [attachment]}),
+      ).toThrow('invalid control characters');
+      expect(() =>
+        buildSimpleMimeMessage({...base, attachments: [attachment]}),
+      ).toThrow('invalid control characters');
+    }
+    const message = buildMultipartMimeMessage({
+      ...base,
+      attachments: [{filename: 'a"b\\c.txt', contentBase64: 'aGVsbG8='}],
+    });
+    expect(message).toContain('filename="a\\"b\\\\c.txt"');
+  });
   it('round-trips attachment-free messages, including multiline bodies', () => {
     const body = 'first line\r\n\r\nlast line';
     const source = buildSimpleMimeMessage({

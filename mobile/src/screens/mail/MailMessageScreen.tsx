@@ -11,7 +11,10 @@ import {
   decryptMailBody,
   type MailAuthenticitySummary,
 } from '../../services/mail/ebpMail';
-import {buildSandboxedEmailSrcDoc} from '../../services/mail/sandboxedHtml';
+import {
+  buildSandboxedEmailSrcDoc,
+  isAllowedMailPreviewNavigation,
+} from '../../services/mail/sandboxedHtml';
 import {
   extractEmailAddress,
   formatQuotedBody,
@@ -308,6 +311,9 @@ export default function MailMessageScreen({
             originWhitelist={['*']}
             source={htmlSource}
             javaScriptEnabled={false}
+            onShouldStartLoadWithRequest={({url}) =>
+              isAllowedMailPreviewNavigation(url)
+            }
             style={styles.webview}
             nestedScrollEnabled
             testID="mail-html-webview"

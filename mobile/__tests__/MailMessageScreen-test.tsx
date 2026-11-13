@@ -192,6 +192,27 @@ it('does not decrypt ordinary mail and keeps sandboxed HTML available', async ()
   expect(
     tree.root.findAllByProps({testID: 'mail-html-webview'}),
   ).not.toHaveLength(0);
+  const preview = tree.root.findAllByProps({testID: 'mail-html-webview'})[0];
+  expect(preview.props.source.html).toContain('sandbox=""');
+  expect(preview.props.onShouldStartLoadWithRequest({url: 'about:blank'})).toBe(
+    true,
+  );
+  expect(
+    preview.props.onShouldStartLoadWithRequest({url: 'about:srcdoc'}),
+  ).toBe(true);
+  expect(
+    preview.props.onShouldStartLoadWithRequest({url: 'about:srcdoc#section'}),
+  ).toBe(true);
+  for (const url of [
+    'https://tracker.example.test',
+    'http://127.0.0.1/private',
+    'file:///private/file',
+    'data:text/html,test',
+    // eslint-disable-next-line no-script-url
+    'javascript:alert(1)',
+  ]) {
+    expect(preview.props.onShouldStartLoadWithRequest({url})).toBe(false);
+  }
   expect(buttons('Reply')).toHaveLength(1);
 });
 

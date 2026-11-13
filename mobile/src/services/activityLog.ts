@@ -1,7 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {KeyedQueue} from '../../../common/KeyedQueue';
 
 const LOG_KEY = 'ebp.mobile.activityLog';
 const LOG_LIMIT = 50;
+const writes = new KeyedQueue();
 
 export type ActivityLogEntry = {
   at: number;
@@ -13,12 +15,14 @@ export async function appendActivityLog(
   message: string,
   kind: ActivityLogEntry['kind'] = 'info',
 ): Promise<void> {
-  const entries = await listActivityLog();
-  entries.unshift({at: Date.now(), kind, message});
-  await AsyncStorage.setItem(
-    LOG_KEY,
-    JSON.stringify(entries.slice(0, LOG_LIMIT)),
-  );
+  await writes.run(LOG_KEY, async () => {
+    const entries = await listActivityLog();
+    entries.unshift({at: Date.now(), kind, message});
+    await AsyncStorage.setItem(
+      LOG_KEY,
+      JSON.stringify(entries.slice(0, LOG_LIMIT)),
+    );
+  });
 }
 
 export async function listActivityLog(): Promise<ActivityLogEntry[]> {
@@ -35,5 +39,5 @@ export async function listActivityLog(): Promise<ActivityLogEntry[]> {
 }
 
 export async function clearActivityLog(): Promise<void> {
-  await AsyncStorage.removeItem(LOG_KEY);
+  await writes.run(LOG_KEY, () => AsyncStorage.removeItem(LOG_KEY));
 }

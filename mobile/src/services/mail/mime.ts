@@ -251,8 +251,17 @@ export function parseMimeMessage(source: string): {
   };
 }
 
+function headerValue(value: string, name: string): string {
+  // Header metadata must never introduce a new line or other controls.
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x08\x0a-\x1f\x7f]/.test(value)) {
+    throw new Error(`${name} contains invalid control characters`);
+  }
+  return value;
+}
+
 function formatMessageId(value: string | null | undefined): string {
-  const trimmed = (value ?? '').trim();
+  const trimmed = headerValue(value ?? '', 'Message-ID').trim();
   if (!trimmed) return '';
   if (trimmed.startsWith('<') && trimmed.endsWith('>')) return trimmed;
   return `<${trimmed.replace(/^<|>$/g, '')}>`;
@@ -268,11 +277,13 @@ function threadingHeaders(params: {
   if (messageId) {
     headers.push(`Message-ID: ${messageId}`);
   }
-  if (params.inReplyTo?.trim()) {
-    headers.push(`In-Reply-To: ${params.inReplyTo.trim()}`);
+  const inReplyTo = headerValue(params.inReplyTo ?? '', 'In-Reply-To').trim();
+  if (inReplyTo) {
+    headers.push(`In-Reply-To: ${inReplyTo}`);
   }
-  if (params.references?.trim()) {
-    headers.push(`References: ${params.references.trim()}`);
+  const references = headerValue(params.references ?? '', 'References').trim();
+  if (references) {
+    headers.push(`References: ${references}`);
   }
   return headers;
 }
@@ -300,9 +311,9 @@ export function buildSimpleMimeMessage(params: {
     });
   }
   const headers = [
-    `From: ${params.from}`,
-    `To: ${params.to}`,
-    `Subject: ${params.subject}`,
+    `From: ${headerValue(params.from, 'From')}`,
+    `To: ${headerValue(params.to, 'To')}`,
+    `Subject: ${headerValue(params.subject, 'Subject')}`,
     ...threadingHeaders(params),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
@@ -331,9 +342,9 @@ export function buildMultipartMimeMessage(params: {
 }): string {
   const boundary = `ebp_${Date.now().toString(36)}`;
   const lines = [
-    `From: ${params.from}`,
-    `To: ${params.to}`,
-    `Subject: ${params.subject}`,
+    `From: ${headerValue(params.from, 'From')}`,
+    `To: ${headerValue(params.to, 'To')}`,
+    `Subject: ${headerValue(params.subject, 'Subject')}`,
     ...threadingHeaders(params),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -354,9 +365,15 @@ export function buildMultipartMimeMessage(params: {
     );
   }
   for (const attachment of params.attachments ?? []) {
-    const filename = attachment.filename.replace(/"/g, '');
+    const filename = headerValue(
+      attachment.filename,
+      'Attachment filename',
+    ).replace(/[\\"]/g, '\\$&');
     const contentType =
-      attachment.contentType?.trim() || 'application/octet-stream';
+      headerValue(
+        attachment.contentType ?? '',
+        'Attachment content type',
+      ).trim() || 'application/octet-stream';
     const b64 = attachment.contentBase64.replace(/\s+/g, '');
     const wrapped = b64.match(/.{1,76}/g)?.join('\r\n') ?? b64;
     lines.push(

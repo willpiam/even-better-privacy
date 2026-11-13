@@ -327,6 +327,9 @@ export async function handlePostDetail(
   if (!identity) {
     return json({ error: "unknown subject" }, 400);
   }
+  if (await isIdentityRevoked(db, fingerprint)) {
+    return json({ error: "identity is revoked" }, 400);
+  }
 
   const existingDetail = await getDetailRecord(db, fingerprint, path);
   if (existingDetail && existingDetail.revoked_at === null) {

@@ -1,5 +1,5 @@
 import nodemailer from "npm:nodemailer";
-import { readJsonBody, validateStringLength, LIMITS } from "./body.ts";
+import { readJsonBody, readTextBody, validateStringLength, LIMITS } from "./body.ts";
 import { json, escapeHtml } from "./response.ts";
 import { buildSecurityHeaders } from "./cors.ts";
 import { computeTokenHash, toHex } from "./crypto.ts";
@@ -69,6 +69,7 @@ export async function sendVerificationEmail(to: string, link: string, fingerprin
     host,
     port,
     secure,
+    requireTLS: true,
     auth: user ? { user, pass: pass ?? "" } : undefined,
   });
 
@@ -175,8 +176,9 @@ export async function readVerificationTokenFromRequest(req: Request): Promise<{ 
     return { ok: true, token: tokenCheck.value };
   }
 
-  const bodyText = await req.text();
-  const params = new URLSearchParams(bodyText);
+  const bodyResult = await readTextBody(req);
+  if (!bodyResult.ok) return bodyResult;
+  const params = new URLSearchParams(bodyResult.data);
   const tokenCheck = validateStringLength(params.get("token"), "token", LIMITS.verificationToken);
   if (!tokenCheck.ok) return { ok: false, error: tokenCheck.error, status: 400 };
   return { ok: true, token: tokenCheck.value };

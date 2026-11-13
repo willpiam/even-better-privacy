@@ -299,7 +299,8 @@ describe('sandboxed HTML', () => {
   it('includes CSP meta and embeds body html without script execution hooks', () => {
     const doc = buildSandboxedEmailSrcDoc('<p>Hi</p><script>alert(1)</script>');
     expect(doc).toContain("default-src 'none'");
-    expect(doc).toContain('<p>Hi</p>');
+    expect(doc).toContain('sandbox=""');
+    expect(doc).toContain('&lt;p&gt;Hi&lt;/p&gt;');
     expect(doc).toContain('Content-Security-Policy');
   });
 });
