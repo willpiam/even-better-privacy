@@ -6,7 +6,7 @@ export {
 export type { SqliteDatabaseAdapter } from "./sqlite.ts";
 export { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 
-import { constantTimeStringEqual, hexToBytes } from "../crypto.ts";
+import { hexToBytes } from "../crypto.ts";
 import { coerceNumber, DatabaseAdapter } from "./adapter.ts";
 import { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 import type {
@@ -208,7 +208,6 @@ export async function updateDetailVerification(db: DatabaseAdapter, record: {
 export async function getDetailByVerificationToken(
   db: DatabaseAdapter,
   tokenHash: string,
-  tokenPlaintext: string,
 ): Promise<
   {
     fingerprint: string;
@@ -237,40 +236,7 @@ export async function getDetailByVerificationToken(
      FROM details WHERE verification_token_hash = ?`,
     [tokenHash],
   );
-  let rows = hashRows;
-  if (rows.length === 0) {
-    const plaintextRows = await db.query<
-      [
-        string,
-        string,
-        string,
-        number | string | bigint | null,
-        number | string | bigint | null,
-        number | string | bigint | null,
-        number | string | bigint | null,
-        string,
-      ]
-    >(
-      `SELECT identity_fingerprint, path, detail,
-              CAST(verified_at AS TEXT), CAST(verification_expires_at AS TEXT),
-              CAST(verification_sent_at AS TEXT), CAST(revoked_at AS TEXT),
-              verification_token
-       FROM details WHERE verification_token IS NOT NULL`,
-    );
-    rows = plaintextRows
-      .filter((row) => constantTimeStringEqual(row[7], tokenPlaintext))
-      .map((
-        [fingerprint, path, detail, verifiedAt, expiresAt, sentAt, revokedAt],
-      ) => [
-        fingerprint,
-        path,
-        detail,
-        verifiedAt,
-        expiresAt,
-        sentAt,
-        revokedAt,
-      ]);
-  }
+  const rows = hashRows;
   if (rows.length === 0) return null;
   const [
     fingerprint,

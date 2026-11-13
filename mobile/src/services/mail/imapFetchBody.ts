@@ -1,6 +1,7 @@
 import type {MailMessageDetail} from './types';
 import {Buffer} from 'buffer';
 import {MAX_MAIL_SOURCE_BYTES} from '../../../../common/MailLimits';
+import {decodeHeaderWords} from './headerWords';
 
 export type FetchBodyClient = {
   readLine: () => Promise<string>;
@@ -47,7 +48,8 @@ export function parseHeaderField(blob: string, name: string): string {
   } else {
     value = value.trim();
   }
-  return value;
+  // Decode display text without changing mailbox addresses used for authentication.
+  return name.toLowerCase() === 'subject' ? decodeHeaderWords(value) : value;
 }
 
 /**

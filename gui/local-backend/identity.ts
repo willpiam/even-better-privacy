@@ -61,18 +61,6 @@ export async function loadIdentity(
     throw toIdentityDecryptHttpError(e);
   }
 
-  // F-STORAGE-02: transparent KDF upgrade on successful unlock.
-  if (
-    Identity.isStorageEncryptedWithLegacyKDF(storageData) ||
-    Identity.needsPrivateKeyTypeStorageUpgrade(identity)
-  ) {
-    try {
-      await saveIdentity(ctx, password, identity);
-    } catch (e) {
-      console.warn("failed to upgrade identity storage:", e);
-    }
-  }
-
   return identity;
 }
 

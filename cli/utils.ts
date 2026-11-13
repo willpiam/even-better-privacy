@@ -234,34 +234,6 @@ export async function ensurePrivateDir(path: string): Promise<void> {
     // support chmod.
   }
 }
-
-// Recursively tighten permissions on an existing ~/.ebp/ tree. Used on
-// startup to repair legacy installs that wrote identity files at mode 0o664
-// and the directory at 0o775 (F-STORAGE-01/04).
-export async function fixLegacyPerms(identityDir: string): Promise<void> {
-  if (Deno.build.os === "windows") return;
-  try {
-    await Deno.chmod(identityDir, 0o700);
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) return;
-    return;
-  }
-  try {
-    for await (const entry of Deno.readDir(identityDir)) {
-      const childPath = `${identityDir}/${entry.name}`;
-      if (entry.isFile) {
-        try {
-          await Deno.chmod(childPath, 0o600);
-        } catch { /* best-effort */ }
-      } else if (entry.isDirectory) {
-        await fixLegacyPerms(childPath);
-      }
-    }
-  } catch {
-    // best-effort
-  }
-}
-
 // F-CLI-01: read a password from stdin without echoing it to the terminal.
 //
 // When stdin is a TTY, switch to raw mode (cbreak) so keystrokes are read
@@ -516,23 +488,6 @@ export async function loadIdentity(
   } catch (e) {
     console.error(identityLoadErrorMessage(e));
     Deno.exit(1);
-  }
-
-  // F-STORAGE-02: transparent re-encrypt when a legacy-KDF blob is
-  // successfully unlocked. We rewrite at the stronger parameters before
-  // handing the identity back to the caller.
-  if (
-    Identity.isStorageEncryptedWithLegacyKDF(storageData) ||
-    Identity.needsPrivateKeyTypeStorageUpgrade(identity)
-  ) {
-    try {
-      await saveIdentity(ctx, pwd, identity);
-      console.error(
-        "[ebp] upgraded identity file storage format.",
-      );
-    } catch (e) {
-      console.error("[ebp] warning: failed to upgrade identity storage:", e);
-    }
   }
 
   return { identity, password: pwd };

@@ -2,8 +2,6 @@ import { base64ToBytes, bytesToBase64 } from "./Base64.ts";
 import { FILE_FORMAT_VERSIONS } from "./version.ts";
 import { gcm } from "@noble/ciphers/aes";
 import { randomBytes } from "@noble/hashes/utils";
-import { pbkdf2 } from "@noble/hashes/pbkdf2";
-import { sha256 } from "@noble/hashes/sha2";
 import { argon2id } from "@noble/hashes/argon2";
 
 const encoder = new TextEncoder();
@@ -14,12 +12,7 @@ const SALT_LENGTH = AES_SALT_LENGTH;
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
 const KEY_LENGTH = 32; // 256 bits
 
-// F-STORAGE-02/03: v1 used PBKDF2-310k, v2 raised to PBKDF2-600k, v3 moves
-// to Argon2id (m=64MiB,t=3,p=1), and v4 adds optional AES-GCM AAD binding for
-// storage-format metadata. The leading version byte keeps all historic
-// ciphertexts decryptable while new writes use the stronger KDF/AAD support.
-const PBKDF2_ITERATIONS_V1 = 310_000;
-const PBKDF2_ITERATIONS_V2 = 600_000;
+// Only AES v4 is supported: Argon2id and AES-GCM metadata binding.
 const CURRENT_AES_VERSION = FILE_FORMAT_VERSIONS.aesCiphertext; // 4
 
 const ARGON2_MEMORY_KIB = 64 * 1024; // 64 MiB
@@ -40,12 +33,12 @@ export class StorageFormatError extends Error {
   }
 }
 
-function iterationsForVersion(version: number): number {
-  if (version === 1) return PBKDF2_ITERATIONS_V1;
-  if (version === 2) return PBKDF2_ITERATIONS_V2;
-  if (version === 3) return PBKDF2_ITERATIONS_V2;
-  if (version === 4) return PBKDF2_ITERATIONS_V2;
-  throw new StorageFormatError(`Unsupported ciphertext version: ${version}`);
+function requireCurrentVersion(version: number): void {
+  if (version !== CURRENT_AES_VERSION) {
+    throw new StorageFormatError(
+      `Unsupported ciphertext version: ${version}; only v${CURRENT_AES_VERSION} is supported`,
+    );
+  }
 }
 
 function encodeAad(aad?: string): Uint8Array | undefined {
@@ -58,6 +51,7 @@ function parseCiphertextBytes(encoded: string): Uint8Array {
     if (data.length < 1 + SALT_LENGTH + IV_LENGTH) {
       throw new StorageFormatError("Invalid ciphertext");
     }
+    requireCurrentVersion(data[0]);
     return data;
   } catch (e) {
     if (e instanceof StorageFormatError) throw e;
@@ -68,12 +62,7 @@ function parseCiphertextBytes(encoded: string): Uint8Array {
 export class AES {
   static encrypt(password: string, plaintext: string, aad?: string): string {
     const salt = randomBytes(SALT_LENGTH);
-    const key = deriveKey(
-      password,
-      salt,
-      iterationsForVersion(CURRENT_AES_VERSION),
-      CURRENT_AES_VERSION,
-    );
+    const key = deriveKey(password, salt);
     return AES.encryptWithKey(key, plaintext, salt, aad);
   }
 
@@ -103,13 +92,8 @@ export class AES {
   }
 
   static decrypt(password: string, encoded: string, aad?: string): string {
-    const { version, salt } = AES.readHeader(encoded);
-    const key = deriveKey(
-      password,
-      salt,
-      iterationsForVersion(version),
-      version,
-    );
+    const { salt } = AES.readHeader(encoded);
+    const key = deriveKey(password, salt);
     return AES.decryptWithKey(key, encoded, aad);
   }
 
@@ -119,7 +103,6 @@ export class AES {
     aad?: string,
   ): string {
     const data = parseCiphertextBytes(encoded);
-    const version = data[0];
 
     const saltStart = 1;
     const saltEnd = saltStart + SALT_LENGTH;
@@ -131,7 +114,7 @@ export class AES {
     const decipher = gcm(
       key,
       iv,
-      version >= 4 ? encodeAad(aad) : undefined,
+      encodeAad(aad),
     );
     let plaintextBytes: Uint8Array;
     try {
@@ -150,21 +133,8 @@ export class AES {
     return { version, salt };
   }
 
-  // F-STORAGE-02: utility so callers (identity-unlock flow) can detect a
-  // legacy v1 blob and transparently rewrite it at v2 after a successful
-  // decrypt.
   static getCiphertextVersion(encoded: string): number {
-    const data = base64ToBytes(encoded);
-    if (data.length < 1) throw new Error("Invalid ciphertext");
-    return data[0];
-  }
-
-  static isLegacyCiphertext(encoded: string): boolean {
-    try {
-      return AES.getCiphertextVersion(encoded) < CURRENT_AES_VERSION;
-    } catch {
-      return false;
-    }
+    return AES.readHeader(encoded).version;
   }
 
   /** Derive a 32-byte AES key (noble). Used by tests and desktop paths. */
@@ -173,29 +143,21 @@ export class AES {
     salt: Uint8Array,
     version: number,
   ): Uint8Array {
-    return deriveKey(password, salt, iterationsForVersion(version), version);
+    requireCurrentVersion(version);
+    return deriveKey(password, salt);
   }
 }
 
 function deriveKey(
   password: string,
   salt: Uint8Array,
-  iterations: number,
-  version: number,
 ): Uint8Array {
   const passwordBytes = encoder.encode(password);
 
-  if (version >= 3) {
-    return argon2id(passwordBytes, salt, {
-      t: ARGON2_ITERATIONS,
-      m: ARGON2_MEMORY_KIB,
-      p: ARGON2_PARALLELISM,
-      dkLen: KEY_LENGTH,
-    });
-  }
-
-  return pbkdf2(sha256, passwordBytes, salt, {
-    c: iterations,
+  return argon2id(passwordBytes, salt, {
+    t: ARGON2_ITERATIONS,
+    m: ARGON2_MEMORY_KIB,
+    p: ARGON2_PARALLELISM,
     dkLen: KEY_LENGTH,
   });
 }

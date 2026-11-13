@@ -84,6 +84,7 @@ describe('mail list helpers', () => {
 
   it.each(['a\rb', 'a\nb', 'a\0b', 'a\tb'])('rejects IMAP control characters in %j', value => {
     expect(() => quoteImap(value)).toThrow('control characters');
+    expect(() => buildUidSearchCommand('a3', value)).toThrow('control characters');
   });
 
   it('buildUidSearchCommand searches the whole mailbox or a text query', () => {

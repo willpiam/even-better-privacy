@@ -23,10 +23,6 @@ function purposePrefix(purpose: SignaturePurpose): string {
 	}
 }
 
-export function buildLegacyMessageHashEnvelopeFromHash(messageHash: string, salt?: string): string {
-	return `ebp::messagehash::${messageHash}::${salt ?? ""}`;
-}
-
 export function buildPurposeHashEnvelopeFromHash(
 	purpose: SignaturePurpose,
 	messageHash: string,

@@ -1,8 +1,10 @@
 import { Database } from "sqlite";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
+import { KeyedQueue } from "../../common/KeyedQueue.ts";
 
 export class SqliteDatabaseAdapter extends DatabaseAdapter {
   private db: Database;
+  private readonly operations = new KeyedQueue();
 
   constructor(path: string) {
     super();
@@ -12,11 +14,22 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
   }
 
   execute(sql: string): Promise<void> {
-    this.db.exec(sql);
-    return Promise.resolve();
+    return this.operations.run("connection", async () => {
+      this.db.exec(sql);
+    });
   }
 
   query<T extends unknown[]>(
+    sql: string,
+    params: DatabaseQueryParams = [],
+  ): Promise<T[]> {
+    return this.operations.run(
+      "connection",
+      () => this.queryDirect<T>(sql, params),
+    );
+  }
+
+  private queryDirect<T extends unknown[]>(
     sql: string,
     params: DatabaseQueryParams = [],
   ): Promise<T[]> {
@@ -43,8 +56,37 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
   }
 
   close(): Promise<void> {
-    this.db.close();
-    return Promise.resolve();
+    return this.operations.run("connection", async () => {
+      this.db.close();
+    });
+  }
+
+  writeTransaction<T>(
+    operation: (db: DatabaseAdapter) => Promise<T>,
+  ): Promise<T> {
+    return this.operations.run("connection", async () => {
+      this.db.exec("BEGIN IMMEDIATE");
+      const scope: DatabaseAdapter = {
+        execute: async (sql) => {
+          this.db.exec(sql);
+        },
+        query: (sql, params) => this.queryDirect(sql, params),
+        close: async () => {
+          throw new Error("Cannot close a transaction connection");
+        },
+        writeTransaction: async () => {
+          throw new Error("Nested transactions are unsupported");
+        },
+      };
+      try {
+        const result = await operation(scope);
+        this.db.exec("COMMIT");
+        return result;
+      } catch (error) {
+        this.db.exec("ROLLBACK");
+        throw error;
+      }
+    });
   }
 
   private initializeSchema(): void {
@@ -153,62 +195,5 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         UNIQUE(username, domain)
       )
     `);
-
-    // Add revocation columns to existing tables if they don't exist (migration)
-    try {
-      this.db.exec(`ALTER TABLE identities ADD COLUMN revoked_at INTEGER`);
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(
-        `ALTER TABLE identities ADD COLUMN revocation_certificate TEXT`,
-      );
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(`ALTER TABLE details ADD COLUMN revoked_at INTEGER`);
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(
-        `ALTER TABLE details ADD COLUMN revocation_certificate TEXT`,
-      );
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(`ALTER TABLE details ADD COLUMN verified_at INTEGER`);
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(`ALTER TABLE details ADD COLUMN verification_token TEXT`);
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(
-        `ALTER TABLE details ADD COLUMN verification_token_hash TEXT`,
-      );
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(
-        `ALTER TABLE details ADD COLUMN verification_expires_at INTEGER`,
-      );
-    } catch {
-      /* column already exists */
-    }
-    try {
-      this.db.exec(
-        `ALTER TABLE details ADD COLUMN verification_sent_at INTEGER`,
-      );
-    } catch {
-      /* column already exists */
-    }
   }
 }

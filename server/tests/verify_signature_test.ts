@@ -11,6 +11,7 @@ import { type DatabaseAdapter } from "../db/adapter.ts";
 
 // All these requests either fail before DB access or verify an unpublished key.
 const emptyDb: DatabaseAdapter = {
+  writeTransaction: async operation => operation(emptyDb),
   query: () => Promise.resolve([]),
   execute: () => Promise.resolve(),
   close: () => Promise.resolve(),

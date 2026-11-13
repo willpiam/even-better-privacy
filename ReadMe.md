@@ -358,6 +358,10 @@ generate multiple identities (stored under `~/.ebp/<name>.identity.json`),
 switch between them, inspect fingerprints and details, exchange signed/encrypted
 messages with contacts, and encrypt/decrypt full file payloads.
 
+Private identity files use Argon2id and metadata-bound AES-GCM (AES format v4).
+Older identity formats are unsupported. See the [legacy inventory](docs/legacy-inventory.md)
+for the removed compatibility paths and current formats retained.
+
 - create and switch identities (`ebp generate [name]`, `ebp identities`,
   `ebp use <name>`)
 - view identity info and attached details (`ebp info`, `ebp details`)

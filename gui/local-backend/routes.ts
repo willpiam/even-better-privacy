@@ -119,7 +119,6 @@ import {
   type MailAccountRecord,
   type MailAuthSecrets,
   mailPinCache,
-  migrateMailSecrets,
   normalizeMailConfig,
   resolveMailAccount,
   saveMailSecretsStore,
@@ -403,13 +402,6 @@ async function saveEbpMailAccount(identityDir: string, options: {
   return { accountId, accountConfig };
 }
 
-/** Only verified identity unlocks may establish the mail encryption password. */
-async function prepareMailSecrets(identityDir: string, previousPin?: string): Promise<boolean> {
-  const status = await getMailSecretsStatus(identityDir);
-  if (status.locked && previousPin) await migrateMailSecrets(identityDir, previousPin);
-  return Boolean(mailPinCache.get(identityDir));
-}
-
 async function nextHdIdentityIndex(
   ctx: CLIContext,
   seed: Uint8Array,
@@ -595,7 +587,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
       const secretStatus = await getMailSecretsStatus(ctx.identityDir);
       if (secretStatus.locked) {
-        throw new HttpError(STATUS.Unauthorized, "mail migration required");
+        throw new HttpError(STATUS.Unauthorized, "Mail credentials are locked; unlock your identity");
       }
       store.accounts = store.accounts.filter((entry) => entry.id !== accountId);
       if (store.selectedAccountId === accountId) {
@@ -614,21 +606,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/v1/mail/unlock") {
-      const body = await readJson<{ home?: unknown; pin?: unknown }>(req);
-      const home = typeof body.home === "string" ? body.home : undefined;
-      const pin = typeof body.pin === "string" ? body.pin : "";
-      if (!pin) throw new HttpError(STATUS.BadRequest, "previous email PIN is required for migration");
-      const ctx = await getContext(home ?? undefined);
-      await loadIdentityForRequest(ctx);
-      const store = await migrateMailSecrets(ctx.identityDir, pin);
-      return json({
-        ok: true,
-        unlocked: true,
-        accountCount: Object.keys(store).length,
-      });
-    }
-
     if (req.method === "POST" && url.pathname === "/api/v1/mail/account") {
       const body = await readJson<{
         home?: unknown;
@@ -638,13 +615,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         accountName?: unknown;
         imapPassword?: unknown;
         smtpPassword?: unknown;
-        pin?: unknown;
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
       const ctx = await getContext(home ?? undefined);
       await loadIdentityForRequest(ctx);
       if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
-        throw new HttpError(STATUS.Conflict, "mail migration required");
+        throw new HttpError(STATUS.Conflict, "Mail credentials are locked; unlock your identity");
       }
       const accountPayload = body.account && typeof body.account === "object"
         ? body.account as Record<string, unknown>
@@ -3777,14 +3753,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           }
 
           if (result.verified) {
-            // F-CRYPTO-02: distinguish recipient-bound (v2) from
-            // legacy unbound (v1) signatures so the UI can flag
-            // that recipient intent was not cryptographically
-            // proven for v1 messages.
-            const base = isKnownContact ? "valid" : "valid_unknown_signer";
-            const status = result.verifyStatus === "valid_unbound"
-              ? `${base}_unbound`
-              : base;
+            const status = isKnownContact ? "valid" : "valid_unknown_signer";
             return await respond({
               message: result.message,
               verified: result.verified,
@@ -3974,9 +3943,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         }
         cleartextEnvelopeRaw = result.message;
         verified = result.verified;
-        // F-CRYPTO-02: propagate recipient-binding state
-        // (valid, valid_unbound, invalid) to the UI so it can warn
-        // the user when a v1 (unbound) signature is encountered.
         verifyStatus = result.verifyStatus;
       } else {
         throw new HttpError(STATUS.BadRequest, "unsupported file payload type");
@@ -4194,7 +4160,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         password?: unknown;
         username?: unknown;
         server?: unknown;
-        pin?: unknown;
         fromName?: unknown;
       }>(req);
       const home = typeof body.home === "string" ? body.home : undefined;
@@ -4207,10 +4172,8 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       const ctx = await getContext(home, identityName);
       const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
       await unlockIdentity(ctx, password);
-      const pinInput = typeof body.pin === "string" ? body.pin : "";
       if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
-        if (!pinInput) throw new HttpError(STATUS.Conflict, "mail migration required");
-        await migrateMailSecrets(ctx.identityDir, pinInput);
+        throw new HttpError(STATUS.Conflict, "Stored mail credentials could not be unlocked with the identity password");
       }
 
       const config = await fetchEbpMailConfig(server);
@@ -4283,13 +4246,11 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         password?: unknown;
         server?: unknown;
         accountId?: unknown;
-        pin?: unknown;
         fromName?: unknown;
       }>(req);
       const password = typeof body.password === "string" && body.password
         ? body.password
         : undefined;
-      const pin = typeof body.pin === "string" && body.pin ? body.pin : undefined;
       const ctx = await getContext(
         typeof body.home === "string" ? body.home : undefined,
         typeof body.identity === "string" ? body.identity : undefined,
@@ -4349,9 +4310,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       let savedLocally = false;
       if (account) {
         try {
-          if (
-            await prepareMailSecrets(ctx.identityDir, pin)
-          ) {
+          if (mailPinCache.has(ctx.identityDir)) {
             const secretStore = await getMailSecretsStore(ctx.identityDir);
             secretStore[account.id] = { imapPassword: mailPassword, smtpPassword: mailPassword };
             await saveMailSecretsStore(ctx.identityDir, secretStore);

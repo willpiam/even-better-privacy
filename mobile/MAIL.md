@@ -129,4 +129,4 @@ native rebuild. Unlock should finish in a few seconds, not hang indefinitely.
 Accounts created in the desktop GUI under the same identity use the same storage
 files and can be unlocked on mobile with the same identity password.
 
-Stored mail credentials use the identity password. Unlocking the identity also unlocks mail. Older credential stores protected by a separate email PIN ask for that previous PIN once and are then re-encrypted with the verified identity password. Cancelling migration leaves the original encrypted file intact.
+Stored mail credentials use the identity password. Unlocking the identity also unlocks mail. Plaintext credential stores and separate email PIN migration are unsupported; incompatible development stores must be replaced. Failed unlocks leave the existing encrypted file intact.

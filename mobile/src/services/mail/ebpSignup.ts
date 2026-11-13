@@ -16,7 +16,6 @@ import {
 import {
   deleteMailAccount,
   getMailSecretsStatus,
-  migrateMailSecrets,
   readMailStore,
   saveMailAccountWithSecrets,
   selectMailAccount,
@@ -102,8 +101,6 @@ export async function signupEbpMailbox(params: {
   username: string;
   server: string;
   config: EbpSignupConfig;
-  pin?: string;
-  requestPreviousPin?: () => Promise<string | null>;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
   if (!params.config.enabled) {
     throw new Error('This key server does not offer EBP email sign-up');
@@ -114,11 +111,10 @@ export async function signupEbpMailbox(params: {
   }
   await openIdentity(params.identityName, params.password);
   if ((await getMailSecretsStatus(params.identityName)).locked) {
-    const previousPin = params.pin || (await params.requestPreviousPin?.());
-    if (!previousPin) throw new Error('Mail credential migration cancelled');
-    await migrateMailSecrets(params.identityName, previousPin);
+    throw new Error(
+      'Stored mail credentials could not be unlocked with the identity password',
+    );
   }
-  const pin = params.password;
   const email = buildMailAddress(check.username, params.config.domain);
   const mailPassword = randomHex(16);
   const {result} = await mutateIdentityForUse(
@@ -158,7 +154,6 @@ export async function signupEbpMailbox(params: {
     record: buildEbpMailAccountRecord({id: accountId, result}),
     imapPassword: mailPassword,
     smtpPassword: mailPassword,
-    pin,
   });
   await selectMailAccount(params.identityName, accountId);
   return {...result, accountId, mailPassword};
@@ -232,7 +227,6 @@ export async function lookupVerifiedManagedEmail(
 
 async function saveManagedMailboxAccount(params: {
   identityName: string;
-  pin: string;
   result: EbpSignupResult;
   mailPassword: string;
   accountId?: string;
@@ -256,7 +250,6 @@ async function saveManagedMailboxAccount(params: {
     }),
     imapPassword: params.mailPassword,
     smtpPassword: params.mailPassword,
-    pin: params.pin,
   });
   await selectMailAccount(params.identityName, accountId);
   return accountId;
@@ -271,8 +264,6 @@ export async function resetEbpMailbox(params: {
   password: string;
   server: string;
   config: EbpSignupConfig;
-  pin?: string;
-  requestPreviousPin?: () => Promise<string | null>;
   accountId?: string;
   fromName?: string;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
@@ -281,11 +272,10 @@ export async function resetEbpMailbox(params: {
   }
   const identity = await openIdentity(params.identityName, params.password);
   if ((await getMailSecretsStatus(params.identityName)).locked) {
-    const previousPin = params.pin || (await params.requestPreviousPin?.());
-    if (!previousPin) throw new Error('Mail credential migration cancelled');
-    await migrateMailSecrets(params.identityName, previousPin);
+    throw new Error(
+      'Stored mail credentials could not be unlocked with the identity password',
+    );
   }
-  const pin = params.password;
   const email = await fetchVerifiedManagedEmail(
     params.server,
     identity.toFingerprint(),
@@ -319,7 +309,6 @@ export async function resetEbpMailbox(params: {
   });
   const accountId = await saveManagedMailboxAccount({
     identityName: params.identityName,
-    pin,
     result,
     mailPassword,
     accountId: params.accountId,

@@ -4,11 +4,20 @@ export type DatabaseQueryParams =
 
 export abstract class DatabaseAdapter {
   abstract execute(sql: string): Promise<void>;
-  abstract query<T extends unknown[]>(sql: string, params?: DatabaseQueryParams): Promise<T[]>;
+  abstract query<T extends unknown[]>(
+    sql: string,
+    params?: DatabaseQueryParams,
+  ): Promise<T[]>;
   abstract close(): Promise<void>;
+  /** Serialize a graph write and commit its validation and changes atomically. */
+  abstract writeTransaction<T>(
+    operation: (db: DatabaseAdapter) => Promise<T>,
+  ): Promise<T>;
 }
 
-export function coerceNumber(value: number | string | bigint | null): number | null {
+export function coerceNumber(
+  value: number | string | bigint | null,
+): number | null {
   if (value === null) return null;
   if (typeof value === "number") return value;
   if (typeof value === "bigint") return Number(value);

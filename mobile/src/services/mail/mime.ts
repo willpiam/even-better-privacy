@@ -90,30 +90,26 @@ function* splitMultipartParts(
 ): Generator<string> {
   const normalized = body.replace(/\r\n/g, '\n');
   const sep = `--${boundary}`;
-  let idx = 0;
-  while (true) {
-    const start = normalized.indexOf(sep, idx);
-    if (start < 0) {
-      break;
+  const escaped = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const delimiter = new RegExp(`^${escaped}(--)?[ \\t]*(?:\\n|$)`, 'gm');
+  let contentStart: number | null = null;
+  for (
+    let match = delimiter.exec(normalized);
+    match;
+    match = delimiter.exec(normalized)
+  ) {
+    if (contentStart !== null) {
+      const end =
+        match.index > contentStart && normalized[match.index - 1] === '\n'
+          ? match.index - 1
+          : match.index;
+      if (end > contentStart) yield normalized.slice(contentStart, end);
     }
-    let contentStart = start + sep.length;
-    if (normalized.startsWith('--', contentStart)) {
-      break;
-    }
-    if (normalized[contentStart] === '\n') {
-      contentStart += 1;
-    }
-    const next = normalized.indexOf(`\n${sep}`, contentStart);
-    const end = next >= 0 ? next : normalized.length;
-    const part = normalized.slice(contentStart, end);
-    if (part.length > 0) {
-      yield part;
-    }
-    if (next < 0) {
-      break;
-    }
-    idx = next + 1;
+    if (match[1]) return;
+    contentStart = delimiter.lastIndex;
   }
+  if (contentStart !== null && contentStart < normalized.length)
+    yield normalized.slice(contentStart);
 }
 
 function collectFromEntity(

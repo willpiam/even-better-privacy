@@ -6,16 +6,18 @@ import {
   parseImapListLine,
   pickSentMailbox,
 } from '../../../../common/SentMailbox';
-import type {MailAccountConfig, MailAuthSecrets, MailMessageDetail, MailMessageSummary} from './types';
+import type {
+  MailAccountConfig,
+  MailAuthSecrets,
+  MailMessageDetail,
+  MailMessageSummary,
+} from './types';
 import {
   connectMailLineClient,
   readTaggedOk,
   type TcpLineClient,
 } from './tcpClient';
-import {
-  messageDetailFromRfc822,
-  readFetchRfc822Source,
-} from './imapFetchBody';
+import {messageDetailFromRfc822, readFetchRfc822Source} from './imapFetchBody';
 import {mailStub} from './mailTrace';
 
 export {
@@ -28,7 +30,8 @@ export {
 export function quoteImap(value: string): string {
   for (const ch of value) {
     const code = ch.charCodeAt(0);
-    if (code < 32 || code === 127) throw new Error('IMAP strings cannot contain control characters');
+    if (code < 32 || code === 127)
+      throw new Error('IMAP strings cannot contain control characters');
   }
   if (value.length > 0 && !/[ (){%*"\\\]]/.test(value)) {
     return value;
@@ -86,8 +89,7 @@ export function buildUidSearchCommand(tag: string, search?: string): string {
   if (!q) {
     return `${tag} UID SEARCH ALL`;
   }
-  const escaped = q.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-  return `${tag} UID SEARCH TEXT "${escaped}"`;
+  return `${tag} UID SEARCH TEXT ${quoteImap(q)}`;
 }
 
 async function maybeImapStartTls(
@@ -123,7 +125,11 @@ export async function imapAuthenticate(
   await maybeImapStartTls(client, config.imapSecure);
   const tag = 'a1';
   await mailStub('imap.login.wait', 'LOGIN');
-  client.writeLine(`${tag} LOGIN ${quoteImap(config.username)} ${quoteImap(secrets.imapPassword)}`);
+  client.writeLine(
+    `${tag} LOGIN ${quoteImap(config.username)} ${quoteImap(
+      secrets.imapPassword,
+    )}`,
+  );
   await readTaggedOk(client, tag);
   await mailStub('imap.login.ok');
 }
@@ -217,9 +223,7 @@ export async function appendSentCopy(
     }
     const payload = normalizeRfc822(mime);
     const octets = Buffer.byteLength(payload, 'utf8');
-    client.writeLine(
-      `s3 APPEND ${quoteImap(mailbox)} (\\Seen) {${octets}}`,
-    );
+    client.writeLine(`s3 APPEND ${quoteImap(mailbox)} (\\Seen) {${octets}}`);
     await readAppendContinuation(client);
     client.writeBytes(payload);
     // The octet count covers only the message. IMAP still needs a CRLF
@@ -291,7 +295,9 @@ export async function listMailboxMessages(
     let out: MailMessageSummary[] = [];
     if (pageInfo.uids.length) {
       client.writeLine(
-        `a4 UID FETCH ${pageInfo.uids.join(',')} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])`,
+        `a4 UID FETCH ${pageInfo.uids.join(
+          ',',
+        )} (UID FLAGS BODY.PEEK[HEADER.FIELDS (SUBJECT FROM TO DATE)])`,
       );
       out = await readMailboxHeaders(client, 'a4', pageInfo.uids);
     }
@@ -307,20 +313,6 @@ export async function listMailboxMessages(
   } finally {
     client.close();
   }
-}
-
-/** @deprecated Prefer {@link listMailboxMessages} */
-export async function listInboxMessages(
-  config: MailAccountConfig,
-  secrets: MailAuthSecrets,
-  limit = 30,
-): Promise<MailMessageSummary[]> {
-  const result = await listMailboxMessages(config, secrets, {
-    folder: 'INBOX',
-    limit,
-    page: 1,
-  });
-  return result.messages;
 }
 
 export async function fetchMessageDetail(

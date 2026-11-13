@@ -3,7 +3,6 @@
 import { loadSync } from "std/dotenv";
 import { handleRequest } from "./routes.ts";
 import { initSecurity, getTokenPersistPath } from "./security.ts";
-import { fixLegacyPerms } from "../../cli/utils.ts";
 import { startUnlockSweeper } from "./unlock-session.ts";
 
 let envLoaded = false;
@@ -40,12 +39,6 @@ await initSecurity({ host: HOST, port: PORT });
 const tokenPath = getTokenPersistPath();
 if (tokenPath) {
 	console.log(`EBP GUI local backend CSRF token written to ${tokenPath}`);
-}
-
-// F-STORAGE-01/04: tighten permissions on any pre-existing ~/.ebp/ tree.
-const ebpHome = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "";
-if (ebpHome) {
-	await fixLegacyPerms(`${ebpHome}/.ebp`);
 }
 
 startUnlockSweeper();

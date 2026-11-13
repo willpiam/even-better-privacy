@@ -290,7 +290,7 @@ export async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter
   const token = tokenResult.token;
   const tokenHash = computeTokenHash(token);
 
-  const record = await getDetailByVerificationToken(db, tokenHash, token);
+  const record = await getDetailByVerificationToken(db, tokenHash);
   if (!record) {
     return wantsJson(req)
       ? json({ error: "token not found" }, 404)

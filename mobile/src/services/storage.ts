@@ -6,7 +6,6 @@ import {deriveIdentityKey} from './argon2';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
 import {sameBytes} from './unlockSessionLogic';
-import {withIdentityPassword} from './identityPassword';
 import {KeyedQueue} from '../../../common/KeyedQueue';
 import {
   cacheUnlockedIdentity,
@@ -19,9 +18,6 @@ const STATE_FILE = `${BASE_DIR}/state.json`;
 const CONTACTS_DIR = `${BASE_DIR}/contacts`;
 const CERTIFICATES_DIR = `${BASE_DIR}/certificates`;
 const PENDING_CERTIFICATES_FILE = `${BASE_DIR}/pending-certificates.json`;
-
-/** Ciphertext versions >= 3 use Argon2id (native on mobile). */
-const ARGON2_AES_VERSION = 3;
 
 /** No cached key, or the session was idle-locked. */
 export class IdentityLockedError extends Error {
@@ -165,19 +161,15 @@ export async function persistIdentity(params: {
 }
 
 async function decryptIdentity(raw: string, password: string) {
-  const {version, salt} = AES.readHeader(parseEncryptedField(raw));
-  return withIdentityPassword(password, async candidate => {
-    const key =
-      version >= ARGON2_AES_VERSION
-        ? await deriveIdentityKey(passwordBytes(candidate), salt)
-        : AES.deriveKeyForStorage(candidate, salt, version);
-    try {
-      return {identity: Identity.fromStorageFormatWithKey(raw, key), key, salt};
-    } catch (error) {
-      key.fill(0);
-      throw error;
-    }
-  });
+  if (!password) throw new Error('Password is required');
+  const {salt} = AES.readHeader(parseEncryptedField(raw));
+  const key = await deriveIdentityKey(passwordBytes(password), salt);
+  try {
+    return {identity: Identity.fromStorageFormatWithKey(raw, key), key, salt};
+  } catch (error) {
+    key.fill(0);
+    throw error;
+  }
 }
 
 export async function loadIdentity(
@@ -194,9 +186,9 @@ export async function loadIdentity(
     throw new Error('Identity not found');
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  const {value} = await decryptIdentity(raw, password);
-  value.key.fill(0);
-  return value.identity;
+  const material = await decryptIdentity(raw, password);
+  material.key.fill(0);
+  return material.identity;
 }
 
 /**
@@ -226,7 +218,7 @@ export async function unlockIdentity(
     }
     throw error;
   }
-  const {key, salt} = decrypted.value;
+  const {key, salt} = decrypted;
   try {
     await cacheUnlockedIdentity(normalized, key, salt);
   } catch (error) {
@@ -234,7 +226,7 @@ export async function unlockIdentity(
     throw error;
   }
   const {unlockMailWithIdentityPassword} = await import('./mail/accountStore');
-  await unlockMailWithIdentityPassword(normalized, decrypted.password);
+  await unlockMailWithIdentityPassword(normalized, password);
   return normalized;
 }
 
@@ -311,14 +303,7 @@ export async function saveIdentityForUse(
   password?: string,
 ): Promise<void> {
   if (password) {
-    // Preserve the password that actually unlocked older trimmed-password files.
-    const raw = await readIdentityRaw(name);
-    const {value, password: acceptedPassword} = await decryptIdentity(
-      raw,
-      password,
-    );
-    value.key.fill(0);
-    await saveIdentity(name, acceptedPassword, identity);
+    await saveIdentity(name, password, identity);
     return;
   }
   await saveIdentityUnlocked(name, identity);

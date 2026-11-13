@@ -313,7 +313,7 @@ async function createIdentity() {
   throw lastError;
 }
 
-async function signupMailbox(pin) {
+async function signupMailbox() {
   return await api("/mail/ebp-signup", {
     method: "POST",
     body: JSON.stringify({
@@ -321,7 +321,6 @@ async function signupMailbox(pin) {
       password: wizard.password,
       username: wizard.username,
       server: wizard.server,
-      ...(pin ? { pin } : {}),
     }),
   });
 }
@@ -372,16 +371,7 @@ async function runCreate() {
         }));
       wizard.published = true;
     }
-    const result = await runTask("mailbox", async () => {
-      try {
-        return await signupMailbox();
-      } catch (err) {
-        if (!/mail migration required/i.test(err.message)) throw err;
-        const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
-        if (!pin) throw new Error("The previous email PIN is required for this one-time migration.");
-        return await signupMailbox(pin);
-      }
-    });
+    const result = await runTask("mailbox", () => signupMailbox());
     renderDone(result);
   } catch (err) {
     if (wizard.useExistingIdentity && isUnlockError(err.message)) {
@@ -401,14 +391,13 @@ async function runCreate() {
   }
 }
 
-async function resetMailboxAccess(pin) {
+async function resetMailboxAccess() {
   return await api("/mail/ebp-reset-password", {
     method: "POST",
     body: JSON.stringify({
       identity: wizard.identityName,
       password: wizard.password,
       server: wizard.server,
-      ...(pin ? { pin } : {}),
     }),
   });
 }
@@ -417,11 +406,7 @@ async function restoreAccess() {
   $("onboarding-create-error").textContent = "";
   $("onboarding-retry").style.display = "none";
   try {
-    let result = await runTask("mailbox", () => resetMailboxAccess());
-    if (!result.savedLocally && result.accountId) {
-      const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
-      if (pin) result = await resetMailboxAccess(pin);
-    }
+    const result = await runTask("mailbox", () => resetMailboxAccess());
     renderDone(result, "Restored");
   } catch (err) {
     $("onboarding-create-error").textContent = err.message;

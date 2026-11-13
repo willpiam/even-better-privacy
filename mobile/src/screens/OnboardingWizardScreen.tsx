@@ -226,11 +226,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
       current = 'mailbox';
       setTask('mailbox', 'running');
       const res = await signupEbpMailbox({
-        requestPreviousPin: () => promptSecret({
-          title: 'Migrate stored mail credentials',
-          placeholder: 'Previous email PIN (one time)',
-          submitLabel: 'Migrate',
-        }),
         identityName: name,
         password,
         username: normalizedUsername,
@@ -265,11 +260,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setTask('mailbox', 'running');
     try {
       const res = await resetEbpMailbox({
-        requestPreviousPin: () => promptSecret({
-          title: 'Migrate stored mail credentials',
-          placeholder: 'Previous email PIN (one time)',
-          submitLabel: 'Migrate',
-        }),
         identityName,
         password,
         server,

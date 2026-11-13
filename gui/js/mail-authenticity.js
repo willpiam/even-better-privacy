@@ -85,9 +85,6 @@ function signatureNote(status) {
   if (status === "fingerprint_mismatch") {
     return "The signer's keys do not match the fingerprint the message claims. Treat this message as forged.";
   }
-  if (status === "valid_unbound" || status === "valid_unknown_signer_unbound") {
-    return "Signature is valid but not bound to the recipient (legacy).";
-  }
   if (status === "valid_unknown_signer") {
     return "Signature is valid. Signer is not in your local contacts.";
   }

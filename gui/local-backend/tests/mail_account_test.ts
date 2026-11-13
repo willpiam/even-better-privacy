@@ -4,7 +4,7 @@ import {
   buildSmtpAuth,
   getMailStore,
   normalizeMailConfig,
-  parseLegacySecretsStore,
+  parseSecretsStore,
 } from "../mail-account.ts";
 
 const account = {
@@ -42,8 +42,8 @@ Deno.test("stored unsupported accounts cannot be selected as password accounts",
   }
 });
 
-Deno.test("legacy secret parsing keeps only password credentials", () => {
-  assertEquals(parseLegacySecretsStore({
+Deno.test("encrypted mail vault contents keep only password credentials", () => {
+  assertEquals(parseSecretsStore({
     account: { imapPassword: "imap", smtpPassword: "smtp", accessToken: "old", refreshToken: "old" },
   }), { account: { imapPassword: "imap", smtpPassword: "smtp" } });
 });

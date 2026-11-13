@@ -2,6 +2,9 @@
 
 These identity fixtures are for local tests and demos only.
 
+They use the current protocol, AES v4 identity storage, and current detail proofs.
+Older fixture identities have been replaced; their fingerprints are not stable API data.
+
 All seven identities in this directory are encrypted with the documented password
 `password`. Do not upload these identities to a real EBP server, install them in
 `~/.ebp/`, or reuse their keys for any non-test purpose.

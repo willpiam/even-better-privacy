@@ -248,11 +248,6 @@ export default function MailAccountSetupScreen({
     try {
       const cfg = await fetchEbpSignupConfig(server);
       const res = await resetEbpMailbox({
-        requestPreviousPin: () => promptSecret({
-          title: 'Migrate stored mail credentials',
-          placeholder: 'Previous email PIN (one time)',
-          submitLabel: 'Migrate',
-        }),
         identityName,
         password,
         server,

@@ -163,47 +163,49 @@ export async function verifyAndInsertHierarchyCertificate(
     return verifyResult;
   }
 
-  const existing = await listHierarchyCertificates(db);
-  const edges = existing.map((row) => ({
-    masterFingerprint: row.master_fingerprint,
-    childFingerprint: row.child_fingerprint,
-  }));
-  const hierarchyOk = validateHierarchy(edges, {
-    masterFingerprint: decoded.masterFingerprint,
-    childFingerprint: decoded.childFingerprint,
-  });
-  if (!hierarchyOk.ok) {
-    return hierarchyOk;
-  }
-
-  try {
-    await db.query(
-      `INSERT INTO hierarchy_certificates (
-         master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [
-        decoded.masterFingerprint,
-        decoded.childFingerprint,
-        decoded.timestamp,
-        decoded.expiry,
-        decoded.context,
-        encodedCertificate,
-        Date.now(),
-      ],
-    );
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-    if (message.includes("unique") || message.includes("duplicate")) {
-      return { ok: false, error: "child already has a master" };
+  return await db.writeTransaction(async (db) => {
+    const existing = await listHierarchyCertificates(db);
+    const edges = existing.map((row) => ({
+      masterFingerprint: row.master_fingerprint,
+      childFingerprint: row.child_fingerprint,
+    }));
+    const hierarchyOk = validateHierarchy(edges, {
+      masterFingerprint: decoded.masterFingerprint,
+      childFingerprint: decoded.childFingerprint,
+    });
+    if (!hierarchyOk.ok) {
+      return hierarchyOk;
     }
-    return { ok: false, error: "failed to insert hierarchy certificate" };
-  }
 
-  const inserted = await getHierarchyCertificateByChild(db, decoded.childFingerprint);
-  if (!inserted) {
-    return { ok: false, error: "hierarchy certificate was not found after insert" };
-  }
-  return { ok: true, row: inserted };
+    try {
+      await db.query(
+        `INSERT INTO hierarchy_certificates (
+           master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          decoded.masterFingerprint,
+          decoded.childFingerprint,
+          decoded.timestamp,
+          decoded.expiry,
+          decoded.context,
+          encodedCertificate,
+          Date.now(),
+        ],
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (message.includes("unique") || message.includes("duplicate")) {
+        return { ok: false, error: "child already has a master" };
+      }
+      return { ok: false, error: "failed to insert hierarchy certificate" };
+    }
+
+    const inserted = await getHierarchyCertificateByChild(db, decoded.childFingerprint);
+    if (!inserted) {
+      return { ok: false, error: "hierarchy certificate was not found after insert" };
+    }
+    return { ok: true, row: inserted };
+  });
 }
 
 type PendingHierarchyCertificate = Omit<HierarchyCertificateData, "masterSignature" | "childSignature"> & {
@@ -392,7 +394,10 @@ export async function getHierarchyForIdentity(
   // Find root and ancestor chain.
   const ancestors: string[] = [];
   let current = fingerprint;
+  const ancestorSet = new Set<string>();
   while (true) {
+    if (ancestorSet.has(current)) throw new Error("Hierarchy contains a cycle");
+    ancestorSet.add(current);
     const parentEdge = childToRow.get(current);
     if (!parentEdge) break;
     ancestors.push(parentEdge.master_fingerprint);

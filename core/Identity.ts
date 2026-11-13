@@ -101,7 +101,7 @@ export type IdentityPublicExportOptions = {
   includeDetails?: boolean;
 };
 
-/** New storage format: public data unencrypted, private keys encrypted */
+/** Storage format: public data unencrypted, private keys encrypted */
 export type IdentityStorageFormat = {
   version: typeof FILE_FORMAT_VERSIONS.identityStorage;
   protocolVersion: string;
@@ -127,14 +127,19 @@ export type PublicIdentity =
 type IdentityPrivateStorageData = {
   signingKey: string;
   encryptionKey: string;
-  signingKeyType?: SigningKeyOptions;
-  encryptionKeyType?: EncryptionKeyOptions;
+  signingKeyType: SigningKeyOptions;
+  encryptionKeyType: EncryptionKeyOptions;
 };
-
-const identitiesNeedingPrivateKeyTypeUpgrade = new WeakSet<Identity>();
 
 function identityStorageAad(): string {
   return `ebp:identity-storage:v${FILE_FORMAT_VERSIONS.identityStorage}`;
+}
+
+function readDetailsNonce(value: unknown): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new StorageFormatError("Missing or invalid identity details nonce");
+  }
+  return value;
 }
 
 function parseIdentityStorageJson(storageData: string): {
@@ -169,6 +174,11 @@ function parseIdentityStorageJson(storageData: string): {
       `Unsupported protocol version: ${fileProtocolVersion}. This implementation supports ${PROTOCOL_VERSION}.`,
     );
   }
+  if (typeof storage.encrypted !== "string") {
+    throw new StorageFormatError("Missing encrypted private identity data");
+  }
+  AES.readHeader(storage.encrypted);
+  readDetailsNonce(pub.detailsNonce);
   if (pub.signingKeyType !== "dilithium" && pub.signingKeyType !== "sphincs") {
     throw new StorageFormatError(
       `Unsupported signing key type: ${pub.signingKeyType}`,
@@ -194,7 +204,7 @@ function buildIdentityShell(pub: IdentityPublicData): Identity {
   identity.details = new Map(
     Object.entries(pub.details ?? {}) as [string, [string, string]][],
   );
-  identity.detailsNonce = pub.detailsNonce ?? 0;
+  identity.detailsNonce = pub.detailsNonce;
   identity.revokedDetails = new Map(
     Object.entries(pub.revokedDetails ?? {}) as [string, string][],
   );
@@ -539,8 +549,7 @@ export class Identity extends Key {
       type: "ebp-encrypted-signed-inner",
       message,
       signature,
-      // v2 envelope marker: a legacy verifier that does not know about
-      // v2 will fail-closed, which is exactly what we want.
+      // Recipient binding is required for all supported signed envelopes.
       envelopeVersion: 2,
       recipientFingerprint,
     }));
@@ -639,7 +648,7 @@ export class Identity extends Key {
   ): {
     message: string;
     verified: boolean;
-    verifyStatus: "valid" | "valid_unbound" | "invalid";
+    verifyStatus: "valid" | "invalid";
   } {
     const decrypted = this.encryptionKey.decrypt(ciphertext);
     const parsed = parseStrictJson(decrypted) as {
@@ -1226,6 +1235,7 @@ export class Identity extends Key {
 
   static fromJSON(json: string): Identity {
     const data = parseStrictJson(json);
+    const detailsNonce = readDetailsNonce(data.detailsNonce);
     let signingKey: SigningKey;
     switch (data.signingKeyType) {
       case "dilithium":
@@ -1259,29 +1269,7 @@ export class Identity extends Key {
     ][];
     i.details = new Map(detailsEntries);
 
-    const storedNonce = typeof data.detailsNonce === "number" &&
-        Number.isFinite(data.detailsNonce)
-      ? data.detailsNonce
-      : undefined;
-
-    if (storedNonce !== undefined) {
-      i.detailsNonce = storedNonce;
-    } else {
-      let maxNonce = -1;
-      for (const [, [, proof]] of detailsEntries) {
-        try {
-          const record = parseStrictJson(hexToString(proof));
-          if (
-            typeof record.nonce === "number" && Number.isInteger(record.nonce)
-          ) {
-            maxNonce = Math.max(maxNonce, record.nonce);
-          }
-        } catch {
-          // ignore malformed proof when inferring nonce
-        }
-      }
-      i.detailsNonce = maxNonce >= 0 ? maxNonce + 1 : detailsEntries.length;
-    }
+    i.detailsNonce = detailsNonce;
 
     // Load revocation data
     const revokedDetailsEntries = Object.entries(data.revokedDetails ?? {}) as [
@@ -1299,7 +1287,7 @@ export class Identity extends Key {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // New Storage Format (v2): Public data unencrypted, private keys encrypted
+  // Storage Format (v2): Public data unencrypted, private keys encrypted
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Get the public portion of the identity (safe to store unencrypted) */
@@ -1338,7 +1326,7 @@ export class Identity extends Key {
     return JSON.stringify(privateData);
   }
 
-  /** Convert to new storage format with encrypted private keys */
+  /** Convert to storage format with encrypted private keys */
   toStorageFormat(password: string): string {
     const encrypted = AES.encrypt(
       password,
@@ -1371,39 +1359,10 @@ export class Identity extends Key {
     return JSON.stringify(storage, null, 2);
   }
 
-  // F-STORAGE-02: return true when the identity's on-disk encrypted blob
-  // was written with a legacy (pre-600k-PBKDF2) format. Callers can use
-  // this after a successful unlock to transparently re-encrypt at the
-  // current strength and rewrite the file.
-  static isStorageEncryptedWithLegacyKDF(storageData: string): boolean {
-    try {
-      const parsed = parseStrictJson(storageData);
-      if (
-        parsed.version === FILE_FORMAT_VERSIONS.identityStorage &&
-        typeof parsed.encrypted === "string"
-      ) {
-        return AES.isLegacyCiphertext(parsed.encrypted);
-      }
-    } catch {
-      // not JSON / legacy format — not a v2 blob with legacy KDF.
-    }
-    return false;
-  }
-
-  static needsPrivateKeyTypeStorageUpgrade(identity: Identity): boolean {
-    return identitiesNeedingPrivateKeyTypeUpgrade.has(identity);
-  }
-
   /** Read just the public data from storage (no password needed). */
   static readPublicData(storageData: string): IdentityPublicData | null {
     try {
-      const parsed = parseStrictJson(storageData);
-      if (
-        parsed.version === FILE_FORMAT_VERSIONS.identityStorage && parsed.public
-      ) {
-        return parsed.public as IdentityPublicData;
-      }
-      return null;
+      return parseIdentityStorageJson(storageData).pub;
     } catch {
       return null;
     }

@@ -45,6 +45,13 @@ function parseEbpArmor(text: string): Record<string, unknown> | null {
 }
 
 describe('mime decode for EBP armor', () => {
+  it('recognizes whole delimiter lines without splitting body prefixes or regex characters', () => {
+    for (const boundary of ['edge', 'edge.+(x)']) {
+      const body = `hello\n--${boundary}case\nworld`;
+      const source = `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n--${boundary}\t \r\nContent-Type: text/plain\r\n\r\n${body}\r\n--${boundary}--\r\n`;
+      expect(extractTextFromMimeSource(source).text).toBe(body);
+    }
+  });
   it('rejects control characters in every outgoing header', () => {
     const base = {
       from: 'alice@example.test',

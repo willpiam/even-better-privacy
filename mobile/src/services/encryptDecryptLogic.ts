@@ -113,7 +113,7 @@ export function decryptMessageWithIdentity(params: {
 }): {
   message: string;
   verified: boolean | null;
-  verifyStatus: 'unsigned' | 'valid' | 'valid_unbound' | 'invalid';
+  verifyStatus: 'unsigned' | 'valid' | 'invalid';
 } {
   const ciphertext = requireCiphertext(params.payload);
   if (isEncryptedMessageType(params.payload.type)) {

@@ -377,47 +377,15 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "mail credentials: legacy PIN migration requires identity unlock and survives relock",
+  name: "obsolete mail PIN migration route is unavailable and leaves credentials untouched",
   permissions: PERMS,
-  fn: () =>
-    withIdentityHome(async (home) => {
-      const path = `${home}/.ebp/mail-account.secrets.json`;
-      const original = JSON.stringify(
-        await encryptSecretsStore({
-          acct: { imapPassword: "imap", smtpPassword: "smtp" },
-        }, "old-pin"),
-      );
-      await Deno.writeTextFile(path, original);
-      assertEquals(
-        (await post("/api/v1/mail/unlock", { home, pin: "old-pin" })).status,
-        401,
-      );
-      await post("/api/v1/identity/unlock", {
-        home,
-        identity: "me",
-        password: PASSWORD,
-      });
-      assertEquals(
-        (await post("/api/v1/mail/unlock", { home, pin: "wrong-pin" })).status,
-        401,
-      );
-      assertEquals(await Deno.readTextFile(path), original);
-      assertEquals(
-        (await post("/api/v1/mail/unlock", { home, pin: "old-pin" })).status,
-        200,
-      );
-      assert(await Deno.readTextFile(path) !== original);
-      await post("/api/v1/identity/lock", { home, identity: "me" });
-      const unlocked = await post("/api/v1/identity/unlock", {
-        home,
-        identity: "me",
-        password: PASSWORD,
-      });
-      assertEquals(unlocked.body.mailSecretsUnlocked, true);
-      assertEquals(
-        mailSecretCache.get(`${home}/.ebp`)?.acct?.smtpPassword,
-        "smtp",
-      );
-    }),
+  fn: () => withIdentityHome(async (home) => {
+    const path = `${home}/.ebp/mail-account.secrets.json`;
+    const original = JSON.stringify(await encryptSecretsStore({acct: {imapPassword: "imap", smtpPassword: "smtp"}}, "old-pin"));
+    await Deno.writeTextFile(path, original);
+    await post("/api/v1/identity/unlock", {home, identity: "me", password: PASSWORD});
+    assertEquals((await post("/api/v1/mail/unlock", {home, pin: "old-pin"})).status, 404);
+    assertEquals(await Deno.readTextFile(path), original);
+    assertEquals(mailSecretCache.has(`${home}/.ebp`), false);
+  }),
 });

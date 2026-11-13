@@ -21,6 +21,9 @@ class CountingDatabase extends DatabaseAdapter {
   execute(sql: string): Promise<void> {
     return this.inner.execute(sql);
   }
+  writeTransaction<T>(operation: (db: DatabaseAdapter) => Promise<T>): Promise<T> {
+    return this.inner.writeTransaction(operation);
+  }
   query<T extends unknown[]>(
     sql: string,
     params?: DatabaseQueryParams,

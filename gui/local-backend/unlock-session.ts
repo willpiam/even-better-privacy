@@ -4,7 +4,6 @@ import { KeyedQueue } from "../../common/KeyedQueue.ts";
 import type { CLIContext } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 import {
-  loadIdentity,
   readIdentityStorage,
   saveIdentity,
   saveIdentityWithKey,
@@ -20,9 +19,6 @@ export const MIN_UNLOCK_TIMEOUT_MIN = 1;
 export const MAX_UNLOCK_TIMEOUT_MIN = 24 * 60;
 export const IDENTITY_LOCKED_ERROR = "identity locked";
 export const IDENTITY_LOCKED_CODE = "identity_locked";
-
-/** Argon2id v3+ ciphertexts share key derivation, so a cached key can re-save. */
-const MIN_SESSION_AES_VERSION = 3;
 
 interface UnlockSession {
   key: Uint8Array;
@@ -162,7 +158,6 @@ function decryptWithKey(storageData: string, key: Uint8Array): Identity {
 
 /**
  * Derive and cache the storage key for the identity (one Argon2id run).
- * Legacy PBKDF2 files are upgraded first so the cached key matches the file.
  */
 export async function unlockIdentity(
   ctx: CLIContext,
@@ -174,29 +169,10 @@ export async function unlockIdentity(
   if (!password) {
     throw new HttpError(STATUS.BadRequest, "password is required");
   }
-  let storageData = await readIdentityStorage(ctx);
-  let header = readEncryptedHeader(storageData);
-  if (header.version < MIN_SESSION_AES_VERSION) {
-    await loadIdentity(ctx, password);
-    storageData = await readIdentityStorage(ctx);
-    header = readEncryptedHeader(storageData);
-    if (header.version < MIN_SESSION_AES_VERSION) {
-      throw new HttpError(
-        STATUS.BadRequest,
-        "identity storage could not be upgraded for session unlock",
-      );
-    }
-  }
+  const storageData = await readIdentityStorage(ctx);
+  const header = readEncryptedHeader(storageData);
   const key = AES.deriveKeyForStorage(password, header.salt, header.version);
   const identity = decryptWithKey(storageData, key);
-  if (Identity.needsPrivateKeyTypeStorageUpgrade(identity)) {
-    try {
-      await saveIdentityWithKey(ctx, key, header.salt, identity);
-    } catch (e) {
-      console.warn("failed to upgrade identity storage:", e);
-    }
-  }
-
   const id = sessionId(ctx);
   const previous = sessions.get(id);
   const timeoutMs = (timeoutMinutes === undefined && previous)

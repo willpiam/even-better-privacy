@@ -1,4 +1,5 @@
 import RNFS from 'react-native-fs';
+import {MAX_ENCRYPTED_FILE_BYTES} from '../../../common/FileLimits';
 import {
   Identity,
   base64ToBytes,
@@ -66,16 +67,22 @@ export async function decryptMessage(params: {
 }): Promise<{
   message: string;
   verified: boolean | null;
-  verifyStatus: 'unsigned' | 'valid' | 'valid_unbound' | 'invalid';
+  verifyStatus: 'unsigned' | 'valid' | 'invalid';
   isKnownContact: boolean;
   signerFingerprint: string | null;
   contact: import('../ebpCore').ExternalIdentity | null;
 }> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
   const type = params.payload.type;
   const ciphertext = requireCiphertext(params.payload);
   if (isEncryptedMessageType(type)) {
-    const result = decryptMessageWithIdentity({identity, payload: params.payload});
+    const result = decryptMessageWithIdentity({
+      identity,
+      payload: params.payload,
+    });
     return {
       message: result.message,
       verified: null,
@@ -147,8 +154,30 @@ export async function encryptFile(params: {
 }): Promise<Record<string, unknown>> {
   const recipient = await loadContact(params.recipient);
   const path = normalizeFileUri(params.fileUri);
-  const base64 = await RNFS.readFile(path, 'base64');
+  const size = Number((await RNFS.stat(path)).size);
+  if (
+    !Number.isSafeInteger(size) ||
+    size < 0 ||
+    size > MAX_ENCRYPTED_FILE_BYTES
+  ) {
+    throw new Error(
+      `File exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`,
+    );
+  }
+  // RNFS.read on Android rejects EOF for an empty file; no read is needed.
+  const base64 =
+    size === 0
+      ? ''
+      : await RNFS.read(
+          path,
+          Math.min(size + 1, MAX_ENCRYPTED_FILE_BYTES + 1),
+          0,
+          'base64',
+        );
   const bytes = base64ToBytes(base64);
+  if (bytes.length !== size || bytes.length > MAX_ENCRYPTED_FILE_BYTES) {
+    throw new Error('File changed or exceeds the size limit');
+  }
   const envelope = createFileCleartextEnvelope(
     bytes,
     params.fileName,
@@ -156,7 +185,10 @@ export async function encryptFile(params: {
   );
   const cleartext = JSON.stringify(envelope);
   if (params.sign) {
-    const identity = await loadIdentityForUse(params.identityName, params.password);
+    const identity = await loadIdentityForUse(
+      params.identityName,
+      params.password,
+    );
     const ciphertext = identity.signAndEncryptFor(cleartext, recipient);
     return buildEncryptedSignedFilePayload({
       recipientFingerprint: recipient.fingerprint,
@@ -190,7 +222,10 @@ export async function decryptFile(params: {
   verified: boolean | null;
   verifyStatus: 'unsigned' | 'valid' | 'invalid';
 }> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
   const type = params.payload.type;
   const ciphertext = requireCiphertext(params.payload);
   let cleartext = '';
@@ -207,6 +242,7 @@ export async function decryptFile(params: {
       embeddedIdentity: embedded,
     });
     const result = identity.decryptAndVerify(ciphertext, contact);
+    if (!result.verified) throw new Error('File signature verification failed');
     cleartext = result.message;
     verified = result.verified;
     verifyStatus = result.verified ? 'valid' : 'invalid';
@@ -215,6 +251,11 @@ export async function decryptFile(params: {
   }
 
   const envelope = parseFileCleartextEnvelope(cleartext);
+  if (envelope.fileSize > MAX_ENCRYPTED_FILE_BYTES) {
+    throw new Error(
+      `File exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes)`,
+    );
+  }
   return {
     fileName: envelope.fileName,
     mimeType: envelope.mimeType,

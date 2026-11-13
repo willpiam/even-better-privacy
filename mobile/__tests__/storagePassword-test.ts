@@ -60,25 +60,29 @@ describe('mobile identity storage passwords and mutations', () => {
     );
   });
 
-  it('unlocks older trimmed-password files and preserves compatibility after updates', async () => {
+  it('never trims passwords and rejects older ciphertext before deriving a key', async () => {
     const identity = new Identity('dilithium', 'kyber');
-    const password = ' Legacy-Password-42! ';
+    const password = ' Exact-Password-42! ';
     const key = sha256(Buffer.from(password.trim(), 'utf8'));
-    mockFiles.set(
-      '/documents/ebp/legacy.identity.json',
-      identity.toStorageFormatWithKey(key, new Uint8Array(16)),
-    );
-    await unlockIdentity('legacy', password);
-    expect(unlockMailWithIdentityPassword).toHaveBeenLastCalledWith(
-      'legacy',
-      password.trim(),
-    );
-    await mutateIdentityForUse('legacy', password, current =>
-      current.attachDetail('email', 'legacy@example.test'),
-    );
-    expect((await loadIdentity('legacy', password)).getDetail('email')).toBe(
-      'legacy@example.test',
-    );
+    const raw = identity.toStorageFormatWithKey(key, new Uint8Array(16));
+    mockFiles.set('/documents/ebp/exact-only.identity.json', raw);
+    await expect(loadIdentity('exact-only', password)).rejects.toThrow();
+    expect(
+      (await loadIdentity('exact-only', password.trim())).toFingerprint(),
+    ).toBe(identity.toFingerprint());
+    for (const version of [1, 2, 3]) {
+      const data = JSON.parse(raw);
+      const bytes = Buffer.from(data.encrypted, 'base64');
+      bytes[0] = version;
+      data.encrypted = bytes.toString('base64');
+      mockFiles.set(
+        '/documents/ebp/obsolete.identity.json',
+        JSON.stringify(data),
+      );
+      await expect(unlockIdentity('obsolete', password)).rejects.toThrow(
+        'Unsupported ciphertext version',
+      );
+    }
   });
 
   it('preserves concurrent updates and releases the queue after a failed mutation', async () => {

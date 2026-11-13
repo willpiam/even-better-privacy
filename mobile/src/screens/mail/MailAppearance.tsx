@@ -1,3 +1,4 @@
+import {decodeHeaderWords} from '../../services/mail/headerWords';
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Svg, {Path} from 'react-native-svg';
@@ -45,7 +46,7 @@ export function MailIcon({
 
 export function mailSenderLabel(address: string): string {
   const name = address.match(/^\s*"?([^"<]+?)"?\s*</)?.[1]?.trim();
-  return name || address.trim() || 'Unknown sender';
+  return decodeHeaderWords(name || address.trim()) || 'Unknown sender';
 }
 
 export function MailAvatar({address}: {address: string}): React.JSX.Element {

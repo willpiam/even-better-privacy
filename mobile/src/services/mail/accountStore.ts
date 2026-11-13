@@ -39,7 +39,6 @@ export {
 } from './accountStoreLogic';
 
 const secretsMemory = new Map<string, MailAuthSecrets>();
-const identityPasswords = new Map<string, string>();
 const pinMemory = new Map<string, string>();
 
 function getSecretsStoreInMemory(
@@ -84,7 +83,6 @@ export function clearMailSecretsMemory(identityName?: string): void {
   if (!identityName) {
     secretsMemory.clear();
     pinMemory.clear();
-    identityPasswords.clear();
     return;
   }
   const prefix = `${identityName}:`;
@@ -94,7 +92,6 @@ export function clearMailSecretsMemory(identityName?: string): void {
     }
   }
   pinMemory.delete(identityName);
-  identityPasswords.delete(identityName);
 }
 
 export function hasMailSecretsInMemory(identityName: string): boolean {
@@ -149,13 +146,11 @@ async function unlockMailSecretsWithPin(
       return decrypted;
     } catch {
       throw new Error(
-        'Stored mail credentials require migration with the previous email PIN',
+        'Stored mail credentials could not be unlocked with the identity password',
       );
     }
   }
-  const legacy = parsed as Record<string, MailAuthSecrets>;
-  setSecretsStoreInMemory(identityName, legacy, pin);
-  return legacy;
+  throw new Error('Unsupported mail credential format');
 }
 
 /** Called only after the identity password has been verified. */
@@ -163,7 +158,6 @@ export async function unlockMailWithIdentityPassword(
   identityName: string,
   password: string,
 ): Promise<boolean> {
-  identityPasswords.set(identityName, password);
   try {
     await unlockMailSecretsWithPin(identityName, password);
     return true;
@@ -172,18 +166,6 @@ export async function unlockMailWithIdentityPassword(
     pinMemory.delete(identityName);
     return false;
   }
-}
-
-export async function migrateMailSecrets(
-  identityName: string,
-  previousPin: string,
-): Promise<void> {
-  const password = identityPasswords.get(identityName);
-  if (!password)
-    throw new Error('Unlock your identity before migrating mail credentials');
-  const secrets = await loadEncryptedSecrets(identityName, previousPin);
-  await saveEncryptedSecrets(identityName, password, secrets);
-  setSecretsStoreInMemory(identityName, secrets, password);
 }
 
 export async function persistMailSecretsStore(
@@ -217,7 +199,6 @@ export async function saveMailAccountWithSecrets(
     record: Omit<MailAccountRecord, 'createdAt' | 'updatedAt'>;
     imapPassword?: string;
     smtpPassword?: string;
-    pin?: string;
   },
 ): Promise<MailAccountRecord> {
   const {record, imapPassword, smtpPassword} = params;
@@ -370,15 +351,13 @@ export async function decryptSecretsStore(
     salt: string;
     ciphertext: string;
     iv: string;
-    iterations?: number;
+    iterations: number;
   };
+  if (!isEncryptedSecretsEnvelope(envelope))
+    throw new Error('Unsupported mail credential format');
   const salt = base64ToBytes(envelope.salt);
   const iv = base64ToBytes(envelope.iv);
-  const key = await deriveMailSecretsKey(
-    pin,
-    salt,
-    envelope.iterations ?? MAIL_SECRETS_KDF_ITERATIONS,
-  );
+  const key = await deriveMailSecretsKey(pin, salt, envelope.iterations);
   const cipher = gcm(key, iv);
   const decrypted = cipher.decrypt(base64ToBytes(envelope.ciphertext));
   return JSON.parse(new TextDecoder().decode(decrypted)) as Record<
@@ -395,18 +374,6 @@ export async function saveEncryptedSecrets(
   await ensureIdentityMailDir(identityName);
   const blob = await encryptSecretsStore(pin, secrets);
   await RNFS.writeFile(mailSecretsPath(identityName), blob, 'utf8');
-}
-
-export async function loadEncryptedSecrets(
-  identityName: string,
-  pin: string,
-): Promise<Record<string, MailAuthSecrets>> {
-  const path = mailSecretsPath(identityName);
-  if (!(await RNFS.exists(path))) {
-    return {};
-  }
-  const raw = await RNFS.readFile(path, 'utf8');
-  return decryptSecretsStore(pin, raw);
 }
 
 export async function resolveSelectedAccount(

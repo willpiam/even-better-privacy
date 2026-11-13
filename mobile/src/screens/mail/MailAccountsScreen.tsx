@@ -130,11 +130,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       const config = await fetchEbpSignupConfig(server);
       const name = identityName || (await getCurrentIdentityRequired());
       const res = await resetEbpMailbox({
-        requestPreviousPin: () => promptSecret({
-          title: 'Migrate stored mail credentials',
-          placeholder: 'Previous email PIN (one time)',
-          submitLabel: 'Migrate',
-        }),
         identityName: name,
         password,
         server,

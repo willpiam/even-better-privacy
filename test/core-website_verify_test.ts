@@ -2,7 +2,7 @@ import { assert, assertEquals } from "jsr:@std/assert";
 import { buildFileSignMessage } from "../core/CryptoUtils.ts";
 import { Identity } from "../core/Identity.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
-import { buildLegacyMessageHashEnvelopeFromHash, sha256Hex } from "../core/MessageHash.ts";
+import { sha256Hex } from "../core/MessageHash.ts";
 import {
   buildDetachedSignaturePayload,
   buildSignedMessagePayload,
@@ -27,7 +27,7 @@ Deno.test("website verifier honors the signing variant and rejects legacy envelo
   identity.signingKey = new DilithiumSigningKey("ml_dsa44");
   const pub = identity.summary;
   assert(verifySignature(pub, {message: MESSAGE, signature: identity.signMessage(MESSAGE)}));
-  const legacy = identity.signingKey.sign(buildLegacyMessageHashEnvelopeFromHash(sha256Hex(MESSAGE)));
+  const legacy = identity.signingKey.sign(`ebp::messagehash::${sha256Hex(MESSAGE)}::`);
   assertEquals(verifySignature(pub, {message: MESSAGE, signature: legacy}), false);
 });
 

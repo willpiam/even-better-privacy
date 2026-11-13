@@ -1,4 +1,5 @@
 import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
+import { readBoundedFile } from "../read-bounded-file.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
@@ -27,11 +28,7 @@ export async function cmdEncryptFile(args: ReturnType<typeof parseArgs>, ctx: CL
 		console.error("Usage: ebp encrypt-file <file-path> --recipient <name> [--output <payload.json>] [--sign]");
 		Deno.exit(1);
 	}
-	const fileBytes = await Deno.readFile(inputPath);
-	if (fileBytes.length > MAX_ENCRYPTED_FILE_BYTES) {
-		console.error(`File exceeds max supported size (${MAX_ENCRYPTED_FILE_BYTES} bytes).`);
-		Deno.exit(1);
-	}
+	const fileBytes = await readBoundedFile(inputPath, MAX_ENCRYPTED_FILE_BYTES);
 	const recipient = await loadContact(ctx, recipientName);
 	const fileName = safeFileName(baseName(inputPath));
 	const mimeType = "application/octet-stream";

@@ -3,7 +3,6 @@ import { Identity } from "../../core/Identity.ts";
 import { cmdGenerateRevocationCert } from "../commands/details.ts";
 import {
 	ensurePrivateDir,
-	fixLegacyPerms,
 	saveIdentity,
 	writeState,
 } from "../utils.ts";
@@ -76,31 +75,7 @@ Deno.test({
 	},
 });
 
-Deno.test({
-	name: "F-STORAGE-01/04: fixLegacyPerms tightens loose pre-existing files",
-	ignore: !isUnix,
-	permissions: { read: true, write: true, env: true },
-	fn: async () => {
-		const tmp = await Deno.makeTempDir({ prefix: "ebp-perms-" });
-		try {
-			const dir = `${tmp}/.ebp`;
-			await Deno.mkdir(dir, { recursive: true, mode: 0o775 });
-			await Deno.writeTextFile(`${dir}/x.identity.json`, "dummy", { mode: 0o664 });
-			const subdir = `${dir}/contacts`;
-			await Deno.mkdir(subdir, { mode: 0o775 });
-			await Deno.writeTextFile(`${subdir}/a.json`, "dummy", { mode: 0o664 });
 
-			await fixLegacyPerms(dir);
-
-			assertEquals(await statMode(dir), 0o700);
-			assertEquals(await statMode(`${dir}/x.identity.json`), 0o600);
-			assertEquals(await statMode(subdir), 0o700);
-			assertEquals(await statMode(`${subdir}/a.json`), 0o600);
-		} finally {
-			await Deno.remove(tmp, { recursive: true });
-		}
-	},
-});
 
 Deno.test({
 	name: "F-STORAGE-06: generate-revocation-cert writes certificate at mode 0600",

@@ -11,7 +11,10 @@ export function isTransientDbError(err: unknown): boolean {
   const code = err && typeof err === "object" && "fields" in err
     ? String((err as { fields?: { code?: unknown } }).fields?.code ?? "")
     : "";
-  if (code.startsWith("08") || code === "57P01" || code === "57P02" || code === "57P03") {
+  if (
+    code.startsWith("08") || code === "57P01" || code === "57P02" ||
+    code === "57P03"
+  ) {
     return true;
   }
   const message = err instanceof Error ? err.message : String(err);
@@ -51,13 +54,17 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     const password = Deno.env.get("PG_PASSWORD") ?? "";
     const database = Deno.env.get("PG_DATABASE") ?? "postgres";
     const poolSize = Number(Deno.env.get("PG_POOL_SIZE") ?? "5");
-    return new Pool({
-      hostname,
-      port,
-      user,
-      password,
-      database,
-    }, poolSize, true);
+    return new Pool(
+      {
+        hostname,
+        port,
+        user,
+        password,
+        database,
+      },
+      poolSize,
+      true,
+    );
   }
 
   private async replacePool(): Promise<void> {
@@ -70,7 +77,9 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     }
   }
 
-  private async withClient<T>(run: (client: PoolClient) => Promise<T>): Promise<T> {
+  private async withClient<T>(
+    run: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt++) {
       let client: PoolClient | undefined;
@@ -100,16 +109,24 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         throw err;
       }
     }
-    throw lastError instanceof Error ? lastError : new Error("database connection failed");
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("database connection failed");
   }
 
   async execute(sql: string): Promise<void> {
     await this.withClient((client) => client.queryArray(sql));
   }
 
-  async query<T extends unknown[]>(sql: string, params: DatabaseQueryParams = []): Promise<T[]> {
+  async query<T extends unknown[]>(
+    sql: string,
+    params: DatabaseQueryParams = [],
+  ): Promise<T[]> {
     return await this.withClient(async (client) => {
-      const { sql: rewrittenSql, params: rewrittenParams } = this.rewriteSql(sql, params);
+      const { sql: rewrittenSql, params: rewrittenParams } = this.rewriteSql(
+        sql,
+        params,
+      );
       const result = await client.queryArray(rewrittenSql, rewrittenParams);
       return result.rows as T[];
     });
@@ -117,6 +134,45 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
 
   async close(): Promise<void> {
     await this.pool.end();
+  }
+
+  async writeTransaction<T>(
+    operation: (db: DatabaseAdapter) => Promise<T>,
+  ): Promise<T> {
+    return await this.withClient(async (client) => {
+      await client.queryArray("BEGIN");
+      try {
+        // A transaction-scoped lock also serializes graph edits from other processes.
+        await client.queryArray(
+          "LOCK TABLE hierarchy_certificates IN SHARE ROW EXCLUSIVE MODE",
+        );
+        const scope: DatabaseAdapter = {
+          execute: async (sql) => {
+            await client.queryArray(sql);
+          },
+          query: async <R extends unknown[]>(
+            sql: string,
+            params: DatabaseQueryParams = [],
+          ) => {
+            const rewritten = this.rewriteSql(sql, params);
+            return (await client.queryArray(rewritten.sql, rewritten.params))
+              .rows as R[];
+          },
+          close: async () => {
+            throw new Error("Cannot close a transaction connection");
+          },
+          writeTransaction: async () => {
+            throw new Error("Nested transactions are unsupported");
+          },
+        };
+        const result = await operation(scope);
+        await client.queryArray("COMMIT");
+        return result;
+      } catch (error) {
+        await client.queryArray("ROLLBACK");
+        throw error;
+      }
+    });
   }
 
   async initializeSchema(): Promise<void> {
@@ -224,19 +280,12 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         UNIQUE(username, domain)
       )
     `);
-
-    await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
-    await this.execute(`ALTER TABLE identities ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revoked_at BIGINT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS revocation_certificate TEXT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verified_at BIGINT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_token TEXT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_token_hash TEXT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_expires_at BIGINT`);
-    await this.execute(`ALTER TABLE details ADD COLUMN IF NOT EXISTS verification_sent_at BIGINT`);
   }
 
-  private rewriteSql(sql: string, params: DatabaseQueryParams): { sql: string; params: unknown[] } {
+  private rewriteSql(
+    sql: string,
+    params: DatabaseQueryParams,
+  ): { sql: string; params: unknown[] } {
     if (!Array.isArray(params)) {
       return { sql, params: [] };
     }

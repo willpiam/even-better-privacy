@@ -7,7 +7,10 @@ import Card from '../../components/Card';
 import SectionTitle from '../../components/SectionTitle';
 import {colors, spacing, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<MailStackParamList, 'MailSenderAuthenticity'>;
+type Props = NativeStackScreenProps<
+  MailStackParamList,
+  'MailSenderAuthenticity'
+>;
 
 function Row({label, value}: {label: string; value: string}): JSX.Element {
   return (
@@ -27,26 +30,28 @@ export default function MailSenderAuthenticityScreen({
     s.verifyStatus === 'unsigned'
       ? 'This message was encrypted but not signed.'
       : s.verifyStatus === 'invalid'
-        ? 'The signature is invalid.'
-        : s.verifyStatus === 'valid_unbound'
-          ? 'Signature is valid but not bound to the recipient (legacy).'
-          : s.verifyStatus === 'valid_unknown_signer'
-            ? 'Signature is valid. Signer is not in your local contacts.'
-            : 'Signature is valid.';
+      ? 'The signature is invalid.'
+      : s.verifyStatus === 'valid_unknown_signer'
+      ? 'Signature is valid. Signer is not in your local contacts.'
+      : 'Signature is valid.';
 
   const fromText =
     s.signerMatchesSenderEmail === true
-      ? `Message From matches the signer’s ${s.matchedEmailPath ?? 'email'} claim.`
+      ? `Message From matches the signer’s ${
+          s.matchedEmailPath ?? 'email'
+        } claim.`
       : s.signerMatchesSenderEmail === false
-        ? 'Message From does not match any email claim on the signer’s identity.'
-        : 'No email claim on the signer’s identity to compare with From.';
+      ? 'Message From does not match any email claim on the signer’s identity.'
+      : 'No email claim on the signer’s identity to compare with From.';
 
   const endorseText =
     s.signerEmailVerified === true
-      ? `The matched ${s.matchedEmailPath ?? 'email'} detail has a verify-email endorsement.`
+      ? `The matched ${
+          s.matchedEmailPath ?? 'email'
+        } detail has a verify-email endorsement.`
       : s.signerEmailVerified === false
-        ? 'An email claim exists but is not endorsed via verify-email.'
-        : 'No email endorsement applies.';
+      ? 'An email claim exists but is not endorsed via verify-email.'
+      : 'No email endorsement applies.';
 
   return (
     <Screen scroll>
@@ -54,16 +59,13 @@ export default function MailSenderAuthenticityScreen({
       <Card padded>
         <Row
           label="Contact"
-          value={s.contactName ?? (s.isKnownContact ? 'Local contact' : 'Unknown contact')}
+          value={
+            s.contactName ??
+            (s.isKnownContact ? 'Local contact' : 'Unknown contact')
+          }
         />
-        <Row
-          label="Fingerprint"
-          value={s.signerFingerprint ?? '(none)'}
-        />
-        <Row
-          label="Known contact"
-          value={s.isKnownContact ? 'Yes' : 'No'}
-        />
+        <Row label="Fingerprint" value={s.signerFingerprint ?? '(none)'} />
+        <Row label="Known contact" value={s.isKnownContact ? 'Yes' : 'No'} />
         {s.serverIdentityMatch !== null ? (
           <Row
             label="Matches server identity"
@@ -75,14 +77,8 @@ export default function MailSenderAuthenticityScreen({
       <SectionTitle>Email claims</SectionTitle>
       <Card padded>
         <Row label="Message From" value={s.messageFrom || '(missing)'} />
-        <Row
-          label="Published email"
-          value={s.signerEmail ?? '(none)'}
-        />
-        <Row
-          label="Matched path"
-          value={s.matchedEmailPath ?? '(none)'}
-        />
+        <Row label="Published email" value={s.signerEmail ?? '(none)'} />
+        <Row label="Matched path" value={s.matchedEmailPath ?? '(none)'} />
         <Row
           label="Opaque email match"
           value={s.opaqueEmailMatched ? 'Yes' : 'No'}
@@ -98,8 +94,8 @@ export default function MailSenderAuthenticityScreen({
             s.signerEmailVerified === true
               ? 'Yes'
               : s.signerEmailVerified === false
-                ? 'No'
-                : 'N/A'
+              ? 'No'
+              : 'N/A'
           }
         />
         <Text style={styles.plain}>{endorseText}</Text>

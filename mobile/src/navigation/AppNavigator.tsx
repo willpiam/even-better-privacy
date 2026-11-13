@@ -107,13 +107,6 @@ export type RootTabParamList = {
   MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
 
-/** @deprecated Use stack-specific param lists */
-export type RootStackParamList = IdentitiesStackParamList &
-  ContactsStackParamList &
-  CryptoStackParamList &
-  MailStackParamList &
-  MoreStackParamList;
-
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const IdentitiesStack = createNativeStackNavigator<IdentitiesStackParamList>();
 const ContactsStack = createNativeStackNavigator<ContactsStackParamList>();

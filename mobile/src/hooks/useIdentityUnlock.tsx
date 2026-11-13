@@ -3,7 +3,6 @@ import {useSecretPrompt} from './useSecretPrompt';
 import {
   getMailSecretsStatus,
   getMailPinInMemory,
-  migrateMailSecrets,
 } from '../services/mail/accountStore';
 import {getCurrentIdentityRequired, unlockIdentity} from '../services/storage';
 import {
@@ -14,7 +13,7 @@ import {
 /**
  * Unlock an identity once per idle session.
  * Returns the identity name, or null if the user cancels.
- * A wrong password throws. Legacy mail credentials are migrated once.
+ * A wrong password throws. Mail credentials use the same identity password.
  */
 export function useIdentityUnlock(): {
   ensureUnlocked: (name?: string) => Promise<string | null>;
@@ -43,13 +42,9 @@ export function useIdentityUnlock(): {
         await unlockIdentity(identityName, password);
       }
       if ((await getMailSecretsStatus(identityName)).locked) {
-        const previousPin = await promptSecret({
-          title: 'Migrate stored mail credentials',
-          placeholder: 'Previous email PIN (one time)',
-          submitLabel: 'Migrate',
-        });
-        if (previousPin === null) return null;
-        await migrateMailSecrets(identityName, previousPin);
+        throw new Error(
+          'Stored mail credentials could not be unlocked with the identity password',
+        );
       }
       return identityName;
     },

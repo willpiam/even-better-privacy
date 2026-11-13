@@ -6,7 +6,6 @@ import { sha256Hex } from "../core/MessageHash.ts";
 export type MailVerifyStatus =
   | "unsigned"
   | "valid"
-  | "valid_unbound"
   | "valid_unknown_signer"
   | "invalid";
 
@@ -196,7 +195,7 @@ export function elevateUnknownSignerVerifyStatus(
   verifyStatus: string,
 ): string {
   if (verified === true && !isKnownContact) {
-    if (verifyStatus === "valid" || verifyStatus === "valid_unbound") {
+    if (verifyStatus === "valid") {
       return "valid_unknown_signer";
     }
   }

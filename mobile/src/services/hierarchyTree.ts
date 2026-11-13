@@ -37,7 +37,10 @@ export function buildHierarchyTreeFromCertificates(
 
   const ancestors: string[] = [];
   let root = fingerprint;
+  const ancestorsSeen = new Set<string>();
   while (true) {
+    if (ancestorsSeen.has(root)) throw new Error('Hierarchy contains a cycle');
+    ancestorsSeen.add(root);
     const parent = childToParent.get(root);
     if (!parent) {
       break;

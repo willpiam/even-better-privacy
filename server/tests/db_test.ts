@@ -98,7 +98,7 @@ Deno.test("sqlite enables foreign-key constraints", async () => {
   });
 });
 
-Deno.test("plaintext verification token fallback still matches through constant-time comparison path", async () => {
+Deno.test("plaintext-only verification tokens are not accepted", async () => {
   await withTempDb(async (dbPath) => {
     const db = await initDb(dbPath);
     const { identity } = createSphincsIdentity();
@@ -135,10 +135,8 @@ Deno.test("plaintext verification token fallback still matches through constant-
       const record = await getDetailByVerificationToken(
         db,
         computeTokenHash("different-token"),
-        token,
       );
-      assertEquals(record?.fingerprint, identity.fingerprint);
-      assertEquals(record?.path, "email");
+      assertEquals(record, null);
     } finally {
       await db.close();
     }

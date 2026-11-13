@@ -62,7 +62,6 @@ function emptyMailStore(): MailAccountStore {
 const MAIL_SECRETS_KDF_ITERATIONS = 210_000;
 
 export const mailSecretCache = new Map<string, MailSecretsStore>();
-const identityMailPasswords = new Map<string, string>();
 export const mailPinCache = new Map<string, string>();
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -133,19 +132,7 @@ export function normalizeMailConfig(
 export async function getMailStore(identityDir: string): Promise<MailAccountStore> {
 	const raw = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_ACCOUNT_FILE));
 	if (!raw) return emptyMailStore();
-	if (isMailAccountConfig(raw)) {
-		const now = Date.now();
-		return {
-			selectedAccountId: "default",
-			accounts: [{
-				id: "default",
-				name: "Default account",
-				config: raw,
-				createdAt: now,
-				updatedAt: now,
-			}],
-		};
-	}
+	if (isMailAccountConfig(raw)) throw new HttpError(STATUS.BadRequest, "Unsupported mail account format");
 	if (typeof raw === "object" && raw) {
 		const parsed = raw as Partial<MailAccountStore>;
 		const accounts = Array.isArray(parsed.accounts) ? parsed.accounts.filter((item) => {
@@ -176,27 +163,18 @@ export function isEncryptedSecretsEnvelope(value: unknown): value is EncryptedMa
 		typeof v.ciphertext === "string";
 }
 
-export function parseLegacySecretsStore(raw: unknown): MailSecretsStore {
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
-	const maybeLegacy = raw as Partial<MailAuthSecrets>;
-	if (typeof maybeLegacy.imapPassword === "string" && typeof maybeLegacy.smtpPassword === "string") {
-		return {
-			default: {
-				imapPassword: maybeLegacy.imapPassword,
-				smtpPassword: maybeLegacy.smtpPassword,
-			},
-		};
-	}
+export function parseSecretsStore(raw: unknown): MailSecretsStore {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format");
 	const out: MailSecretsStore = {};
 	for (const [accountId, value] of Object.entries(raw as Record<string, unknown>)) {
-		if (!value || typeof value !== "object") continue;
+		if (!value || typeof value !== "object") throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format");
 		const sec = value as Partial<MailAuthSecrets>;
 		if (typeof sec.imapPassword === "string" && typeof sec.smtpPassword === "string") {
 			out[accountId] = {
 				imapPassword: sec.imapPassword,
 				smtpPassword: sec.smtpPassword,
 			};
-		}
+		} else { throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format"); }
 	}
 	return out;
 }
@@ -245,9 +223,9 @@ export async function decryptSecretsEnvelope(envelope: EncryptedMailSecretsEnvel
 			key,
 			toArrayBuffer(ciphertext),
 		);
-		return parseLegacySecretsStore(JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext))));
+		return parseSecretsStore(JSON.parse(new TextDecoder().decode(new Uint8Array(plaintext))));
 	} catch {
-		throw new HttpError(STATUS.Unauthorized, "Stored mail credentials require migration with the previous email PIN");
+		throw new HttpError(STATUS.Unauthorized, "Stored mail credentials could not be unlocked with the identity password");
 	}
 }
 
@@ -257,7 +235,7 @@ export async function getMailSecretsStatus(identityDir: string): Promise<{ inMem
 	const diskSecrets = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
 	if (!diskSecrets) return { inMemory: false, locked: false, store: {} };
 	if (isEncryptedSecretsEnvelope(diskSecrets)) return { inMemory: false, locked: true, store: null };
-	return { inMemory: false, locked: false, store: parseLegacySecretsStore(diskSecrets) };
+	throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format");
 }
 
 export async function getMailSecretsStore(identityDir: string): Promise<MailSecretsStore> {
@@ -276,9 +254,7 @@ export async function getMailSecretsStore(identityDir: string): Promise<MailSecr
 		mailSecretCache.set(identityDir, decrypted);
 		return decrypted;
 	}
-	const legacy = parseLegacySecretsStore(diskSecrets);
-	mailSecretCache.set(identityDir, legacy);
-	return legacy;
+	throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format");
 }
 
 export async function unlockMailSecretsWithPin(identityDir: string, pin: string): Promise<MailSecretsStore> {
@@ -295,15 +271,11 @@ export async function unlockMailSecretsWithPin(identityDir: string, pin: string)
 		mailPinCache.set(identityDir, pin);
 		return decrypted;
 	}
-	const legacy = parseLegacySecretsStore(diskSecrets);
-	mailSecretCache.set(identityDir, legacy);
-	mailPinCache.set(identityDir, pin);
-	return legacy;
+	throw new HttpError(STATUS.BadRequest, "Unsupported mail credential format");
 }
 
 /** Remember only a verified identity password; never overwrite a locked store. */
 export async function tryUnlockMailSecretsWithIdentityPassword(identityDir: string, password: string): Promise<boolean> {
-	identityMailPasswords.set(identityDir, password);
 	try {
 		await unlockMailSecretsWithPin(identityDir, password);
 		return true;
@@ -314,25 +286,9 @@ export async function tryUnlockMailSecretsWithIdentityPassword(identityDir: stri
 	}
 }
 
-/** One-time conversion of legacy PIN encryption to the verified identity password. */
-export async function migrateMailSecrets(identityDir: string, previousPin: string): Promise<MailSecretsStore> {
-	const password = identityMailPasswords.get(identityDir);
-	if (!password) throw new HttpError(STATUS.Unauthorized, "identity locked");
-	const disk = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
-	const store = isEncryptedSecretsEnvelope(disk)
-		? await decryptSecretsEnvelope(disk, previousPin)
-		: parseLegacySecretsStore(disk ?? {});
-	const encrypted = await encryptSecretsStore(store, password);
-	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), encrypted);
-	mailPinCache.set(identityDir, password);
-	mailSecretCache.set(identityDir, store);
-	return store;
-}
-
 export function clearMailSecrets(identityDir: string): void {
 	mailSecretCache.delete(identityDir);
 	mailPinCache.delete(identityDir);
-	identityMailPasswords.delete(identityDir);
 }
 
 export async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {

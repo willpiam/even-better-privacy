@@ -155,19 +155,10 @@ async function restoreEbpMailboxAccess() {
     server: state.server || undefined,
     accountId: state.selectedMailAccountId || undefined,
   };
-  let result = await withIdentity(async () => api("/mail/ebp-reset-password", {
+  const result = await withIdentity(async () => api("/mail/ebp-reset-password", {
     method: "POST",
     body: JSON.stringify(body),
   }), "Enter your identity password to restore mailbox access");
-  if (!result?.savedLocally && result?.accountId) {
-    const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials");
-    if (pin) {
-      result = await withIdentity(async () => api("/mail/ebp-reset-password", {
-        method: "POST",
-        body: JSON.stringify({ ...body, pin }),
-      }));
-    }
-  }
   await loadMailAccount();
   if (result?.savedLocally) {
     setStatus(`Restored mailbox access for ${result.email}`, "success");
@@ -211,23 +202,8 @@ async function ensureMailSecretsUnlocked() {
   if (!(await ensureIdentityUnlocked())) return false;
   await loadMailAccount();
   if (!state.mailSecretsLocked || state.mailSecretsInMemory) return true;
-  const pin = await requestPassword("Enter your previous email PIN once to migrate stored mail credentials to your identity password");
-  if (!pin) {
-    setStatus("Previous email PIN is required for migration", "error");
-    return false;
-  }
-  try {
-    await api("/mail/unlock", {
-      method: "POST",
-      body: JSON.stringify({ pin }),
-    });
-    await loadMailAccount();
-    setStatus("Mail passwords unlocked for this session", "success");
-    return true;
-  } catch (err) {
-    setStatus(err.message, "error");
-    return false;
-  }
+  setStatus("Stored mail credentials could not be unlocked with the identity password", "error");
+  return false;
 }
 
 export async function loadStoredMailCredentials() {
