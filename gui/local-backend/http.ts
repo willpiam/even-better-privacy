@@ -115,12 +115,11 @@ export async function tryServeStatic(
   const fileUrl = new URL(target, STATIC_ROOT);
   let realRoot: string;
   let realFile: string;
-  let data: Uint8Array;
   try {
     realRoot = await Deno.realPath(STATIC_ROOT);
     realFile = await Deno.realPath(fileUrl);
     if (!pathWithinRoot(realFile, realRoot)) return badStaticPath();
-    data = await Deno.readFile(fileUrl);
+    if (!(await Deno.stat(realFile)).isFile) return null;
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) return null;
     throw e;
@@ -133,9 +132,8 @@ export async function tryServeStatic(
   if (req.method === "HEAD") {
     return new Response(null, { status: STATUS.OK, headers });
   }
-  const copy = new Uint8Array(data.byteLength);
-  copy.set(data);
-  return new Response(copy.buffer, { status: STATUS.OK, headers });
+  const data = await Deno.readFile(realFile);
+  return new Response(data, { status: STATUS.OK, headers });
 }
 
 export function json(body: unknown, status: StatusCode = STATUS.OK): Response {

@@ -1,4 +1,5 @@
 import { Identity, type IdentityPublicData } from "../../core/Identity.ts";
+import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import { DecryptionAuthError, StorageFormatError } from "../../core/AES.ts";
 import {
   type CLIContext,
@@ -103,7 +104,7 @@ export async function saveIdentity(
 
   await ensurePrivateDir(dir);
   const storageData = identity.toStorageFormat(password);
-  await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
+  await writePrivateFileAtomic(newPath, storageData);
   console.log(`Saved identity to ${newPath}`);
 
   ctx.identityPath = newPath;
@@ -121,7 +122,7 @@ export async function saveIdentityWithKey(
 
   await ensurePrivateDir(dir);
   const storageData = identity.toStorageFormatWithKey(key, salt);
-  await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
+  await writePrivateFileAtomic(newPath, storageData);
 
   ctx.identityPath = newPath;
 }

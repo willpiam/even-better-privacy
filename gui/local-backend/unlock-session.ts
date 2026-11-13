@@ -1,5 +1,6 @@
 import { AES, DecryptionAuthError } from "../../core/AES.ts";
 import { Identity } from "../../core/Identity.ts";
+import { KeyedQueue } from "../../common/KeyedQueue.ts";
 import type { CLIContext } from "../../cli/utils.ts";
 import { HttpError, STATUS } from "./http.ts";
 import {
@@ -40,6 +41,22 @@ export interface UnlockStatus {
 }
 
 const sessions = new Map<string, UnlockSession>();
+const mutations = new KeyedQueue();
+
+/** Hold the lock across the complete load, mutation, and save operation. */
+export async function mutateIdentityForRequest<T>(
+  ctx: CLIContext,
+  password: string | undefined,
+  mutate: (identity: Identity) => T | Promise<T>,
+): Promise<{ identity: Identity; result: T }> {
+  const key = await Deno.realPath(ctx.identityPath);
+  return mutations.run(key, async () => {
+    const identity = await loadIdentityForRequest(ctx, password);
+    const result = await mutate(identity);
+    await saveIdentityForRequest(ctx, password, identity);
+    return { identity, result };
+  });
+}
 let clock: () => number = () => Date.now();
 let sweepTimer: ReturnType<typeof setInterval> | undefined;
 
@@ -151,7 +168,9 @@ export async function unlockIdentity(
   ctx: CLIContext,
   password: string,
   timeoutMinutes?: unknown,
-): Promise<{ identity: Identity; status: UnlockStatus; mailUnlocked: boolean }> {
+): Promise<
+  { identity: Identity; status: UnlockStatus; mailUnlocked: boolean }
+> {
   if (!password) {
     throw new HttpError(STATUS.BadRequest, "password is required");
   }

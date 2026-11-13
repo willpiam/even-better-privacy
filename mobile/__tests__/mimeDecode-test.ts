@@ -1,13 +1,14 @@
 import {Buffer} from 'buffer';
-import {
-  armorPayload,
-  extractArmoredPayload,
-} from '../../core/Payloads';
+import {armorPayload, extractArmoredPayload} from '../../core/Payloads';
 import {
   buildMultipartMimeMessage,
+  buildSimpleMimeMessage,
   decodeTransferEncoding,
   extractEbpPayloadFromMime,
   extractTextFromMimeSource,
+  parseMimeMessage,
+  MAX_MIME_DEPTH,
+  MAX_MIME_ENTITIES,
 } from '../src/services/mail/mime';
 
 const MINIMAL_PAYLOAD = {
@@ -24,12 +25,7 @@ function qpEncodeWithSoftBreaks(text: string, lineLen = 76): string {
   for (let i = 0; i < bytes.length; i++) {
     const b = bytes[i]!;
     let enc: string;
-    if (
-      (b >= 33 && b <= 60) ||
-      (b >= 62 && b <= 126) ||
-      b === 9 ||
-      b === 32
-    ) {
+    if ((b >= 33 && b <= 60) || (b >= 62 && b <= 126) || b === 9 || b === 32) {
       enc = String.fromCharCode(b);
     } else {
       enc = `=${b.toString(16).toUpperCase().padStart(2, '0')}`;
@@ -49,6 +45,55 @@ function parseEbpArmor(text: string): Record<string, unknown> | null {
 }
 
 describe('mime decode for EBP armor', () => {
+  it('round-trips attachment-free messages, including multiline bodies', () => {
+    const body = 'first line\r\n\r\nlast line';
+    const source = buildSimpleMimeMessage({
+      from: 'a@example.test',
+      to: 'b@example.test',
+      subject: 'test',
+      body,
+    });
+    expect(source).toContain('charset=utf-8\r\n\r\nfirst line');
+    expect(extractTextFromMimeSource(source).text).toBe(
+      'first line\n\nlast line',
+    );
+  });
+
+  it('rejects excessive nesting and excessive sibling parts', () => {
+    let nested = 'Content-Type: text/plain\r\n\r\nhello';
+    for (let i = 0; i <= MAX_MIME_DEPTH; i++) {
+      const boundary = `level${i}x`;
+      nested = `Content-Type: multipart/mixed; boundary="${boundary}"\r\n\r\n--${boundary}\r\n${nested}\r\n--${boundary}--`;
+    }
+    expect(() => parseMimeMessage(nested)).toThrow(
+      'MIME nesting limit exceeded',
+    );
+    const wide =
+      'Content-Type: multipart/mixed; boundary="part"\r\n\r\n' +
+      '--part\r\nContent-Type: text/plain\r\n\r\nhello\r\n'.repeat(
+        MAX_MIME_ENTITIES,
+      ) +
+      '--part--';
+    expect(() => parseMimeMessage(wide)).toThrow('MIME part limit exceeded');
+  });
+
+  it('decodes each base64 text part once for display and EBP extraction', () => {
+    const armor = armorPayload(MINIMAL_PAYLOAD);
+    const source = `Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\n${Buffer.from(
+      armor,
+    ).toString('base64')}`;
+    const from = jest.spyOn(Buffer, 'from');
+    try {
+      const parsed = parseMimeMessage(source);
+      expect(parsed.text).toBe(armor);
+      expect(parsed.ebpPayload).toBe(armor);
+      expect(from.mock.calls.filter(call => call[1] === 'base64')).toHaveLength(
+        1,
+      );
+    } finally {
+      from.mockRestore();
+    }
+  });
   it('extracts armor from multipart mixed 7bit (mobile compose shape)', () => {
     const armor = armorPayload(MINIMAL_PAYLOAD);
     const source = buildMultipartMimeMessage({

@@ -14,9 +14,69 @@ import {
   sweepExpiredSessions,
 } from "../unlock-session.ts";
 import { getContext, writeState } from "../../../cli/utils.ts";
+import { hexToString } from "../../../core/Hex.ts";
 
 const TEST_TOKEN = "u".repeat(64);
 const PASSWORD = "Unlock-Session-Pass-7";
+
+Deno.test({
+  name:
+    "unlock-session: concurrent route mutations preserve every detail and distinct nonces",
+  permissions: {
+    read: true,
+    write: true,
+    env: true,
+    net: true,
+    sys: ["hostname"],
+  },
+  fn: () =>
+    withIdentityHome(async (home) => {
+      assertEquals(
+        (await post("/api/v1/identity/unlock", {
+          home,
+          identity: "me",
+          password: PASSWORD,
+        })).status,
+        200,
+      );
+      const responses = await Promise.all(
+        ["first", "second", "third"].map((path) =>
+          post("/api/v1/detail", { home, identity: "me", path, detail: path })
+        ),
+      );
+      assertEquals(responses.map((response) => response.status), [
+        200,
+        200,
+        200,
+      ]);
+      const identity = Identity.fromStorageFormat(
+        await Deno.readTextFile(`${home}/.ebp/me.identity.json`),
+        PASSWORD,
+      );
+      assertEquals(identity.details.size, 3);
+      const nonces = [...identity.details.values()].map(([, proof]) =>
+        JSON.parse(hexToString(proof)).nonce
+      );
+      assertEquals(nonces.sort(), [0, 1, 2]);
+      assertEquals(
+        (await post("/api/v1/revoke/detail", {
+          home,
+          identity: "me",
+          path: "absent",
+        })).status,
+        404,
+      );
+      assertEquals(
+        (await post("/api/v1/detail", {
+          home,
+          identity: "me",
+          path: "after-failure",
+          detail: "still works",
+        })).status,
+        200,
+      );
+    }),
+});
 const PERMS: Deno.PermissionOptionsObject = {
   read: true,
   write: true,

@@ -8,7 +8,11 @@ import {
   sha256Hex,
 } from '../../ebpCore';
 import {apiUrl} from '../contactsLogic';
-import {unlockIdentity, loadIdentityUnlocked, saveIdentity} from '../storage';
+import {
+  unlockIdentity,
+  loadIdentityUnlocked,
+  mutateIdentityForUse,
+} from '../storage';
 import {
   deleteMailAccount,
   getMailSecretsStatus,
@@ -108,7 +112,7 @@ export async function signupEbpMailbox(params: {
   if (!check.ok) {
     throw new Error(check.reason);
   }
-  const identity = await openIdentity(params.identityName, params.password);
+  await openIdentity(params.identityName, params.password);
   if ((await getMailSecretsStatus(params.identityName)).locked) {
     const previousPin = params.pin || (await params.requestPreviousPin?.());
     if (!previousPin) throw new Error('Mail credential migration cancelled');
@@ -116,33 +120,38 @@ export async function signupEbpMailbox(params: {
   }
   const pin = params.password;
   const email = buildMailAddress(check.username, params.config.domain);
-  identity.attachDetail('email', email);
-  const entry = identity.details.get('email');
-  if (!entry) {
-    throw new Error('Failed to sign email detail');
-  }
-  const fingerprint = identity.toFingerprint();
   const mailPassword = randomHex(16);
+  const {result} = await mutateIdentityForUse(
+    params.identityName,
+    undefined,
+    async identity => {
+      identity.attachDetail('email', email);
+      const entry = identity.details.get('email');
+      if (!entry) {
+        throw new Error('Failed to sign email detail');
+      }
+      const fingerprint = identity.toFingerprint();
 
-  const res = await fetch(apiUrl(params.server, '/api/v1/mail/signup'), {
-    method: 'POST',
-    headers: {'content-type': 'application/json'},
-    body: buildSignupRequest({
-      fingerprint,
-      username: check.username,
-      mailPassword,
-      detailProof: entry[1],
-    }),
-  });
-  if (!res.ok) {
-    throw new EbpMailApiError(res.status, await readError(res));
-  }
-  const result = parseSignupResponse(await res.json(), {
-    email,
-    fingerprint,
-    config: params.config,
-  });
-  await saveIdentity(params.identityName, params.password, identity);
+      const res = await fetch(apiUrl(params.server, '/api/v1/mail/signup'), {
+        method: 'POST',
+        headers: {'content-type': 'application/json'},
+        body: buildSignupRequest({
+          fingerprint,
+          username: check.username,
+          mailPassword,
+          detailProof: entry[1],
+        }),
+      });
+      if (!res.ok) {
+        throw new EbpMailApiError(res.status, await readError(res));
+      }
+      return parseSignupResponse(await res.json(), {
+        email,
+        fingerprint,
+        config: params.config,
+      });
+    },
+  );
 
   const accountId = `ebp-${Date.now()}`;
   await saveMailAccountWithSecrets(params.identityName, {

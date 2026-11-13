@@ -1,5 +1,6 @@
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity } from "../../core/Identity.ts";
+import { writePrivateFileAtomic } from "../atomic-file.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "../../core/version.ts";
 import { validatePassword } from "../../common/PasswordPolicy.ts";
 import {
@@ -88,7 +89,7 @@ export async function cmdGenerate(
   await ensurePrivateDir(ctx.contactsDir);
 
   const storageData = identity.toStorageFormat(password);
-  await Deno.writeTextFile(newFormatPath, storageData, { mode: 0o600 });
+  await writePrivateFileAtomic(newFormatPath, storageData);
   await updateState(ctx.identityDir, { currentIdentity: identityName });
 
   console.log("\n✓ Identity generated successfully!");

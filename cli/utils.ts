@@ -1,4 +1,5 @@
 import { ExternalIdentity, Identity } from "../core/Identity.ts";
+import { writePrivateFileAtomic } from "./atomic-file.ts";
 import { DecryptionAuthError, StorageFormatError } from "../core/AES.ts";
 import {
   buildIdentityStateFromExternal,
@@ -548,7 +549,7 @@ export async function saveIdentity(
 
   await ensurePrivateDir(dir);
   const storageData = identity.toStorageFormat(password);
-  await Deno.writeTextFile(newPath, storageData, { mode: 0o600 });
+  await writePrivateFileAtomic(newPath, storageData);
 
   ctx.identityPath = newPath;
 }

@@ -12,6 +12,28 @@ import {
   tryServeStatic,
   writeFileExclusive,
 } from "../http.ts";
+
+Deno.test({
+  name: "static HEAD checks existence without reading file contents",
+  permissions: { read: true },
+  fn: async () => {
+    const readFile = Deno.readFile;
+    Deno.readFile = () => {
+      throw new Error("HEAD must not read contents");
+    };
+    try {
+      const url = new URL("http://127.0.0.1:8787/index.html");
+      const response = await tryServeStatic(
+        new Request(url, { method: "HEAD" }),
+        url,
+      );
+      assertEquals(response?.status, 200);
+      assertEquals(response?.body, null);
+    } finally {
+      Deno.readFile = readFile;
+    }
+  },
+});
 import { handleRequest } from "../routes.ts";
 import {
   isAllowedMailOAuthBrowserUrl,

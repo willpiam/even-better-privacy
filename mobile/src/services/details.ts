@@ -1,4 +1,4 @@
-import {loadIdentityForUse, saveIdentityForUse} from './storage';
+import {loadIdentityForUse, mutateIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 import {apiUrl} from './contactsLogic';
 import {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
@@ -9,12 +9,17 @@ export async function listDetails(params: {
   identityName: string;
   password?: string;
 }): Promise<Array<{path: string; detail: string; proof: string}>> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
-  return Array.from(identity.details.entries()).map(([path, [detail, proof]]) => ({
-    path,
-    detail,
-    proof,
-  }));
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
+  return Array.from(identity.details.entries()).map(
+    ([path, [detail, proof]]) => ({
+      path,
+      detail,
+      proof,
+    }),
+  );
 }
 
 export async function addDetail(params: {
@@ -27,9 +32,13 @@ export async function addDetail(params: {
 }): Promise<void> {
   requirePathAndDetail(params.path, params.detail);
   const detailToAttach = prepareDetailValue(params.path, params.detail);
-  const identity = await loadIdentityForUse(params.identityName, params.password);
-  identity.attachDetail(params.path, detailToAttach);
-  await saveIdentityForUse(params.identityName, identity, params.password);
+  const {identity} = await mutateIdentityForUse(
+    params.identityName,
+    params.password,
+    current => {
+      current.attachDetail(params.path, detailToAttach);
+    },
+  );
 
   if (params.push) {
     const server = params.server ?? (await getServerUrl());

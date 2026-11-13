@@ -1,4 +1,5 @@
 import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
+import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import { type ExternalIdentity, Identity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "../../core/version.ts";
 import { COMPONENT_VERSIONS } from "../../app-version.ts";
@@ -94,9 +95,9 @@ import {
 import {
   getUnlockStatus,
   loadIdentityForRequest,
+  mutateIdentityForRequest,
   lockAll,
   lockIdentity,
-  saveIdentityForRequest,
   setUnlockTimeout,
   sweepExpiredSessions,
   unlockIdentity,
@@ -2376,7 +2377,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
       await ensurePrivateDir(ctx.identityDir);
       await ensurePrivateDir(ctx.contactsDir);
-      await Deno.writeTextFile(ctx.identityPath, content, { mode: 0o600 });
+      await writePrivateFileAtomic(ctx.identityPath, content);
       if (setCurrent) {
         await updateState(ctx.identityDir, { currentIdentity: name });
       }
@@ -4574,7 +4575,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
 
       const ctx = await getContext(home, identityName);
       const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
-      const { identity } = await unlockIdentity(ctx, password);
+      await unlockIdentity(ctx, password);
       const pinInput = typeof body.pin === "string" ? body.pin : "";
       if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
         if (!pinInput) throw new HttpError(STATUS.Conflict, "mail migration required");
@@ -4589,32 +4590,34 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         );
       }
       const email = `${check.username}@${config.domain}`;
-      identity.attachDetail("email", email);
-      const entry = identity.details.get("email");
-      if (!entry) {
-        throw new HttpError(STATUS.InternalServerError, "failed to sign email detail");
-      }
       const mailPassword = randomHex(16);
+      const { identity, result } = await mutateIdentityForRequest(ctx, undefined, async (current) => {
+        current.attachDetail("email", email);
+        const entry = current.details.get("email");
+        if (!entry) {
+          throw new HttpError(STATUS.InternalServerError, "failed to sign email detail");
+        }
 
-      const res = await fetch(apiUrl(server, "/api/v1/mail/signup"), {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          fingerprint: identity.toFingerprint(),
-          username: check.username,
-          mailPassword,
-          detailProof: entry[1],
-        }),
+        const res = await fetch(apiUrl(server, "/api/v1/mail/signup"), {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            fingerprint: current.toFingerprint(),
+            username: check.username,
+            mailPassword,
+            detailProof: entry[1],
+          }),
+        });
+        const signupResult = await res.json().catch(() => ({})) as Record<string, unknown>;
+        if (!res.ok) {
+          const reason = typeof signupResult.error === "string" ? signupResult.error : `HTTP ${res.status}`;
+          throw new HttpError(
+            res.status === 409 ? STATUS.Conflict : STATUS.BadGateway,
+            reason,
+          );
+        }
+        return signupResult;
       });
-      const result = await res.json().catch(() => ({})) as Record<string, unknown>;
-      if (!res.ok) {
-        const reason = typeof result.error === "string" ? result.error : `HTTP ${res.status}`;
-        throw new HttpError(
-          res.status === 409 ? STATUS.Conflict : STATUS.BadGateway,
-          reason,
-        );
-      }
-      await saveIdentity(ctx, password, identity);
 
       const imap = result.imap as MailEndpoint;
       const smtp = result.smtp as MailEndpoint;
@@ -4809,10 +4812,13 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
       let detailRemoved = false;
       if (identity.getDetail("email")?.toLowerCase() === email) {
-        identity.details.delete("email");
         try {
-          await saveIdentityForRequest(ctx, password, identity);
-          detailRemoved = true;
+          const mutation = await mutateIdentityForRequest(ctx, password, (current) => {
+            if (current.getDetail("email")?.toLowerCase() !== email) return false;
+            current.details.delete("email");
+            return true;
+          });
+          detailRemoved = mutation.result;
         } catch {
           // The server copy is already revoked; the stale local detail is harmless.
         }
@@ -4855,12 +4861,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       }
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentityForRequest(ctx, password);
       const detailToAttach = path.startsWith("opaque::")
         ? sha256Hex(detail)
         : detail;
-      identity.attachDetail(path, detailToAttach);
-      await saveIdentityForRequest(ctx, password, identity);
+      const { identity } = await mutateIdentityForRequest(ctx, password, (current) => {
+        current.attachDetail(path, detailToAttach);
+      });
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);
@@ -5263,14 +5269,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       if (!path) throw new HttpError(STATUS.BadRequest, "path is required");
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentityForRequest(ctx, password);
-
-      if (!identity.details.has(path)) {
-        throw new HttpError(STATUS.NotFound, "detail not found");
-      }
-
-      const certificate = identity.revokeDetail(path, reason);
-      await saveIdentityForRequest(ctx, password, identity);
+      const { identity, result: certificate } = await mutateIdentityForRequest(ctx, password, (current) => {
+        if (!current.details.has(path)) {
+          throw new HttpError(STATUS.NotFound, "detail not found");
+        }
+        return current.revokeDetail(path, reason);
+      });
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);
@@ -5326,14 +5330,12 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         : undefined;
 
       const ctx = await getContext(home, identityName);
-      const identity = await loadIdentityForRequest(ctx, password);
-
-      if (identity.isRevoked()) {
-        throw new HttpError(STATUS.Conflict, "identity is already revoked");
-      }
-
-      const certificate = identity.createIdentityRevocation(reason);
-      await saveIdentityForRequest(ctx, password, identity);
+      const { identity, result: certificate } = await mutateIdentityForRequest(ctx, password, (current) => {
+        if (current.isRevoked()) {
+          throw new HttpError(STATUS.Conflict, "identity is already revoked");
+        }
+        return current.createIdentityRevocation(reason);
+      });
 
       if (push) {
         const server = resolveServer(ctx, serverOverride);

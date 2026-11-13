@@ -1,16 +1,13 @@
 import {clearMailDataCache} from './mail/mailCache';
 import RNFS from 'react-native-fs';
 import {DecryptionAuthError} from '../../../core/AES';
-import {
-  AES,
-  Identity,
-  randomBytes,
-  shortFingerprint,
-} from '../ebpCore';
+import {AES, Identity, randomBytes, shortFingerprint} from '../ebpCore';
 import {deriveIdentityKey} from './argon2';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
 import {sameBytes} from './unlockSessionLogic';
+import {withIdentityPassword} from './identityPassword';
+import {KeyedQueue} from '../../../common/KeyedQueue';
 import {
   cacheUnlockedIdentity,
   getUnlockMaterial,
@@ -57,15 +54,16 @@ async function writeIdentityStorage(
   identity: Identity,
   password: string,
 ): Promise<string> {
-  const normalizedPassword = password.trim();
+  if (!password) throw new Error('Password is required');
   const salt = randomBytes(16);
-  const key = await deriveIdentityKey(
-    passwordBytes(normalizedPassword),
-    salt,
-  );
-  const storageData = identity.toStorageFormatWithKey(key, salt);
-  await RNFS.writeFile(path, storageData, 'utf8');
-  return storageData;
+  const key = await deriveIdentityKey(passwordBytes(password), salt);
+  try {
+    const storageData = identity.toStorageFormatWithKey(key, salt);
+    await RNFS.writeFile(path, storageData, 'utf8');
+    return storageData;
+  } finally {
+    key.fill(0);
+  }
 }
 
 async function ensureBaseDir(): Promise<void> {
@@ -166,12 +164,27 @@ export async function persistIdentity(params: {
   return publicDataToMeta(name, publicData);
 }
 
+async function decryptIdentity(raw: string, password: string) {
+  const {version, salt} = AES.readHeader(parseEncryptedField(raw));
+  return withIdentityPassword(password, async candidate => {
+    const key =
+      version >= ARGON2_AES_VERSION
+        ? await deriveIdentityKey(passwordBytes(candidate), salt)
+        : AES.deriveKeyForStorage(candidate, salt, version);
+    try {
+      return {identity: Identity.fromStorageFormatWithKey(raw, key), key, salt};
+    } catch (error) {
+      key.fill(0);
+      throw error;
+    }
+  });
+}
+
 export async function loadIdentity(
   name: string,
   password: string,
 ): Promise<Identity> {
-  const normalizedPassword = password.trim();
-  if (!normalizedPassword) {
+  if (!password) {
     throw new Error('Password is required');
   }
   await ensureAppDirs();
@@ -181,19 +194,9 @@ export async function loadIdentity(
     throw new Error('Identity not found');
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  const encrypted = parseEncryptedField(raw);
-  const {version, salt} = AES.readHeader(encrypted);
-
-  if (version >= ARGON2_AES_VERSION) {
-    const key = await deriveIdentityKey(
-      passwordBytes(normalizedPassword),
-      salt,
-    );
-    return Identity.fromStorageFormatWithKey(raw, key);
-  }
-
-  // Legacy PBKDF2 (v1/v2): slow noble path; rare for mobile-created identities.
-  return Identity.fromStorageFormat(raw, normalizedPassword);
+  const {value} = await decryptIdentity(raw, password);
+  value.key.fill(0);
+  return value.identity;
 }
 
 /**
@@ -204,8 +207,7 @@ export async function unlockIdentity(
   name: string,
   password: string,
 ): Promise<string> {
-  const normalizedPassword = password.trim();
-  if (!normalizedPassword) {
+  if (!password) {
     throw new Error('Password is required');
   }
   const normalized = normalizeName(name);
@@ -215,21 +217,16 @@ export async function unlockIdentity(
     throw new Error('Identity not found');
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  const encrypted = parseEncryptedField(raw);
-  const {version, salt} = AES.readHeader(encrypted);
-  const key =
-    version >= ARGON2_AES_VERSION
-      ? await deriveIdentityKey(passwordBytes(normalizedPassword), salt)
-      : AES.deriveKeyForStorage(normalizedPassword, salt, version);
+  let decrypted: Awaited<ReturnType<typeof decryptIdentity>>;
   try {
-    Identity.fromStorageFormatWithKey(raw, key);
+    decrypted = await decryptIdentity(raw, password);
   } catch (error) {
-    key.fill(0);
     if (error instanceof DecryptionAuthError) {
       throw new Error('Wrong password');
     }
     throw error;
   }
+  const {key, salt} = decrypted.value;
   try {
     await cacheUnlockedIdentity(normalized, key, salt);
   } catch (error) {
@@ -237,7 +234,7 @@ export async function unlockIdentity(
     throw error;
   }
   const {unlockMailWithIdentityPassword} = await import('./mail/accountStore');
-  await unlockMailWithIdentityPassword(normalized, normalizedPassword);
+  await unlockMailWithIdentityPassword(normalized, decrypted.password);
   return normalized;
 }
 
@@ -290,7 +287,10 @@ export async function saveIdentityUnlocked(
     throw new IdentityLockedError();
   }
   await ensureAppDirs();
-  const storageData = identity.toStorageFormatWithKey(material.key, material.salt);
+  const storageData = identity.toStorageFormatWithKey(
+    material.key,
+    material.salt,
+  );
   await RNFS.writeFile(identityPath(normalized), storageData, 'utf8');
 }
 
@@ -299,7 +299,7 @@ export async function loadIdentityForUse(
   name: string,
   password?: string,
 ): Promise<Identity> {
-  if (password?.trim()) {
+  if (password) {
     return loadIdentity(name, password);
   }
   return loadIdentityUnlocked(name);
@@ -310,11 +310,34 @@ export async function saveIdentityForUse(
   identity: Identity,
   password?: string,
 ): Promise<void> {
-  if (password?.trim()) {
-    await saveIdentity(name, password, identity);
+  if (password) {
+    // Preserve the password that actually unlocked older trimmed-password files.
+    const raw = await readIdentityRaw(name);
+    const {value, password: acceptedPassword} = await decryptIdentity(
+      raw,
+      password,
+    );
+    value.key.fill(0);
+    await saveIdentity(name, acceptedPassword, identity);
     return;
   }
   await saveIdentityUnlocked(name, identity);
+}
+
+const identityMutations = new KeyedQueue();
+
+/** Serialize the entire load, update, and save, rather than just the write. */
+export async function mutateIdentityForUse<T>(
+  name: string,
+  password: string | undefined,
+  mutate: (identity: Identity) => T | Promise<T>,
+): Promise<{identity: Identity; result: T}> {
+  return identityMutations.run(normalizeName(name), async () => {
+    const identity = await loadIdentityForUse(name, password);
+    const result = await mutate(identity);
+    await saveIdentityForUse(name, identity, password);
+    return {identity, result};
+  });
 }
 
 export async function importIdentity(params: {

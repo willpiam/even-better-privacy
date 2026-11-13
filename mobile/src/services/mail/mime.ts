@@ -1,8 +1,5 @@
 import {Buffer} from 'buffer';
-import {
-  armorPayload,
-  extractArmoredPayload,
-} from '../../../../core/Payloads';
+import {armorPayload, extractArmoredPayload} from '../../../../core/Payloads';
 
 type HeaderMap = Record<string, string>;
 
@@ -10,6 +7,9 @@ type DecodedTextPart = {
   contentType: string;
   body: string;
 };
+
+export const MAX_MIME_DEPTH = 30;
+export const MAX_MIME_ENTITIES = 1000;
 
 function parseHeadersAndBody(part: string): {headers: HeaderMap; body: string} {
   const normalized = part.replace(/\r\n/g, '\n');
@@ -40,7 +40,10 @@ function getBoundary(contentType: string): string | null {
   return match ? match[1] : null;
 }
 
-function headerValueParam(header: string | undefined, fallback: string): string {
+function headerValueParam(
+  header: string | undefined,
+  fallback: string,
+): string {
   if (!header) {
     return fallback;
   }
@@ -81,10 +84,12 @@ function decodeQuotedPrintable(input: string): string {
 }
 
 /** Split a multipart body into raw part strings (headers + body each). */
-function splitMultipartParts(body: string, boundary: string): string[] {
+function* splitMultipartParts(
+  body: string,
+  boundary: string,
+): Generator<string> {
   const normalized = body.replace(/\r\n/g, '\n');
   const sep = `--${boundary}`;
-  const parts: string[] = [];
   let idx = 0;
   while (true) {
     const start = normalized.indexOf(sep, idx);
@@ -102,17 +107,27 @@ function splitMultipartParts(body: string, boundary: string): string[] {
     const end = next >= 0 ? next : normalized.length;
     const part = normalized.slice(contentStart, end);
     if (part.length > 0) {
-      parts.push(part);
+      yield part;
     }
     if (next < 0) {
       break;
     }
     idx = next + 1;
   }
-  return parts;
 }
 
-function collectFromEntity(raw: string, into: DecodedTextPart[]): void {
+function collectFromEntity(
+  raw: string,
+  into: DecodedTextPart[],
+  budget: {entities: number},
+  depth = 0,
+): void {
+  if (depth > MAX_MIME_DEPTH) {
+    throw new Error('MIME nesting limit exceeded');
+  }
+  if (++budget.entities > MAX_MIME_ENTITIES) {
+    throw new Error('MIME part limit exceeded');
+  }
   const {headers, body} = parseHeadersAndBody(raw);
   const contentType = headers['content-type'] ?? 'text/plain';
   const mediaType = headerValueParam(contentType, 'text/plain');
@@ -124,7 +139,7 @@ function collectFromEntity(raw: string, into: DecodedTextPart[]): void {
       return;
     }
     for (const part of splitMultipartParts(body, boundary)) {
-      collectFromEntity(part, into);
+      collectFromEntity(part, into, budget, depth + 1);
     }
     return;
   }
@@ -140,29 +155,34 @@ function collectFromEntity(raw: string, into: DecodedTextPart[]): void {
 /** Walk RFC822 / MIME and collect decoded text/plain and text/html parts. */
 export function collectDecodedTextParts(source: string): DecodedTextPart[] {
   const parts: DecodedTextPart[] = [];
-  collectFromEntity(source, parts);
+  collectFromEntity(source, parts, {entities: 0});
   return parts;
 }
 
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return html
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-export function extractTextFromMimeSource(source: string): {
+export function extractTextFromMimeSource(
+  source: string,
+  parts = collectDecodedTextParts(source),
+): {
   text: string;
   html: string;
 } {
-  const parts = collectDecodedTextParts(source);
-  const plains = parts.filter(p => p.contentType === 'text/plain').map(p => p.body);
-  const htmls = parts.filter(p => p.contentType === 'text/html').map(p => p.body);
+  const plains = parts
+    .filter(p => p.contentType === 'text/plain')
+    .map(p => p.body);
+  const htmls = parts
+    .filter(p => p.contentType === 'text/html')
+    .map(p => p.body);
   if (plains.length > 0 || htmls.length > 0) {
     const html = htmls.join('\n\n');
     const text =
-      plains.length > 0
-        ? plains.join('\n\n')
-        : html
-          ? stripHtml(html)
-          : '';
+      plains.length > 0 ? plains.join('\n\n') : html ? stripHtml(html) : '';
     return {text, html};
   }
   // Fallback for non-MIME / missing Content-Type bodies
@@ -180,8 +200,10 @@ export function extractTextFromMimeSource(source: string): {
  * Extract EBP armor only when JSON inside the block parses successfully
  * after MIME CTE decode. Returns a clean re-armored string, or null.
  */
-export function extractEbpPayloadFromMime(source: string): string | null {
-  const parts = collectDecodedTextParts(source);
+export function extractEbpPayloadFromMime(
+  source: string,
+  parts = collectDecodedTextParts(source),
+): string | null {
   const candidates: string[] = [];
   for (const part of parts) {
     if (part.contentType === 'text/plain') {
@@ -195,7 +217,7 @@ export function extractEbpPayloadFromMime(source: string): string | null {
     }
   }
   if (candidates.length === 0) {
-    const fallback = extractTextFromMimeSource(source);
+    const fallback = extractTextFromMimeSource(source, parts);
     if (fallback.text) {
       candidates.push(fallback.text);
     }
@@ -214,6 +236,19 @@ export function extractEbpPayloadFromMime(source: string): string | null {
     }
   }
   return null;
+}
+
+/** Decode the text entities once for both display and EBP extraction. */
+export function parseMimeMessage(source: string): {
+  text: string;
+  html: string;
+  ebpPayload: string | null;
+} {
+  const parts = collectDecodedTextParts(source);
+  return {
+    ...extractTextFromMimeSource(source, parts),
+    ebpPayload: extractEbpPayloadFromMime(source, parts),
+  };
 }
 
 function formatMessageId(value: string | null | undefined): string {
@@ -273,7 +308,7 @@ export function buildSimpleMimeMessage(params: {
     'Content-Type: text/plain; charset=utf-8',
     '',
   ];
-  return `${headers.join('\r\n')}${params.body}`;
+  return `${headers.join('\r\n')}\r\n${params.body}`;
 }
 
 export type MailAttachmentPart = {

@@ -121,6 +121,6 @@ export async function cmdDecryptFile(args: ReturnType<typeof parseArgs>, ctx: CL
 		Deno.exit(1);
 	}
 	const finalPath = outputPath || safeFileName(envelope.fileName);
-	await Deno.writeFile(finalPath, envelope.fileBytes);
+	await Deno.writeFile(finalPath, envelope.fileBytes, { createNew: true, mode: 0o600 });
 	console.error(`Decrypted file written to: ${finalPath}`);
 }

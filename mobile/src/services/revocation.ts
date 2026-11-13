@@ -1,4 +1,4 @@
-import {loadIdentityForUse, saveIdentityForUse} from './storage';
+import {loadIdentityForUse, mutateIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 
 function apiUrl(server: string, path: string): string {
@@ -14,9 +14,11 @@ export async function revokeDetail(params: {
   push?: boolean;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
-  const certificate = identity.revokeDetail(params.path, params.reason);
-  await saveIdentityForUse(params.identityName, identity, params.password);
+  const {identity, result: certificate} = await mutateIdentityForUse(
+    params.identityName,
+    params.password,
+    current => current.revokeDetail(params.path, params.reason),
+  );
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
     const res = await fetch(apiUrl(server, '/api/v1/revoke'), {
@@ -31,7 +33,9 @@ export async function revokeDetail(params: {
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as {error?: string};
-      throw new Error(`Failed to push revocation: ${body.error ?? `HTTP ${res.status}`}`);
+      throw new Error(
+        `Failed to push revocation: ${body.error ?? `HTTP ${res.status}`}`,
+      );
     }
   }
 }
@@ -43,9 +47,11 @@ export async function revokeIdentity(params: {
   push?: boolean;
   server?: string;
 }): Promise<void> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
-  const certificate = identity.createIdentityRevocation(params.reason);
-  await saveIdentityForUse(params.identityName, identity, params.password);
+  const {identity, result: certificate} = await mutateIdentityForUse(
+    params.identityName,
+    params.password,
+    current => current.createIdentityRevocation(params.reason),
+  );
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
     const res = await fetch(apiUrl(server, '/api/v1/revoke'), {
@@ -59,7 +65,9 @@ export async function revokeIdentity(params: {
     });
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as {error?: string};
-      throw new Error(`Failed to push revocation: ${body.error ?? `HTTP ${res.status}`}`);
+      throw new Error(
+        `Failed to push revocation: ${body.error ?? `HTTP ${res.status}`}`,
+      );
     }
   }
 }
@@ -74,13 +82,17 @@ export async function generateEmergencyCert(params: {
   createdAt: string;
   warning: string;
 }> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
   const certificate = identity.generateEmergencyRevocationCertificate();
   return {
     type: 'ebp-emergency-revocation-certificate',
     fingerprint: identity.toFingerprint(),
     certificate,
     createdAt: new Date().toISOString(),
-    warning: 'KEEP THIS SECURE. Anyone with this certificate can revoke your identity.',
+    warning:
+      'KEEP THIS SECURE. Anyone with this certificate can revoke your identity.',
   };
 }

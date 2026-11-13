@@ -360,9 +360,9 @@ export async function fetchMessageDetail(
     await mailStub('tcp.readLine.wait', `tag=${fetchTag} body`);
     const source = await readFetchRfc822Source(client, fetchTag);
     await mailStub('tcp.readLine.ok', `tag=${fetchTag}`);
-    const {extractTextFromMimeSource, extractEbpPayloadFromMime} = await import('./mime');
-    const parsed = extractTextFromMimeSource(source);
-    const ebpPayload = extractEbpPayloadFromMime(source);
+    const {parseMimeMessage} = await import('./mime');
+    const parsed = parseMimeMessage(source);
+    const {ebpPayload} = parsed;
     await mailStub('inbox.fetch.done', `uid=${uid}`);
     return messageDetailFromRfc822(uid, source, parsed, ebpPayload);
   } finally {
