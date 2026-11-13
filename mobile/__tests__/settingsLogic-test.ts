@@ -1,7 +1,6 @@
 import {
   booleanPrefToStorage,
   clampAutoLockMinutes,
-  normalizeOptionalPref,
   numberPrefToStorage,
   parseAutoLockMinutes,
   parseEnforcePasswordPolicy,
@@ -24,11 +23,6 @@ describe('settingsLogic', () => {
     expect(parseEnforcePasswordPolicy(null)).toBe(true);
     expect(parseEnforcePasswordPolicy('false')).toBe(false);
     expect(parseEnforcePasswordPolicy('true')).toBe(true);
-  });
-
-  test('normalizeOptionalPref trims', () => {
-    expect(normalizeOptionalPref(null)).toBe('');
-    expect(normalizeOptionalPref('  abc  ')).toBe('abc');
   });
 
   test('resolveServerUrl and requireNonEmptyServerUrl', () => {

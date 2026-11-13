@@ -74,12 +74,6 @@ describe('SMTP error replies', () => {
     expect(client.written).toEqual(['EHLO ebp-mobile', 'STARTTLS']);
   });
 
-  it('surfaces a rejected OAuth token', async () => {
-    const client = scriptedClient(['250 ok', '334 challenge', '535 5.7.8 Invalid OAuth token']);
-    await expect(smtpAuth(client, {
-      ...DEFAULT_MAIL_ACCOUNT, smtpSecure: true, authType: 'oauth', username: 'user@example.test',
-    }, {imapPassword: '', smtpPassword: '', accessToken: 'token'})).rejects.toThrow('535 5.7.8 Invalid OAuth token');
-  });
 });
 
 describe('SMTP send multi RCPT', () => {
@@ -127,9 +121,7 @@ describe('SMTP send multi RCPT', () => {
     const {sendMimeMessage} = require('../src/services/mail/smtp');
     await sendMimeMessage(
       {
-        gmailMode: false,
         authType: 'password',
-        oauthProvider: '',
         imapHost: 'imap.test',
         imapPort: 143,
         imapSecure: false,
@@ -205,9 +197,7 @@ describe('SMTP send multi RCPT', () => {
     const {sendMimeMessage} = require('../src/services/mail/smtp');
     await sendMimeMessage(
       {
-        gmailMode: false,
         authType: 'password',
-        oauthProvider: '',
         imapHost: 'imap.test',
         imapPort: 993,
         imapSecure: true,

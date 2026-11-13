@@ -1,5 +1,5 @@
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import React, {useCallback, useEffect, useRef, useState} from 'react';
+import React, {useCallback, useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
@@ -8,31 +8,12 @@ import {getCurrentIdentityRequired} from '../../services/storage';
 import {
   getMailSecretsStatus,
   readMailStore,
-  persistMailSecretsStore,
   selectMailAccount,
-  setMailSecretsInMemory,
-  upsertMailAccount,
 } from '../../services/mail/accountStore';
-import {
-  completeMailOAuthFromUrl,
-  fetchMailOAuthConfig,
-  getOAuthProviderConfig,
-  openMailOAuthBrowser,
-  resolveOAuthClientId,
-  startMailOAuth,
-  subscribeMailOAuthCallbacks,
-  type MailOauthServerConfig,
-} from '../../services/mail/oauth';
-import {DEFAULT_MAIL_ACCOUNT, type MailOauthProvider} from '../../services/mail/types';
-import {
-  getMailOauthGmailClientIdOverride,
-  getMailOauthOutlookClientIdOverride,
-  getServerUrl,
-} from '../../services/settings';
+import {getServerUrl} from '../../services/settings';
 import {fetchEbpSignupConfig, resetEbpMailbox} from '../../services/mail/ebpSignup';
 import {appendActivityLog} from '../../services/activityLog';
 import Screen from '../../components/Screen';
-import AddAccountModal from '../../components/AddAccountModal';
 import AppButton from '../../components/AppButton';
 import Card from '../../components/Card';
 import ListRow from '../../components/ListRow';
@@ -45,42 +26,20 @@ import {mailColors as colors} from './MailAppearance';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailAccounts'>;
 
-const EMPTY_OAUTH_CONFIG: MailOauthServerConfig = {
-  gmail: {clientId: '', configured: false},
-  outlook: {clientId: '', configured: false},
-};
-
 export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const {promptSecret, secretPrompt} = useSecretPrompt();
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [identityName, setIdentityName] = useState('');
   const [accounts, setAccounts] = useState<
-    Array<{id: string; name: string; fromEmail: string; authType: string}>
+    Array<{id: string; name: string; fromEmail: string}>
   >([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [oauthConfig, setOauthConfig] = useState<MailOauthServerConfig>(
-    EMPTY_OAUTH_CONFIG,
-  );
   const [secretsLocked, setSecretsLocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [status, setStatus] = useState('');
   const [mailDomain, setMailDomain] = useState('');
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
-  const [addAccountVisible, setAddAccountVisible] = useState(false);
   const promptedThisFocus = useRef(false);
-
-  const loadOAuthConfig = useCallback(async () => {
-    try {
-      const server = await getServerUrl();
-      const config = await fetchMailOAuthConfig(server);
-      setOauthConfig(config);
-      return config;
-    } catch (error) {
-      setOauthConfig(EMPTY_OAUTH_CONFIG);
-      setStatus(error instanceof Error ? error.message : String(error));
-      return null;
-    }
-  }, []);
 
   const refresh = useCallback(async () => {
     const name = await getCurrentIdentityRequired();
@@ -92,12 +51,10 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         id: a.id,
         name: a.name,
         fromEmail: a.config.fromEmail || a.config.username,
-        authType: a.config.authType,
       })),
     );
     const secretStatus = await getMailSecretsStatus(name);
     setSecretsLocked(secretStatus.locked && !secretStatus.inMemory);
-    await loadOAuthConfig();
     try {
       const cfg = await fetchEbpSignupConfig(await getServerUrl());
       setMailDomain(cfg.enabled ? cfg.domain : '');
@@ -105,7 +62,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       setMailDomain('');
     }
     return secretStatus.locked && !secretStatus.inMemory;
-  }, [loadOAuthConfig]);
+  }, []);
 
   const unlockMailWithIdentity = useCallback(
     async () => {
@@ -153,48 +110,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     }, []),
   );
 
-  useEffect(() => {
-    return subscribeMailOAuthCallbacks(async url => {
-      try {
-        const tokens = await completeMailOAuthFromUrl(url);
-        if (!(await ensureUnlocked(identityName))) return;
-        const cfg = getOAuthProviderConfig(tokens.provider);
-        const id = `oauth-${tokens.provider}-${Date.now()}`;
-        await upsertMailAccount(identityName, {
-          id,
-          name: `${tokens.provider} ${tokens.email}`,
-          config: {
-            ...DEFAULT_MAIL_ACCOUNT,
-            authType: 'oauth',
-            oauthProvider: tokens.provider,
-            username: tokens.email,
-            fromEmail: tokens.email,
-            imapHost: cfg.imapHost,
-            imapPort: cfg.imapPort,
-            imapSecure: cfg.imapSecure,
-            smtpHost: cfg.smtpHost,
-            smtpPort: cfg.smtpPort,
-            smtpSecure: cfg.smtpSecure,
-            persistSecrets: true,
-          },
-        });
-        setMailSecretsInMemory(identityName, id, {
-          imapPassword: tokens.email,
-          smtpPassword: tokens.email,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          tokenExpiry: tokens.tokenExpiry,
-        });
-        await persistMailSecretsStore(identityName);
-        await appendActivityLog(`Mail OAuth linked: ${tokens.email}`, 'success');
-        setStatus(`Linked ${tokens.email}`);
-        await refresh();
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      }
-    });
-  }, [identityName, refresh, ensureUnlocked]);
-
   const onRestoreMailbox = async () => {
     const password = await promptSecret({
       title: 'Identity password',
@@ -232,28 +147,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusyMessage(null);
-    }
-  };
-
-  const startOAuth = async (provider: MailOauthProvider) => {
-    if (provider !== 'gmail' && provider !== 'outlook') {
-      return;
-    }
-    try {
-      setStatus('');
-      const config = oauthConfig.gmail.configured || oauthConfig.outlook.configured
-        ? oauthConfig
-        : (await loadOAuthConfig()) ?? EMPTY_OAUTH_CONFIG;
-      const override =
-        provider === 'gmail'
-          ? await getMailOauthGmailClientIdOverride()
-          : await getMailOauthOutlookClientIdOverride();
-      const clientId = resolveOAuthClientId(provider, config, override);
-      const {authUrl} = await startMailOAuth(provider, clientId);
-      await openMailOAuthBrowser(authUrl);
-      setStatus('Complete sign-in in the browser…');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
@@ -295,9 +188,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
               <Card key={a.id}>
                 <ListRow
                   title={a.name}
-                  subtitle={`${a.fromEmail} · ${
-                    a.authType === 'oauth' ? 'OAuth' : 'Manual IMAP/SMTP'
-                  }`}
+                  subtitle={a.fromEmail}
                   badge={selected ? 'Selected' : undefined}
                   avatarText={a.name}
                   onPress={() =>
@@ -342,23 +233,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       <AppButton
         title="Add account"
         variant="secondary"
-        onPress={() => setAddAccountVisible(true)}
-      />
-      <AddAccountModal
-        visible={addAccountVisible}
-        onCancel={() => setAddAccountVisible(false)}
-        onManual={() => {
-          setAddAccountVisible(false);
-          navigation.navigate('MailAccountSetup', {});
-        }}
-        onGmail={() => {
-          setAddAccountVisible(false);
-          startOAuth('gmail');
-        }}
-        onOutlook={() => {
-          setAddAccountVisible(false);
-          startOAuth('outlook');
-        }}
+        onPress={() => navigation.navigate('MailAccountSetup', {})}
       />
       <AppButton
         title="Mail help"

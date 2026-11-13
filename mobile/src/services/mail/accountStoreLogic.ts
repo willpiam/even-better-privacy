@@ -51,9 +51,15 @@ export function isEncryptedSecretsEnvelope(
 export function parseMailAccountStore(raw: string): MailAccountStore {
   try {
     const parsed = JSON.parse(raw) as MailAccountStore;
+    const accounts = Array.isArray(parsed.accounts)
+      ? parsed.accounts.filter(a => a?.config &&
+          (a.config.authType === undefined || a.config.authType === 'password'))
+      : [];
     return {
-      selectedAccountId: parsed.selectedAccountId ?? null,
-      accounts: Array.isArray(parsed.accounts) ? parsed.accounts : [],
+      selectedAccountId: accounts.some(a => a.id === parsed.selectedAccountId)
+        ? parsed.selectedAccountId
+        : accounts[0]?.id ?? null,
+      accounts,
     };
   } catch {
     return {...DEFAULT_MAIL_STORE, accounts: []};

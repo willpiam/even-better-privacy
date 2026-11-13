@@ -4290,7 +4290,7 @@
                   <input
                     id="mail-account-name"
                     type="text"
-                    placeholder="Personal Gmail"
+                    placeholder="My pqpost.com account"
                   />
                 </label>
               </div>
@@ -4298,48 +4298,6 @@
                 <button type="button" class="secondary" id="mail-account-new">
                   New Account
                 </button>
-              </div>
-              <label>Auth Method
-                <select id="mail-auth-type">
-                  <option value="oauth" selected>OAuth (recommended)</option>
-                  <option value="password">Manual IMAP/SMTP</option>
-                </select>
-              </label>
-              <div id="mail-oauth-fields" class="stack">
-                <div class="row">
-                  <button type="button" id="mail-oauth-gmail-btn">
-                    Sign in with Gmail
-                  </button>
-                  <button
-                    type="button"
-                    class="secondary"
-                    id="mail-oauth-reauth-btn"
-                    style="display: none"
-                  >
-                    Re-authenticate
-                  </button>
-                </div>
-                <div class="two">
-                  <label>OAuth Provider
-                    <input
-                      id="mail-oauth-provider"
-                      type="text"
-                      readonly
-                      placeholder="Not connected"
-                    />
-                  </label>
-                  <label>OAuth Email
-                    <input
-                      id="mail-oauth-email"
-                      type="text"
-                      readonly
-                      placeholder="Not connected"
-                    />
-                  </label>
-                </div>
-                <div id="mail-oauth-status" class="small muted">
-                  Choose a provider to connect this account.
-                </div>
               </div>
               <div id="mail-manual-fields" class="stack">
                 <div class="two">

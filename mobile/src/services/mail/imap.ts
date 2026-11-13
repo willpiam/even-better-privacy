@@ -25,11 +25,6 @@ export {
   type FetchBodyClient,
 } from './imapFetchBody';
 
-function xoauth2String(user: string, accessToken: string): string {
-  const raw = `user=${user}\x01auth=Bearer ${accessToken}\x01\x01`;
-  return Buffer.from(raw, 'utf8').toString('base64');
-}
-
 export function quoteImap(value: string): string {
   for (const ch of value) {
     const code = ch.charCodeAt(0);
@@ -127,16 +122,8 @@ export async function imapAuthenticate(
   await mailStub('imap.greeting.ok');
   await maybeImapStartTls(client, config.imapSecure);
   const tag = 'a1';
-  await mailStub(
-    'imap.login.wait',
-    config.authType === 'oauth' ? 'XOAUTH2' : 'LOGIN',
-  );
-  if (config.authType === 'oauth' && secrets.accessToken) {
-    const blob = xoauth2String(config.username || secrets.imapPassword, secrets.accessToken);
-    client.writeLine(`${tag} AUTHENTICATE XOAUTH2 ${blob}`);
-  } else {
-    client.writeLine(`${tag} LOGIN ${quoteImap(config.username)} ${quoteImap(secrets.imapPassword)}`);
-  }
+  await mailStub('imap.login.wait', 'LOGIN');
+  client.writeLine(`${tag} LOGIN ${quoteImap(config.username)} ${quoteImap(secrets.imapPassword)}`);
   await readTaggedOk(client, tag);
   await mailStub('imap.login.ok');
 }

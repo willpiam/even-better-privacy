@@ -1,15 +1,15 @@
 # Mobile native mail stack
 
 Parity v1 mail uses in-process IMAP/SMTP over TLS TCP sockets, matching the GUI
-trust model (OAuth token exchange via the configured EBP server — no client
-secrets in the app).
+trust model: password credentials stay on the device and connect directly to
+the mail provider. Create an `@pqpost.com` account through onboarding or add
+IMAP/SMTP credentials manually.
 
 ## Libraries
 
 | Concern | Choice | Notes |
 |---------|--------|-------|
 | TLS TCP | `react-native-tcp-socket` | IMAP 993 / SMTP 465/587 |
-| OAuth browser | React Native `Linking` | Custom redirect `ebp://mail/oauth/callback` |
 | MIME / armor | `mobile/src/services/mail/mime.ts` | EBP armor extraction aligned with GUI |
 | Crypto compose | `encryptDecrypt.ts` + `ebpMail.ts` | Same payloads as GUI `send-ebp` |
 
@@ -30,25 +30,6 @@ Then restart Metro with a clean cache: `npm start -- --reset-cache`.
 
 Rebuild the native app after adding the TCP module (`npm run android` / `npm run ios`).
 
-## OAuth redirect
-
-Register `ebp://mail/oauth/callback` in Google/Microsoft OAuth clients alongside
-the desktop `http://127.0.0.1:8787/...` URI. Token exchange posts that redirect
-to `POST /api/v1/mail/oauth/exchange` on the EBP server (same as GUI).
-
-## OAuth client IDs
-
-Mobile loads public OAuth client IDs from the configured key server:
-
-`GET /api/v1/mail/oauth/config`
-
-Set `MAIL_OAUTH_GMAIL_CLIENT_ID` and `MAIL_OAUTH_OUTLOOK_CLIENT_ID` in the
-server `.env` (same as GUI). Client secrets stay on the server only.
-
-For local development, optional overrides live in **Settings → Advanced**
-(Gmail / Outlook OAuth client ID override). Overrides take precedence over the
-server when non-empty.
-
 ## Storage layout
 
 Per current identity: `DocumentDirectory/ebp/<identity>/mail-account.json` and
@@ -56,7 +37,7 @@ encrypted `mail-account.secrets.json` (PBKDF2 envelope, ported from GUI).
 
 ## Manual IMAP/SMTP accounts
 
-From **Mail Accounts → Add manual account**, enter:
+From **Mail Accounts → Add account**, enter:
 
 - Account label (display name)
 - IMAP host, port, TLS
@@ -147,10 +128,5 @@ native rebuild. Unlock should finish in a few seconds, not hang indefinitely.
 
 Accounts created in the desktop GUI under the same identity use the same storage
 files and can be unlocked on mobile with the same identity password.
-
-## Deep links
-
-- Android: `AndroidManifest.xml` intent-filter for `ebp` scheme
-- iOS: `Info.plist` `CFBundleURLTypes` for `ebp`
 
 Stored mail credentials use the identity password. Unlocking the identity also unlocks mail. Older credential stores protected by a separate email PIN ask for that previous PIN once and are then re-encrypted with the verified identity password. Cancelling migration leaves the original encrypted file intact.

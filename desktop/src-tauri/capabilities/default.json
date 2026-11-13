@@ -5,7 +5,6 @@
     "main"
   ],
   "permissions": [
-    "core:default",
-    "shell:allow-open"
+    "core:default"
   ]
 }

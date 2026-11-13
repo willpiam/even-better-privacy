@@ -68,8 +68,6 @@ import {
   base64ToBytes,
   bytesToBase64,
   CORS_HEADERS,
-  ENCRYPTED_FILE_FORMAT_VERSION,
-  ENCRYPTED_SIGNED_FILE_FORMAT_VERSION,
   HttpError,
   json,
   randomHex,
@@ -116,11 +114,9 @@ import {
   getMailSecretsStatus,
   getMailSecretsStore,
   getMailStore,
-  isMailOauthProvider,
   type MailAccountConfig,
   type MailAccountRecord,
   type MailAuthSecrets,
-  type MailOauthProvider,
   mailPinCache,
   migrateMailSecrets,
   normalizeMailConfig,
@@ -146,16 +142,6 @@ import {
 } from "./mail-imap.ts";
 import { buildSmtpTransport, deliverSmtpAndAppendSent } from "./mail-send.ts";
 import {
-  exchangeOAuthCode,
-  getMailOAuthRedirectUri,
-  getOAuthProviderConfig,
-  isAllowedMailOAuthBrowserUrl,
-  mailOauthCompleted,
-  mailOauthStarts,
-  pruneExpiredOAuthState,
-  registerMailOAuthStart,
-} from "./mail-oauth.ts";
-import {
   addPendingHierarchyLocal,
   buildHierarchyTreeFromCertificates,
   decodeHierarchyCertificateDraft,
@@ -168,15 +154,6 @@ import {
 
 const EBP_ENCRYPTED_ATTACHMENT_CONTENT_TYPE =
   "application/ebp-encrypted-attachment+json";
-
-function escapeHtml(value: unknown): string {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
 
 type MailAttachmentInput = {
   fileName: string;
@@ -291,12 +268,6 @@ function sourceByteLength(source: unknown): number {
 
 function durationMs(startedAt: number): number {
   return Math.round(performance.now() - startedAt);
-}
-
-function clientRateLimitKey(req: Request): string {
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  return `${origin ?? "no-origin"}|${host ?? "no-host"}`;
 }
 
 function parseHdProfile(value: unknown): HdProfile {
@@ -526,319 +497,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
       });
     }
 
-    if (req.method === "POST" && url.pathname === "/api/v1/mail/oauth/start") {
-      const body = await readJson<{ provider?: unknown; home?: unknown }>(req);
-      const providerRaw = toSafeString(body.provider, 64).toLowerCase();
-      if (!isMailOauthProvider(providerRaw)) {
-        throw new HttpError(
-          STATUS.BadRequest,
-          "provider must be gmail or outlook",
-        );
-      }
-      const provider = providerRaw as Exclude<MailOauthProvider, "">;
-      const home = typeof body.home === "string" ? body.home : undefined;
-      const ctx = await getContext(home ?? undefined);
-      const serverUrl = resolveServer(ctx);
-      const conf = getOAuthProviderConfig(provider);
-      const oauthState = randomHex(24);
-      registerMailOAuthStart(
-        oauthState,
-        { provider, createdAt: Date.now(), serverUrl },
-        clientRateLimitKey(req),
-      );
-      const authUrl = new URL(conf.authUrl);
-      authUrl.searchParams.set("client_id", conf.clientId);
-      authUrl.searchParams.set("response_type", "code");
-      authUrl.searchParams.set("redirect_uri", getMailOAuthRedirectUri());
-      authUrl.searchParams.set("scope", conf.scopes.join(" "));
-      authUrl.searchParams.set("state", oauthState);
-      authUrl.searchParams.set("prompt", "consent");
-      authUrl.searchParams.set("access_type", "offline");
-      return json({
-        ok: true,
-        oauthState,
-        provider,
-        authUrl: authUrl.toString(),
-      });
-    }
-
-    if (
-      req.method === "GET" && url.pathname === "/api/v1/mail/oauth/callback"
-    ) {
-      const code = toSafeString(url.searchParams.get("code"), 4096);
-      const oauthState = toSafeString(url.searchParams.get("state"), 256);
-      const err = toSafeString(url.searchParams.get("error"), 256);
-      pruneExpiredOAuthState();
-      const pending = mailOauthStarts.get(oauthState);
-      if (!oauthState || !pending) {
-        return new Response(
-          "<!doctype html><html><body><h3>OAuth failed: invalid or expired state.</h3></body></html>",
-          {
-            status: STATUS.BadRequest,
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              ...CORS_HEADERS,
-            },
-          },
-        );
-      }
-      if (err) {
-        mailOauthStarts.delete(oauthState);
-        return new Response(
-          `<!doctype html><html><body><h3>OAuth failed: ${
-            escapeHtml(err)
-          }</h3></body></html>`,
-          {
-            status: STATUS.BadRequest,
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              ...CORS_HEADERS,
-            },
-          },
-        );
-      }
-      try {
-        const exchanged = await exchangeOAuthCode(
-          pending.serverUrl,
-          pending.provider,
-          code,
-        );
-        mailOauthCompleted.set(oauthState, {
-          provider: pending.provider,
-          createdAt: Date.now(),
-          accessToken: exchanged.accessToken,
-          refreshToken: exchanged.refreshToken,
-          tokenExpiry: exchanged.tokenExpiry,
-          email: exchanged.email,
-        });
-        mailOauthStarts.delete(oauthState);
-        const payload = JSON.stringify({
-          type: "ebp-mail-oauth-complete",
-          ok: true,
-          oauthState,
-          provider: pending.provider,
-          email: exchanged.email,
-        });
-        return new Response(
-          `<!doctype html><html><body><h3>Email account connected.</h3><p>You can close this window.</p><script>try{if(window.opener&&!window.opener.closed){window.opener.postMessage(${payload},"*");}setTimeout(()=>window.close(),300);}catch{}</script></body></html>`,
-          {
-            status: STATUS.OK,
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              ...CORS_HEADERS,
-            },
-          },
-        );
-      } catch (oauthErr) {
-        mailOauthStarts.delete(oauthState);
-        const message = oauthErr instanceof HttpError
-          ? oauthErr.message
-          : "oauth callback failed";
-        return new Response(
-          `<!doctype html><html><body><h3>OAuth failed: ${
-            escapeHtml(message)
-          }</h3></body></html>`,
-          {
-            status: STATUS.BadGateway,
-            headers: {
-              "content-type": "text/html; charset=utf-8",
-              ...CORS_HEADERS,
-            },
-          },
-        );
-      }
-    }
-
-    // Poll for OAuth completion (used when the popup couldn't be opened
-    // and the auth URL was opened in the system browser instead).
-    if (req.method === "GET" && url.pathname === "/api/v1/mail/oauth/poll") {
-      const oauthState = toSafeString(url.searchParams.get("state"), 256);
-      if (!oauthState) {
-        throw new HttpError(STATUS.BadRequest, "state is required");
-      }
-      const completed = mailOauthCompleted.get(oauthState);
-      if (completed) {
-        return json({
-          status: "complete",
-          type: "ebp-mail-oauth-complete",
-          ok: true,
-          oauthState,
-          provider: completed.provider,
-          email: completed.email,
-        });
-      }
-      const pending = mailOauthStarts.get(oauthState);
-      if (pending) {
-        return json({ status: "pending" });
-      }
-      return json({ status: "unknown" });
-    }
-
-    // Open a URL in the user's default system browser.
-    // Used for OAuth flows where the URL must open in a real browser rather
-    // than the Tauri/WebKitGTK webview (which causes "Popup blocked" errors).
-    if (
-      req.method === "POST" &&
-      url.pathname === "/api/v1/mail/oauth/open-browser"
-    ) {
-      const body = await readJson<{ url?: unknown }>(req);
-      const targetUrl = typeof body.url === "string" ? body.url.trim() : "";
-      if (!targetUrl) throw new HttpError(STATUS.BadRequest, "url is required");
-      if (!isAllowedMailOAuthBrowserUrl(targetUrl)) {
-        throw new HttpError(
-          STATUS.BadRequest,
-          "url must target a configured mail OAuth provider",
-        );
-      }
-      const os = Deno.build.os;
-      // Try multiple openers on Linux — xdg-open may not be available inside
-      // some AppImage or container environments.
-      const openers: string[][] = [];
-      if (os === "linux") {
-        openers.push(["xdg-open", targetUrl]);
-        openers.push(["gio", "open", targetUrl]);
-        openers.push(["sensible-browser", targetUrl]);
-      } else if (os === "darwin") {
-        openers.push(["open", targetUrl]);
-      } else if (os === "windows") {
-        // cmd /c start breaks URLs containing & because cmd.exe treats & as
-        // a command separator, truncating the OAuth URL before response_type.
-        // rundll32 invokes the URL protocol handler directly without shell
-        // interpretation; powershell Start-Process is a secondary fallback.
-        openers.push(["rundll32", "url.dll,FileProtocolHandler", targetUrl]);
-        openers.push([
-          "powershell",
-          "-NoProfile",
-          "-Command",
-          `Start-Process '${targetUrl.replace(/'/g, "''")}'`,
-        ]);
-      } else {
-        throw new HttpError(
-          STATUS.InternalServerError,
-          `unsupported OS for open-browser: ${os}`,
-        );
-      }
-      let opened = false;
-      for (const cmd of openers) {
-        try {
-          const proc = new Deno.Command(cmd[0], {
-            args: cmd.slice(1),
-            stdout: "null",
-            stderr: "null",
-          });
-          const output = await proc.output();
-          if (output.success) {
-            opened = true;
-            break;
-          }
-        } catch {
-          // This opener isn't available — try next.
-        }
-      }
-      if (!opened) {
-        throw new HttpError(
-          STATUS.InternalServerError,
-          "could not open system browser — xdg-open, gio, and sensible-browser all failed",
-        );
-      }
-      return json({ ok: true });
-    }
-
-    if (
-      req.method === "POST" && url.pathname === "/api/v1/mail/oauth/complete"
-    ) {
-      const body = await readJson<{
-        home?: unknown;
-        oauthState?: unknown;
-        accountId?: unknown;
-        createNew?: unknown;
-        accountName?: unknown;
-        pin?: unknown;
-      }>(req);
-      const home = typeof body.home === "string" ? body.home : undefined;
-      const oauthState = toSafeString(body.oauthState, 256);
-      if (!oauthState) {
-        throw new HttpError(STATUS.BadRequest, "oauthState is required");
-      }
-      const pending = mailOauthCompleted.get(oauthState);
-      if (!pending) {
-        throw new HttpError(STATUS.Conflict, "oauth flow is not completed yet");
-      }
-      const ctx = await getContext(home ?? undefined);
-      await loadIdentityForRequest(ctx);
-      if ((await getMailSecretsStatus(ctx.identityDir)).locked) {
-        throw new HttpError(STATUS.Conflict, "mail migration required");
-      }
-      const requestedAccountId = toSafeString(body.accountId, 128);
-      const createNew = Boolean(body.createNew);
-      const accountName = toSafeString(body.accountName, 128) || "Mail account";
-      const store = await getMailStore(ctx.identityDir);
-      const current = createNew
-        ? null
-        : requestedAccountId
-        ? store.accounts.find((entry) => entry.id === requestedAccountId)
-        : (store.selectedAccountId
-          ? store.accounts.find((entry) => entry.id === store.selectedAccountId)
-          : null);
-      const conf = getOAuthProviderConfig(pending.provider);
-      const accountConfig = normalizeMailConfig(
-        current?.config ?? DEFAULT_MAIL_ACCOUNT,
-        {
-          authType: "oauth",
-          oauthProvider: pending.provider,
-          imapHost: conf.imapHost,
-          imapPort: conf.imapPort,
-          imapSecure: conf.imapSecure,
-          smtpHost: conf.smtpHost,
-          smtpPort: conf.smtpPort,
-          smtpSecure: conf.smtpSecure,
-          username: pending.email,
-          fromEmail: pending.email,
-          fromName: current?.config.fromName ?? "",
-          persistSecrets: true,
-        },
-      );
-      const accountId = current?.id ?? `mail-${randomHex(8)}`;
-      const now = Date.now();
-      const nextRecord: MailAccountRecord = {
-        id: accountId,
-        name: accountName,
-        config: accountConfig,
-        createdAt: current?.createdAt ?? now,
-        updatedAt: now,
-      };
-      if (current) {
-        store.accounts = store.accounts.map((entry) =>
-          entry.id === accountId ? nextRecord : entry
-        );
-      } else {
-        store.accounts.push(nextRecord);
-      }
-      store.selectedAccountId = accountId;
-      await saveMailStore(ctx.identityDir, store);
-      const secretStore = await getMailSecretsStore(ctx.identityDir);
-      secretStore[accountId] = {
-        imapPassword: "",
-        smtpPassword: "",
-        accessToken: pending.accessToken,
-        refreshToken: pending.refreshToken,
-        tokenExpiry: pending.tokenExpiry,
-      };
-      await saveMailSecretsStore(ctx.identityDir, secretStore);
-      mailOauthCompleted.delete(oauthState);
-      return json({
-        ok: true,
-        accountId,
-        accountName: nextRecord.name,
-        account: accountConfig,
-        selectedAccountId: store.selectedAccountId,
-        hasImapPassword: false,
-        hasSmtpPassword: false,
-        hasAccessToken: true,
-        localOnly: true,
-      });
-    }
-
     if (req.method === "GET" && url.pathname === "/api/v1/mail/account") {
       const home = url.searchParams.get("home") ?? undefined;
       const requestedAccountId =
@@ -865,7 +523,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         })),
         hasImapPassword: Boolean(secrets?.imapPassword),
         hasSmtpPassword: Boolean(secrets?.smtpPassword),
-        hasAccessToken: Boolean(secrets?.accessToken),
         secretsInMemory: secretStatus.inMemory,
         secretsLocked: secretStatus.locked,
         localOnly: true,
@@ -891,7 +548,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           imapHost: entry.config.imapHost,
           smtpHost: entry.config.smtpHost,
           authType: entry.config.authType ?? "password",
-          oauthProvider: entry.config.oauthProvider ?? "",
           persistSecrets: entry.config.persistSecrets,
           hasStoredSecret: secretStatus.locked
             ? null
@@ -1038,14 +694,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           typeof body.smtpPassword === "string" && body.smtpPassword.length > 0
             ? body.smtpPassword
             : existingSecrets.smtpPassword,
-        accessToken: existingSecrets.accessToken,
-        refreshToken: existingSecrets.refreshToken,
-        tokenExpiry: existingSecrets.tokenExpiry,
       };
-      if (accountConfig.authType === "oauth") {
-        nextSecrets.imapPassword = "";
-        nextSecrets.smtpPassword = "";
-      }
       secretStore[accountId] = nextSecrets;
       if (!accountConfig.persistSecrets) {
         delete secretStore[accountId];
@@ -1059,7 +708,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         selectedAccountId: store.selectedAccountId,
         hasImapPassword: Boolean(nextSecrets.imapPassword),
         hasSmtpPassword: Boolean(nextSecrets.smtpPassword),
-        hasAccessToken: Boolean(nextSecrets.accessToken),
         localOnly: true,
       });
     }
@@ -1130,7 +778,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                 pagination: { page: 1, totalPages: 1, total: 0 },
                 _timing: {
                   resolveMs,
-                  oauthMs: resolved.oauthRefreshMs,
                   searchMs,
                   fetchMs,
                   totalMs: durationMs(requestStartedAt),
@@ -1154,7 +801,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                   pagination: { page: 1, totalPages: 1, total: 0 },
                   _timing: {
                     resolveMs,
-                    oauthMs: resolved.oauthRefreshMs,
                     searchMs,
                     fetchMs,
                     totalMs: durationMs(requestStartedAt),
@@ -1206,7 +852,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                   pagination: { page: 1, totalPages: 1, total: 0 },
                   _timing: {
                     resolveMs,
-                    oauthMs: resolved.oauthRefreshMs,
                     searchMs,
                     fetchMs,
                     totalMs: durationMs(requestStartedAt),
@@ -1240,7 +885,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                 pagination: { page, totalPages, total },
                 _timing: {
                   resolveMs,
-                  oauthMs: resolved.oauthRefreshMs,
                   searchMs,
                   fetchMs,
                   totalMs: durationMs(requestStartedAt),
@@ -1254,9 +898,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         console.warn(
           `mail/messages account=${resolved.account.id} folder=${folder} search=${
             searchQuery ? "yes" : "no"
-          } resolveMs=${resolveMs} oauthMs=${
-            resolved.oauthRefreshMs ?? 0
-          } searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${
+          } resolveMs=${resolveMs} searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${
             durationMs(requestStartedAt)
           } mailboxExists=${mailboxExists} fetchedCount=${fetchedCount}`,
         );
@@ -1265,9 +907,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         console.warn(
           `mail/messages error account=${resolved.account.id} folder=${folder} search=${
             searchQuery ? "yes" : "no"
-          } resolveMs=${resolveMs} oauthMs=${
-            resolved.oauthRefreshMs ?? 0
-          } searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${
+          } resolveMs=${resolveMs} searchMs=${searchMs} fetchMs=${fetchMs} totalMs=${
             durationMs(requestStartedAt)
           } mailboxExists=${mailboxExists} fetchedCount=${fetchedCount} error=${
             err instanceof Error ? err.message : String(err)
@@ -1388,7 +1028,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
                 ebpBodyPayloadHash,
                 _timing: {
                   resolveMs,
-                  oauthMs: resolved.oauthRefreshMs,
                   connectMs,
                   lockMs,
                   fetchMs,
@@ -1403,18 +1042,14 @@ async function handleRequestInternal(req: Request): Promise<Response> {
           { connectTimeoutMs: 10_000 },
         );
         console.warn(
-          `mail/message account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} oauthMs=${
-            resolved.oauthRefreshMs ?? 0
-          } connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${
+          `mail/message account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${
             durationMs(requestStartedAt)
           } bytes=${sourceBytes}`,
         );
         return response;
       } catch (err) {
         console.warn(
-          `mail/message error account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} oauthMs=${
-            resolved.oauthRefreshMs ?? 0
-          } connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${
+          `mail/message error account=${resolved.account.id} folder=${folder} uid=${uid} resolveMs=${resolveMs} connectMs=${connectMs} lockMs=${lockMs} fetchMs=${fetchMs} parseMs=${parseMs} attachMs=${attachMs} totalMs=${
             durationMs(requestStartedAt)
           } bytes=${sourceBytes} error=${
             err instanceof Error ? err.message : String(err)
@@ -1534,7 +1169,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
               ebpPayload: payload,
               _timing: {
                 resolveMs,
-                oauthMs: resolved.oauthRefreshMs,
                 fetchMs,
                 parseMs,
                 totalMs: durationMs(requestStartedAt),
@@ -1546,9 +1180,7 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         { connectTimeoutMs: 10_000 },
       );
       console.warn(
-        `mail/message/attachment account=${resolved.account.id} folder=${folder} uid=${uid} index=${index} resolveMs=${resolveMs} oauthMs=${
-          resolved.oauthRefreshMs ?? 0
-        } fetchMs=${fetchMs} parseMs=${parseMs} totalMs=${
+        `mail/message/attachment account=${resolved.account.id} folder=${folder} uid=${uid} index=${index} resolveMs=${resolveMs} fetchMs=${fetchMs} parseMs=${parseMs} totalMs=${
           durationMs(requestStartedAt)
         } bytes=${sourceBytes}`,
       );
@@ -2890,7 +2522,6 @@ async function handleRequestInternal(req: Request): Promise<Response> {
     if (req.method === "GET" && url.pathname === "/api/v1/hierarchy/pending") {
       const home = url.searchParams.get("home") ?? undefined;
       const identityName = url.searchParams.get("identity") ?? undefined;
-      const serverOverride = url.searchParams.get("server") ?? undefined;
       const ctx = await getContext(
         home ?? undefined,
         identityName ?? undefined,

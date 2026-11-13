@@ -37,7 +37,6 @@ import AppButton from '../../components/AppButton';
 import SectionTitle from '../../components/SectionTitle';
 import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
-import Card from '../../components/Card';
 import {statusKind} from '../../theme/statusKind';
 import {colors, spacing, typography} from '../../theme/tokens';
 
@@ -57,7 +56,6 @@ export default function MailAccountSetupScreen({
   const [managedDomain, setManagedDomain] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const [existing, setExisting] = useState<MailAccountRecord | null>(null);
-  const [isOAuth, setIsOAuth] = useState(false);
   const [hasExistingSecrets, setHasExistingSecrets] = useState(false);
 
 
@@ -93,7 +91,6 @@ export default function MailAccountSetupScreen({
     }
     if (!accountId) {
       setExisting(null);
-      setIsOAuth(false);
       setHasExistingSecrets(false);
       const defaults = newManualAccountDefaults();
       setAccountName('Mail account');
@@ -117,8 +114,6 @@ export default function MailAccountSetupScreen({
       return;
     }
     setExisting(record);
-    const oauth = record.config.authType === 'oauth';
-    setIsOAuth(oauth);
     setHasExistingSecrets(Boolean(getMailSecretsInMemory(name, record.id)));
     setAccountName(record.name);
     setImapHost(record.config.imapHost);
@@ -177,9 +172,6 @@ export default function MailAccountSetupScreen({
   };
 
   const onTest = async () => {
-    if (isOAuth) {
-      return;
-    }
     setLoading(true);
     setBusyMessage('Connecting IMAP…');
     setStatus('');
@@ -202,9 +194,6 @@ export default function MailAccountSetupScreen({
   };
 
   const onSave = async () => {
-    if (isOAuth) {
-      return;
-    }
     setLoading(true);
     setBusyMessage('Saving mail account…');
     setStatus('');
@@ -334,29 +323,6 @@ export default function MailAccountSetupScreen({
       ],
     );
   };
-
-  if (isEdit && isOAuth && existing) {
-    return (
-      <Screen scroll>
-        <SectionTitle>OAuth account</SectionTitle>
-        <Card padded>
-          <Text style={styles.readOnly}>{existing.name}</Text>
-          <Text style={styles.readOnly}>{existing.config.fromEmail}</Text>
-          <Text style={styles.readOnly}>
-            Provider: {existing.config.oauthProvider}
-          </Text>
-          <Text style={styles.note}>
-            OAuth-linked accounts cannot be edited here. Delete and re-link to
-            change.
-          </Text>
-        </Card>
-        <AppButton title="Delete account" variant="danger" onPress={onDelete} />
-        <StatusBanner message={status} kind={statusKind(status)} />
-      </Screen>
-    );
-  }
-
-
 
   const managedAddress = isManagedMailAddress(fromEmail, managedDomain);
 
@@ -536,10 +502,5 @@ const styles = StyleSheet.create({
   note: {
     fontSize: 13,
     color: colors.muted,
-  },
-  readOnly: {
-    fontSize: typography.body,
-    color: colors.text,
-    marginBottom: 6,
   },
 });

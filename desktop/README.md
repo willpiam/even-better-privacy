@@ -13,11 +13,3 @@ Security expectations for all platforms:
 - If macOS or Windows artifacts are added to the Tauri bundle config, the
   external scripts should be removed or reduced to thin wrappers around the
   Tauri output so there is one release pipeline to audit.
-
-## Mail OAuth client IDs
-
-Mail OAuth client IDs are not compiled into the Tauri binary. The desktop
-launcher forwards `MAIL_OAUTH_GMAIL_CLIENT_ID` and
-`MAIL_OAUTH_OUTLOOK_CLIENT_ID` from the runtime environment to the local backend.
-Packagers should provide these per installation channel or instruct users to set
-them before launching mail OAuth.
