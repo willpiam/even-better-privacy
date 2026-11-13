@@ -49,12 +49,23 @@ describe('accountStoreLogic', () => {
     });
     expect(
       parseMailAccountStore(
-        JSON.stringify({selectedAccountId: 'a1', accounts: [{id: 'a1'}]}),
+        JSON.stringify({selectedAccountId: 'a1', accounts: [{id: 'a1', config: DEFAULT_MAIL_ACCOUNT}]}),
       ),
     ).toEqual({
       selectedAccountId: 'a1',
-      accounts: [{id: 'a1'}],
+      accounts: [{id: 'a1', config: DEFAULT_MAIL_ACCOUNT}],
     });
+  });
+
+  test('unsupported stored authentication is excluded and selection falls back', () => {
+    const passwordAccount = {id: 'password', config: DEFAULT_MAIL_ACCOUNT};
+    expect(parseMailAccountStore(JSON.stringify({
+      selectedAccountId: 'old',
+      accounts: [
+        {id: 'old', config: {...DEFAULT_MAIL_ACCOUNT, authType: 'oauth'}},
+        passwordAccount,
+      ],
+    }))).toEqual({selectedAccountId: 'password', accounts: [passwordAccount]});
   });
 
   test('resolveSelectedAccountId falls back to first account', () => {

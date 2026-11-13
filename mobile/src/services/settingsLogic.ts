@@ -20,10 +20,6 @@ export function parseEnforcePasswordPolicy(value: string | null): boolean {
   return value === 'true';
 }
 
-export function normalizeOptionalPref(value: string | null | undefined): string {
-  return value?.trim() ?? '';
-}
-
 export function resolveServerUrl(
   value: string | null,
   fallback: string,

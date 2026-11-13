@@ -79,27 +79,8 @@ Linux, __ on Mac, or __ on Windows.
 
 The EBP GUI includes a built-in interface for sending and receiving email. It
 connects directly over standard SMTP and IMAP protocols, making it compatible
-with most email providers. EBP also supports OAuth with Gmail and Outlook for a
-simpler experience.
-
-### Native Email Via OAuth
-
-To run using OAuth you will need to provide the following values in your `.env`
-file.
-
-```ini
-MAIL_OAUTH_GMAIL_CLIENT_ID=""
-MAIL_OAUTH_GMAIL_CLIENT_SECRET="" # only provided to key server (playing double duty by also handeling oauth)
-
-# MAIL_OAUTH_OUTLOOK_CLIENT_ID="" # no longer concerned with outlook because the headache wasn't worth the time
-# MAIL_OAUTH_OUTLOOK_CLIENT_SECRET="" # only provided to key server, not the users machine
-```
-
-If you are using a testing gmail client oauth cred you may find this following
-link helpful for adding people as test users.
-[console.cloud.google.com/auth/audience](https://console.cloud.google.com/auth/audience).
-Make sure you are in the correct project. Scroll down to "Test users" and click
-"add users".
+with password-authenticated mail providers. Create an `@pqpost.com` account for
+the managed mail experience, or configure IMAP/SMTP credentials manually.
 
 ### Proton Native Email
 

@@ -8,15 +8,11 @@ import {
   getAutoLockMinutes,
   getEnforcePasswordPolicy,
   getMailIncludePublicKeys,
-  getMailOauthGmailClientIdOverride,
-  getMailOauthOutlookClientIdOverride,
   getMailRenderHtml,
   getServerUrl,
   setAutoLockMinutes,
   setEnforcePasswordPolicy,
   setMailIncludePublicKeys,
-  setMailOauthGmailClientIdOverride,
-  setMailOauthOutlookClientIdOverride,
   setMailRenderHtml,
   setServerUrl,
 } from '../services/settings';
@@ -43,9 +39,6 @@ export default function SettingsScreen(_props: Props): JSX.Element {
   const [autoLockMinutes, setAutoLockMinutesValue] = useState(15);
   const [mailRenderHtml, setMailRenderHtmlValue] = useState(false);
   const [mailIncludePublicKeys, setMailIncludePublicKeysValue] = useState(true);
-  const [gmailOauthClientIdOverride, setGmailOauthClientIdOverride] = useState('');
-  const [outlookOauthClientIdOverride, setOutlookOauthClientIdOverride] =
-    useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -59,24 +52,18 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           lockMinutes,
           renderHtml,
           includeKeys,
-          gmailOverride,
-          outlookOverride,
         ] = await Promise.all([
             getServerUrl(),
             getEnforcePasswordPolicy(),
             getAutoLockMinutes(),
             getMailRenderHtml(),
             getMailIncludePublicKeys(),
-            getMailOauthGmailClientIdOverride(),
-            getMailOauthOutlookClientIdOverride(),
           ]);
         setServerUrlValue(url);
         setEnforcePasswordPolicyValue(enforce);
         setAutoLockMinutesValue(lockMinutes);
         setMailRenderHtmlValue(renderHtml);
         setMailIncludePublicKeysValue(includeKeys);
-        setGmailOauthClientIdOverride(gmailOverride);
-        setOutlookOauthClientIdOverride(outlookOverride);
       })();
     }, []),
   );
@@ -86,8 +73,6 @@ export default function SettingsScreen(_props: Props): JSX.Element {
     setStatus('');
     try {
       await setServerUrl(serverUrl);
-      await setMailOauthGmailClientIdOverride(gmailOauthClientIdOverride);
-      await setMailOauthOutlookClientIdOverride(outlookOauthClientIdOverride);
       await appendActivityLog('Settings saved', 'success');
       setStatus('Saved');
     } catch (error) {
@@ -180,27 +165,6 @@ export default function SettingsScreen(_props: Props): JSX.Element {
         />
       </View>
 
-      <SectionTitle>Advanced</SectionTitle>
-      <Text style={styles.advancedNote}>
-        Mail OAuth client IDs are normally loaded from the key server. Override
-        only for development.
-      </Text>
-      <TextField
-        label="Gmail OAuth client ID override"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={gmailOauthClientIdOverride}
-        onChangeText={setGmailOauthClientIdOverride}
-        placeholder="Optional"
-      />
-      <TextField
-        label="Outlook OAuth client ID override"
-        autoCapitalize="none"
-        autoCorrect={false}
-        value={outlookOauthClientIdOverride}
-        onChangeText={setOutlookOauthClientIdOverride}
-        placeholder="Optional"
-      />
     </Screen>
   );
 }
@@ -222,10 +186,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.body,
     marginRight: spacing.sm,
-  },
-  advancedNote: {
-    fontSize: 13,
-    color: colors.muted,
   },
   fieldLabel: {
     fontSize: typography.caption,

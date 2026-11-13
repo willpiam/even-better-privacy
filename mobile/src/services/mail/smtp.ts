@@ -67,20 +67,6 @@ export async function smtpAuth(
 ): Promise<void> {
   await smtpEhlo(client);
   await maybeSmtpStartTls(client, config.smtpSecure);
-  if (config.authType === 'oauth' && secrets.accessToken) {
-    await mailStub('smtp.auth.wait', 'XOAUTH2');
-    client.writeLine('AUTH XOAUTH2');
-    const line = await client.readLine();
-    if (!line.startsWith('334')) {
-      throw new Error(`SMTP AUTH challenge failed: ${line}`);
-    }
-    const user = config.username || secrets.imapPassword;
-    const raw = `user=${user}\x01auth=Bearer ${secrets.accessToken}\x01\x01`;
-    client.writeLine(Buffer.from(raw, 'utf8').toString('base64'));
-    await readSmtpUntil(client, '235');
-    await mailStub('smtp.auth.ok', 'XOAUTH2');
-    return;
-  }
   await mailStub('smtp.auth.wait', 'LOGIN');
   client.writeLine('AUTH LOGIN');
   await readSmtpUntil(client, '334');

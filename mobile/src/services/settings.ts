@@ -3,12 +3,10 @@ import {DEFAULT_SERVER_URL} from '../config/constants';
 import {
   booleanPrefToStorage,
   clampAutoLockMinutes,
-  normalizeOptionalPref,
   numberPrefToStorage,
   parseAutoLockMinutes,
   parseEnforcePasswordPolicy,
   parseStoredBoolean,
-  parseStoredNumber,
   requireNonEmptyServerUrl,
   resolveServerUrl,
 } from './settingsLogic';
@@ -18,7 +16,6 @@ export {
   clampAutoLockMinutes,
   DEFAULT_AUTO_LOCK_MINUTES,
   AUTO_LOCK_MINUTE_OPTIONS,
-  normalizeOptionalPref,
   numberPrefToStorage,
   parseAutoLockMinutes,
   parseEnforcePasswordPolicy,
@@ -43,41 +40,6 @@ async function getBooleanPref(key: string, fallback: boolean): Promise<boolean> 
 
 async function setBooleanPref(key: string, value: boolean): Promise<void> {
   await AsyncStorage.setItem(key, booleanPrefToStorage(value));
-}
-
-export const MAIL_OAUTH_GMAIL_CLIENT_ID_OVERRIDE_KEY =
-  'ebp.mail.oauth.gmailClientIdOverride';
-export const MAIL_OAUTH_OUTLOOK_CLIENT_ID_OVERRIDE_KEY =
-  'ebp.mail.oauth.outlookClientIdOverride';
-
-async function getOptionalStringPref(key: string): Promise<string> {
-  const value = await AsyncStorage.getItem(key);
-  return normalizeOptionalPref(value);
-}
-
-async function setOptionalStringPref(key: string, value: string): Promise<void> {
-  const clean = normalizeOptionalPref(value);
-  if (clean) {
-    await AsyncStorage.setItem(key, clean);
-  } else {
-    await AsyncStorage.removeItem(key);
-  }
-}
-
-export async function getMailOauthGmailClientIdOverride(): Promise<string> {
-  return getOptionalStringPref(MAIL_OAUTH_GMAIL_CLIENT_ID_OVERRIDE_KEY);
-}
-
-export async function setMailOauthGmailClientIdOverride(value: string): Promise<void> {
-  await setOptionalStringPref(MAIL_OAUTH_GMAIL_CLIENT_ID_OVERRIDE_KEY, value);
-}
-
-export async function getMailOauthOutlookClientIdOverride(): Promise<string> {
-  return getOptionalStringPref(MAIL_OAUTH_OUTLOOK_CLIENT_ID_OVERRIDE_KEY);
-}
-
-export async function setMailOauthOutlookClientIdOverride(value: string): Promise<void> {
-  await setOptionalStringPref(MAIL_OAUTH_OUTLOOK_CLIENT_ID_OVERRIDE_KEY, value);
 }
 
 export async function getServerUrl(): Promise<string> {

@@ -26,9 +26,7 @@ export function normalizeManualMailConfig(
   payload: ManualMailConfigInput,
 ): MailAccountConfig {
   const next: MailAccountConfig = {
-    gmailMode: false,
     authType: 'password',
-    oauthProvider: '',
     imapHost: toSafeString(payload.imapHost ?? base.imapHost),
     imapPort: clampPort(payload.imapPort ?? base.imapPort, 993),
     imapSecure: asBool(payload.imapSecure, base.imapSecure),

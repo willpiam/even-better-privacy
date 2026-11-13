@@ -13,9 +13,7 @@ export function buildImapClient(
   config: MailAccountConfig,
   secrets: MailAuthSecrets,
 ): ImapFlow {
-  const auth = config.authType === "oauth"
-    ? { user: config.username, accessToken: secrets.accessToken ?? "" }
-    : { user: config.username, pass: secrets.imapPassword };
+  const auth = { user: config.username, pass: secrets.imapPassword };
   const client = new ImapFlow({
     host: config.imapHost,
     port: config.imapPort,

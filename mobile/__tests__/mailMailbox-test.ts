@@ -159,9 +159,7 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
     const {listMailboxMessages} = require('../src/services/mail/imap');
     const result = await listMailboxMessages(
       {
-        gmailMode: false,
         authType: 'password',
-        oauthProvider: '',
         imapHost: 'imap.test',
         imapPort: 993,
         imapSecure: true,
@@ -189,9 +187,7 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
 
 describe('appendSentCopy', () => {
   const account = {
-    gmailMode: false,
     authType: 'password' as const,
-    oauthProvider: '' as const,
     imapHost: 'imap.test',
     imapPort: 993,
     imapSecure: true,

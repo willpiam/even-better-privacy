@@ -1,20 +1,12 @@
 import { HttpError, STATUS, bytesToBase64, base64ToBytes } from "./http.ts";
 import { toSafeString, clampPort, asBool } from "./identity.ts";
-import { getOAuthProviderConfig, toOAuthProvider, refreshOAuthToken } from "./mail-oauth.ts";
 
-export type MailAuthType = "oauth" | "password";
-export type MailOauthProvider = "gmail" | "outlook" | "";
 export type MailAuthSecrets = {
 	imapPassword: string;
 	smtpPassword: string;
-	accessToken?: string;
-	refreshToken?: string;
-	tokenExpiry?: number;
 };
 export type MailAccountConfig = {
-	gmailMode: boolean;
-	authType: MailAuthType;
-	oauthProvider: MailOauthProvider;
+	authType: "password";
 	imapHost: string;
 	imapPort: number;
 	imapSecure: boolean;
@@ -49,9 +41,7 @@ export type EncryptedMailSecretsEnvelope = {
 };
 
 export const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
-	gmailMode: false,
 	authType: "password",
-	oauthProvider: "",
 	imapHost: "",
 	imapPort: 993,
 	imapSecure: true,
@@ -104,21 +94,13 @@ export async function writePrivateJson(path: string, value: unknown): Promise<vo
 	}
 }
 
-export function isMailAuthType(value: unknown): value is MailAuthType {
-	return value === "oauth" || value === "password";
-}
-
-export function isMailOauthProvider(value: unknown): value is Exclude<MailOauthProvider, ""> {
-	return value === "gmail" || value === "outlook";
-}
-
 export function isMailAccountConfig(value: unknown): value is MailAccountConfig {
 	if (!value || typeof value !== "object") return false;
 	const v = value as Record<string, unknown>;
 	return typeof v.imapHost === "string" &&
 		typeof v.smtpHost === "string" &&
 		typeof v.username === "string" &&
-		(isMailAuthType(v.authType) || v.authType === undefined);
+		(v.authType === "password" || v.authType === undefined);
 }
 
 export function normalizeMailConfig(
@@ -126,12 +108,11 @@ export function normalizeMailConfig(
 	payload?: Record<string, unknown> | null,
 ): MailAccountConfig {
 	const p = payload ?? {};
-	const authType: MailAuthType = isMailAuthType(p.authType) ? p.authType : (base.authType ?? "password");
-	const oauthProvider: MailOauthProvider = toOAuthProvider(p.oauthProvider ?? base.oauthProvider);
+	if (p.authType !== undefined && p.authType !== "password") {
+		throw new HttpError(STATUS.BadRequest, "Only password authentication is supported");
+	}
 	const next: MailAccountConfig = {
-		gmailMode: asBool(p.gmailMode, base.gmailMode),
-		authType,
-		oauthProvider,
+		authType: "password",
 		imapHost: toSafeString(p.imapHost ?? base.imapHost),
 		imapPort: clampPort(p.imapPort ?? base.imapPort, 993),
 		imapSecure: asBool(p.imapSecure, base.imapSecure),
@@ -143,21 +124,8 @@ export function normalizeMailConfig(
 		fromName: toSafeString(p.fromName ?? base.fromName),
 		persistSecrets: asBool(p.persistSecrets, base.persistSecrets),
 	};
-	if (next.authType === "oauth") {
-		const provider = getOAuthProviderConfig(next.oauthProvider);
-		next.imapHost = provider.imapHost;
-		next.imapPort = provider.imapPort;
-		next.imapSecure = provider.imapSecure;
-		next.smtpHost = provider.smtpHost;
-		next.smtpPort = provider.smtpPort;
-		next.smtpSecure = provider.smtpSecure;
-		next.persistSecrets = true;
-	}
 	if (!next.imapHost || !next.smtpHost || !next.username || !next.fromEmail) {
 		throw new HttpError(STATUS.BadRequest, "imapHost, smtpHost, username, and fromEmail are required");
-	}
-	if (next.authType === "oauth" && !next.oauthProvider) {
-		throw new HttpError(STATUS.BadRequest, "oauthProvider is required for oauth accounts");
 	}
 	return next;
 }
@@ -185,7 +153,8 @@ export async function getMailStore(identityDir: string): Promise<MailAccountStor
 			const rec = item as Partial<MailAccountRecord>;
 			return typeof rec.id === "string" && typeof rec.name === "string" && isMailAccountConfig(rec.config);
 		}).map((item) => item as MailAccountRecord) : [];
-		const selectedAccountId = typeof parsed.selectedAccountId === "string" ? parsed.selectedAccountId : null;
+		const selectedAccountId = accounts.some(a => a.id === parsed.selectedAccountId)
+			? parsed.selectedAccountId! : accounts[0]?.id ?? null;
 		return { selectedAccountId, accounts };
 	}
 	return emptyMailStore();
@@ -215,9 +184,6 @@ export function parseLegacySecretsStore(raw: unknown): MailSecretsStore {
 			default: {
 				imapPassword: maybeLegacy.imapPassword,
 				smtpPassword: maybeLegacy.smtpPassword,
-				accessToken: typeof maybeLegacy.accessToken === "string" ? maybeLegacy.accessToken : undefined,
-				refreshToken: typeof maybeLegacy.refreshToken === "string" ? maybeLegacy.refreshToken : undefined,
-				tokenExpiry: typeof maybeLegacy.tokenExpiry === "number" ? maybeLegacy.tokenExpiry : undefined,
 			},
 		};
 	}
@@ -229,9 +195,6 @@ export function parseLegacySecretsStore(raw: unknown): MailSecretsStore {
 			out[accountId] = {
 				imapPassword: sec.imapPassword,
 				smtpPassword: sec.smtpPassword,
-				accessToken: typeof sec.accessToken === "string" ? sec.accessToken : undefined,
-				refreshToken: typeof sec.refreshToken === "string" ? sec.refreshToken : undefined,
-				tokenExpiry: typeof sec.tokenExpiry === "number" ? sec.tokenExpiry : undefined,
 			};
 		}
 	}
@@ -389,37 +352,22 @@ export async function saveMailSecretsStore(identityDir: string, store: MailSecre
 }
 
 export function buildSmtpAuth(config: MailAccountConfig, secrets: MailAuthSecrets): Record<string, unknown> {
-	if (config.authType === "oauth") {
-		if (!secrets.accessToken) {
-			throw new HttpError(STATUS.BadRequest, "mail oauth access token is not configured");
-		}
-		return { type: "OAuth2", user: config.username, accessToken: secrets.accessToken };
-	}
 	return { user: config.username, pass: secrets.smtpPassword };
 }
 
 export async function resolveMailAccount(
 	identityDir: string,
 	accountId?: string,
-): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets; oauthRefreshMs: number | null }> {
+): Promise<{ account: MailAccountRecord; secrets: MailAuthSecrets }> {
 	const store = await getMailStore(identityDir);
 	if (!store.accounts.length) throw new HttpError(STATUS.BadRequest, "mail account is not configured");
 	const selected = accountId ?? store.selectedAccountId ?? store.accounts[0].id;
 	const account = store.accounts.find((entry) => entry.id === selected);
 	if (!account) throw new HttpError(STATUS.NotFound, "mail account not found");
 	const secretStore = await getMailSecretsStore(identityDir);
-	let secrets = secretStore[account.id];
-	if (account.config.authType === "oauth") {
-		const oauthStartedAt = performance.now();
-		if (!secrets?.refreshToken && !secrets?.accessToken) {
-			throw new HttpError(STATUS.BadRequest, "mail oauth credentials are not configured");
-		}
-		secrets = await refreshOAuthToken(identityDir, account.id, account.config, secrets ?? { imapPassword: "", smtpPassword: "" });
-		if (!secrets.accessToken) throw new HttpError(STATUS.BadRequest, "mail oauth credentials are not configured");
-		return { account, secrets, oauthRefreshMs: Math.round(performance.now() - oauthStartedAt) };
-	}
+	const secrets = secretStore[account.id];
 	if (!secrets?.imapPassword || !secrets?.smtpPassword) {
 		throw new HttpError(STATUS.BadRequest, "mail credentials are not configured");
 	}
-	return { account, secrets, oauthRefreshMs: null };
+	return { account, secrets };
 }

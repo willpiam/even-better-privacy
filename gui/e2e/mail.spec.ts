@@ -128,7 +128,6 @@ async function createMailAccount(
 ) {
   await expandMailSection(page, "Account Setup (Local Device)");
   await page.getByRole("button", { name: "New Account", exact: true }).click();
-  await page.selectOption("#mail-auth-type", "password");
   await page.fill("#mail-account-name", accountName);
   await page.fill("#mail-imap-host", account.imapHost);
   await page.fill("#mail-imap-port", String(account.imapPort));
@@ -411,7 +410,6 @@ test("mail reader defaults to plaintext and can render HTML from settings", asyn
         accountId: "mock-account",
         accountName: "Mock account",
         account: {
-          gmailMode: false,
           imapHost: "imap.example.com",
           imapPort: 993,
           imapSecure: true,
@@ -553,7 +551,6 @@ test("mail message load timeout surfaces error and later selection still loads",
         accountId: "mock-account",
         accountName: "Mock account",
         account: {
-          gmailMode: false,
           imapHost: "imap.example.com",
           imapPort: 993,
           imapSecure: true,
@@ -788,7 +785,6 @@ test("inbox search passes search param and filters displayed messages", async ({
         accountId: "mock-account",
         accountName: "Mock account",
         account: {
-          gmailMode: false,
           imapHost: "imap.example.com",
           imapPort: 993,
           imapSecure: true,
@@ -920,7 +916,6 @@ test("inbox pagination navigates between pages", async ({ page }) => {
         accountId: "mock-account",
         accountName: "Mock account",
         account: {
-          gmailMode: false,
           imapHost: "imap.example.com",
           imapPort: 993,
           imapSecure: true,

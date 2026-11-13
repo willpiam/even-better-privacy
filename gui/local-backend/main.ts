@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { loadSync } from "std/dotenv";
 import { handleRequest } from "./routes.ts";
@@ -9,8 +9,7 @@ import { startUnlockSweeper } from "./unlock-session.ts";
 let envLoaded = false;
 function loadEnvOnce(): void {
 	if (envLoaded) return;
-	// Try loading .env from several locations so OAuth client IDs can be
-	// picked up even when the app is installed (not running from the source tree).
+	// Load runtime settings from the source tree or installed app directory.
 	const candidates: string[] = [];
 	try { candidates.push(new URL(".env", import.meta.url).pathname); } catch { /* ignore */ }
 	const home = Deno.env.get("HOME") || Deno.env.get("USERPROFILE") || "";

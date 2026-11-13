@@ -232,14 +232,9 @@ export async function saveMailAccountWithSecrets(
       smtpPassword && smtpPassword.length > 0
         ? smtpPassword
         : existingSecrets?.smtpPassword ?? '',
-    accessToken: existingSecrets?.accessToken,
-    refreshToken: existingSecrets?.refreshToken,
-    tokenExpiry: existingSecrets?.tokenExpiry,
   };
-  if (record.config.authType === 'password') {
-    if (!nextSecrets.imapPassword || !nextSecrets.smtpPassword) {
-      throw new Error('IMAP and SMTP passwords are required');
-    }
+  if (!nextSecrets.imapPassword || !nextSecrets.smtpPassword) {
+    throw new Error('IMAP and SMTP passwords are required');
   }
   const effectivePin = pinMemory.get(identityName);
   if (record.config.persistSecrets && !effectivePin) {

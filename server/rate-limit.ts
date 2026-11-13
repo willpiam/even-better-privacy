@@ -15,8 +15,6 @@ export const RATE_LIMITS: Record<string, { windowMs: number; maxRequests: number
   "POST /api/v1/hierarchy/accept": { windowMs: 60_000, maxRequests: 10 },
   "POST /api/v1/hierarchy/reject": { windowMs: 60_000, maxRequests: 10 },
   "GET /api/v1/verify-email": { windowMs: 60_000, maxRequests: 30 },
-  "POST /api/v1/mail/oauth/exchange": { windowMs: 60_000, maxRequests: 10 },
-  "POST /api/v1/mail/oauth/refresh": { windowMs: 60_000, maxRequests: 20 },
   "POST /api/v1/mail/signup": { windowMs: 3_600_000, maxRequests: 3 },
   "POST /api/v1/mail/reset-password": { windowMs: 3_600_000, maxRequests: 5 },
   "POST /api/v1/mail/delete": { windowMs: 3_600_000, maxRequests: 5 },

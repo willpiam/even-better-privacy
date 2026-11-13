@@ -27,7 +27,7 @@ not yet capture.
 `gui/local-backend/routes.ts` (4,795 lines) holds 46+ inline arms of
 `if (req.method === ... && url.pathname === ...)` inside one
 `handleRequestInternal` function. There are no per-domain handler
-modules; sign/verify/encrypt/decrypt/file/mail/oauth/hierarchy/contacts
+modules; sign/verify/encrypt/decrypt/file/mail/hierarchy/contacts
 all branch from the same body.
 
 Compare to `server/main.ts` (252 lines), which routes the same way but
@@ -37,7 +37,7 @@ template; the GUI backend has not adopted it.
 
 This is the README item `tighten up gui/local-backend`. Concrete
 remediation: split `routes.ts` into `gui/local-backend/handlers/{sign,
-verify,encrypt,decrypt,file,mail,oauth,hierarchy,contacts}.ts`,
+verify,encrypt,decrypt,file,mail,hierarchy,contacts}.ts`,
 mirroring the `server/handlers/` shape.
 
 Evidence:
@@ -228,23 +228,12 @@ would localize the wiring and remove the late-bound injection.
 Evidence:
 - `gui/app.js` (1,241 lines, `addEventListener` count = 49)
 
-### 10. Public key server carries mail-OAuth proxy code
+### 10. Public key server mail proxy — resolved
 
-`server/mail-oauth.ts` (190 lines) and `server/handlers` for
-`/api/v1/mail/oauth/exchange` and `/api/v1/mail/oauth/refresh` exist
-because Gmail/Outlook OAuth client secrets cannot live on user
-devices. This is documented in the ReadMe ("only provided to key
-server (playing double duty by also handling oauth)").
-
-The coupling is necessary in the current design but not architectural
-(the discovery server has no other reason to know about mail
-providers). If mail OAuth ever justifies its own service, splitting
-it out of the discovery/key server would simplify both surfaces.
-
-Evidence:
-- `server/mail-oauth.ts`
-- `server/main.ts` lines 231-236
-- ReadMe.md "Native Email Via OAuth"
+Gmail and Outlook OAuth support has been removed from the public server,
+local backend, desktop launcher, and mobile app. Mail accounts now use
+IMAP/SMTP password credentials; managed `@pqpost.com` signup remains supported.
+The former exchange/refresh proxy and client configuration are gone.
 
 ## Lower-priority simplifications (still real)
 

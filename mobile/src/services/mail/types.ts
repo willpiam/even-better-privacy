@@ -1,18 +1,11 @@
-export type MailAuthType = 'oauth' | 'password';
-export type MailOauthProvider = 'gmail' | 'outlook' | '';
 
 export type MailAuthSecrets = {
   imapPassword: string;
   smtpPassword: string;
-  accessToken?: string;
-  refreshToken?: string;
-  tokenExpiry?: number;
 };
 
 export type MailAccountConfig = {
-  gmailMode: boolean;
-  authType: MailAuthType;
-  oauthProvider: MailOauthProvider;
+  authType: 'password';
   imapHost: string;
   imapPort: number;
   imapSecure: boolean;
@@ -60,9 +53,7 @@ export type MailMessageDetail = {
 };
 
 export const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
-  gmailMode: false,
   authType: 'password',
-  oauthProvider: '',
   imapHost: '',
   imapPort: 993,
   imapSecure: true,
@@ -74,5 +65,3 @@ export const DEFAULT_MAIL_ACCOUNT: MailAccountConfig = {
   fromName: '',
   persistSecrets: false,
 };
-
-export const MAIL_OAUTH_REDIRECT_URI = 'ebp://mail/oauth/callback';
