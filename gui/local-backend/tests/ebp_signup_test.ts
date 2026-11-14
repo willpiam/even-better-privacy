@@ -4,8 +4,9 @@ import { initSecurity, setCsrfTokenForTest } from "../security.ts";
 
 const TEST_TOKEN = "s".repeat(64);
 const PASSWORD = "Correct-Horse-Battery-9";
-const DOMAIN = "pqpost.test";
-const SERVER = "https://keys.test";
+const DOMAIN = "test.pqpost.com";
+const MAIL_HOST = "mail.pqpost.com";
+const SERVER = "http://127.0.0.1:8789";
 
 type SignupBody = {
   fingerprint: string;
@@ -35,12 +36,13 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 async function withEnv(
-  fn: (home: string, signups: SignupBody[], setSignupStatus: (s: number) => void) => Promise<void>,
+  fn: (home: string, signups: SignupBody[], setSignupStatus: (s: number) => void, payments: Record<string, unknown>[]) => Promise<void>,
 ): Promise<void> {
   const securityHome = await Deno.makeTempDir({ prefix: "ebp-signup-sec-" });
   const home = await Deno.makeTempDir({ prefix: "ebp-signup-home-" });
   const realFetch = globalThis.fetch;
   const signups: SignupBody[] = [];
+  const payments: Record<string, unknown>[] = [];
   let signupStatus = 200;
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
@@ -48,13 +50,21 @@ async function withEnv(
       return jsonResponse({
         enabled: true,
         domain: DOMAIN,
-        imap: { host: `mail.${DOMAIN}`, port: 993, secure: true },
-        smtp: { host: `mail.${DOMAIN}`, port: 465, secure: true },
+        imap: { host: MAIL_HOST, port: 993, secure: true },
+        smtp: { host: MAIL_HOST, port: 465, secure: true },
       });
     }
     if (url.pathname === "/api/v1/mail/username-available") {
       const u = url.searchParams.get("u");
       return jsonResponse({ available: u !== "taken", username: u });
+    }
+    if (url.pathname === "/api/v1/mail/payment/recover") {
+      payments.push(JSON.parse(String(init?.body)));
+      return jsonResponse({ orderId: null });
+    }
+    if (url.pathname === "/api/v1/mail/payment/order") {
+      payments.push(JSON.parse(String(init?.body)));
+      return jsonResponse({ orderId: "123e4567-e89b-42d3-a456-426614174000" });
     }
     if (url.pathname === "/api/v1/mail/signup") {
       const body = JSON.parse(String(init?.body)) as SignupBody;
@@ -67,8 +77,8 @@ async function withEnv(
         ok: true,
         email,
         login: email,
-        imap: { host: `mail.${DOMAIN}`, port: 993, secure: true },
-        smtp: { host: `mail.${DOMAIN}`, port: 465, secure: true },
+        imap: { host: MAIL_HOST, port: 993, secure: true },
+        smtp: { host: MAIL_HOST, port: 465, secure: true },
       });
     }
     return jsonResponse({ error: "unexpected" }, 500);
@@ -78,7 +88,7 @@ async function withEnv(
     setCsrfTokenForTest(TEST_TOKEN);
     await fn(home, signups, (s) => {
       signupStatus = s;
-    });
+    }, payments);
   } finally {
     globalThis.fetch = realFetch;
     await Deno.remove(securityHome, { recursive: true });
@@ -136,13 +146,38 @@ Deno.test({
       const acctRes = await handleRequest(req("GET", `/api/v1/mail/account?home=${encodeURIComponent(home)}&server=${SERVER}`));
       const acct = await acctRes.json();
       assertEquals(acct.selectedAccountId, body.accountId);
-      assertEquals(acct.account.imapHost, `mail.${DOMAIN}`);
+      assertEquals(acct.account.imapHost, MAIL_HOST);
       assertEquals(acct.account.fromEmail, `alice@${DOMAIN}`);
       assertEquals(acct.hasImapPassword, true);
 
       const idRes = await handleRequest(req("GET", `/api/v1/identity/public?home=${encodeURIComponent(home)}&server=${SERVER}`));
       const idText = await idRes.text();
       assert(idText.includes(`alice@${DOMAIN}`), "identity should carry the email detail");
+    });
+  },
+});
+
+Deno.test({
+  name: "ebp-payment signs separate recover and order proofs and opens test checkout",
+  permissions: { read: true, write: true, env: true, net: true, sys: ["hostname"] },
+  fn: async () => {
+    await withEnv(async (home, _signups, _setStatus, payments) => {
+      await createIdentity(home);
+      const common = { home, server: SERVER, identity: "wizard", password: PASSWORD, username: "Alice" };
+      const recovery = await handleRequest(req("POST", "/api/v1/mail/ebp-payment/recover", common));
+      assertEquals(recovery.status, 200, await recovery.clone().text());
+      const order = await handleRequest(req("POST", "/api/v1/mail/ebp-payment/order", { ...common, network: "ethereum-sepolia", asset: "USDC" }));
+      const result = await order.json();
+      assertEquals(order.status, 200, JSON.stringify(result));
+      assertEquals(result.checkoutUrl, "http://127.0.0.1:8789/checkout.html#123e4567-e89b-42d3-a456-426614174000");
+      assertEquals(payments.length, 2);
+      const decode = (value: unknown) => JSON.parse(new TextDecoder().decode(Uint8Array.from(String(value).match(/../g)!, (part) => parseInt(part, 16))));
+      const recoveryProof = decode(payments[0].proof);
+      const orderProof = decode(payments[1].proof);
+      assertEquals(recoveryProof.path, "ebp-mail::payment-recover");
+      assertEquals(orderProof.path, "ebp-mail::payment-order");
+      assertEquals(orderProof.detail, JSON.stringify(["alice@test.pqpost.com", "ethereum-sepolia", "USDC"]));
+      assertEquals(orderProof.nonce, recoveryProof.nonce + 1);
     });
   },
 });

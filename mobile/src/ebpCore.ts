@@ -34,8 +34,11 @@ export {validatePassword} from '../../common/PasswordPolicy';
 export {
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
+  MAIL_PAYMENT_ORDER_PATH,
+  MAIL_PAYMENT_RECOVER_PATH,
   buildMailDeleteDetail,
   buildMailPasswordResetDetail,
+  buildMailPaymentOrderDetail,
   normalizeMailUsername,
   validateMailUsername,
   type MailUsernameCheck,

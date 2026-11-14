@@ -11,11 +11,18 @@ import {
   mailboxDeleteConfirmed,
   managedMailboxRestoreHint,
   managedEmailLookupError,
+  checkoutHandoff,
+  formatUsdPrice,
+  mobileAddressChoice,
   parseSignupConfig,
   parseSignupResponse,
+  parseTestPaymentAssets,
+  parseUsernameAvailability,
   parseVerifiedManagedEmail,
   pickQuizIndexes,
   quizMatches,
+  PRODUCTION_KEY_SERVER,
+  testCheckoutUrl,
   validateMailUsername,
   wizardSteps,
 } from '../src/services/mail/ebpSignupLogic';
@@ -207,5 +214,97 @@ describe('ebpSignupLogic', () => {
   test('managedMailboxRestoreHint points at Mail accounts', () => {
     expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('alice@pqpost.test');
     expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('Mail accounts');
+  });
+
+  const ORDER = 'b34af21f-ccfd-404b-84cc-865afdad3100';
+  const assets = [
+    {network: 'ethereum-sepolia', symbol: 'ETH'},
+    {network: 'cardano-preview', symbol: 'ADA'},
+    {network: 'ethereum-mainnet', symbol: 'ETH'},
+    {network: 'ethereum-sepolia', symbol: 'ETH'},
+  ];
+
+  test('parseUsernameAvailability requires a positive integer price', () => {
+    expect(parseUsernameAvailability({
+      available: false,
+      purchasable: true,
+      username: 'short',
+      usdCents: 100,
+    }, 'fallback')).toMatchObject({purchasable: true, usdCents: 100, username: 'short'});
+    expect(parseUsernameAvailability({purchasable: true, usdCents: 0}, 'name').purchasable).toBe(false);
+    expect(parseUsernameAvailability({available: true}, 'name')).toMatchObject({
+      available: true,
+      purchasable: false,
+      username: 'name',
+    });
+  });
+
+  test('parseTestPaymentAssets keeps only test networks', () => {
+    expect(parseTestPaymentAssets({assets})).toEqual([
+      {network: 'ethereum-sepolia', symbol: 'ETH'},
+      {network: 'cardano-preview', symbol: 'ADA'},
+    ]);
+    expect(parseTestPaymentAssets({})).toEqual([]);
+  });
+
+  test('formatUsdPrice uses cents', () => {
+    expect(formatUsdPrice(100)).toBe('$1.00 USD');
+    expect(formatUsdPrice(600)).toBe('$6.00 USD');
+  });
+
+  test('mobileAddressChoice offers a purchase only in test mode', () => {
+    const availability = {
+      available: false,
+      purchasable: true,
+      username: 'short',
+      usdCents: 100,
+    };
+    expect(mobileAddressChoice({
+      testMode: false,
+      domain: 'test.pqpost.com',
+      availability,
+      assets,
+    }).kind).toBe('unavailable');
+    expect(mobileAddressChoice({
+      testMode: true,
+      domain: 'pqpost.com',
+      availability,
+      assets,
+    })).toMatchObject({kind: 'unavailable', reason: 'Short names can only be purchased for test.pqpost.com.'});
+    expect(mobileAddressChoice({
+      testMode: true,
+      domain: 'test.pqpost.com',
+      availability,
+      assets,
+    })).toEqual({
+      kind: 'purchase',
+      username: 'short',
+      usdCents: 100,
+      assets: [
+        {network: 'ethereum-sepolia', symbol: 'ETH'},
+        {network: 'cardano-preview', symbol: 'ADA'},
+      ],
+    });
+    expect(mobileAddressChoice({
+      testMode: true,
+      domain: 'test.pqpost.com',
+      availability: {available: true, purchasable: false, username: 'longname'},
+      assets,
+    })).toEqual({kind: 'available', username: 'longname'});
+  });
+
+  test('test checkout stays on the production key server origin', () => {
+    expect(testCheckoutUrl(PRODUCTION_KEY_SERVER, ORDER))
+      .toBe(`https://test.pqpost.com/checkout.html#${ORDER}`);
+    expect(testCheckoutUrl('http://127.0.0.1:8789', ORDER))
+      .toBe(`http://127.0.0.1:8789/checkout.html#${ORDER}`);
+    expect(testCheckoutUrl('https://example.test', ORDER)).toBeNull();
+    expect(testCheckoutUrl(PRODUCTION_KEY_SERVER, 'not-an-order')).toBeNull();
+    const remote = checkoutHandoff(`https://test.pqpost.com/checkout.html#${ORDER}`);
+    expect(remote.canOpenOnDevice).toBe(true);
+    expect(remote.message).toContain('test funds only');
+    const local = checkoutHandoff(`http://127.0.0.1:8789/checkout.html#${ORDER}`);
+    expect(local.canOpenOnDevice).toBe(false);
+    expect(local.message).toContain('localhost');
   });
 });

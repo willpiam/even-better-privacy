@@ -348,12 +348,33 @@ export async function runMailE2e(
   if (testFailed) throw testFailure;
 }
 
+/** Ubuntu's Deno SQLite plugin needs a newer glibc than this machine has. */
+function useSystemSqlite(): void {
+  if (Deno.env.get("DENO_SQLITE_PATH")?.trim()) return;
+  for (
+    const candidate of [
+      "/usr/lib/x86_64-linux-gnu/libsqlite3.so",
+      "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    ]
+  ) {
+    try {
+      if (Deno.statSync(candidate).isFile) {
+        Deno.env.set("DENO_SQLITE_PATH", candidate);
+        return;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+}
+
 async function startLocalServer(config: MailTestConfig): Promise<void> {
   if (!Deno.env.get("STALWART_ADMIN_TOKEN")?.trim()) {
     throw new Error(
       "Set STALWART_ADMIN_TOKEN in .env.pqpost-mail.local to provision test mailboxes.",
     );
   }
+  useSystemSqlite();
   const resultsDir = new URL("../test-results/", import.meta.url);
   const dbPath = new URL("pqpost-mail-e2e.sqlite", resultsDir).pathname;
   await Deno.mkdir(resultsDir, { recursive: true });
@@ -375,11 +396,17 @@ async function startLocalServer(config: MailTestConfig): Promise<void> {
   if (!Deno.env.get("STALWART_ADMIN_URL")?.trim()) {
     Deno.env.set("STALWART_ADMIN_URL", `https://${config.mailHost}`);
   }
-  const { handleRequest, closeDb } = await import("../server/main.ts");
+  const { handleRequest, closeDb, startPaymentReconciliation } = await import(
+    "../server/main.ts"
+  );
+  startPaymentReconciliation();
   console.log(`test mail domain: ${TEST_MAIL_DOMAIN}; database: ${dbPath}`);
   const server = Deno.serve(
     { hostname: "127.0.0.1", port: 8789 },
-    (req) => handleRequest(req),
+    async (req) => {
+      const response = await serveLocalCheckout(req);
+      return response ?? handleRequest(req);
+    },
   );
   const shutdown = () => {
     void server.shutdown();
@@ -393,6 +420,33 @@ async function startLocalServer(config: MailTestConfig): Promise<void> {
     Deno.removeSignalListener("SIGTERM", shutdown);
     await closeDb();
   }
+}
+
+/** Serve only the checkout assets from the loopback-only test server. */
+export async function serveLocalCheckout(
+  req: Request,
+): Promise<Response | null> {
+  if (req.method !== "GET") return null;
+  const assets: Record<string, string> = {
+    "/checkout.html": "text/html; charset=utf-8",
+    "/checkout.js": "text/javascript; charset=utf-8",
+    "/checkout.css": "text/css; charset=utf-8",
+    "/styles.css": "text/css; charset=utf-8",
+  };
+  const path = new URL(req.url).pathname;
+  if (!Object.hasOwn(assets, path)) return null;
+  const text = await Deno.readTextFile(
+    new URL(`../website${path}`, import.meta.url),
+  );
+  return new Response(text, {
+    headers: {
+      "content-type": assets[path],
+      "x-content-type-options": "nosniff",
+      "referrer-policy": "no-referrer",
+      "content-security-policy":
+        "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'",
+    },
+  });
 }
 
 if (import.meta.main) {

@@ -10,8 +10,37 @@ import {
   type MailTestConfig,
   readMailTestConfig,
   runMailE2e,
+  serveLocalCheckout,
   TEST_MAIL_DOMAIN,
 } from "./pqpost_mail_e2e.ts";
+
+Deno.test("local test checkout serves only the required static files", async () => {
+  const page = await serveLocalCheckout(
+    new Request("http://127.0.0.1:8789/checkout.html"),
+  );
+  assert(page);
+  assertEquals(page.status, 200);
+  assertStringIncludes(await page.text(), "Complete your purchase");
+  const javascript = await serveLocalCheckout(
+    new Request("http://127.0.0.1:8789/checkout.js"),
+  );
+  assert(javascript);
+  assertStringIncludes(
+    javascript.headers.get("content-type") ?? "",
+    "javascript",
+  );
+  await javascript.body?.cancel();
+  assertEquals(
+    await serveLocalCheckout(new Request("http://127.0.0.1:8789/.env")),
+    null,
+  );
+  assertEquals(
+    await serveLocalCheckout(
+      new Request("http://127.0.0.1:8789/checkout.html", { method: "POST" }),
+    ),
+    null,
+  );
+});
 
 const CONFIG: MailTestConfig = {
   keyServer: "http://127.0.0.1:8789",

@@ -30,6 +30,7 @@ const SERVER_URL_KEY = 'ebp.server_url';
 export const ENFORCE_PASSWORD_POLICY_KEY = 'ebp.identity.enforcePasswordPolicy';
 export const MAIL_RENDER_HTML_KEY = 'ebp.mail.renderHtml';
 export const MAIL_INCLUDE_PUBLIC_KEYS_KEY = 'ebp.mail.includePublicKeys';
+export const MAIL_TEST_MODE_KEY = 'ebp.mail.testMode';
 /** Matches GUI localStorage key `ebp.identity.autoLockMinutes`. */
 export const AUTO_LOCK_MINUTES_KEY = 'ebp.identity.autoLockMinutes';
 
@@ -71,6 +72,14 @@ export async function setMailRenderHtml(value: boolean): Promise<void> {
 
 export async function getMailIncludePublicKeys(): Promise<boolean> {
   return getBooleanPref(MAIL_INCLUDE_PUBLIC_KEYS_KEY, true);
+}
+
+export async function getMailTestMode(): Promise<boolean> {
+  return getBooleanPref(MAIL_TEST_MODE_KEY, false);
+}
+
+export async function setMailTestMode(value: boolean): Promise<void> {
+  await setBooleanPref(MAIL_TEST_MODE_KEY, value);
 }
 
 export async function setMailIncludePublicKeys(value: boolean): Promise<void> {

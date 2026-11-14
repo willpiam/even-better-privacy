@@ -12,6 +12,12 @@ export const MAIL_PASSWORD_RESET_PATH = "ebp-mail::password-reset";
 
 /** Path signed (but never stored) when deleting a managed mailbox. */
 export const MAIL_DELETE_PATH = "ebp-mail::delete";
+export const MAIL_PAYMENT_ORDER_PATH = "ebp-mail::payment-order";
+export const MAIL_PAYMENT_RECOVER_PATH = "ebp-mail::payment-recover";
+
+export function buildMailPaymentOrderDetail(email: string, network: string, asset: string): string {
+  return JSON.stringify([email.toLowerCase(), network, asset]);
+}
 
 /** Live end-to-end tests use `e2e` plus digits. People cannot register these. */
 export const E2E_MAIL_USERNAME = /^e2e[0-9]+$/;

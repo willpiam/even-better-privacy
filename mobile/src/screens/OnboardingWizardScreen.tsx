@@ -1,6 +1,8 @@
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {StyleSheet, Text, View} from 'react-native';
+import {Linking, StyleSheet, Text, View} from 'react-native';
+import Clipboard from '@react-native-clipboard/clipboard';
+import Share from 'react-native-share';
 import {useNavigation} from '@react-navigation/native';
 import Screen from '../components/Screen';
 import TextField from '../components/TextField';
@@ -10,25 +12,37 @@ import StatusBanner from '../components/StatusBanner';
 import {randomHex, validatePassword} from '../ebpCore';
 import {createHdIdentity, createHdMnemonic} from '../services/hd';
 import {publishIdentity} from '../services/publish';
-import {getEnforcePasswordPolicy, getServerUrl} from '../services/settings';
+import {getEnforcePasswordPolicy, getMailTestMode, getServerUrl} from '../services/settings';
 import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../services/storage';
 import {appendActivityLog} from '../services/activityLog';
 import {
   checkEbpUsername,
+  createTestPaymentOrder,
   EbpMailApiError,
   fetchEbpSignupConfig,
+  fetchPaymentOrderStatus,
+  fetchTestPaymentAssets,
+  rememberedPaymentOrder,
+  rememberPaymentOrder,
+  recoverTestPaymentOrder,
   resetEbpMailbox,
   signupEbpMailbox,
 } from '../services/mail/ebpSignup';
 import {
+  checkoutHandoff,
   chooseIdentityName,
+  formatUsdPrice,
   isAddressTakenError,
   isAlreadyHasMailboxError,
+  mobileAddressChoice,
   pickQuizIndexes,
   quizMatches,
+  TEST_MAIL_DOMAIN,
+  testCheckoutUrl,
   validateMailUsername,
   type EbpSignupConfig,
   type OnboardingWizardStep,
+  type PaymentAsset,
 } from '../services/mail/ebpSignupLogic';
 import {colors} from '../theme/tokens';
 
@@ -57,6 +71,15 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const [username, setUsername] = useState('');
   const [usernameHint, setUsernameHint] = useState('');
   const [usernameOk, setUsernameOk] = useState(false);
+  const [testMode, setTestMode] = useState(false);
+  const [paid, setPaid] = useState(false);
+  const [assets, setAssets] = useState<PaymentAsset[]>([]);
+  const [assetIndex, setAssetIndex] = useState(0);
+  const [orderId, setOrderId] = useState('');
+  const [checkoutUrl, setCheckoutUrl] = useState('');
+  const [checkoutMessage, setCheckoutMessage] = useState('');
+  const [canOpenCheckout, setCanOpenCheckout] = useState(false);
+  const [awaitingPayment, setAwaitingPayment] = useState(false);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordHint, setPasswordHint] = useState('');
@@ -96,11 +119,15 @@ export default function OnboardingWizardScreen(): JSX.Element {
     (async () => {
       try {
         const url = await getServerUrl();
-        const cfg = await fetchEbpSignupConfig(url);
+        const testing = await getMailTestMode();
+        const cfg = await fetchEbpSignupConfig(url, testing);
         if (cancelled) return;
         setServer(url);
+        setTestMode(testing);
         setConfig(cfg);
-        if (!cfg.enabled) {
+        if (testing && cfg.enabled && cfg.domain !== TEST_MAIL_DOMAIN) {
+          setConfigError('This key server did not offer test.pqpost.com addresses.');
+        } else if (!cfg.enabled) {
           setConfigError(
             "This key server doesn't offer EBP email addresses yet. You can still create keys and add an existing mailbox manually.",
           );
@@ -124,6 +151,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
     (value: string) => {
       setUsername(value);
       setUsernameOk(false);
+      setPaid(false);
+      setAssets([]);
       const local = validateMailUsername(value);
       if (!value.trim()) {
         setUsernameHint('');
@@ -138,13 +167,29 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setTimeout(async () => {
         if (seq !== checkSeq.current) return;
         try {
-          const res = await checkEbpUsername(server, local.username);
+          const res = await checkEbpUsername(server, local.username, testMode);
           if (seq !== checkSeq.current) return;
-          if (res.available) {
+          const paymentAssets = res.purchasable && testMode
+            ? await fetchTestPaymentAssets(server)
+            : [];
+          if (seq !== checkSeq.current) return;
+          const choice = mobileAddressChoice({
+            testMode,
+            domain,
+            availability: res,
+            assets: paymentAssets,
+          });
+          if (choice.kind === 'available') {
             setUsernameOk(true);
-            setUsernameHint(`${res.username}@${domain} is available`);
+            setUsernameHint(`${choice.username}@${domain} is available`);
+          } else if (choice.kind === 'purchase') {
+            setPaid(true);
+            setAssets(choice.assets);
+            setAssetIndex(0);
+            setUsernameOk(true);
+            setUsernameHint(`One-time price: ${formatUsdPrice(choice.usdCents)}`);
           } else {
-            setUsernameHint(res.reason ?? 'That address is taken.');
+            setUsernameHint(choice.reason);
           }
         } catch (error) {
           if (seq === checkSeq.current) {
@@ -153,7 +198,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
         }
       }, 350);
     },
-    [server, domain],
+    [server, domain, testMode],
   );
 
   const normalizedUsername = username.trim().toLowerCase();
@@ -193,11 +238,13 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
   const runCreate = async () => {
     if (!config?.enabled) return;
+    if (testMode && config.domain !== TEST_MAIL_DOMAIN) return;
     setStep('create');
     setCreateError('');
     setCreateStatus(undefined);
     setRestored(false);
     let current: TaskKey = 'keys';
+    let keysPublished = published;
     try {
       let name = identityName;
       if (!name) {
@@ -217,11 +264,63 @@ export default function OnboardingWizardScreen(): JSX.Element {
         setTask('keys', 'done');
       }
       current = 'publish';
-      if (!published) {
+      if (!keysPublished) {
         setTask('publish', 'running');
         await publishIdentity({identityName: name, password, server});
+        keysPublished = true;
         setPublished(true);
         setTask('publish', 'done');
+      }
+      if (paid) {
+        const asset = assets[assetIndex] ?? assets[0];
+        if (!asset) throw new Error('Choose a test-network payment.');
+        let id = orderId || await rememberedPaymentOrder(server, name, normalizedUsername);
+        if (!id) {
+          id = await recoverTestPaymentOrder({
+            identityName: name,
+            password,
+            username: normalizedUsername,
+            domain,
+            server,
+          }) ?? '';
+        }
+        if (!id) {
+          const created = await createTestPaymentOrder({
+            identityName: name,
+            password,
+            username: normalizedUsername,
+            domain,
+            server,
+            asset,
+          });
+          id = created.orderId;
+        }
+        setOrderId(id);
+        await rememberPaymentOrder(server, name, normalizedUsername, id);
+        const status = await fetchPaymentOrderStatus(server, id);
+        if (status === 'expired') {
+          await rememberPaymentOrder(server, name, normalizedUsername, null);
+          setOrderId('');
+          setCheckoutUrl('');
+          setAwaitingPayment(false);
+          setCreateError('The quote expired. If you sent a payment, contact support. Otherwise, request a new quote.');
+          return;
+        }
+        if (status !== 'confirmed' && status !== 'fulfilled') {
+          const url = testCheckoutUrl(server, id);
+          if (!url) throw new Error('Checkout is not available for this key server.');
+          const handoff = checkoutHandoff(url);
+          setCheckoutUrl(handoff.url);
+          setCanOpenCheckout(handoff.canOpenOnDevice && status !== 'manual_review');
+          setCheckoutMessage(status === 'manual_review'
+            ? 'This order needs support. Contact support before paying again.'
+            : handoff.message);
+          setAwaitingPayment(true);
+          setCreateError('');
+          return;
+        }
+        setAwaitingPayment(false);
+        setCheckoutUrl('');
       }
       current = 'mailbox';
       setTask('mailbox', 'running');
@@ -231,6 +330,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
         username: normalizedUsername,
         server,
         config,
+        testMode,
       });
       setTask('mailbox', 'done');
       await appendActivityLog(`EBP mailbox created: ${res.email}`, 'success');
@@ -247,7 +347,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setMnemonic('');
       setStep('done');
     } catch (error) {
-      setTask(current, 'error');
+      if (!(current === 'publish' && keysPublished)) setTask(current, 'error');
       setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
       setCreateError(error instanceof Error ? error.message : String(error));
     }
@@ -332,6 +432,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
   };
 
   const words = mnemonic.trim() ? mnemonic.trim().split(/\s+/) : [];
+  const testDomainReady = !testMode || (config?.enabled === true && config.domain === TEST_MAIL_DOMAIN);
   const addressTaken = isAddressTakenError(createError);
   const mailboxExists = isAlreadyHasMailboxError(createError, createStatus);
   const taskKeys: TaskKey[] = useExisting
@@ -352,7 +453,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
           <AppButton
             title="Get started"
             testID="onboarding-start"
-            disabled={!config?.enabled}
+            disabled={!config?.enabled || !testDomainReady}
             onPress={() => {
               setUseExisting(false);
               setStep('address');
@@ -363,7 +464,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
               title="Use this identity"
               testID="onboarding-use-current"
               variant="secondary"
-              disabled={!config?.enabled}
+              disabled={!config?.enabled || !testDomainReady}
               onPress={startUseCurrent}
             />
           ) : null}
@@ -387,6 +488,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
           <Text style={styles.hint}>
             3–30 characters: letters, numbers, dots, hyphens.
           </Text>
+          {testMode ? (
+            <Text style={styles.hint}>
+              Test mode is on. This creates a @{domain || TEST_MAIL_DOMAIN} address and can only be paid on a test network.
+            </Text>
+          ) : null}
           <TextField
             label={`Username (@${domain})`}
             testID="onboarding-username"
@@ -400,6 +506,20 @@ export default function OnboardingWizardScreen(): JSX.Element {
             style={[styles.hint, usernameOk ? styles.ok : styles.err]}>
             {usernameHint}
           </Text>
+          {paid && assets.length ? (
+            <View testID="onboarding-payment-assets">
+              <Text style={styles.hint}>Payment asset</Text>
+              {assets.map((asset, index) => (
+                <AppButton
+                  key={`${asset.network}:${asset.symbol}`}
+                  title={`${assetIndex === index ? '✓ ' : ''}${asset.symbol} · ${asset.network}`}
+                  testID={`onboarding-asset-${asset.symbol}`}
+                  variant={assetIndex === index ? 'primary' : 'secondary'}
+                  onPress={() => setAssetIndex(index)}
+                />
+              ))}
+            </View>
+          ) : null}
           <AppButton
             title="Next"
             testID="onboarding-address-next"
@@ -532,14 +652,53 @@ export default function OnboardingWizardScreen(): JSX.Element {
             }
             kind="error"
           />
-          {createError ? (
+          {awaitingPayment && checkoutUrl ? (
+            <View testID="onboarding-checkout">
+              <Text style={styles.hint}>{checkoutMessage}</Text>
+              <Text style={styles.fingerprint} selectable testID="onboarding-checkout-url">
+                {checkoutUrl}
+              </Text>
+              <AppButton
+                title="Copy link"
+                testID="onboarding-copy-checkout"
+                variant="secondary"
+                onPress={() => {
+                  Clipboard.setString(checkoutUrl);
+                  setCheckoutMessage('Link copied. Open it on a computer, or paste it into your wallet browser.');
+                }}
+              />
+              <AppButton
+                title="Share link"
+                testID="onboarding-share-checkout"
+                variant="secondary"
+                onPress={() => {
+                  void Share.open({message: checkoutUrl, failOnCancel: false});
+                }}
+              />
+              {canOpenCheckout ? (
+                <AppButton
+                  title="Open checkout"
+                  testID="onboarding-open-checkout"
+                  variant="secondary"
+                  onPress={() => {
+                    void Linking.openURL(checkoutUrl);
+                  }}
+                />
+              ) : null}
+            </View>
+          ) : null}
+          {createError || awaitingPayment ? (
             <AppButton
               title={
                 mailboxExists
                   ? 'Restore access'
-                  : addressTaken
-                    ? 'Choose another address'
-                    : 'Try again'
+                  : awaitingPayment
+                    ? 'Check payment'
+                    : createError.startsWith('The quote expired')
+                      ? 'Get a new quote'
+                      : addressTaken
+                        ? 'Choose another address'
+                        : 'Try again'
               }
               testID={mailboxExists ? 'onboarding-restore' : 'onboarding-retry'}
               onPress={() => {

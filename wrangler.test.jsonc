@@ -1,0 +1,13 @@
+{
+  // Attach test.pqpost.com to this separate Worker in Cloudflare.
+  // Do not add routes here: Wrangler replaces an existing routes list on deploy.
+  "name": "pqpost-test-checkout",
+  "compatibility_date": "2026-10-26",
+  "workers_dev": true,
+  "preview_urls": false,
+  "assets": {
+    "directory": "./website",
+    "html_handling": "none",
+    "not_found_handling": "none"
+  }
+}

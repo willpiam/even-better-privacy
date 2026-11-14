@@ -272,3 +272,164 @@ export function mailboxDeleteConfirmed(email: string, typed: string): boolean {
 export function managedMailboxRestoreHint(email: string): string {
   return `This identity has a verified mailbox (${email}). Mailbox access can be restored from Mail accounts.`;
 }
+
+export const TEST_MAIL_DOMAIN = 'test.pqpost.com';
+export const PRODUCTION_KEY_SERVER = 'https://ebp-cqyo.onrender.com';
+export const TEST_CHECKOUT_ORIGIN = 'https://test.pqpost.com';
+export const MAIL_TEST_MODE_HEADER = 'x-ebp-mail-mode';
+const TEST_PAYMENT_NETWORKS = new Set(['ethereum-sepolia', 'cardano-preview']);
+const ORDER_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export type PaymentAsset = {network: string; symbol: string};
+
+export type UsernameAvailability = {
+  available: boolean;
+  username: string;
+  reason?: string;
+  purchasable: boolean;
+  usdCents?: number;
+};
+
+export function parseUsernameAvailability(
+  body: unknown,
+  fallbackUsername: string,
+): UsernameAvailability {
+  const record = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  const username = typeof record.username === 'string' && record.username
+    ? record.username
+    : fallbackUsername;
+  const usdCents = record.usdCents;
+  const purchasable = record.purchasable === true &&
+    typeof usdCents === 'number' &&
+    Number.isSafeInteger(usdCents) &&
+    usdCents > 0;
+  return {
+    available: record.available === true,
+    username,
+    purchasable,
+    ...(purchasable ? {usdCents} : {}),
+    ...(typeof record.reason === 'string' && record.reason ? {reason: record.reason} : {}),
+  };
+}
+
+/** Keep only Sepolia and Cardano preview. Mainnet assets are never offered here. */
+export function parseTestPaymentAssets(body: unknown): PaymentAsset[] {
+  const assets = (body && typeof body === 'object'
+    ? (body as {assets?: unknown}).assets
+    : null);
+  if (!Array.isArray(assets)) return [];
+  const seen = new Set<string>();
+  const parsed: PaymentAsset[] = [];
+  for (const asset of assets) {
+    if (!asset || typeof asset !== 'object') continue;
+    const network = (asset as {network?: unknown}).network;
+    const symbol = (asset as {symbol?: unknown}).symbol;
+    if (typeof network !== 'string' || typeof symbol !== 'string') continue;
+    if (!TEST_PAYMENT_NETWORKS.has(network) || !symbol) continue;
+    const key = `${network}:${symbol}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    parsed.push({network, symbol});
+  }
+  return parsed;
+}
+
+export function formatUsdPrice(cents: number): string {
+  return `$${(cents / 100).toFixed(2)} USD`;
+}
+
+export type AddressChoice =
+  | {kind: 'available'; username: string}
+  | {kind: 'purchase'; username: string; usdCents: number; assets: PaymentAsset[]}
+  | {kind: 'unavailable'; username: string; reason: string};
+
+/**
+ * Short-address sales in the app are test-only. Test mode must be on, the
+ * server must be offering test.pqpost.com, and the assets must be test networks.
+ */
+export function mobileAddressChoice(input: {
+  testMode: boolean;
+  domain: string;
+  availability: UsernameAvailability;
+  assets: PaymentAsset[];
+}): AddressChoice {
+  const {availability} = input;
+  if (availability.available) {
+    return {kind: 'available', username: availability.username};
+  }
+  if (availability.purchasable && availability.usdCents) {
+    if (!input.testMode) {
+      return {
+        kind: 'unavailable',
+        username: availability.username,
+        reason: 'Turn on test mail in Settings to buy a short test address.',
+      };
+    }
+    if (input.domain !== TEST_MAIL_DOMAIN) {
+      return {
+        kind: 'unavailable',
+        username: availability.username,
+        reason: 'Short names can only be purchased for test.pqpost.com.',
+      };
+    }
+    const assets = parseTestPaymentAssets({assets: input.assets});
+    if (!assets.length) {
+      return {
+        kind: 'unavailable',
+        username: availability.username,
+        reason: 'Test-network payment is not available.',
+      };
+    }
+    return {
+      kind: 'purchase',
+      username: availability.username,
+      usdCents: availability.usdCents,
+      assets,
+    };
+  }
+  return {
+    kind: 'unavailable',
+    username: availability.username,
+    reason: availability.reason || 'That address is taken.',
+  };
+}
+
+export function testCheckoutUrl(server: string, orderId: string): string | null {
+  if (!ORDER_ID.test(orderId)) return null;
+  let origin = '';
+  try {
+    origin = new URL(server).origin;
+  } catch {
+    return null;
+  }
+  const checkoutOrigin = origin === 'http://127.0.0.1:8789'
+    ? origin
+    : origin === PRODUCTION_KEY_SERVER
+      ? TEST_CHECKOUT_ORIGIN
+      : '';
+  if (!checkoutOrigin) return null;
+  return `${checkoutOrigin}/checkout.html#${encodeURIComponent(orderId)}`;
+}
+
+export type CheckoutHandoff = {
+  url: string;
+  canOpenOnDevice: boolean;
+  message: string;
+};
+
+export function checkoutHandoff(url: string): CheckoutHandoff {
+  let host = '';
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    host = '';
+  }
+  const local = host === '127.0.0.1' || host === 'localhost';
+  return {
+    url,
+    canOpenOnDevice: !local && url.startsWith('https://'),
+    message: local
+      ? 'Open this checkout link on the computer running the test server. This phone cannot reach that computer’s localhost. Pay with test funds only, then come back and check payment.'
+      : 'Open this checkout link on a computer, or paste it into your wallet app’s browser. Pay with test funds only. This does not buy a real address. Then come back and check payment.',
+  };
+}

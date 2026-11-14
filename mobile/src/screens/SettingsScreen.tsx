@@ -8,11 +8,13 @@ import {
   getAutoLockMinutes,
   getEnforcePasswordPolicy,
   getMailIncludePublicKeys,
+  getMailTestMode,
   getMailRenderHtml,
   getServerUrl,
   setAutoLockMinutes,
   setEnforcePasswordPolicy,
   setMailIncludePublicKeys,
+  setMailTestMode,
   setMailRenderHtml,
   setServerUrl,
 } from '../services/settings';
@@ -39,6 +41,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
   const [autoLockMinutes, setAutoLockMinutesValue] = useState(15);
   const [mailRenderHtml, setMailRenderHtmlValue] = useState(false);
   const [mailIncludePublicKeys, setMailIncludePublicKeysValue] = useState(true);
+  const [mailTestMode, setMailTestModeValue] = useState(false);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -52,18 +55,21 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           lockMinutes,
           renderHtml,
           includeKeys,
+          testMode,
         ] = await Promise.all([
             getServerUrl(),
             getEnforcePasswordPolicy(),
             getAutoLockMinutes(),
             getMailRenderHtml(),
             getMailIncludePublicKeys(),
+            getMailTestMode(),
           ]);
         setServerUrlValue(url);
         setEnforcePasswordPolicyValue(enforce);
         setAutoLockMinutesValue(lockMinutes);
         setMailRenderHtmlValue(renderHtml);
         setMailIncludePublicKeysValue(includeKeys);
+        setMailTestModeValue(testMode);
       })();
     }, []),
   );
@@ -141,6 +147,23 @@ export default function SettingsScreen(_props: Props): JSX.Element {
         }}
       />
 
+      <SectionTitle>Test mail</SectionTitle>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Show test addresses</Text>
+        <Switch
+          testID="settings-mail-test-mode"
+          value={mailTestMode}
+          onValueChange={async value => {
+            setMailTestModeValue(value);
+            await setMailTestMode(value);
+          }}
+        />
+      </View>
+      <Text style={styles.advancedNote}>
+        When this is on, Get started offers @test.pqpost.com addresses paid with
+        Ethereum Sepolia or Cardano preview. Real addresses stay hidden.
+      </Text>
+
       <SectionTitle>Mail preferences</SectionTitle>
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Render HTML mail bodies</Text>
@@ -186,6 +209,10 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: typography.body,
     marginRight: spacing.sm,
+  },
+  advancedNote: {
+    fontSize: 13,
+    color: colors.muted,
   },
   fieldLabel: {
     fontSize: typography.caption,
