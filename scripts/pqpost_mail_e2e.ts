@@ -348,12 +348,33 @@ export async function runMailE2e(
   if (testFailed) throw testFailure;
 }
 
+/** Ubuntu's Deno SQLite plugin needs a newer glibc than this machine has. */
+function useSystemSqlite(): void {
+  if (Deno.env.get("DENO_SQLITE_PATH")?.trim()) return;
+  for (
+    const candidate of [
+      "/usr/lib/x86_64-linux-gnu/libsqlite3.so",
+      "/usr/lib/x86_64-linux-gnu/libsqlite3.so.0",
+    ]
+  ) {
+    try {
+      if (Deno.statSync(candidate).isFile) {
+        Deno.env.set("DENO_SQLITE_PATH", candidate);
+        return;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+}
+
 async function startLocalServer(config: MailTestConfig): Promise<void> {
   if (!Deno.env.get("STALWART_ADMIN_TOKEN")?.trim()) {
     throw new Error(
       "Set STALWART_ADMIN_TOKEN in .env.pqpost-mail.local to provision test mailboxes.",
     );
   }
+  useSystemSqlite();
   const resultsDir = new URL("../test-results/", import.meta.url);
   const dbPath = new URL("pqpost-mail-e2e.sqlite", resultsDir).pathname;
   await Deno.mkdir(resultsDir, { recursive: true });

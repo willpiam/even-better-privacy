@@ -38,6 +38,8 @@ export const HSTS_INCLUDE_SUBDOMAINS = (Deno.env.get("HSTS_INCLUDE_SUBDOMAINS") 
  */
 export function isOriginAllowed(origin: string | null, req?: Request): boolean {
   if (!origin) return true; // non-browser clients
+  // Checkout pages call the key server that created the order.
+  if (origin === "https://pqpost.com" || origin === "https://test.pqpost.com") return true;
   if (RAW_ALLOWED_ORIGINS.includes("*")) return true;
   if (RAW_ALLOWED_ORIGINS.some((o) => o === origin)) return true;
 

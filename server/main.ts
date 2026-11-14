@@ -187,11 +187,11 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/mail/signup/config") {
-      return respond(attachCors(handleMailSignupConfig(), corsHeaders));
+      return respond(attachCors(handleMailSignupConfig(req), corsHeaders));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/mail/payment/config") {
-      return respond(attachCors(handlePaymentConfig(), corsHeaders));
+      return respond(attachCors(handlePaymentConfig(req), corsHeaders));
     }
 
     const db = await getDb();
@@ -210,7 +210,7 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/mail/username-available") {
-      return respond(attachCors(await handleMailUsernameAvailable(url, db), corsHeaders));
+      return respond(attachCors(await handleMailUsernameAvailable(url, db, req), corsHeaders));
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/signup") {

@@ -1,7 +1,9 @@
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
 const localTest = location.origin === "http://127.0.0.1:8789";
-const apiOrigin = localTest ? location.origin : location.hostname === "pqpost.com" ? "https://ebp-cqyo.onrender.com"
-  : location.hostname === "test.pqpost.com" ? "https://test-api.pqpost.com" : "";
+const apiOrigin = localTest ? location.origin
+  : location.hostname === "pqpost.com" || location.hostname === "test.pqpost.com"
+    ? "https://ebp-cqyo.onrender.com"
+    : "";
 let id = "";
 try { id = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid link */ }
 const $ = (id) => document.getElementById(id);

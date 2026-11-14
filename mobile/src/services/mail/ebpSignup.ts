@@ -1,8 +1,12 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Identity,
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
+  MAIL_PAYMENT_ORDER_PATH,
+  MAIL_PAYMENT_RECOVER_PATH,
   buildMailDeleteDetail,
+  buildMailPaymentOrderDetail,
   buildMailPasswordResetDetail,
   randomHex,
   sha256Hex,
@@ -23,14 +27,20 @@ import {
   buildMailDeleteRequest,
   buildMailPasswordResetRequest,
   buildSignupRequest,
+  MAIL_TEST_MODE_HEADER,
   mailboxDeleteConfirmed,
   managedEmailLookupError,
   parseSignupConfig,
   parseSignupResponse,
+  parseTestPaymentAssets,
+  parseUsernameAvailability,
   parseVerifiedManagedEmail,
+  testCheckoutUrl,
   validateMailUsername,
   type EbpSignupConfig,
   type EbpSignupResult,
+  type PaymentAsset,
+  type UsernameAvailability,
 } from './ebpSignupLogic';
 
 export class EbpMailApiError extends Error {
@@ -48,10 +58,21 @@ async function readError(res: Response): Promise<string> {
   return body.error ?? `HTTP ${res.status}`;
 }
 
+function testModeInit(testMode: boolean, init: RequestInit = {}): RequestInit {
+  if (!testMode) return init;
+  const headers = new Headers(init.headers);
+  headers.set(MAIL_TEST_MODE_HEADER, 'test');
+  return {...init, headers};
+}
+
 export async function fetchEbpSignupConfig(
   server: string,
+  testMode = false,
 ): Promise<EbpSignupConfig> {
-  const res = await fetch(apiUrl(server, '/api/v1/mail/signup/config'));
+  const res = await fetch(
+    apiUrl(server, '/api/v1/mail/signup/config'),
+    testModeInit(testMode),
+  );
   if (res.status === 404) {
     return {enabled: false};
   }
@@ -64,26 +85,174 @@ export async function fetchEbpSignupConfig(
 export async function checkEbpUsername(
   server: string,
   raw: string,
-): Promise<{available: boolean; username: string; reason?: string}> {
+  testMode = false,
+): Promise<UsernameAvailability> {
   const check = validateMailUsername(raw);
   if (!check.ok) {
-    return {available: false, username: check.username, reason: check.reason};
+    return {available: false, purchasable: false, username: check.username, reason: check.reason};
   }
   const res = await fetch(
     apiUrl(
       server,
       `/api/v1/mail/username-available?u=${encodeURIComponent(check.username)}`,
     ),
+    testModeInit(testMode),
   );
   if (!res.ok) {
     throw new Error(`Username check failed: ${await readError(res)}`);
   }
-  const body = (await res.json()) as {available?: boolean; reason?: string};
-  return {
-    available: body.available === true,
-    username: check.username,
-    reason: body.reason,
-  };
+  return parseUsernameAvailability(await res.json(), check.username);
+}
+
+export async function fetchTestPaymentAssets(
+  server: string,
+): Promise<PaymentAsset[]> {
+  const res = await fetch(
+    apiUrl(server, '/api/v1/mail/payment/config'),
+    testModeInit(true),
+  );
+  if (!res.ok) {
+    throw new Error(`Payment config failed: ${await readError(res)}`);
+  }
+  return parseTestPaymentAssets(await res.json());
+}
+
+export type PaymentOrderStatus =
+  | 'quoted'
+  | 'pending'
+  | 'confirmed'
+  | 'fulfilled'
+  | 'expired'
+  | 'manual_review';
+
+function orderStorageKey(server: string, identityName: string, username: string): string {
+  return `ebp.mail.order:${server}:${identityName}:${username}`;
+}
+
+export async function rememberedPaymentOrder(
+  server: string,
+  identityName: string,
+  username: string,
+): Promise<string> {
+  return (await AsyncStorage.getItem(orderStorageKey(server, identityName, username))) ?? '';
+}
+
+export async function rememberPaymentOrder(
+  server: string,
+  identityName: string,
+  username: string,
+  orderId: string | null,
+): Promise<void> {
+  const key = orderStorageKey(server, identityName, username);
+  if (orderId) await AsyncStorage.setItem(key, orderId);
+  else await AsyncStorage.removeItem(key);
+}
+
+async function signedPaymentProof(
+  identityName: string,
+  password: string,
+  path: string,
+  detail: string,
+): Promise<{fingerprint: string; proof: string}> {
+  const identity = await openIdentity(identityName, password);
+  identity.attachDetail(path, detail);
+  const proof = identity.details.get(path)?.[1];
+  if (!proof) throw new Error('Failed to sign payment authorization');
+  identity.details.delete(path);
+  await saveIdentity(identityName, password, identity);
+  return {fingerprint: identity.toFingerprint(), proof};
+}
+
+export async function createTestPaymentOrder(params: {
+  identityName: string;
+  password: string;
+  username: string;
+  domain: string;
+  server: string;
+  asset: PaymentAsset;
+}): Promise<{orderId: string; checkoutUrl: string}> {
+  const check = validateMailUsername(params.username);
+  if (!check.ok) throw new Error(check.reason);
+  const email = buildMailAddress(check.username, params.domain);
+  const signed = await signedPaymentProof(
+    params.identityName,
+    params.password,
+    MAIL_PAYMENT_ORDER_PATH,
+    buildMailPaymentOrderDetail(email, params.asset.network, params.asset.symbol),
+  );
+  const res = await fetch(
+    apiUrl(params.server, '/api/v1/mail/payment/order'),
+    testModeInit(true, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        fingerprint: signed.fingerprint,
+        username: check.username,
+        network: params.asset.network,
+        asset: params.asset.symbol,
+        proof: signed.proof,
+      }),
+    }),
+  );
+  const body = (await res.json().catch(() => ({}))) as {orderId?: string; error?: string};
+  if (!res.ok || typeof body.orderId !== 'string') {
+    throw new EbpMailApiError(res.status, body.error ?? `HTTP ${res.status}`);
+  }
+  const checkoutUrl = testCheckoutUrl(params.server, body.orderId);
+  if (!checkoutUrl) throw new Error('Checkout is not available for this key server.');
+  await rememberPaymentOrder(params.server, params.identityName, check.username, body.orderId);
+  return {orderId: body.orderId, checkoutUrl};
+}
+
+export async function recoverTestPaymentOrder(params: {
+  identityName: string;
+  password: string;
+  username: string;
+  domain: string;
+  server: string;
+}): Promise<string | null> {
+  const check = validateMailUsername(params.username);
+  if (!check.ok) throw new Error(check.reason);
+  const signed = await signedPaymentProof(
+    params.identityName,
+    params.password,
+    MAIL_PAYMENT_RECOVER_PATH,
+    buildMailAddress(check.username, params.domain),
+  );
+  const res = await fetch(
+    apiUrl(params.server, '/api/v1/mail/payment/recover'),
+    testModeInit(true, {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({
+        fingerprint: signed.fingerprint,
+        username: check.username,
+        proof: signed.proof,
+      }),
+    }),
+  );
+  const body = (await res.json().catch(() => ({}))) as {orderId?: string | null; error?: string};
+  if (!res.ok) throw new EbpMailApiError(res.status, body.error ?? `HTTP ${res.status}`);
+  return typeof body.orderId === 'string' ? body.orderId : null;
+}
+
+export async function fetchPaymentOrderStatus(
+  server: string,
+  orderId: string,
+): Promise<PaymentOrderStatus> {
+  const res = await fetch(
+    apiUrl(server, '/api/v1/mail/payment/status'),
+    {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({orderId}),
+    },
+  );
+  const body = (await res.json().catch(() => ({}))) as {status?: string; error?: string};
+  if (!res.ok || typeof body.status !== 'string') {
+    throw new EbpMailApiError(res.status, body.error ?? `HTTP ${res.status}`);
+  }
+  return body.status as PaymentOrderStatus;
 }
 
 /**
@@ -98,6 +267,7 @@ export async function signupEbpMailbox(params: {
   username: string;
   server: string;
   config: EbpSignupConfig;
+  testMode?: boolean;
   pin?: string;
   requestPreviousPin?: () => Promise<string | null>;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
@@ -124,7 +294,7 @@ export async function signupEbpMailbox(params: {
   const fingerprint = identity.toFingerprint();
   const mailPassword = randomHex(16);
 
-  const res = await fetch(apiUrl(params.server, '/api/v1/mail/signup'), {
+  const res = await fetch(apiUrl(params.server, '/api/v1/mail/signup'), testModeInit(params.testMode === true, {
     method: 'POST',
     headers: {'content-type': 'application/json'},
     body: buildSignupRequest({
@@ -133,7 +303,7 @@ export async function signupEbpMailbox(params: {
       mailPassword,
       detailProof: entry[1],
     }),
-  });
+  }));
   if (!res.ok) {
     throw new EbpMailApiError(res.status, await readError(res));
   }

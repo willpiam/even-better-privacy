@@ -33,28 +33,27 @@ const SYMBOLS: Record<string, string[]> = {
   cardano: ["ADA", "USDM", "USDA", "USDCx", "DJED", "iUSD"],
 };
 
+type PaymentPrefix = "MAIL_PAYMENT" | "MAIL_TEST_PAYMENT";
+
+function paymentEnv(prefix: PaymentPrefix, name: string, fallback = false): string | undefined {
+  const value = Deno.env.get(`${prefix}_${name}`);
+  if (value !== undefined && value.trim() !== "") return value;
+  if (!fallback || prefix === "MAIL_PAYMENT") return undefined;
+  const shared = Deno.env.get(`MAIL_PAYMENT_${name}`);
+  return shared !== undefined && shared.trim() !== "" ? shared : undefined;
+}
+
 /** Missing or malformed configuration disables payment rather than guessing. */
-export function readPaymentConfig(): PaymentConfig | null {
-  if (Deno.env.get("MAIL_PAYMENT_ENABLED") !== "true") return null;
+function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null {
+  if (paymentEnv(prefix, "ENABLED") !== "true") return null;
   try {
-    const prices = JSON.parse(
-      Deno.env.get("MAIL_PAYMENT_PRICES_CENTS") ?? "null",
-    );
-    const assets = JSON.parse(
-      Deno.env.get("MAIL_PAYMENT_ASSETS") ?? "null",
-    ) as unknown;
-    const ethereumRpcUrl = (Deno.env.get("MAIL_PAYMENT_ETH_RPC_URL") ?? "")
-      .trim();
-    const blockfrostKey = (Deno.env.get("MAIL_PAYMENT_BLOCKFROST_KEY") ?? "")
-      .trim();
-    const coinGeckoKey = (Deno.env.get("MAIL_PAYMENT_COINGECKO_KEY") ?? "")
-      .trim();
-    const ethereumConfirmations = Number(
-      Deno.env.get("MAIL_PAYMENT_ETH_CONFIRMATIONS") ?? "5",
-    );
-    const cardanoConfirmations = Number(
-      Deno.env.get("MAIL_PAYMENT_CARDANO_CONFIRMATIONS") ?? "2",
-    );
+    const prices = JSON.parse(paymentEnv(prefix, "PRICES_CENTS", true) ?? "null");
+    const assets = JSON.parse(paymentEnv(prefix, "ASSETS") ?? "null") as unknown;
+    const ethereumRpcUrl = (paymentEnv(prefix, "ETH_RPC_URL") ?? "").trim();
+    const blockfrostKey = (paymentEnv(prefix, "BLOCKFROST_KEY") ?? "").trim();
+    const coinGeckoKey = (paymentEnv(prefix, "COINGECKO_KEY", true) ?? "").trim();
+    const ethereumConfirmations = Number(paymentEnv(prefix, "ETH_CONFIRMATIONS", true) ?? "5");
+    const cardanoConfirmations = Number(paymentEnv(prefix, "CARDANO_CONFIRMATIONS", true) ?? "2");
     if (
       !prices || typeof prices !== "object" || !Array.isArray(assets) ||
       assets.length === 0 ||
@@ -129,4 +128,13 @@ export function readPaymentConfig(): PaymentConfig | null {
   } catch {
     return null;
   }
+}
+
+export function readPaymentConfig(): PaymentConfig | null {
+  return readPrefixedPaymentConfig("MAIL_PAYMENT");
+}
+
+/** Test-network assets for test.pqpost.com on a server whose primary domain is pqpost.com. */
+export function readTestPaymentConfig(): PaymentConfig | null {
+  return readPrefixedPaymentConfig("MAIL_TEST_PAYMENT");
 }

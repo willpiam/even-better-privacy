@@ -34,7 +34,12 @@ import {
 } from "../db/index.ts";
 import { timingSafeEqual } from "node:crypto";
 import { expirePaymentOrders, getConfirmedPaymentOrder } from "../payments/orders.ts";
-import { paymentConfigMatchesDomain, readPaymentConfig } from "../payments/config.ts";
+import {
+  paymentConfigMatchesDomain,
+  readPaymentConfig,
+  readTestPaymentConfig,
+  type PaymentConfig,
+} from "../payments/config.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 import { verifyDetailProof } from "../detail.ts";
 import {
@@ -54,6 +59,23 @@ const E2E_SWEEP_DEFAULT_HOURS = 6;
 const E2E_CLEANUP_MAX = 10;
 const PQPOST_FREE_USERNAME_MIN = 9;
 const SHORT_ADDRESS_REASON = `Names shorter than ${PQPOST_FREE_USERNAME_MIN} characters are not available for registration yet.`;
+export const PRODUCTION_MAIL_DOMAIN = "pqpost.com";
+export const TEST_MAIL_DOMAIN = "test.pqpost.com";
+export const MAIL_MODE_HEADER = "x-ebp-mail-mode";
+export type MailMode = "production" | "test";
+
+/** Test addresses are a separate mode. A normal request stays on the server's primary domain. */
+export function mailModeFromRequest(req: Request): MailMode {
+  if ((req.headers.get(MAIL_MODE_HEADER) ?? "").trim().toLowerCase() === "test") {
+    return "test";
+  }
+  try {
+    if (new URL(req.url).searchParams.get("mode") === "test") return "test";
+  } catch {
+    // A malformed URL cannot select test mode.
+  }
+  return "production";
+}
 
 function isShortPqpostUsername(username: string, domain: string): boolean {
   return (domain === "pqpost.com" || domain === "test.pqpost.com") &&
@@ -98,6 +120,41 @@ export function readMailSignupSettings(): MailSignupSettings {
   };
 }
 
+/**
+ * Test mode on the production server serves test.pqpost.com without changing
+ * the primary domain. A server already configured as the test domain stays there.
+ */
+export function mailSettingsForMode(mode: MailMode): MailSignupSettings {
+  const settings = readMailSignupSettings();
+  if (mode !== "test" || settings.domain === TEST_MAIL_DOMAIN) return settings;
+  if (settings.domain !== PRODUCTION_MAIL_DOMAIN || !settings.enabled) {
+    return { ...settings, enabled: false, domain: TEST_MAIL_DOMAIN };
+  }
+  return { ...settings, domain: TEST_MAIL_DOMAIN };
+}
+
+export function paymentConfigForSettings(
+  settings: MailSignupSettings,
+): PaymentConfig | null {
+  const primary = readMailSignupSettings();
+  const config = settings.domain === primary.domain
+    ? readPaymentConfig()
+    : settings.domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN
+      ? readTestPaymentConfig()
+      : null;
+  if (!config || !paymentConfigMatchesDomain(settings.domain, config)) return null;
+  return config;
+}
+
+export function paymentConfigForDomain(domain: string): PaymentConfig | null {
+  const primary = readMailSignupSettings();
+  if (domain === primary.domain) return paymentConfigForSettings(primary);
+  if (domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN) {
+    return paymentConfigForSettings({ ...primary, domain: TEST_MAIL_DOMAIN });
+  }
+  return null;
+}
+
 let stalwartOverride: StalwartClient | null = null;
 
 /** Tests inject a client backed by a fake fetch. Pass null to reset. */
@@ -126,8 +183,8 @@ function disabled(): Response {
   return json({ error: "mail signup is not enabled on this server" }, 503);
 }
 
-export function handleMailSignupConfig(): Response {
-  const settings = readMailSignupSettings();
+export function handleMailSignupConfig(req?: Request): Response {
+  const settings = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
   const enabled = settings.enabled && getStalwartClient() !== null;
   if (!enabled) return json({ enabled: false });
   return json({ enabled: true, domain: settings.domain, ...connectionInfo(settings) });
@@ -136,16 +193,17 @@ export function handleMailSignupConfig(): Response {
 export async function handleMailUsernameAvailable(
   url: URL,
   db: DatabaseAdapter,
+  req?: Request,
 ): Promise<Response> {
-  const settings = readMailSignupSettings();
+  const settings = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
   if (!settings.enabled) return disabled();
   const check = validateMailUsername(url.searchParams.get("u") ?? "");
   if (!check.ok) {
     return json({ available: false, username: check.username, reason: check.reason });
   }
   if (isShortPqpostUsername(check.username, settings.domain)) {
-    const config = readPaymentConfig();
-    if (config && isMailSignupReady() && paymentConfigMatchesDomain(settings.domain, config) &&
+    const config = paymentConfigForSettings(settings);
+    if (config && isMailSignupReady() &&
       !await isMailboxUsernameTaken(db, check.username, settings.domain)) {
       return json({ available: false, purchasable: true, username: check.username,
         email: `${check.username}@${settings.domain}`, usdCents: config.prices[check.username.length],
@@ -174,7 +232,7 @@ export async function handleMailSignup(
   req: Request,
   db: DatabaseAdapter,
 ): Promise<Response> {
-  const settings = readMailSignupSettings();
+  const settings = mailSettingsForMode(mailModeFromRequest(req));
   const stalwart = getStalwartClient();
   if (!settings.enabled || !stalwart) return disabled();
 
@@ -486,7 +544,7 @@ export async function handleMailE2eCleanup(
   db: DatabaseAdapter,
 ): Promise<Response> {
   if (!isMailE2eAuthorized(req)) return json({ error: "not found" }, 404);
-  const settings = readMailSignupSettings();
+  const settings = mailSettingsForMode(mailModeFromRequest(req));
   const stalwart = getStalwartClient();
   if (!settings.enabled || !stalwart) return disabled();
 

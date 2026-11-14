@@ -8,6 +8,7 @@ import {
   getAutoLockMinutes,
   getEnforcePasswordPolicy,
   getMailIncludePublicKeys,
+  getMailTestMode,
   getMailOauthGmailClientIdOverride,
   getMailOauthOutlookClientIdOverride,
   getMailRenderHtml,
@@ -15,6 +16,7 @@ import {
   setAutoLockMinutes,
   setEnforcePasswordPolicy,
   setMailIncludePublicKeys,
+  setMailTestMode,
   setMailOauthGmailClientIdOverride,
   setMailOauthOutlookClientIdOverride,
   setMailRenderHtml,
@@ -43,6 +45,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
   const [autoLockMinutes, setAutoLockMinutesValue] = useState(15);
   const [mailRenderHtml, setMailRenderHtmlValue] = useState(false);
   const [mailIncludePublicKeys, setMailIncludePublicKeysValue] = useState(true);
+  const [mailTestMode, setMailTestModeValue] = useState(false);
   const [gmailOauthClientIdOverride, setGmailOauthClientIdOverride] = useState('');
   const [outlookOauthClientIdOverride, setOutlookOauthClientIdOverride] =
     useState('');
@@ -59,6 +62,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           lockMinutes,
           renderHtml,
           includeKeys,
+          testMode,
           gmailOverride,
           outlookOverride,
         ] = await Promise.all([
@@ -67,6 +71,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
             getAutoLockMinutes(),
             getMailRenderHtml(),
             getMailIncludePublicKeys(),
+            getMailTestMode(),
             getMailOauthGmailClientIdOverride(),
             getMailOauthOutlookClientIdOverride(),
           ]);
@@ -75,6 +80,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
         setAutoLockMinutesValue(lockMinutes);
         setMailRenderHtmlValue(renderHtml);
         setMailIncludePublicKeysValue(includeKeys);
+        setMailTestModeValue(testMode);
         setGmailOauthClientIdOverride(gmailOverride);
         setOutlookOauthClientIdOverride(outlookOverride);
       })();
@@ -155,6 +161,23 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           setStatus('Identity locked');
         }}
       />
+
+      <SectionTitle>Test mail</SectionTitle>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Show test addresses</Text>
+        <Switch
+          testID="settings-mail-test-mode"
+          value={mailTestMode}
+          onValueChange={async value => {
+            setMailTestModeValue(value);
+            await setMailTestMode(value);
+          }}
+        />
+      </View>
+      <Text style={styles.advancedNote}>
+        When this is on, Get started offers @test.pqpost.com addresses paid with
+        Ethereum Sepolia or Cardano preview. Real addresses stay hidden.
+      </Text>
 
       <SectionTitle>Mail preferences</SectionTitle>
       <View style={styles.switchRow}>

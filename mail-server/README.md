@@ -223,8 +223,8 @@ keys on the key server. Use only a receiving wallet and wallet infrastructure
 capable of handling the required on-chain message and token transactions.
 
 The production checkout expects its key server at
-`https://ebp-cqyo.onrender.com`; configure `ALLOWED_ORIGINS` to include
-`https://pqpost.com` alongside any existing origins. For payment testing, use
+`https://ebp-cqyo.onrender.com`. `https://pqpost.com` and
+`https://test.pqpost.com` may call that server. For payment testing, use
 the local test server described above, which serves checkout at
 `http://127.0.0.1:8789/checkout.html` and uses the existing Stalwart service
 for `test.pqpost.com`. Configure test assets with `ethereum-sepolia` and/or
@@ -241,6 +241,18 @@ deno task test:pqpost-payment ethereum-sepolia ETH
 # or, with a configured Preview receiving address and provider:
 deno task test:pqpost-payment cardano-preview ADA
 ```
+
+The production key server keeps `MAIL_DOMAIN=pqpost.com`. Test addresses are a
+separate mode: a client sends `x-ebp-mail-mode: test` (or `?mode=test` on a
+GET) and the same server offers `test.pqpost.com` instead. Configure
+`MAIL_TEST_PAYMENT_ENABLED=true`, `MAIL_TEST_PAYMENT_ASSETS` with only
+`ethereum-sepolia` and `cardano-preview` recipients, `MAIL_TEST_PAYMENT_ETH_RPC_URL`,
+and `MAIL_TEST_PAYMENT_BLOCKFROST_KEY`. Prices and the CoinGecko key fall back
+to the `MAIL_PAYMENT_*` values when the test-specific ones are unset. Normal
+requests never see the test domain. The mobile app shows those addresses only
+while its test-mail setting is on, then sends the buyer to
+`https://test.pqpost.com/checkout.html` to pay from a computer or a wallet
+browser.
 
 The test refuses non-loopback key servers, non-test mail domains and mainnet
 assets. It creates a disposable eight-character `e2e` test name and prints a

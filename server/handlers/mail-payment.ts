@@ -21,12 +21,11 @@ import {
 import {
   isMailE2eAuthorized,
   isMailSignupReady,
-  readMailSignupSettings,
+  mailModeFromRequest,
+  mailSettingsForMode,
+  paymentConfigForDomain,
+  paymentConfigForSettings,
 } from "./mail-signup.ts";
-import {
-  paymentConfigMatchesDomain,
-  readPaymentConfig,
-} from "../payments/config.ts";
 import {
   confirmPaymentOrder,
   expirePaymentOrders,
@@ -44,13 +43,10 @@ import {
 const QUOTE_MS = 30 * 60_000;
 const GRACE_MS = 2 * 60 * 60_000;
 
-export function handlePaymentConfig(): Response {
-  const mail = readMailSignupSettings();
-  const config = readPaymentConfig();
-  if (
-    !isMailSignupReady() || !config ||
-    !paymentConfigMatchesDomain(mail.domain, config)
-  ) {
+export function handlePaymentConfig(req?: Request): Response {
+  const mail = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
+  const config = paymentConfigForSettings(mail);
+  if (!isMailSignupReady() || !config) {
     return json({ enabled: false });
   }
   return json({
@@ -64,12 +60,9 @@ export async function handlePaymentCreate(
   req: Request,
   db: DatabaseAdapter,
 ): Promise<Response> {
-  const mail = readMailSignupSettings();
-  const config = readPaymentConfig();
-  if (
-    !isMailSignupReady() || !config ||
-    !paymentConfigMatchesDomain(mail.domain, config)
-  ) {
+  const mail = mailSettingsForMode(mailModeFromRequest(req));
+  const config = paymentConfigForSettings(mail);
+  if (!isMailSignupReady() || !config) {
     return json({ error: "paid signup is not enabled" }, 503);
   }
   const parsed = await readJsonBody<Record<string, unknown>>(req);
@@ -178,7 +171,7 @@ export async function handlePaymentRecover(
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
   const { fingerprint, username, proof } = parsed.data;
-  const mail = readMailSignupSettings();
+  const mail = mailSettingsForMode(mailModeFromRequest(req));
   if (
     typeof fingerprint !== "string" || fingerprint.length > 128 ||
     !isValidFingerprintBech32(fingerprint) ||
@@ -259,7 +252,7 @@ export async function handlePaymentOrder(
     order = (await getPaymentOrder(db, orderId))!;
   }
   if (order.status === "pending") {
-    const config = readPaymentConfig();
+    const config = paymentConfigForDomain(order.domain);
     if (
       !config ||
       !config.assets.some((entry) => entry.network === order!.network)
