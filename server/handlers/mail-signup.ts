@@ -202,6 +202,10 @@ export async function handleMailUsernameAvailable(
     return json({ available: false, username: check.username, reason: check.reason });
   }
   if (isShortPqpostUsername(check.username, settings.domain)) {
+    // Production short names stay unavailable. Test mode is the only purchase path.
+    if (settings.domain !== TEST_MAIL_DOMAIN) {
+      return json({ available: false, username: check.username, reason: SHORT_ADDRESS_REASON });
+    }
     const config = paymentConfigForSettings(settings);
     if (config && isMailSignupReady() &&
       !await isMailboxUsernameTaken(db, check.username, settings.domain)) {
@@ -259,6 +263,9 @@ export async function handleMailSignup(
     : normalizeMailUsername(usernameCheck.username);
   if (!usernameCheck.ok && !(isE2eMailUsername(username) && isMailE2eAuthorized(req))) {
     return json({ error: usernameCheck.reason }, 400);
+  }
+  if (isShortPqpostUsername(username, settings.domain) && settings.domain !== TEST_MAIL_DOMAIN) {
+    return json({ error: SHORT_ADDRESS_REASON }, 400);
   }
   const paidOrder = isShortPqpostUsername(username, settings.domain)
     ? await getConfirmedPaymentOrder(db, username, settings.domain, fingerprint)

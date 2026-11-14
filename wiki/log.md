@@ -1,5 +1,17 @@
 # Wiki Log
 
+## [2026-11-14] ingest | checkout wallet submission
+
+- Ingested `wiki/raw/cip-0030.md` → [[source-cip-30]].
+- Ingested `wiki/raw/cip-0020.md` → [[source-cip-20]].
+- Ingested `wiki/raw/cardano-developer-portal-mesh-metadata.md` → [[source-cardano-mesh-metadata]].
+- Ingested `wiki/raw/eip-1193.md` → [[source-eip-1193]].
+- Ingested `wiki/raw/eip-1102.md` → [[source-eip-1102]].
+- Ingested `wiki/raw/ethereum-execution-apis-submit.yaml` and `wiki/raw/ethereum-execution-apis-transaction.yaml` → [[source-ethereum-execution-apis-submit]].
+- Filed: [[analysis-checkout-wallet-submission]].
+- Updated: [[component-website]], [[component-server]].
+- CIP-20's specification says 64 UTF-8 bytes per message string; its conclusion says 64 characters. Noted on [[source-cip-20]].
+
 ## [2026-11-10] update | drop chat interface
 
 - Removed the Chat tab on mobile and the Chat page on desktop, including the design prototype. Mail lists no longer hide `X-EBP-Channel: chat`. `common/ChatChannel.ts` and `GET /api/v1/mail/chat` are gone.

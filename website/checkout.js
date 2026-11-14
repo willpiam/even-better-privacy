@@ -1,3 +1,5 @@
+import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind } from "./checkout-wallet.js";
+
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
 const localTest = location.origin === "http://127.0.0.1:8789";
 const apiOrigin = localTest ? location.origin
@@ -45,7 +47,120 @@ function render(order) {
     }
   }
   $("transaction-form").hidden = order.status !== "quoted";
+  renderWallet(order);
   $("loading").hidden = true; $("order").hidden = false;
+}
+function walletButton(title, onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.textContent = title;
+  button.addEventListener("click", () => {
+    if (busy) return;
+    busy = true;
+    showError("");
+    onClick().then((order) => render(order)).catch((error) => {
+      showError(error instanceof Error ? error.message : String(error));
+    }).finally(() => {
+      busy = false;
+    });
+  });
+  return button;
+}
+function renderWallet(order) {
+  const box = $("wallet-pay");
+  box.replaceChildren();
+  const kind = walletPayKind(order);
+  if (!kind) {
+    box.hidden = true;
+    return;
+  }
+  box.hidden = false;
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent = kind === "ethereum"
+    ? "Pay from an Ethereum wallet on Sepolia. Test funds only."
+    : "Pay from a Cardano wallet on the preview network. Test funds only. A preprod wallet cannot be detected here.";
+  box.append(note);
+  if (kind === "ethereum") {
+    box.append(walletButton("Pay with Ethereum wallet", () => payEthereum(order)));
+    return;
+  }
+  const wallets = cardanoWalletNames();
+  if (!wallets.length) {
+    note.textContent = "Open this page in a browser with a Cardano preview wallet, or paste a transaction id below.";
+    return;
+  }
+  for (const name of wallets) {
+    box.append(walletButton(`Pay with ${name}`, () => payCardano(order, name)));
+  }
+}
+function cardanoWalletNames() {
+  const injected = window.cardano;
+  if (!injected || typeof injected !== "object") return [];
+  return Object.keys(injected).filter((name) =>
+    injected[name] && typeof injected[name].enable === "function"
+  );
+}
+async function switchSepolia(ethereum) {
+  try {
+    await ethereum.request({
+      method: "wallet_switchEthereumChain",
+      params: [{ chainId: SEPOLIA_CHAIN_ID }],
+    });
+  } catch (error) {
+    if (error?.code !== 4902) throw error;
+    await ethereum.request({
+      method: "wallet_addEthereumChain",
+      params: [{
+        chainId: SEPOLIA_CHAIN_ID,
+        chainName: "Sepolia",
+        nativeCurrency: { name: "Sepolia ETH", symbol: "ETH", decimals: 18 },
+        rpcUrls: ["https://ethereum-sepolia-rpc.publicnode.com"],
+      }],
+    });
+  }
+}
+async function payEthereum(order) {
+  const ethereum = window.ethereum;
+  if (!ethereum?.request) throw new Error("No Ethereum wallet is available in this browser.");
+  await switchSepolia(ethereum);
+  const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+  const tx = sepoliaPayment(order, accounts[0]);
+  let hash;
+  try {
+    hash = await ethereum.request({ method: "eth_sendTransaction", params: [tx] });
+  } catch (error) {
+    if (error?.code === 4001) throw error;
+    const { input, ...rest } = tx;
+    hash = await ethereum.request({
+      method: "eth_sendTransaction",
+      params: [{ ...rest, data: input }],
+    });
+  }
+  if (typeof hash !== "string" || !/^0x[0-9a-f]{64}$/i.test(hash)) {
+    throw new Error("The wallet did not return a transaction id.");
+  }
+  return await request("transaction", { transactionId: hash });
+}
+async function payCardano(order, name) {
+  const api = await window.cardano[name].enable();
+  if (await api.getNetworkId() !== 0) {
+    throw new Error("Switch the Cardano wallet to the preview network. This page cannot tell preview from preprod.");
+  }
+  const changeAddress = await api.getChangeAddress();
+  const utxos = await api.getUtxos();
+  if (!utxos?.length) throw new Error("The Cardano wallet has no funds.");
+  const built = await request("cardano-tx", { changeAddress, utxos });
+  const witnessSet = await api.signTx(built.unsignedTx, false);
+  const assembled = await request("cardano-assemble", {
+    unsignedTx: built.unsignedTx,
+    witnessSet,
+  });
+  const txHash = await api.submitTx(assembled.signedTx);
+  if (typeof txHash !== "string" || !/^[0-9a-f]{64}$/i.test(txHash)) {
+    throw new Error("The wallet did not return a transaction id.");
+  }
+  return await request("transaction", { transactionId: txHash });
 }
 async function request(path, extra = {}) {
   const response = await fetch(`${apiOrigin}/api/v1/mail/payment/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: id, ...extra }), cache: "no-store" });

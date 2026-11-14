@@ -2,8 +2,8 @@
 title: "EBP Server Component"
 type: component
 status: active
-last_updated: 2026-10-20
-source_count: 8
+last_updated: 2026-11-14
+source_count: 9
 tags:
   - component
   - server
@@ -77,6 +77,12 @@ IMAP itself. See [[analysis-ebp-managed-email-onboarding]].
 | `POST` | `/api/v1/mail/signup` | Signed `email` proof, Stalwart principal, verified detail |
 | `POST` | `/api/v1/mail/reset-password` | Identity-signed mailbox secret reset |
 
+Paid names of 3–8 characters are confirmed from the chain transaction the
+buyer submits, not from the checkout page. Cardano payments need CIP-20
+metadata label 674; Ethereum payments need the order message in the
+transaction input. The exact checks are in
+[[analysis-checkout-wallet-submission]].
+
 `mailboxes` (SQLite and Postgres) stores `username`, `domain`, fingerprint,
 Stalwart id, and `active`. Unique on `(username, domain)` and one row per
 fingerprint. No password hash. Stalwart is called from `server/stalwart.ts`
@@ -117,6 +123,7 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - [[component-cli]]
 - [[component-gui]]
 - [[analysis-ebp-managed-email-onboarding]]
+- [[analysis-checkout-wallet-submission]]
 - [[component-website]] — hosts a browser-based verifier that calls `POST /api/v1/verify-signature`
 - [[uri-syntax]]
 - [[decentralized-identifiers]]
@@ -132,6 +139,7 @@ The server's publish/discovery role is adjacent to, but distinct from, DID resol
 - `ReadMe.md`
 - `server/main.ts`, `server/handlers/`, `server/db/`
 - `server/handlers/mail-signup.ts`, `server/stalwart.ts`
+- `server/handlers/mail-payment.ts`, `server/payments/verification.ts`
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]
 - `wiki/raw/Decentralized Identifiers (DIDs) v1.1.pdf` → [[source-did-1-1]]
 - `wiki/raw/Unverified apps - Google Cloud Platform Console Help.md` → [[source-google-cloud-unverified-apps]]

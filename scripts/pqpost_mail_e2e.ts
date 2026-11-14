@@ -430,6 +430,7 @@ export async function serveLocalCheckout(
   const assets: Record<string, string> = {
     "/checkout.html": "text/html; charset=utf-8",
     "/checkout.js": "text/javascript; charset=utf-8",
+    "/checkout-wallet.js": "text/javascript; charset=utf-8",
     "/checkout.css": "text/css; charset=utf-8",
     "/styles.css": "text/css; charset=utf-8",
   };

@@ -2,8 +2,8 @@
 title: "EBP Website"
 type: component
 status: active
-last_updated: 2026-10-27
-source_count: 6
+last_updated: 2026-11-14
+source_count: 8
 tags:
   - component
   - website
@@ -21,6 +21,7 @@ The public website (`website/`) is a static, framework-free mini-site serving as
 |---|---|
 | `index.html` | Landing page — positioning, feature overview, getting-started links |
 | `verify.html` + `verify.js` | Browser-based signature verification tool |
+| `checkout.html` + `checkout.js` | Paid-address checkout. Shows the quote and accepts a transaction id. It does not call a wallet. |
 | `privacy.html` | Privacy policy (mirrors `PRIVACY.md`) |
 | `styles.css` | Shared stylesheet for all pages |
 
@@ -90,6 +91,13 @@ When the signer is published on the configured server, the verifier also renders
 
 It exports `verifySignature`, `computeIdentityFingerprint`, `isValidFingerprintBech32`, and `sha256Hex`.
 
+## Checkout (`checkout.html`)
+
+Shows a paid short-address order and lets the buyer submit a transaction id.
+The script does not call `window.cardano` or `window.ethereum`. Building and
+submitting those transactions from the page is specified in
+[[analysis-checkout-wallet-submission]].
+
 ## Privacy Page (`privacy.html`)
 
 Static rendering of the project's privacy policy: minimal data collection, only public keys/signatures/details stored, no private keys or message content. Links to the canonical `PRIVACY.md` on GitHub.
@@ -108,6 +116,7 @@ Warm, minimal aesthetic using CSS custom properties (`--brand: #d36f2f`, `--bg: 
 ## Related Pages
 
 - [[component-server]] — hosts the verify-signature API the verifier calls
+- [[analysis-checkout-wallet-submission]] — wallet APIs for a future checkout pay button
 - [[component-cli]] — referenced in "How to Get It"
 - [[component-gui]] — referenced in "How to Get It"
 - [[uri-syntax]]
@@ -122,6 +131,8 @@ Warm, minimal aesthetic using CSS custom properties (`--brand: #d36f2f`, `--bg: 
 - `website/verify.js`
 - `website/crypto.js`
 - `website/privacy.html`
+- `website/checkout.html`
+- `website/checkout.js`
 - `core/Fingerprint.ts`
 - `core/MessageHash.ts`
 - `wiki/raw/rfc3986.txt` → [[source-rfc-3986]]

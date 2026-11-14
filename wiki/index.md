@@ -2,7 +2,7 @@
 title: "Wiki Index"
 type: overview
 status: active
-last_updated: 2026-11-10
+last_updated: 2026-11-14
 source_count: 0
 tags:
   - wiki
@@ -11,7 +11,7 @@ tags:
 
 # Wiki Index
 
-Last updated: 2026-11-10 (chat interface removed)
+Last updated: 2026-11-14 (checkout wallet submission specs)
 
 ## Wiki Operations
 
@@ -184,6 +184,9 @@ Last updated: 2026-11-10 (chat interface removed)
   disconnect; Android release via `build_mobile_android.sh`; iOS still open.
 - [[analysis-mobile-android-build-oom]] - Sandboxed `assembleRelease` leaves
   extra Gradle daemons and the OOM killer kills Cursor before `adb install`.
+- [[analysis-checkout-wallet-submission]] - How a checkout page would
+  build and submit a Cardano CIP-30 payment and an Ethereum `eth_sendTransaction`,
+  and the stricter checks the key server already applies.
 - [[analysis-opaque-detail-endorsement]] - Opaque/`opaque::email` endorsement
   implemented: hash-check verify-email request, GUI/mobile cleartext prompts,
   `detailsMeta` for opaque paths.
@@ -217,6 +220,18 @@ Last updated: 2026-11-10 (chat interface removed)
 
 ## Source Summaries
 
+- [[source-cardano-mesh-metadata]] - Cardano Developer Portal Mesh guide:
+  attach CIP-20 metadata, then sign and submit.
+- [[source-cip-20]] - CIP-20: Cardano metadata label 674 `msg` memos, 64-byte
+  UTF-8 strings.
+- [[source-cip-30]] - CIP-30: browser bridge for Cardano wallets (`enable`,
+  `signTx`, `submitTx`).
+- [[source-eip-1102]] - EIP-1102: `eth_requestAccounts` before a page may use
+  an Ethereum account.
+- [[source-eip-1193]] - EIP-1193: JavaScript Ethereum Provider `request` API
+  used by injected wallets.
+- [[source-ethereum-execution-apis-submit]] - `eth_sendTransaction` and the
+  `GenericTransaction` object, including the `input` field.
 - [[source-bip-hd-wallet-standards]] - Bitcoin BIPs 32/39/43/44: HD wallets,
   mnemonics, purpose namespaces, and multi-account paths; comparison-only for
   EBP (PQ identities, not secp256k1).

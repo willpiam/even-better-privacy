@@ -15,6 +15,7 @@
     "@noble/ciphers/aes": "jsr:@noble/ciphers@^1.3.0/aes",
     "@std/cli/parse-args": "jsr:@std/cli@^1.0.28/parse-args",
     "bech32": "npm:bech32@^2.0.0",
+    "@lucid-evolution/lucid": "npm:@lucid-evolution/lucid@0.4.29",
     "imapflow": "npm:imapflow@1.2.12",
     "mailparser": "npm:mailparser@3.9.3",
     "nodemailer": "npm:nodemailer@^6.10.1",

@@ -25,6 +25,7 @@ import {
   mailSettingsForMode,
   paymentConfigForDomain,
   paymentConfigForSettings,
+  TEST_MAIL_DOMAIN,
 } from "./mail-signup.ts";
 import {
   confirmPaymentOrder,
@@ -39,9 +40,18 @@ import {
   verifyCardanoPayment,
   verifyEthereumPayment,
 } from "../payments/providers.ts";
+import {
+  assembleSignedTransaction,
+  bech32Address,
+  buildPreviewUnsigned,
+  cardanoPayError,
+  previewBlockfrost,
+  utxoFromCip30,
+} from "../payments/cardano_tx.ts";
 
 const QUOTE_MS = 30 * 60_000;
 const GRACE_MS = 2 * 60 * 60_000;
+const TEST_PAYMENT_NETWORKS = new Set(["ethereum-sepolia", "cardano-preview"]);
 
 export function handlePaymentConfig(req?: Request): Response {
   const mail = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
@@ -65,16 +75,26 @@ export async function handlePaymentCreate(
   if (!isMailSignupReady() || !config) {
     return json({ error: "paid signup is not enabled" }, 503);
   }
+  if (mail.domain !== TEST_MAIL_DOMAIN) {
+    return json({
+      error: "Names shorter than 9 characters are not available for registration yet.",
+    }, 400);
+  }
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
   const { fingerprint, username, network, asset, proof } = parsed.data;
   if (
     typeof fingerprint !== "string" || fingerprint.length > 128 ||
-    !isValidFingerprintBech32(fingerprint) ||
     typeof username !== "string" || typeof network !== "string" ||
     typeof asset !== "string" ||
     typeof proof !== "string" || proof.length > 100_000
   ) return json({ error: "invalid payment request" }, 400);
+  if (!TEST_PAYMENT_NETWORKS.has(network)) {
+    return json({ error: "unsupported payment asset" }, 400);
+  }
+  if (!isValidFingerprintBech32(fingerprint)) {
+    return json({ error: "invalid payment request" }, 400);
+  }
   const check = validateMailUsername(username);
   const authorizedTestName = mail.domain === "test.pqpost.com" &&
     isE2eMailUsername(check.username) && isMailE2eAuthorized(req);
@@ -341,6 +361,88 @@ export async function handlePaymentOrder(
     status: order.status,
     transactionId: order.transactionId,
   });
+}
+
+const MAX_WALLET_UTXOS = 40;
+
+function cardanoFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "Could not build the Cardano transaction.";
+  if (/blockfrost|project_id|api key/i.test(message)) {
+    return "Cardano payment is temporarily unavailable.";
+  }
+  return message;
+}
+
+async function quotedCardanoOrder(db: DatabaseAdapter, orderId: unknown): Promise<
+  { order: Awaited<ReturnType<typeof getPaymentOrder>> & object; error?: undefined } | { order?: undefined; error: Response }
+> {
+  if (typeof orderId !== "string" || orderId.length > 80) {
+    return { error: json({ error: "invalid cardano payment request" }, 400) };
+  }
+  await expirePaymentOrders(db, Date.now());
+  const order = await getPaymentOrder(db, orderId);
+  if (!order) return { error: json({ error: "unknown order" }, 404) };
+  const refusal = cardanoPayError(order, Date.now());
+  if (refusal) return { error: json({ error: refusal }, 400) };
+  return { order };
+}
+
+export async function handleCardanoUnsigned(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
+  const parsed = await readJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const loaded = await quotedCardanoOrder(db, parsed.data.orderId);
+  if (loaded.error) return loaded.error;
+  const { changeAddress, utxos } = parsed.data;
+  if (
+    typeof changeAddress !== "string" || changeAddress.length > 200 ||
+    !Array.isArray(utxos) || utxos.length === 0 || utxos.length > MAX_WALLET_UTXOS
+  ) {
+    return json({ error: "invalid cardano payment request" }, 400);
+  }
+  const config = paymentConfigForDomain(loaded.order.domain);
+  if (!config?.blockfrostKey) return json({ error: "cardano payment is not configured" }, 503);
+  try {
+    const unsignedTx = await buildPreviewUnsigned(loaded.order, {
+      changeAddress: bech32Address(changeAddress),
+      utxos: utxos.map((hex) => {
+        if (typeof hex !== "string" || !/^[0-9a-f]+$/i.test(hex) || hex.length > 8000) {
+          throw new Error("The wallet did not provide a usable testnet address or funds.");
+        }
+        return utxoFromCip30(hex);
+      }),
+    }, previewBlockfrost(config.blockfrostKey));
+    return json({ unsignedTx });
+  } catch (error) {
+    return json({ error: cardanoFailure(error) }, 400);
+  }
+}
+
+export async function handleCardanoAssemble(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
+  const parsed = await readJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const loaded = await quotedCardanoOrder(db, parsed.data.orderId);
+  if (loaded.error) return loaded.error;
+  const { unsignedTx, witnessSet } = parsed.data;
+  if (
+    typeof unsignedTx !== "string" || typeof witnessSet !== "string" ||
+    !/^[0-9a-f]+$/i.test(unsignedTx) || !/^[0-9a-f]+$/i.test(witnessSet) ||
+    unsignedTx.length > 100_000 || witnessSet.length > 100_000
+  ) {
+    return json({ error: "invalid cardano payment request" }, 400);
+  }
+  try {
+    return json({
+      signedTx: assembleSignedTransaction(unsignedTx, witnessSet, loaded.order),
+    });
+  } catch (error) {
+    return json({ error: cardanoFailure(error) }, 400);
+  }
 }
 
 /** Reconcile pending payments without requiring the buyer to keep checkout open. */
