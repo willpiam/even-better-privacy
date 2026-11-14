@@ -100,6 +100,10 @@ Optionally point the existing verification mailer at Stalwart too:
 `SMTP_HOST=mail.pqpost.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`,
 `SMTP_USER=noreply`, `SMTP_PASS=...`, `SMTP_FROM=noreply@pqpost.com`.
 
+For `pqpost.com`, mailbox names shorter than nine characters require a confirmed
+purchase when paid signup is enabled; otherwise they remain unavailable. Existing
+mailboxes are unaffected. The test domain follows the same rule.
+
 ## 7. Smoke test
 
 ```bash
@@ -120,3 +124,136 @@ an outside Gmail address. Check headers for `dkim=pass`, `spf=pass`,
 - **Backups:** snapshot the `stalwart-data` and `stalwart-etc` volumes.
 - **Upgrades:** the image is pinned to the `v0.16` minor series; read
   Stalwart's `UPGRADING/` notes before moving to a new minor version.
+
+## Live mail test on test.pqpost.com
+
+`deno task test:pqpost-mail` creates two disposable
+`e2e<digits>@test.pqpost.com` mailboxes through the key server, sends a unique
+message over authenticated TLS SMTP (465), checks delivery over TLS IMAP
+(993), and deletes the mailboxes. It first checks the key server's signup
+configuration and refuses to mutate a server advertising another domain or
+unexpected transport settings. The default key-server URL is
+`http://127.0.0.1:8789`; there is no production Render fallback.
+
+### Prerequisites
+
+1. Add `test.pqpost.com` as an enabled domain in Stalwart, with its own DKIM
+   keys. Continue using `mail.pqpost.com` as the connection hostname.
+2. In the Cloudflare `pqpost.com` zone, add an MX record named `test` pointing
+   to `mail.pqpost.com` at priority 10, an SPF TXT record named `test` with
+   `v=spf1 mx -all`, and both DKIM TXT records shown by Stalwart for the test
+   domain. An optional `_dmarc.test` TXT record can use
+   `v=DMARC1; p=none; rua=mailto:postmaster@pqpost.com` while verifying setup.
+3. Use a Stalwart management token with account create/destroy and domain
+   lookup permissions. Keep it in the ignored configuration file below.
+   A token restricted to the test domain is preferable when supported.
+
+### Local key server
+
+From the repository root:
+
+```sh
+cp mail-server/.env.test.example .env.pqpost-mail.local
+# Fill STALWART_ADMIN_TOKEN and MAIL_E2E_SECRET in that file.
+# Generate a separate test secret with: openssl rand -hex 32
+deno task server:pqpost-mail-test
+```
+
+This task binds the key server to `127.0.0.1:8789`, forces the mail domain to
+`test.pqpost.com`, and uses `test-results/pqpost-mail-e2e.sqlite` regardless of
+production database settings in `.env`. It also clears any configured
+`STALWART_DOMAIN_ID` so the test domain is looked up by name. Public signup
+rate limits are disabled on this local test instance. Production services
+are not reconfigured.
+
+Keep the database between runs: it records the remote account IDs used to
+clean up abandoned test mailboxes. Stop the server with Ctrl+C when finished.
+
+In another terminal:
+
+```sh
+deno task test:pqpost-mail
+```
+
+Both tasks load `.env.pqpost-mail.local` before `.env`; existing process
+environment variables take precedence. The runner tracks each successful
+signup immediately, so failure of the second signup still cleans the first.
+At startup it also sweeps `e2e<digits>` mailboxes at least six hours old from
+this test key server's database and configured domain. Do not run concurrent
+tests that keep mailboxes alive for six hours or longer.
+
+These tests share the Stalwart VPS with production but use a separate mail
+domain and local identity database. Internal delivery does not require
+outbound port 25 and does not establish external deliverability or prove
+public DNS/DKIM authentication works. Published identities remain in the
+test database; cleanup removes their email details and remote mailboxes.
+
+Run the focused regression tests without mail credentials or live services:
+
+```sh
+deno task test:pqpost-mail:unit
+```
+
+## Paid short-address checkout
+
+Paid signup is disabled unless `MAIL_PAYMENT_ENABLED=true` and all payment
+configuration is valid. Names of 3–8 characters have a one-time USD price;
+longer names remain free. Configure `MAIL_PAYMENT_PRICES_CENTS` as JSON with a
+positive integer price for every length `3` through `8`, strictly decreasing
+as the length increases. Configure `MAIL_PAYMENT_ASSETS` as a JSON array of
+objects with `network`, `symbol`, `recipient`, `unit`, and `decimals`. For ETH,
+use unit `native` and 18 decimals; for ADA, use `lovelace` and 6 decimals. For
+Ethereum tokens, `unit` is the token contract address; for Cardano native
+assets it is the lowercase policy ID concatenated with the hex asset name.
+Only configure independently verified canonical asset identifiers and wallet
+addresses. Accepted symbols are ETH, USDC and USDT on Ethereum, and ADA, USDM,
+USDA, USDCx, DJED and iUSD on Cardano. Stablecoins are valued at $1 each.
+
+Set `MAIL_PAYMENT_ETH_RPC_URL` to an HTTPS JSON-RPC endpoint,
+`MAIL_PAYMENT_BLOCKFROST_KEY` to the appropriate Blockfrost project key, and
+`MAIL_PAYMENT_COINGECKO_KEY` to a CoinGecko demo API key. ETH and ADA quotes
+require a CoinGecko rate no more than two minutes old. Orders expire after 30
+minutes; transactions submitted in time have two additional hours to confirm.
+Confirmation counts default to 5 Ethereum blocks and 2 Cardano blocks; set
+`MAIL_PAYMENT_ETH_CONFIRMATIONS` and `MAIL_PAYMENT_CARDANO_CONFIRMATIONS` to
+positive integers to change the thresholds for new orders.
+Transactions that are invalid or do not confirm in time require manual review.
+Keep payment records and the database durable and backed up. Never put spending
+keys on the key server. Use only a receiving wallet and wallet infrastructure
+capable of handling the required on-chain message and token transactions.
+
+The production checkout expects its key server at
+`https://ebp-cqyo.onrender.com`; configure `ALLOWED_ORIGINS` to include
+`https://pqpost.com` alongside any existing origins. For payment testing, use
+the local test server described above, which serves checkout at
+`http://127.0.0.1:8789/checkout.html` and uses the existing Stalwart service
+for `test.pqpost.com`. Configure test assets with `ethereum-sepolia` and/or
+`cardano-preview`, separate testnet receiving addresses and the corresponding
+test-token identifiers. The application rejects mixed mainnet/testnet asset
+configurations, and testnet orders cannot purchase production addresses.
+
+To exercise a complete paid signup, fill the payment settings in the same
+ignored `.env.pqpost-mail.local` file, enable payments, and restart
+`deno task server:pqpost-mail-test`. In another terminal run, for example:
+
+```sh
+deno task test:pqpost-payment ethereum-sepolia ETH
+# or, with a configured Preview receiving address and provider:
+deno task test:pqpost-payment cardano-preview ADA
+```
+
+The test refuses non-loopback key servers, non-test mail domains and mainnet
+assets. It creates a disposable eight-character `e2e` test name and prints a
+local checkout link. Use a testnet wallet to send the displayed
+amount and required transaction message, then submit its transaction ID on the
+checkout page. The script waits for confirmation, creates the paid test mailbox,
+and cleans it up through the authenticated test-only cleanup endpoint. It never
+holds a blockchain spending key. If cleanup reports an error, inspect the
+isolated test server before retrying. Use `deno task test:pqpost-payment:unit`
+for the safety checks without a wallet or network.
+
+The order reference is a checkout capability: keep checkout links private.
+The on-chain payment message is a separate public reference. If a transaction
+is late, insufficient, unmatched, or requires manual review, do not resend
+payment without consulting support. Recovery uses a fresh signature from the
+original identity; a confirmed order remains valid if mailbox creation fails.

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self' https://ebp-cqyo.onrender.com https://test-api.pqpost.com; form-action 'self'; base-uri 'none'">
+  <title>Address checkout · pqpost</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/checkout.css">
+  <script type="module" src="/checkout.js"></script>
+</head>
+<body>
+  <main class="checkout">
+    <a class="brand" href="/">pqpost</a>
+    <p class="eyebrow">Address checkout</p>
+    <h1>Complete your purchase</h1>
+    <p id="testnet" class="notice" hidden>Test network: use test funds only. No real address is purchased.</p>
+    <p id="error" class="notice" role="alert" hidden></p>
+    <p id="loading" role="status">Loading your order…</p>
+    <section id="order" hidden>
+      <dl>
+        <dt>Address</dt><dd id="email"></dd>
+        <dt>Identity fingerprint</dt><dd id="fingerprint" class="break"></dd>
+        <dt>Price</dt><dd id="price"></dd>
+        <dt>Send</dt><dd id="amount"></dd>
+        <dt>Network</dt><dd id="network"></dd>
+        <dt>Receiving address</dt><dd id="recipient" class="break"></dd>
+        <dt>Payment message</dt><dd id="message" class="break"></dd>
+        <dt>Quote expires</dt><dd id="expiry"></dd>
+        <dt>Status</dt><dd id="status"></dd>
+      </dl>
+      <div id="instructions"></div>
+      <form id="transaction-form">
+        <label for="transaction">Transaction ID</label>
+        <input id="transaction" type="text" autocomplete="off" spellcheck="false" required>
+        <button type="submit">Submit transaction</button>
+      </form>
+      <button type="button" id="refresh">Refresh status</button>
+      <p class="muted">Keep this page until the payment is confirmed. For late, insufficient, or unmatched payments, contact support before sending another payment.</p>
+      <p class="muted">After confirmation, return to the app and select “Check payment”.</p>
+      <p class="muted">Stablecoins are priced at one USD per token. This order requires <span id="confirmations"></span> network confirmations.</p>
+    </section>
+  </main>
+</body>
+</html>

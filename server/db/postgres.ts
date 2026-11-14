@@ -215,6 +215,41 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     `);
 
     await this.execute(`
+      CREATE TABLE IF NOT EXISTS mail_payment_orders (
+        order_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        identity_fingerprint TEXT NOT NULL REFERENCES identities(fingerprint),
+        proof_nonce BIGINT NOT NULL,
+        asset TEXT NOT NULL,
+        network TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        asset_unit TEXT NOT NULL,
+        usd_cents BIGINT NOT NULL,
+        amount_atomic TEXT NOT NULL,
+        decimals INTEGER NOT NULL,
+        usd_per_token TEXT NOT NULL,
+        confirmations INTEGER NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at BIGINT NOT NULL,
+        expires_at BIGINT NOT NULL,
+        grace_until BIGINT NOT NULL,
+        transaction_id TEXT,
+        last_checked BIGINT NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+      )
+    `);
+    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
+      ON mail_payment_orders (username, domain) WHERE active = 1`);
+    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_proof_nonce
+      ON mail_payment_orders (identity_fingerprint, proof_nonce)`);
+    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
+      ON mail_payment_orders (identity_fingerprint) WHERE active = 1`);
+    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
+      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`);
+
+    await this.execute(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (
         id BIGSERIAL PRIMARY KEY,
         username TEXT NOT NULL,

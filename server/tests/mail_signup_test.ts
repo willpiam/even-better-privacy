@@ -34,7 +34,7 @@ function installFakeStalwart(): FakeStalwart {
     state.calls.push({ method, args });
     let result: Record<string, unknown> = {};
     if (method === "x:Domain/get") {
-      result = { list: [{ id: "d1", name: DOMAIN }] };
+      result = { list: [{ id: "d1", name: Deno.env.get("MAIL_DOMAIN") }] };
     } else if (method === "x:Account/set" && args.create) {
       if (state.failCreate) {
         result = { notCreated: { new1: { type: "serverFail", description: "boom" } } };
@@ -64,12 +64,12 @@ function installFakeStalwart(): FakeStalwart {
 
 async function withServer(
   fn: (mod: MainModule, stalwart: FakeStalwart) => Promise<void>,
-  opts: { enabled?: boolean } = {},
+  opts: { enabled?: boolean; domain?: string } = {},
 ): Promise<void> {
   const dbPath = await Deno.makeTempFile({ suffix: ".sqlite" });
   Deno.env.set("DB_TYPE", "sqlite");
   Deno.env.set("DB_PATH", dbPath);
-  Deno.env.set("MAIL_DOMAIN", DOMAIN);
+  Deno.env.set("MAIL_DOMAIN", opts.domain ?? DOMAIN);
   Deno.env.set("MAIL_HOST", `mail.${DOMAIN}`);
   Deno.env.set("MAIL_SIGNUP_ENABLED", opts.enabled === false ? "false" : "true");
   Deno.env.set("MAIL_E2E_SECRET", E2E_SECRET);
@@ -146,7 +146,7 @@ async function signup(
   const { proof } = createSignedProof(identity.signingKey, {
     nonce,
     path: "email",
-    detail: `${username.toLowerCase()}@${DOMAIN}`,
+    detail: `${username.trim().toLowerCase()}@${Deno.env.get("MAIL_DOMAIN")}`,
     timestamp: Date.now(),
   });
   return await post(mod, "/api/v1/mail/signup", {
@@ -225,6 +225,38 @@ Deno.test("username-available rejects reserved and accepts free names", async ()
     assertEquals(free, { available: true, username: "bob", email: `bob@${DOMAIN}` });
   });
 });
+
+Deno.test({ name: "test.pqpost.com reserves short names in availability and signup", sanitizeOps: false, sanitizeResources: false, fn: async () => {
+  await withServer(async (mod, stalwart) => {
+    const identity = await registerIdentity(mod);
+    for (const username of ["abc", "abcdefg", "ABCDEFGH"]) {
+      const available = await (await get(mod, `/api/v1/mail/username-available?u=${username}`)).json();
+      assertEquals(available.available, false);
+      assertEquals(available.reason, "Names shorter than 9 characters are not available for registration yet.");
+      const res = await post(mod, "/api/v1/mail/signup", {
+        fingerprint: identity.fingerprint,
+        username,
+      });
+      assertEquals(res.status, 400);
+      assertEquals((await res.json()).error, available.reason);
+    }
+    const bypass = await post(mod, "/api/v1/mail/signup", {
+      fingerprint: identity.fingerprint,
+      username: "e2e123",
+    }, e2eHeaders());
+    assertEquals(bypass.status, 400);
+    await bypass.body?.cancel();
+    assertEquals(stalwart.accounts.size, 0);
+    assertEquals(stalwart.calls.length, 0);
+
+    const available = await (await get(mod, "/api/v1/mail/username-available?u=abcdefghi")).json();
+    assertEquals(available.available, true);
+    const res = await signup(mod, identity, "abcdefghi");
+    assertEquals(res.status, 200, JSON.stringify(await res.clone().json()));
+    await res.body?.cancel();
+    assertEquals(stalwart.accounts.size, 1);
+  }, { domain: "test.pqpost.com" });
+} });
 
 Deno.test("signup rejects unpublished identity and bad proofs", async () => {
   await withServer(async (mod, stalwart) => {

@@ -144,6 +144,41 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
     `);
 
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS mail_payment_orders (
+        order_id TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        identity_fingerprint TEXT NOT NULL REFERENCES identities(fingerprint),
+        proof_nonce INTEGER NOT NULL,
+        asset TEXT NOT NULL,
+        network TEXT NOT NULL,
+        recipient TEXT NOT NULL,
+        asset_unit TEXT NOT NULL,
+        usd_cents INTEGER NOT NULL,
+        amount_atomic TEXT NOT NULL,
+        decimals INTEGER NOT NULL,
+        usd_per_token TEXT NOT NULL,
+        confirmations INTEGER NOT NULL,
+        message TEXT NOT NULL,
+        status TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        grace_until INTEGER NOT NULL,
+        transaction_id TEXT,
+        last_checked INTEGER NOT NULL DEFAULT 0,
+        active INTEGER NOT NULL DEFAULT 1
+      )
+    `);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
+      ON mail_payment_orders (username, domain) WHERE active = 1`);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_proof_nonce
+      ON mail_payment_orders (identity_fingerprint, proof_nonce)`);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
+      ON mail_payment_orders (identity_fingerprint) WHERE active = 1`);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
+      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`);
+
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT NOT NULL,

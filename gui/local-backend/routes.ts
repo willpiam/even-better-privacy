@@ -39,8 +39,11 @@ import {
 import { validatePassword } from "../../common/PasswordPolicy.ts";
 import {
   buildMailDeleteDetail,
+  buildMailPaymentOrderDetail,
   buildMailPasswordResetDetail,
   MAIL_DELETE_PATH,
+  MAIL_PAYMENT_ORDER_PATH,
+  MAIL_PAYMENT_RECOVER_PATH,
   MAIL_PASSWORD_RESET_PATH,
   validateMailUsername,
 } from "../../common/MailUsername.ts";
@@ -347,6 +350,14 @@ async function fetchEbpMailConfig(server: string): Promise<EbpMailConfig> {
 }
 
 type MailEndpoint = { host: string; port: number; secure: boolean };
+
+function checkoutOriginForServer(domain: string, server: string): string | null {
+  const origin = new URL(server).origin;
+  if (domain === "test.pqpost.com" && origin === "http://127.0.0.1:8789") return origin;
+  if (domain === "test.pqpost.com" && origin === "https://test-api.pqpost.com") return "https://test.pqpost.com";
+  if (domain === "pqpost.com" && origin === "https://ebp-cqyo.onrender.com") return "https://pqpost.com";
+  return null;
+}
 
 /**
  * The managed address for `identity`. Identities restored from a recovery
@@ -4553,6 +4564,78 @@ async function handleRequestInternal(req: Request): Promise<Response> {
         );
       }
       return json(payload);
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/ebp-payment/config") {
+      const ctx = await getContext(url.searchParams.get("home") ?? undefined, url.searchParams.get("identity") ?? undefined);
+      const server = resolveServer(ctx, url.searchParams.get("server") ?? undefined);
+      const res = await fetch(apiUrl(server, "/api/v1/mail/payment/config"));
+      if (!res.ok) throw new HttpError(STATUS.BadGateway, "payment configuration unavailable");
+      return json(await res.json());
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-payment/recover") {
+      const body = await readJson<{ home?: unknown; identity?: unknown; password?: unknown; username?: unknown; server?: unknown }>(req);
+      if (typeof body.password !== "string" || !body.password) throw new HttpError(STATUS.BadRequest, "password is required");
+      const check = validateMailUsername(typeof body.username === "string" ? body.username : "");
+      if (!check.ok) throw new HttpError(STATUS.BadRequest, check.reason);
+      const ctx = await getContext(typeof body.home === "string" ? body.home : undefined, typeof body.identity === "string" ? body.identity : undefined);
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const config = await fetchEbpMailConfig(server);
+      if (!config.enabled || !config.domain) throw new HttpError(STATUS.ServiceUnavailable, "mail signup unavailable");
+      if (!checkoutOriginForServer(config.domain, server)) {
+        throw new HttpError(STATUS.ServiceUnavailable, "checkout is not configured for this key server");
+      }
+      const { identity } = await unlockIdentity(ctx, body.password);
+      identity.attachDetail(MAIL_PAYMENT_RECOVER_PATH, `${check.username}@${config.domain}`);
+      const proof = identity.details.get(MAIL_PAYMENT_RECOVER_PATH)?.[1];
+      identity.details.delete(MAIL_PAYMENT_RECOVER_PATH);
+      await saveIdentity(ctx, body.password, identity);
+      const res = await fetch(apiUrl(server, "/api/v1/mail/payment/recover"), {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fingerprint: identity.toFingerprint(), username: check.username, proof }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new HttpError(STATUS.BadGateway, typeof result.error === "string" ? result.error : `HTTP ${res.status}`);
+      return json(result);
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-payment/order") {
+      const body = await readJson<{ home?: unknown; identity?: unknown; password?: unknown; username?: unknown; server?: unknown; network?: unknown; asset?: unknown }>(req);
+      if (typeof body.password !== "string" || !body.password || typeof body.network !== "string" || typeof body.asset !== "string") {
+        throw new HttpError(STATUS.BadRequest, "password, network, and asset are required");
+      }
+      const check = validateMailUsername(typeof body.username === "string" ? body.username : "");
+      if (!check.ok) throw new HttpError(STATUS.BadRequest, check.reason);
+      const ctx = await getContext(typeof body.home === "string" ? body.home : undefined, typeof body.identity === "string" ? body.identity : undefined);
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const config = await fetchEbpMailConfig(server);
+      if (!config.enabled || !config.domain) throw new HttpError(STATUS.ServiceUnavailable, "mail signup unavailable");
+      const checkoutOrigin = checkoutOriginForServer(config.domain, server);
+      if (!checkoutOrigin) throw new HttpError(STATUS.ServiceUnavailable, "checkout is not configured for this key server");
+      const { identity } = await unlockIdentity(ctx, body.password);
+      identity.attachDetail(MAIL_PAYMENT_ORDER_PATH, buildMailPaymentOrderDetail(`${check.username}@${config.domain}`, body.network, body.asset));
+      const proof = identity.details.get(MAIL_PAYMENT_ORDER_PATH)?.[1];
+      identity.details.delete(MAIL_PAYMENT_ORDER_PATH);
+      await saveIdentity(ctx, body.password, identity);
+      const res = await fetch(apiUrl(server, "/api/v1/mail/payment/order"), {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ fingerprint: identity.toFingerprint(), username: check.username, network: body.network, asset: body.asset, proof }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new HttpError(STATUS.BadGateway, typeof result.error === "string" ? result.error : `HTTP ${res.status}`);
+      if (typeof result.orderId !== "string") throw new HttpError(STATUS.BadGateway, "invalid checkout response");
+      return json({ orderId: result.orderId, checkoutUrl: `${checkoutOrigin}/checkout.html#${result.orderId}` });
+    }
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-payment/status") {
+      const body = await readJson<{ home?: unknown; orderId?: unknown; identity?: unknown; server?: unknown }>(req);
+      const ctx = await getContext(typeof body.home === "string" ? body.home : undefined, typeof body.identity === "string" ? body.identity : undefined);
+      const server = resolveServer(ctx, typeof body.server === "string" ? body.server : undefined);
+      const res = await fetch(apiUrl(server, "/api/v1/mail/payment/status"), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: body.orderId }) });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new HttpError(STATUS.BadGateway, typeof result.error === "string" ? result.error : `HTTP ${res.status}`);
+      return json(result);
     }
 
     if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-signup") {

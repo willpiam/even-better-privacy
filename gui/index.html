@@ -5097,6 +5097,9 @@
             <span class="onboarding-domain" id="onboarding-domain">@…</span>
           </div>
           <div class="onboarding-hint" id="onboarding-username-hint"></div>
+          <label id="onboarding-payment-wrap" hidden>Payment asset
+            <select id="onboarding-payment-asset"></select>
+          </label>
           <div class="modal-actions">
             <button class="secondary" type="button" data-onboarding-back>Back</button>
             <button type="button" id="onboarding-address-next" disabled>Next</button>
@@ -5155,6 +5158,10 @@
             <li data-task="mailbox">Creating your mailbox</li>
           </ul>
           <div class="input-warning" id="onboarding-create-error"></div>
+          <div id="onboarding-checkout" hidden>
+            <p>Complete payment in your browser, then return here and check payment.</p>
+            <a id="onboarding-checkout-link" target="_blank" rel="noopener noreferrer">Open checkout</a>
+          </div>
           <div class="modal-actions">
             <button class="secondary" type="button" id="onboarding-retry" style="display: none">
               Try again

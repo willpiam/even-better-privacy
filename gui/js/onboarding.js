@@ -23,6 +23,8 @@ const wizard = {
   identityCreated: false,
   useExistingIdentity: false,
   published: false,
+  paid: false,
+  orderId: "",
   checkTimer: null,
   checkSeq: 0,
   navigateTo: null,
@@ -82,6 +84,8 @@ function resetWizard() {
     identityCreated: false,
     useExistingIdentity: false,
     published: false,
+    paid: false,
+    orderId: "",
   });
   setKeysTaskVisible(true);
   $("onboarding-username").value = "";
@@ -91,6 +95,8 @@ function resetWizard() {
   $("onboarding-quiz").innerHTML = "";
   $("onboarding-unavailable").textContent = "";
   $("onboarding-create-error").textContent = "";
+  $("onboarding-checkout").hidden = true;
+  $("onboarding-payment-wrap").hidden = true;
   $("onboarding-address-next").disabled = true;
   setHint("onboarding-username-hint", "");
   setHint("onboarding-password-hint", "");
@@ -143,6 +149,8 @@ function localUsernameError(username) {
 function onUsernameInput() {
   const username = $("onboarding-username").value.trim().toLowerCase();
   wizard.usernameOk = false;
+  wizard.paid = false;
+  $("onboarding-payment-wrap").hidden = true;
   $("onboarding-address-next").disabled = true;
   clearTimeout(wizard.checkTimer);
   if (!username) {
@@ -167,6 +175,24 @@ function onUsernameInput() {
         wizard.usernameOk = true;
         $("onboarding-address-next").disabled = false;
         setHint("onboarding-username-hint", `${wizard.username}@${wizard.domain} is available`, "ok");
+      } else if (res.purchasable) {
+        const config = await api(`/mail/ebp-payment/config?server=${encodeURIComponent(wizard.server)}`);
+        if (seq !== wizard.checkSeq) return;
+        if (!config.enabled || !Array.isArray(config.assets) || !config.assets.length) throw new Error("Payment is not available.");
+        const select = $("onboarding-payment-asset");
+        select.replaceChildren();
+        for (const asset of config.assets) {
+          const option = document.createElement("option");
+          option.value = JSON.stringify([asset.network, asset.symbol]);
+          option.textContent = `${asset.symbol} · ${asset.network}`;
+          select.append(option);
+        }
+        $("onboarding-payment-wrap").hidden = false;
+        wizard.username = res.username ?? username;
+        wizard.usernameOk = true;
+        wizard.paid = true;
+        $("onboarding-address-next").disabled = false;
+        setHint("onboarding-username-hint", `One-time price: $${(res.usdCents / 100).toFixed(2)} USD`, "ok");
       } else {
         setHint("onboarding-username-hint", res.reason || "That address is taken.", "error");
       }
@@ -371,6 +397,52 @@ async function runCreate() {
           }),
         }));
       wizard.published = true;
+    }
+    if (wizard.paid) {
+      const storageKey = `ebp.mail.order:${wizard.server}:${wizard.identityName}:${wizard.username}`;
+      if (!wizard.orderId) {
+        try { wizard.orderId = localStorage.getItem(storageKey) || ""; } catch { /* storage may be unavailable */ }
+      }
+      if (!wizard.orderId) {
+        const recovered = await api("/mail/ebp-payment/recover", { method: "POST", body: JSON.stringify({
+          identity: wizard.identityName, password: wizard.password, username: wizard.username, server: wizard.server,
+        }) });
+        wizard.orderId = recovered.orderId || "";
+      }
+      if (!wizard.orderId) {
+        const [network, asset] = JSON.parse($("onboarding-payment-asset").value);
+        const order = await api("/mail/ebp-payment/order", { method: "POST", body: JSON.stringify({
+          identity: wizard.identityName, password: wizard.password, username: wizard.username,
+          server: wizard.server, network, asset,
+        }) });
+        wizard.orderId = order.orderId;
+        try { localStorage.setItem(storageKey, wizard.orderId); } catch { /* checkout URL remains available */ }
+      }
+      const status = await api("/mail/ebp-payment/status", { method: "POST", body: JSON.stringify({
+        identity: wizard.identityName, server: wizard.server, orderId: wizard.orderId,
+      }) });
+      if (status.status === "expired") {
+        wizard.orderId = "";
+        try { localStorage.removeItem(storageKey); } catch { /* storage may be unavailable */ }
+        $("onboarding-checkout").hidden = true;
+        $("onboarding-create-error").textContent = "The quote expired. If you sent a payment, contact support. Otherwise, request a new quote.";
+        $("onboarding-retry").textContent = "Get a new quote";
+        $("onboarding-retry").style.display = "";
+        return;
+      }
+      if (status.status !== "confirmed") {
+        const localTest = wizard.domain === "test.pqpost.com" && new URL(wizard.server).origin === "http://127.0.0.1:8789";
+        const checkoutOrigin = localTest ? "http://127.0.0.1:8789" : wizard.domain === "test.pqpost.com" ? "https://test.pqpost.com" : "https://pqpost.com";
+        $("onboarding-checkout-link").href = `${checkoutOrigin}/checkout.html#${encodeURIComponent(wizard.orderId)}`;
+        $("onboarding-checkout").hidden = false;
+        $("onboarding-create-error").textContent = status.status === "manual_review"
+          ? "This order needs support. Contact support before paying again."
+          : "Payment is not confirmed yet.";
+        $("onboarding-retry").textContent = "Check payment";
+        $("onboarding-retry").style.display = "";
+        return;
+      }
+      $("onboarding-checkout").hidden = true;
     }
     const result = await runTask("mailbox", async () => {
       try {

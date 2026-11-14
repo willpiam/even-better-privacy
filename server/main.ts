@@ -9,6 +9,7 @@ import { isOriginAllowed, buildCorsHeaders, isHostAllowed } from "./cors.ts";
 import { checkRateLimit, getClientIp, RATE_LIMIT_DISABLED, RATE_LIMIT_CLEANUP } from "./rate-limit.ts";
 import { json, attachCors, logRequest, generateTraceId } from "./response.ts";
 import { handleOAuthConfig, handleOAuthExchange, handleOAuthRefresh } from "./mail-oauth.ts";
+import { handlePaymentConfig, handlePaymentCreate, handlePaymentOrder, handlePaymentRecover, reconcilePendingPayments } from "./handlers/mail-payment.ts";
 import {
   handleRequestVerifyEmail,
   handleVerifyEmailPage,
@@ -46,6 +47,18 @@ const DB_PATH = Deno.env.get("DB_PATH") ?? "./ebp.sqlite";
 
 let db: DatabaseAdapter | null = null;
 let currentDbPath = DB_PATH;
+let paymentReconciliationTimer: ReturnType<typeof setInterval> | null = null;
+let paymentReconciliationRunning = false;
+
+export function startPaymentReconciliation(): void {
+  if (paymentReconciliationTimer !== null) return;
+  paymentReconciliationTimer = setInterval(() => {
+    if (paymentReconciliationRunning || !db) return;
+    paymentReconciliationRunning = true;
+    void reconcilePendingPayments(db).catch((error) => console.error("payment reconciliation failed:", error))
+      .finally(() => { paymentReconciliationRunning = false; });
+  }, 30_000);
+}
 
 async function getDb(): Promise<DatabaseAdapter> {
   if (!db) {
@@ -67,6 +80,10 @@ async function replaceDb(dbPath: string): Promise<void> {
 }
 
 async function closeDb(): Promise<void> {
+  if (paymentReconciliationTimer !== null) {
+    clearInterval(paymentReconciliationTimer);
+    paymentReconciliationTimer = null;
+  }
   try {
     if (db) {
       await db.close();
@@ -100,9 +117,14 @@ export async function startServer(options: {
   if (!db || dbPath !== currentDbPath) {
     await replaceDb(dbPath);
   }
+  startPaymentReconciliation();
 
   console.log(`EBP server listening on http://localhost:${port}`);
-  await serve(handleRequest, { port, signal: options.signal });
+  try {
+    await serve(handleRequest, { port, signal: options.signal });
+  } finally {
+    await closeDb();
+  }
 }
 
 if (import.meta.main) {
@@ -168,7 +190,24 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
       return respond(attachCors(handleMailSignupConfig(), corsHeaders));
     }
 
+    if (req.method === "GET" && url.pathname === "/api/v1/mail/payment/config") {
+      return respond(attachCors(handlePaymentConfig(), corsHeaders));
+    }
+
     const db = await getDb();
+
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/order") {
+      return respond(attachCors(await handlePaymentCreate(req, db), corsHeaders));
+    }
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/recover") {
+      return respond(attachCors(await handlePaymentRecover(req, db), corsHeaders));
+    }
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/status") {
+      return respond(attachCors(await handlePaymentOrder(req, db, false), corsHeaders));
+    }
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/transaction") {
+      return respond(attachCors(await handlePaymentOrder(req, db, true), corsHeaders));
+    }
 
     if (req.method === "GET" && url.pathname === "/api/v1/mail/username-available") {
       return respond(attachCors(await handleMailUsernameAvailable(url, db), corsHeaders));

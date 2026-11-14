@@ -33,6 +33,8 @@ import {
   updateDetail,
 } from "../db/index.ts";
 import { timingSafeEqual } from "node:crypto";
+import { expirePaymentOrders, getConfirmedPaymentOrder } from "../payments/orders.ts";
+import { paymentConfigMatchesDomain, readPaymentConfig } from "../payments/config.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 import { verifyDetailProof } from "../detail.ts";
 import {
@@ -50,6 +52,13 @@ const E2E_SECRET_MIN = 16;
 const E2E_SWEEP_MIN_HOURS = 1;
 const E2E_SWEEP_DEFAULT_HOURS = 6;
 const E2E_CLEANUP_MAX = 10;
+const PQPOST_FREE_USERNAME_MIN = 9;
+const SHORT_ADDRESS_REASON = `Names shorter than ${PQPOST_FREE_USERNAME_MIN} characters are not available for registration yet.`;
+
+function isShortPqpostUsername(username: string, domain: string): boolean {
+  return (domain === "pqpost.com" || domain === "test.pqpost.com") &&
+    username.length < PQPOST_FREE_USERNAME_MIN;
+}
 
 function secretEquals(provided: string, expected: string): boolean {
   const providedBytes = new TextEncoder().encode(provided);
@@ -102,6 +111,10 @@ function getStalwartClient(): StalwartClient | null {
   return config ? new StalwartClient(config) : null;
 }
 
+export function isMailSignupReady(): boolean {
+  return readMailSignupSettings().enabled && getStalwartClient() !== null;
+}
+
 function connectionInfo(settings: MailSignupSettings) {
   return {
     imap: { host: settings.host, port: 993, secure: true },
@@ -129,6 +142,16 @@ export async function handleMailUsernameAvailable(
   const check = validateMailUsername(url.searchParams.get("u") ?? "");
   if (!check.ok) {
     return json({ available: false, username: check.username, reason: check.reason });
+  }
+  if (isShortPqpostUsername(check.username, settings.domain)) {
+    const config = readPaymentConfig();
+    if (config && isMailSignupReady() && paymentConfigMatchesDomain(settings.domain, config) &&
+      !await isMailboxUsernameTaken(db, check.username, settings.domain)) {
+      return json({ available: false, purchasable: true, username: check.username,
+        email: `${check.username}@${settings.domain}`, usdCents: config.prices[check.username.length],
+        reason: "This address requires a one-time purchase." });
+    }
+    return json({ available: false, username: check.username, reason: SHORT_ADDRESS_REASON });
   }
   const taken = await isMailboxUsernameTaken(db, check.username, settings.domain);
   return json({
@@ -178,6 +201,20 @@ export async function handleMailSignup(
     : normalizeMailUsername(usernameCheck.username);
   if (!usernameCheck.ok && !(isE2eMailUsername(username) && isMailE2eAuthorized(req))) {
     return json({ error: usernameCheck.reason }, 400);
+  }
+  const paidOrder = isShortPqpostUsername(username, settings.domain)
+    ? await getConfirmedPaymentOrder(db, username, settings.domain, fingerprint)
+    : null;
+  await expirePaymentOrders(db, Date.now());
+  const activeOrders = await db.query<[string]>(
+    "SELECT order_id FROM mail_payment_orders WHERE identity_fingerprint = ? AND active = 1 AND status IN ('quoted', 'pending', 'confirmed')",
+    [fingerprint],
+  );
+  if (activeOrders.length && activeOrders[0][0] !== paidOrder?.orderId) {
+    return json({ error: "this identity has an active address purchase" }, 409);
+  }
+  if (isShortPqpostUsername(username, settings.domain) && !paidOrder) {
+    return json({ error: SHORT_ADDRESS_REASON }, 400);
   }
   const email = `${username}@${settings.domain}`;
 
@@ -271,6 +308,12 @@ export async function handleMailSignup(
     );
     await deleteMailbox(db, username, settings.domain);
     return json({ error: "failed to store mailbox" }, 500);
+  }
+
+  if (paidOrder) {
+    // A bookkeeping failure must not destroy an already-created mailbox.
+    await db.query("UPDATE mail_payment_orders SET status = 'fulfilled' WHERE order_id = ? AND status = 'confirmed'", [paidOrder.orderId])
+      .catch((err) => console.error("payment fulfillment bookkeeping failed:", err));
   }
 
   return json({
