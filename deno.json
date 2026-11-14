@@ -1,5 +1,6 @@
 {
   "imports": {
+    "@std/assert": "jsr:@std/assert@^1.0.6",
     "@noble/post-quantum": "jsr:@noble/post-quantum@^0.5.4",
     "@noble/post-quantum/ml-dsa": "jsr:@noble/post-quantum@^0.5.4/ml-dsa.js",
     "@noble/post-quantum/ml-kem": "jsr:@noble/post-quantum@^0.5.4/ml-kem.js",
@@ -50,7 +51,9 @@
     "test:e2e": "sh -c 'export DENO_SQLITE_PATH=\"${DENO_SQLITE_PATH:-/usr/lib/x86_64-linux-gnu/libsqlite3.so}\"; export DB_TYPE=\"${DB_TYPE:-sqlite}\"; ./node_modules/@playwright/test/cli.js test ./gui/e2e --reporter=line'",
     "test:e2e:psql": "./scripts/e2e-with-postgres.sh",
     "test:e2e:inspect": "PWDEBUG=1 ./node_modules/@playwright/test/cli.js test gui/e2e/identity.spec.ts --headed",
-    "test:pqpost-mail": "deno run --allow-net --allow-read --allow-env ./scripts/pqpost_mail_e2e.ts",
+    "test:pqpost-mail": "deno run --allow-net --allow-read --allow-env --allow-sys=hostname ./scripts/pqpost_mail_e2e.ts",
+    "test:pqpost-mail:unit": "deno test --allow-read --allow-write --allow-env --allow-sys=hostname ./scripts/pqpost_mail_e2e_test.ts",
+    "server:pqpost-mail-test": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi --allow-sys ./scripts/pqpost_mail_e2e.ts --server",
     "test:e2e:mobile": "./scripts/mobile-e2e.sh",
     "test:e2e:mobile:smoke": "./scripts/mobile-e2e.sh ./mobile/e2e/smoke.yaml",
     "test:e2e:mobile:fast": "./scripts/mobile-e2e.sh ./mobile/e2e/smoke.yaml ./mobile/e2e/identity.yaml",

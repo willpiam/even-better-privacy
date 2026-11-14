@@ -111,6 +111,75 @@ Then run the onboarding wizard in the GUI or mobile app and send a message to
 an outside Gmail address. Check headers for `dkim=pass`, `spf=pass`,
 `dmarc=pass`.
 
+## Live mail test on test.pqpost.com
+
+`deno task test:pqpost-mail` creates two disposable
+`e2e<digits>@test.pqpost.com` mailboxes through the key server, sends a unique
+message over authenticated TLS SMTP (465), checks delivery over TLS IMAP
+(993), and deletes the mailboxes. It first checks the key server's signup
+configuration and refuses to mutate a server advertising another domain or
+unexpected transport settings. The default key-server URL is
+`http://127.0.0.1:8789`; there is no production Render fallback.
+
+### Prerequisites
+
+1. Add `test.pqpost.com` as an enabled domain in Stalwart, with its own DKIM
+   keys. Continue using `mail.pqpost.com` as the connection hostname.
+2. In the Cloudflare `pqpost.com` zone, add an MX record named `test` pointing
+   to `mail.pqpost.com` at priority 10, an SPF TXT record named `test` with
+   `v=spf1 mx -all`, and both DKIM TXT records shown by Stalwart for the test
+   domain. An optional `_dmarc.test` TXT record can use
+   `v=DMARC1; p=none; rua=mailto:postmaster@pqpost.com` while verifying setup.
+3. Use a Stalwart management token with account create/destroy and domain
+   lookup permissions. Keep it in the ignored configuration file below.
+   A token restricted to the test domain is preferable when supported.
+
+### Local key server
+
+From the repository root:
+
+```sh
+cp mail-server/.env.test.example .env.pqpost-mail.local
+# Fill STALWART_ADMIN_TOKEN and MAIL_E2E_SECRET in that file.
+# Generate a separate test secret with: openssl rand -hex 32
+deno task server:pqpost-mail-test
+```
+
+This task binds the key server to `127.0.0.1:8789`, forces the mail domain to
+`test.pqpost.com`, and uses `test-results/pqpost-mail-e2e.sqlite` regardless of
+production database settings in `.env`. It also clears any configured
+`STALWART_DOMAIN_ID` so the test domain is looked up by name. Public signup
+rate limits are disabled on this local test instance. Production services
+are not reconfigured.
+
+Keep the database between runs: it records the remote account IDs used to
+clean up abandoned test mailboxes. Stop the server with Ctrl+C when finished.
+
+In another terminal:
+
+```sh
+deno task test:pqpost-mail
+```
+
+Both tasks load `.env.pqpost-mail.local` before `.env`; existing process
+environment variables take precedence. The runner tracks each successful
+signup immediately, so failure of the second signup still cleans the first.
+At startup it also sweeps `e2e<digits>` mailboxes at least six hours old from
+this test key server's database and configured domain. Do not run concurrent
+tests that keep mailboxes alive for six hours or longer.
+
+These tests share the Stalwart VPS with production but use a separate mail
+domain and local identity database. Internal delivery does not require
+outbound port 25 and does not establish external deliverability or prove
+public DNS/DKIM authentication works. Published identities remain in the
+test database; cleanup removes their email details and remote mailboxes.
+
+Run the focused regression tests without mail credentials or live services:
+
+```sh
+deno task test:pqpost-mail:unit
+```
+
 ## Operations notes
 
 - **Deliverability:** a new domain and IP start with no reputation. Expect
