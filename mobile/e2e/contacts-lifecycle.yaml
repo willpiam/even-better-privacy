@@ -60,8 +60,10 @@ env:
     id: "tab-contacts"
 - extendedWaitUntil:
     visible:
-      id: "contacts-fetch"
+      id: "contacts-add"
     timeout: 15000
+- tapOn:
+    id: "contacts-add"
 - tapOn:
     id: "contacts-fetch"
 - extendedWaitUntil:

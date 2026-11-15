@@ -30,7 +30,6 @@ import {
   type MailAccountConfig,
   type MailAccountRecord,
 } from '../../services/mail/types';
-import {appendActivityLog} from '../../services/activityLog';
 import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
@@ -211,7 +210,6 @@ export default function MailAccountSetupScreen({
         imapPassword: secrets.imapPassword,
         smtpPassword: secrets.smtpPassword,
       });
-      await appendActivityLog(`Mail account saved: ${config.fromEmail}`, 'success');
       navigation.goBack();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -255,7 +253,6 @@ export default function MailAccountSetupScreen({
         accountId,
         fromName,
       });
-      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
       setStatus(`Mailbox access restored for ${res.email}`);
       setImapPassword('');
       setSmtpPassword('');
@@ -277,13 +274,12 @@ export default function MailAccountSetupScreen({
     setBusyMessage('Deleting mailbox…');
     setStatus('');
     try {
-      const res = await deleteEbpMailbox({
+      await deleteEbpMailbox({
         identityName,
         password,
         server,
         confirm: deleteConfirm,
       });
-      await appendActivityLog(`EBP mailbox deleted: ${res.email}`, 'success');
       navigation.goBack();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -308,7 +304,6 @@ export default function MailAccountSetupScreen({
           onPress: async () => {
             try {
               await deleteMailAccount(identityName, accountId);
-              await appendActivityLog(`Mail account deleted: ${fromEmail}`, 'success');
               navigation.goBack();
             } catch (error) {
               setStatus(error instanceof Error ? error.message : String(error));

@@ -7,7 +7,6 @@ import {
   verifyMailPbkdf2Parity,
 } from '../services/developerChecks';
 import {BASE_DIR} from '../services/storage';
-import {appendActivityLog} from '../services/activityLog';
 import Screen from '../components/Screen';
 import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
@@ -36,7 +35,6 @@ export default function DiagnosticsScreen(_props: Props): JSX.Element {
           try {
             const result = await verifyArgon2NobleParity();
             const msg = result.ok ? 'Argon2 parity OK' : 'Argon2 parity FAILED';
-            await appendActivityLog(msg, result.ok ? 'success' : 'error');
             setStatus(msg);
           } catch (error) {
             setStatus(error instanceof Error ? error.message : String(error));
@@ -57,7 +55,6 @@ export default function DiagnosticsScreen(_props: Props): JSX.Element {
             const msg = result.ok
               ? 'Mail PBKDF2 parity OK'
               : 'Mail PBKDF2 parity FAILED';
-            await appendActivityLog(msg, result.ok ? 'success' : 'error');
             setStatus(msg);
           } catch (error) {
             setStatus(error instanceof Error ? error.message : String(error));

@@ -36,8 +36,6 @@ import MailComposeScreen from '../screens/mail/MailComposeScreen';
 import type {MailAuthenticitySummary} from '../services/mail/ebpMail';
 import MoreScreen from '../screens/MoreScreen';
 import SettingsScreen from '../screens/SettingsScreen';
-import ActivityLogScreen from '../screens/ActivityLogScreen';
-import CertificatesScreen from '../screens/CertificatesScreen';
 import ProjectInfoScreen from '../screens/ProjectInfoScreen';
 
 export type IdentitiesStackParamList = {
@@ -93,9 +91,7 @@ export type MailStackParamList = {
 export type MoreStackParamList = {
   MoreHome: undefined;
   Settings: undefined;
-  ActivityLog: undefined;
   Diagnostics: undefined;
-  Certificates: {fingerprint?: string} | undefined;
   ProjectInfo: undefined;
   MailTrace: undefined;
 };
@@ -334,11 +330,6 @@ function MoreNavigator(): JSX.Element {
         component={SettingsScreen}
         options={{title: 'Settings'}}
       />
-      <MoreStack.Screen
-        name="ActivityLog"
-        component={ActivityLogScreen}
-        options={{title: 'Activity Log'}}
-      />
       {__DEV__ && (
         <MoreStack.Screen
           name="Diagnostics"
@@ -346,11 +337,6 @@ function MoreNavigator(): JSX.Element {
           options={{title: 'Diagnostics'}}
         />
       )}
-      <MoreStack.Screen
-        name="Certificates"
-        component={CertificatesScreen}
-        options={{title: 'Certificates'}}
-      />
       <MoreStack.Screen
         name="ProjectInfo"
         component={ProjectInfoScreen}

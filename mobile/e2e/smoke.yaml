@@ -25,19 +25,6 @@ appId: com.mobile
 - assertVisible: "How It Works"
 - back
 
-# Activity log is available without diagnostics
-- extendedWaitUntil:
-    visible:
-      id: "more-activity-log"
-    timeout: 10000
-- tapOn:
-    id: "more-activity-log"
-- extendedWaitUntil:
-    visible:
-      id: "activity-log-list"
-    timeout: 15000
-- back
-
 # Settings toggles + save
 - tapOn:
     id: "more-settings"

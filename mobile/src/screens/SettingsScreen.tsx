@@ -18,7 +18,6 @@ import {
   setMailRenderHtml,
   setServerUrl,
 } from '../services/settings';
-import {appendActivityLog} from '../services/activityLog';
 import {
   applyUnlockTimeoutMinutes,
   installIdentityUnlockWatcher,
@@ -73,7 +72,6 @@ export default function SettingsScreen(_props: Props): JSX.Element {
     setStatus('');
     try {
       await setServerUrl(serverUrl);
-      await appendActivityLog('Settings saved', 'success');
       setStatus('Saved');
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));

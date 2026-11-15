@@ -19,7 +19,6 @@ import {
 } from '../../services/mail/recipientChipsLogic';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import type {MailAttachmentPart} from '../../services/mail/mime';
-import {appendActivityLog} from '../../services/activityLog';
 import {statusKind} from '../../theme/statusKind';
 import {MailIcon, mailColors} from './MailAppearance';
 
@@ -106,10 +105,6 @@ export default function MailComposeScreen({
           references,
           attachments,
         });
-        await appendActivityLog(
-          `Sent unencrypted mail to ${emails.join(', ')}`,
-          'success',
-        );
         setStatus(
           sent.savedToSent
             ? 'Message sent. Open Sent to view it.'
@@ -135,10 +130,6 @@ export default function MailComposeScreen({
         references,
         attachments,
       });
-      await appendActivityLog(
-        `Sent EBP mail to ${emails.join(', ')}`,
-        'success',
-      );
       setStatus(
         sent.savedToSent
           ? 'Message sent. Open Sent to view it.'

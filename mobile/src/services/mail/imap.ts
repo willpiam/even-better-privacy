@@ -348,3 +348,79 @@ export async function fetchMessageDetail(
     client.close();
   }
 }
+
+/** Move only the selected UID; never expunge unrelated deleted messages. */
+export async function moveMailboxMessage(
+  config: MailAccountConfig,
+  secrets: MailAuthSecrets,
+  uid: number,
+  folder: string,
+  action: 'archive' | 'delete',
+): Promise<void> {
+  if (!Number.isSafeInteger(uid) || uid <= 0)
+    throw new Error('Invalid message UID');
+  const client = await connectMailLineClient({
+    host: config.imapHost,
+    port: config.imapPort,
+    secure: config.imapSecure,
+  });
+  try {
+    await imapAuthenticate(client, config, secrets);
+    client.writeLine('m1 LIST "" "*"');
+    const boxes = (await readTaggedOk(client, 'm1'))
+      .map(parseImapListLine)
+      .filter((box): box is NonNullable<typeof box> => box !== null);
+    const flags = action === 'delete' ? ['\\trash'] : ['\\archive', '\\all'];
+    const aliases =
+      action === 'delete'
+        ? [
+            'Trash',
+            'Deleted Items',
+            'Deleted Messages',
+            '[Gmail]/Trash',
+            'INBOX.Trash',
+          ]
+        : [
+            'Archive',
+            'Archives',
+            'All Mail',
+            '[Gmail]/All Mail',
+            'INBOX.Archive',
+          ];
+    const target =
+      flags
+        .map(flag =>
+          boxes.find(box =>
+            box.flags.some(value => value.toLowerCase() === flag),
+          ),
+        )
+        .find(Boolean) ??
+      aliases
+        .map(alias =>
+          boxes.find(box => box.path.toLowerCase() === alias.toLowerCase()),
+        )
+        .find(Boolean);
+    if (!target)
+      throw new Error(
+        action === 'delete'
+          ? 'No Trash mailbox found on this account'
+          : 'No Archive mailbox found on this account',
+      );
+    if (target.path === folder)
+      throw new Error('Message is already in that mailbox');
+    // Require atomic MOVE rather than COPY + broad EXPUNGE.
+    client.writeLine('m2 CAPABILITY');
+    const capabilities = (await readTaggedOk(client, 'm2'))
+      .join(' ')
+      .toUpperCase();
+    if (!/\bMOVE\b|\bIMAP4REV2\b/.test(capabilities)) {
+      throw new Error('This mail server does not support safe message moves');
+    }
+    client.writeLine(`m3 SELECT ${quoteImap(folder)}`);
+    await readTaggedOk(client, 'm3');
+    client.writeLine(`m4 UID MOVE ${uid} ${quoteImap(target.path)}`);
+    await readTaggedOk(client, 'm4');
+  } finally {
+    client.close();
+  }
+}

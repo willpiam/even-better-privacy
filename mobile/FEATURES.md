@@ -28,7 +28,6 @@ Sources: `src/components/DeveloperTools.tsx`, `src/screens/DiagnosticsScreen.tsx
 | ID  | Feature                      | Controls or content                                                                                                 |
 | --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | 6   | About EBP                    | Large illustration, project description, How It Works, security note, GitHub and project-site links.                |
-| 7   | Activity log                 | Recent operation history, timestamps/status, clear log; newest 50 entries. Separate from developer mail traces.     |
 | 8   | Mail help                    | Provider-specific Gmail/Proton Bridge instructions and generic IMAP/SMTP guidance.                                  |
 | 9   | Custom key server            | Global server URL and a separate per-publish override on an identity.                                               |
 | 10  | Password-policy preference   | Toggle enforcement when creating identities.                                                                        |
@@ -37,7 +36,7 @@ Sources: `src/components/DeveloperTools.tsx`, `src/screens/DiagnosticsScreen.tsx
 | 13  | Include public keys in mail  | Preference controlling public-key inclusion in EBP messages.                                                        |
 | 14  | Protocol and server metadata | Server URL and protocol version on the identity home screen; algorithm/server/fingerprint metadata in detail views. |
 
-Sources: `src/screens/{ProjectInfoScreen,ActivityLogScreen,SettingsScreen,IdentitiesHomeScreen,IdentityDetailScreen}.tsx`,
+Sources: `src/screens/{ProjectInfoScreen,SettingsScreen,IdentitiesHomeScreen,IdentityDetailScreen}.tsx`,
 `src/screens/mail/MailHelpScreen.tsx`.
 
 ## Identity creation and management
@@ -63,7 +62,7 @@ Recovery, revocation, and auto-lock are security capabilities even if their scre
 are considered secondary; removing an entry point should be an explicit product
 choice.
 
-## Contacts and hierarchy
+## Contacts
 
 | ID  | Feature                   | Controls or behavior                                                                                                                |
 | --- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
@@ -72,12 +71,16 @@ choice.
 | 30  | Local contact annotations | Alias, description, and local email address separate from published identity details.                                               |
 | 31  | Contact synchronization   | Refresh published details and revocation status from the server.                                                                    |
 | 32  | Opaque-detail resolution  | Enter an opaque path and candidate plaintext value to check a hash-only detail.                                                     |
-| 33  | Hierarchy proposals       | Master/child role selection, other party, context, expiry; create, accept, and reject proposals.                                    |
-| 34  | Hierarchy explorer        | Load a tree for a fingerprint, view relationships and identity details in an SVG diagram. Accessible from More and contact details. |
-| 35  | Certificate inspection    | Reload/list active certificates, inspect master/child fingerprints, context, dates and expiry, and copy raw certificate data.       |
 
-Sources: `src/screens/{ContactsScreen,ContactDetailScreen,CertificatesScreen}.tsx`,
-`src/components/{HierarchyTreeView,HierarchyDiagramDetailModal,CertificateDetailModal}.tsx`.
+Sources: `src/screens/{ContactsScreen,ContactDetailScreen}.tsx`.
+
+Parent–child certificate management is deferred from v1. The existing certificate
+storage, protocol, and validation code remains for compatibility. HD mnemonic
+creation/recovery, encrypted backups, emergency revocation certificates, and
+ordinary identity revocation remain available. A future interface belongs under
+Identity → Keys and recovery, with a read-only relationship view on contacts;
+it needs guided child replacement, rotation, revocation, and interrupted-operation
+repair before returning to the mobile UI.
 
 ## Standalone crypto tools
 

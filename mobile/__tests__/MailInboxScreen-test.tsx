@@ -17,6 +17,7 @@ jest.mock('../src/services/mail/accountStore', () => ({
 jest.mock('../src/services/mail/imap', () => ({
   clampMailLimit: (n: number) => Math.max(1, Math.min(n, 100)),
   listMailboxMessages: jest.fn(),
+  moveMailboxMessage: jest.fn(),
 }));
 jest.mock('../src/hooks/useIdentityUnlock', () => ({
   useIdentityUnlock: () => ({ensureUnlocked: jest.fn(), unlockPrompt: null}),
@@ -36,7 +37,10 @@ import {
   getMailSecretsStatus,
   resolveSelectedAccount,
 } from '../src/services/mail/accountStore';
-import {listMailboxMessages} from '../src/services/mail/imap';
+import {
+  listMailboxMessages,
+  moveMailboxMessage,
+} from '../src/services/mail/imap';
 
 type Props = React.ComponentProps<typeof MailInboxScreen>;
 const navigation = {
@@ -226,3 +230,27 @@ it('does not let a late inbox request overwrite the newly selected folder', asyn
   expect(text()).toContain('Sent message');
   expect(text()).not.toContain('Hello there');
 });
+
+it.each(['archive', 'delete'] as const)(
+  'supports the %s accessibility action on a preview',
+  async action => {
+    await mount();
+    jest
+      .mocked(listMailboxMessages)
+      .mockResolvedValue({...mailbox, messages: [], total: 0, totalPages: 1});
+    const row = tree.root.findAll(
+      node => typeof node.props.onAccessibilityAction === 'function',
+    )[0];
+    await act(async () =>
+      row.props.onAccessibilityAction({nativeEvent: {actionName: action}}),
+    );
+    expect(moveMailboxMessage).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      42,
+      'INBOX',
+      action,
+    );
+    expect(text()).not.toContain('Hello there');
+  },
+);

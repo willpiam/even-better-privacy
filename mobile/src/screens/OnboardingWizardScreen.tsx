@@ -14,7 +14,6 @@ import {createHdIdentity, createHdMnemonic} from '../services/hd';
 import {publishIdentity} from '../services/publish';
 import {getEnforcePasswordPolicy, getMailTestMode, getServerUrl} from '../services/settings';
 import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../services/storage';
-import {appendActivityLog} from '../services/activityLog';
 import {
   checkEbpUsername,
   createTestPaymentOrder,
@@ -63,7 +62,7 @@ function randomInt(max: number): number {
 export default function OnboardingWizardScreen(): JSX.Element {
   // Registered in both the Identities and Mail stacks.
   const navigation = useNavigation<any>();
-  const {promptSecret, secretPrompt} = useSecretPrompt();
+  const {secretPrompt} = useSecretPrompt();
   const [step, setStep] = useState<Step>('welcome');
   const [server, setServer] = useState('');
   const [config, setConfig] = useState<EbpSignupConfig | null>(null);
@@ -333,7 +332,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
         testMode,
       });
       setTask('mailbox', 'done');
-      await appendActivityLog(`EBP mailbox created: ${res.email}`, 'success');
       setResult({
         email: res.email,
         fingerprint: res.fingerprint,
@@ -366,7 +364,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
         config,
       });
       setTask('mailbox', 'done');
-      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
       setResult({
         email: res.email,
         fingerprint: res.fingerprint,

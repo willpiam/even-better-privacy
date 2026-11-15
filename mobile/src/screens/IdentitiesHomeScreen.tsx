@@ -23,7 +23,6 @@ import {
   listIdentities,
   setCurrentIdentity,
 } from '../services/storage';
-import {appendActivityLog} from '../services/activityLog';
 import type {StoredIdentityMeta} from '../types';
 import {getServerUrl} from '../services/settings';
 import {PROTOCOL_VERSION} from '../../../core/version';
@@ -119,7 +118,6 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
         : copy.localUri;
       const raw = await RNFS.readFile(path, 'utf8');
       const meta = await importIdentity({storageJson: raw, overwrite: false});
-      await appendActivityLog(`Imported identity ${meta.name}`, 'success');
       setStatus(`Imported ${meta.name}`);
       await refresh();
     } catch (error) {

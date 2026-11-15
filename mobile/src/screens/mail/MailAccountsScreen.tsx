@@ -4,15 +4,22 @@ import {StyleSheet, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
-import {getCurrentIdentityRequired} from '../../services/storage';
+import {
+  getCurrentIdentityRequired,
+  readCurrentIdentityPublic,
+} from '../../services/storage';
 import {
   getMailSecretsStatus,
   readMailStore,
+  getMailSecretsInMemory,
   selectMailAccount,
 } from '../../services/mail/accountStore';
 import {getServerUrl} from '../../services/settings';
-import {fetchEbpSignupConfig, resetEbpMailbox} from '../../services/mail/ebpSignup';
-import {appendActivityLog} from '../../services/activityLog';
+import {
+  fetchEbpSignupConfig,
+  lookupVerifiedManagedEmail,
+  resetEbpMailbox,
+} from '../../services/mail/ebpSignup';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
 import Card from '../../components/Card';
@@ -33,11 +40,13 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [accounts, setAccounts] = useState<
     Array<{id: string; name: string; fromEmail: string}>
   >([]);
-  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(
+    null,
+  );
   const [secretsLocked, setSecretsLocked] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const [status, setStatus] = useState('');
-  const [mailDomain, setMailDomain] = useState('');
+  const [needsRestore, setNeedsRestore] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const promptedThisFocus = useRef(false);
 
@@ -56,32 +65,50 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
     const secretStatus = await getMailSecretsStatus(name);
     setSecretsLocked(secretStatus.locked && !secretStatus.inMemory);
     try {
-      const cfg = await fetchEbpSignupConfig(await getServerUrl());
-      setMailDomain(cfg.enabled ? cfg.domain : '');
+      setNeedsRestore(false);
+      const server = await getServerUrl();
+      const cfg = await fetchEbpSignupConfig(server);
+      const identity = await readCurrentIdentityPublic();
+      if (cfg.enabled && identity?.name === name) {
+        const email = await lookupVerifiedManagedEmail(
+          server,
+          identity.publicData.fingerprint,
+          cfg.domain,
+        );
+        const local = store.accounts.find(
+          a =>
+            (a.config.fromEmail || a.config.username).toLowerCase() ===
+            email?.toLowerCase(),
+        );
+        // Locked credentials need unlocking, not a mailbox password reset.
+        const secrets = local ? getMailSecretsInMemory(name, local.id) : null;
+        setNeedsRestore(
+          Boolean(
+            email &&
+              (!local || (!secretStatus.locked && !secrets?.imapPassword)),
+          ),
+        );
+      }
     } catch {
-      setMailDomain('');
+      setNeedsRestore(false);
     }
     return secretStatus.locked && !secretStatus.inMemory;
   }, []);
 
-  const unlockMailWithIdentity = useCallback(
-    async () => {
-      setUnlocking(true);
-      try {
-        setStatus('');
-        const name = identityName || (await getCurrentIdentityRequired());
-        if (!(await ensureUnlocked(name))) return;
-        await appendActivityLog('Mail secrets unlocked', 'success');
-        setStatus('Mail secrets unlocked');
-        await refresh();
-      } catch (error) {
-        setStatus(error instanceof Error ? error.message : String(error));
-      } finally {
-        setUnlocking(false);
-      }
-    },
-    [identityName, refresh, ensureUnlocked],
-  );
+  const unlockMailWithIdentity = useCallback(async () => {
+    setUnlocking(true);
+    try {
+      setStatus('');
+      const name = identityName || (await getCurrentIdentityRequired());
+      if (!(await ensureUnlocked(name))) return;
+      setStatus('Mail secrets unlocked');
+      await refresh();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setUnlocking(false);
+    }
+  }, [identityName, refresh, ensureUnlocked]);
 
   const requestIdentityUnlock = useCallback(async () => {
     await unlockMailWithIdentity();
@@ -135,7 +162,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         server,
         config,
       });
-      await appendActivityLog(`EBP mailbox access restored: ${res.email}`, 'success');
       setStatus(`Mailbox access restored for ${res.email}`);
       await refresh();
     } catch (error) {
@@ -153,11 +179,16 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         visible={unlocking || busyMessage !== null}
         message={busyMessage ?? 'Unlocking mail secrets…'}
       />
-      <Text style={styles.eyebrow}>CURRENT IDENTITY · {identityName || '…'}</Text>
+      <Text style={styles.eyebrow}>
+        CURRENT IDENTITY · {identityName || '…'}
+      </Text>
       <Text style={styles.header}>Your mail accounts</Text>
       {accounts.length > 0 ? (
-        <AppButton title="Open inbox" style={styles.primary}
-          onPress={() => navigation.navigate('MailInbox')} />
+        <AppButton
+          title="Open inbox"
+          style={styles.primary}
+          onPress={() => navigation.navigate('MailInbox')}
+        />
       ) : null}
       <StatusBanner message={status} kind={statusKind(status)} />
 
@@ -217,7 +248,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         testID="mail-onboarding"
         onPress={() => navigation.navigate('OnboardingWizard')}
       />
-      {mailDomain ? (
+      {needsRestore ? (
         <AppButton
           title="Restore mailbox access"
           testID="mail-restore-access"
@@ -230,11 +261,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         variant="secondary"
         onPress={() => navigation.navigate('MailAccountSetup', {})}
       />
-      <AppButton
-        title="Mail help"
-        variant="secondary"
-        onPress={() => navigation.navigate('MailHelp')}
-      />
     </Screen>
   );
 }
@@ -242,7 +268,12 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
 const styles = StyleSheet.create({
   screen: {backgroundColor: colors.page},
   primary: {backgroundColor: colors.accent},
-  eyebrow: {fontSize: 10, letterSpacing: 1.4, color: colors.muted, marginTop: 8},
+  eyebrow: {
+    fontSize: 10,
+    letterSpacing: 1.4,
+    color: colors.muted,
+    marginTop: 8,
+  },
   header: {
     fontWeight: '700',
     fontSize: 26,

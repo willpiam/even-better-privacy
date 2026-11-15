@@ -72,3 +72,7 @@ export function loadMailMessage(
 export function invalidateMailBodies() {
   bodies.clear();
 }
+
+export function invalidateMailPages() {
+  pages.clear();
+}

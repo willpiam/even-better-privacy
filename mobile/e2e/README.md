@@ -26,13 +26,13 @@ Keep `adb reverse tcp:8081 tcp:8081` so the debug app can reach Metro.
 From the repo root:
 
 ```bash
-# Full suite (smoke + identity + details + contacts-lifecycle + sign-verify + hierarchy)
+# Full suite (smoke + identity + details + contacts-lifecycle + sign-verify)
 deno task test:e2e:mobile
 
 # Smoke only
 deno task test:e2e:mobile:smoke
 
-# Smoke + identity (skip details / sign-verify / hierarchy)
+# Smoke + identity (skip details / sign-verify)
 deno task test:e2e:mobile:fast
 
 # Single flow
@@ -81,13 +81,12 @@ modal. Flows that type into `password-modal-input` should run
 
 | File | Coverage |
 |------|----------|
-| `smoke.yaml` | Launch, Identities tab, More (About, Activity log, Settings toggles); works with debug and release builds |
+| `smoke.yaml` | Launch, Identities tab, More (About, Settings toggles); works with debug and release builds |
 | `developer.yaml` | Development build only: mail trace, Argon2/PBKDF2 parity, core self-test |
 | `identity.yaml` | HD create, set server, wrong-password publish, successful publish |
 | `details.yaml` | HD create + publish, push email detail, Contacts browse/search |
 | `contacts-lifecycle.yaml` | HD create + publish, export public JSON, emergency cert, fetch contact, local notes, delete contact + identity |
 | `sign-verify.yaml` | Sign attached message, paste payload, verify |
-| `hierarchy.yaml` | Two identities, propose/accept, Load Tree |
 | `helpers/` | Shared subflows (create HD identity, set server, dismiss autofill) |
 
 The identity overview shows server publication and email verification status.
@@ -95,9 +94,8 @@ Forms live on the Identity details, Export and backup, and Revocation and remova
 screens. `helpers/publish-identity.yaml` opens publication, unlocks the identity,
 and returns to the overview after confirming the published indicator.
 
-Default suite order puts details and sign-verify **before** hierarchy so a
-details failure fails faster than the long HD keygen. `contacts-lifecycle`
-runs after details (needs publish + server fetch).
+`contacts-lifecycle` runs after details (needs publish + server fetch).
+Hierarchy management is deferred from v1 and has no mobile UI flow.
 
 On Ubuntu 22.04, start Metro with **Node 22+** (`nvm use 22`) if system Node
 is too old for React Native 0.84, then:

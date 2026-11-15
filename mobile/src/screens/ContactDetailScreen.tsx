@@ -213,18 +213,6 @@ export default function ContactDetailScreen({
       </Card>
       <StatusBanner message={status} kind={statusKind(status)} />
 
-      <AppButton
-        title="View hierarchy / certificates"
-        testID="contact-open-certificates"
-        variant="secondary"
-        onPress={() => {
-          navigation.getParent()?.navigate('MoreTab', {
-            screen: 'Certificates',
-            params: {fingerprint: contact.fingerprint},
-          });
-        }}
-      />
-
       <SectionTitle>Details</SectionTitle>
       {Object.keys(contact.details).length === 0 ? (
         <Text style={styles.meta}>No published details.</Text>

@@ -16,6 +16,8 @@ export const mailColors = {
 };
 
 const paths = {
+  archive: 'M3 3h18v5H3zM5 8v13h14V8M10 12h4',
+  delete: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
   search: 'M21 21l-4.5-4.5M19 10.5a8.5 8.5 0 1 1-17 0 8.5 8.5 0 0 1 17 0',
   refresh:
     'M20 7v5h-5M4 17v-5h5M5.5 7a7.5 7.5 0 0 1 12-2L20 8M4 16l2.5 3a7.5 7.5 0 0 0 12-2',
@@ -26,8 +28,10 @@ const paths = {
 
 export function MailIcon({
   name,
+  color = mailColors.accent,
 }: {
   name: keyof typeof paths;
+  color?: string;
 }): React.JSX.Element {
   return (
     <Svg
@@ -35,7 +39,7 @@ export function MailIcon({
       height={20}
       viewBox="0 0 24 24"
       fill="none"
-      stroke={mailColors.accent}
+      stroke={color}
       strokeWidth={1.7}
       strokeLinecap="round"
       strokeLinejoin="round">

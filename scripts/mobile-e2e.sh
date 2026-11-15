@@ -198,7 +198,6 @@ if [[ ${#FLOW_ARGS[@]} -eq 0 ]]; then
     "${ROOT}/mobile/e2e/contacts-lifecycle.yaml"
     "${ROOT}/mobile/e2e/sign-verify.yaml"
     "${ROOT}/mobile/e2e/verify-public-keys.yaml"
-    "${ROOT}/mobile/e2e/hierarchy.yaml"
   )
 fi
 

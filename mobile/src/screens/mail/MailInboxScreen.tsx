@@ -6,6 +6,7 @@ import React, {
   useState,
 } from 'react';
 import {
+  Alert,
   FlatList,
   Pressable,
   ScrollView,
@@ -23,12 +24,13 @@ import {
   resolveSelectedAccount,
 } from '../../services/mail/accountStore';
 import {isSentFolderRequest} from '../../../../common/SentMailbox';
-import {clampMailLimit} from '../../services/mail/imap';
+import {moveMailboxMessage, clampMailLimit} from '../../services/mail/imap';
 import type {ListMailboxMessagesResult} from '../../services/mail/imap';
 import {
   getCachedMailPage,
   refreshMailPage,
   invalidateMailBodies,
+  invalidateMailPages,
 } from '../../services/mail/mailData';
 import {onMailCacheCleared} from '../../services/mail/mailCache';
 import type {MailMessageSummary} from '../../services/mail/types';
@@ -45,6 +47,8 @@ import {
   mailDateLabel,
   mailSenderLabel,
 } from './MailAppearance';
+
+import SwipeMailRow, {type MailSwipeAction} from './SwipeMailRow';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailInbox'>;
 
@@ -68,46 +72,63 @@ const MailSummaryRow = React.memo(function MailSummaryRow({
   item,
   sent,
   onOpen,
+  onAction,
+  disabled,
 }: {
   item: MailMessageSummary;
   sent: boolean;
+  disabled: boolean;
+  onAction: (uid: number, action: MailSwipeAction) => Promise<void>;
   onOpen: (uid: number) => void;
 }) {
   const address = sent ? item.to : item.from;
   const unread = !item.seen;
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${unread ? 'Unread. ' : ''}${
-        sent ? 'To: ' : ''
-      }${address}. ${item.subject || '(no subject)'}. ${item.date}`}
-      style={({pressed}) => [
-        styles.messageRow,
-        unread && styles.unreadRow,
-        pressed && styles.pressedRow,
-      ]}
-      onPress={() => onOpen(item.uid)}>
-      <MailAvatar address={address} />
-      <View style={styles.messageCopy}>
-        <View style={styles.rowTop}>
-          <Text
-            numberOfLines={1}
-            style={[styles.sender, unread && styles.unreadText]}>
-            {sent ? 'To: ' : ''}
-            {mailSenderLabel(address)}
-          </Text>
-          <Text style={styles.date}>{mailDateLabel(item.date)}</Text>
+    <SwipeMailRow
+      disabled={disabled}
+      onAction={action => onAction(item.uid, action)}>
+      <Pressable
+        accessibilityActions={[
+          {name: 'archive', label: 'Archive'},
+          {name: 'delete', label: 'Delete'},
+        ]}
+        onAccessibilityAction={event => {
+          const action = event.nativeEvent.actionName;
+          if (!disabled && (action === 'archive' || action === 'delete'))
+            void onAction(item.uid, action);
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${unread ? 'Unread. ' : ''}${
+          sent ? 'To: ' : ''
+        }${address}. ${item.subject || '(no subject)'}. ${item.date}`}
+        style={({pressed}) => [
+          styles.messageRow,
+          unread && styles.unreadRow,
+          pressed && styles.pressedRow,
+        ]}
+        onPress={() => onOpen(item.uid)}>
+        <MailAvatar address={address} />
+        <View style={styles.messageCopy}>
+          <View style={styles.rowTop}>
+            <Text
+              numberOfLines={1}
+              style={[styles.sender, unread && styles.unreadText]}>
+              {sent ? 'To: ' : ''}
+              {mailSenderLabel(address)}
+            </Text>
+            <Text style={styles.date}>{mailDateLabel(item.date)}</Text>
+          </View>
+          <View style={styles.subjectRow}>
+            {unread ? <View style={styles.unreadDot} /> : null}
+            <Text
+              numberOfLines={2}
+              style={[styles.subject, unread && styles.unreadText]}>
+              {item.subject || '(no subject)'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.subjectRow}>
-          {unread ? <View style={styles.unreadDot} /> : null}
-          <Text
-            numberOfLines={2}
-            style={[styles.subject, unread && styles.unreadText]}>
-            {item.subject || '(no subject)'}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </SwipeMailRow>
   );
 });
 const messageKey = (item: MailMessageSummary) => String(item.uid);
@@ -273,12 +294,53 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     },
     [navigation, openedFolder],
   );
+  const moving = useRef(false);
+  const moveMessage = useCallback(
+    async (uid: number, action: MailSwipeAction) => {
+      if (moving.current) return;
+      moving.current = true;
+      const currentRequest = requestId.current;
+      try {
+        const identity = await getCurrentIdentityRequired();
+        const context = await resolveSelectedAccount(identity);
+        if (!context) throw new Error('Configure a mail account first');
+        if (currentRequest !== requestId.current) return;
+        await moveMailboxMessage(
+          context.account.config,
+          context.secrets,
+          uid,
+          openedFolder,
+          action,
+        );
+        invalidateMailPages();
+        invalidateMailBodies();
+        if (currentRequest === requestId.current) {
+          setMessages(previous => previous.filter(item => item.uid !== uid));
+          await load();
+        }
+      } catch (error) {
+        Alert.alert(
+          'Could not move message',
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        moving.current = false;
+      }
+    },
+    [openedFolder, load],
+  );
   const sent = isSentFolderRequest(folder);
   const renderMessage = useCallback(
     ({item}: {item: MailMessageSummary}) => (
-      <MailSummaryRow item={item} sent={sent} onOpen={openMessage} />
+      <MailSummaryRow
+        item={item}
+        sent={sent}
+        onOpen={openMessage}
+        disabled={loading}
+        onAction={moveMessage}
+      />
     ),
-    [sent, openMessage],
+    [sent, openMessage, loading, moveMessage],
   );
 
   const emptyLabel = loadError ? loadError : status || 'Mailbox empty.';
@@ -578,6 +640,7 @@ const styles = StyleSheet.create({
   options: {padding: 16, gap: 12},
   primary: {backgroundColor: mailColors.accent},
   messageRow: {
+    backgroundColor: mailColors.surface,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
