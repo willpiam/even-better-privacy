@@ -8,7 +8,7 @@ Open **index.html** in a browser for the prototype studio. If your browser restr
 python3 -m http.server 8000 --bind 127.0.0.1 --directory mockups
 ```
 
-Then visit http://127.0.0.1:8000/ . Open **app.html** directly for the responsive interface without the studio. `app.html?screen=contacts` (or `mail`, `identities`, `tools`, `settings`) opens a particular screen.
+Then visit http://127.0.0.1:8000/ . Open **assets.html** for the watercolor fox gallery, all six places, four animation loops, and downloadable atlases. Open **app.html** directly for the responsive interface without the studio. `app.html?screen=contacts` (or `mail`, `identities`, `tools`, `settings`) opens a particular screen.
 
 ## Review the design
 
@@ -17,13 +17,13 @@ Then visit http://127.0.0.1:8000/ . Open **app.html** directly for the responsiv
 - Mail: open a message, search, filter unread/starred/sent, star, archive, inspect security, reply, or compose a preview. Preview sends appear in Sent.
 - Identities: switch Personal/Work, inspect details, and preview the creation/backup handoff.
 - Contacts: search, add an unverified sample contact, inspect details, and start an email.
-- Tools: preview encrypt/decrypt/sign/verify workflows with explicit simulated result states.
+- Tools: preview encrypt/decrypt/sign/verify workflows with a short fox loading animation and explicit simulated result states. Verify uses a fox sniffing a sealed letter. Closing a dialog cancels its pending preview.
 - Settings: change appearance and the sample notification preference. On mobile, open the profile circle, then **Workspace settings**.
 
-The design replaces the dense utility-first navigation with familiar communication surfaces, consistent identity context, and security details available where they matter. Desktop uses a sidebar, message list, and reader. Mobile uses bottom navigation and a list-to-detail flow. Warm neutrals and muted green carry across both sizes; dark appearance is available in Settings.
+The design replaces the dense utility-first navigation with familiar communication surfaces, consistent identity context, and security details available where they matter. Desktop uses a sidebar, message list, and reader. Mobile uses bottom navigation and a list-to-detail flow. Each screen has its own watercolor place and matching palette: a golden mail meadow, sage identity grove, rose contact garden, teal crypto woodland, and lavender settings den. Compose has a blue flower path. Dark appearance preserves the screen palettes and is available in Settings.
 
 ## Scope
 
 This is a reviewable design proposal, separate from `gui/` and `mobile/`. All messages, identities, keys, signatures, and verification states are fictional. Nothing is sent; no cryptography is performed. State is held in memory and resets on reload. Identity creation ends at a proposed key-backup handoff. File crypto, certificates, diagnostics, and full account onboarding are outside this exploration.
 
-The implementation uses system fonts, inline SVG icons, labeled form controls, native modal dialogs, visible keyboard focus, and reduced-motion support. It has no external assets or runtime dependencies.
+The implementation uses system fonts, inline SVG icons, labeled form controls, native modal dialogs, visible keyboard focus, and reduced-motion support. The generated watercolor artwork is bundled locally as two optimized WebP atlases (about 676 KiB combined). See [the asset map](assets/README.md) for frame coordinates and usage. No external requests or runtime dependencies are required. Loading states include live status text; reduced motion keeps the fox still, and the gallery includes a pause control.
