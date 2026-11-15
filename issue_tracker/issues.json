@@ -1,0 +1,53 @@
+{
+  "next_id": 9,
+  "issues": [
+    {
+      "id": 1,
+      "description": "Empty mail headers consume the following field. mobile/src/services/mail/imapFetchBody.ts:33-52 uses \\s* after the colon, which also matches a newline. Reproduction: parseHeaderField(\"Subject:\\r\\nFrom: alice@example.com\\r\\n\\r\\nBody\", \"Subject\") returns \"From: alice@example.com\" instead of an empty string. This misrepresents message metadata, and applies to From/To/Date as well. Restrict whitespace to spaces/tabs and unfold only continuation lines. Confirmed by issue_tracker/review_checks.mjs.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 2,
+      "description": "Failed IMAP FETCH can be reported as successful. mobile/src/services/mail/imapFetchBody.ts:67-71 accepts a tagged completion whenever the entire line includes \" OK\", instead of checking the status atom. Reproduction: a BODY[] payload followed by \"a1 NO server says OK later\" returns the payload instead of rejecting the failed command. Check an anchored tagged OK status, case-insensitively, as readHeaderRecords already does. Confirmed by issue_tracker/review_checks.mjs.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 3,
+      "description": "MIME text decoding ignores the declared charset. mobile/src/services/mail/mime.ts:55-83 and collectFromEntity decode all base64/quoted-printable text as UTF-8 without reading the Content-Type charset parameter. Reproduction: Content-Type: text/plain; charset=iso-8859-1 plus base64 Y2Fm6Q== renders caf followed by a replacement character instead of café. Separate transfer decoding into bytes from charset decoding and handle supported declared encodings explicitly. Confirmed by issue_tracker/review_checks.mjs.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 4,
+      "description": "Valid SMTP RCPT success replies cause send to wait until timeout. mobile/src/services/mail/smtp.ts:16-34 and sendMimeMessage RCPT loop accept only 250; RFC 5321 also allows 251 (forwarding) and 252 for RCPT. A server replying \"251 User not local; will forward\" has completed the response, but readSmtpUntil keeps reading while the server waits for DATA. The message is not submitted. Accept the command-specific success set and fail promptly on unexpected completed replies. Confirmed with a scripted client in issue_tracker/review_checks.mjs; real sockets eventually raise TCP readLine timed out.",
+      "criticality": "high",
+      "category": "correctness"
+    },
+    {
+      "id": 5,
+      "description": "Message detail extraction repeatedly scans and normalizes the entire mail source for headers. mobile/src/services/mail/imapFetchBody.ts:19-25 normalizes all CRLF/CR characters before locating the header boundary; messageDetailFromRfc822:112-115 calls that path four times for Subject/From/To/Date. Thus large message bodies and attachments are traversed repeatedly even though only a short header block is needed. Extract the header block once before normalization and parse all fields from it. Verified by tracing the four calls and the two replace operations per call; no runtime speedup estimate claimed.",
+      "criticality": "medium",
+      "category": "efficiency"
+    },
+    {
+      "id": 6,
+      "description": "Strict JSON validation builds and discards a sorted deep copy. core/StrictJson.ts:40 calls canonicalize(value) solely for validation and returns the original value. core/CanonicalJson.ts canonicalize recursively allocates new objects/arrays and sorts every object key, so every strict parse pays for another full object graph and key sorting whose result is unused. Add a validation-only traversal with the same string/number rules; keep copying/sorting only where a caller actually needs it. Verified by code inspection of both functions; performance impact grows with payload size.",
+      "criticality": "medium",
+      "category": "efficiency"
+    },
+    {
+      "id": 7,
+      "description": "Duplicate RFC822 header parsers already use different rules. mobile/src/services/mail/imapFetchBody.ts:19-52 implements boundary detection/unfolding/field extraction, while mobile/src/services/mail/mime.ts:14-37 implements another parser with its own normalization, duplicate-header and continuation rules. One handles bare CR and the other does not; field extraction also has the empty-header bug recorded separately. Maintaining separate parsers makes it difficult to reason about which headers drive display versus MIME processing and requires fixes in multiple places. Extract one shared, explicitly specified header parser with tests for empty fields, folding, duplicate fields and line endings.",
+      "criticality": "low",
+      "category": "code readability/maintainability"
+    },
+    {
+      "id": 8,
+      "description": "Strict JSON scanner obscures its cursor invariants and trust in JSON.parse. core/StrictJson.ts:8-37 packs delimiter advances, whitespace handling, recursion and early returns onto single lines, uses a helper named string, and advances past colons/commas without explaining that the initial JSON.parse has already validated grammar. This security-sensitive duplicate-key check is difficult to audit or debug when escaped keys or nested structures fail. Expand each state transition, use descriptive helper names and document the valid-input precondition and cursor positions; preserve duplicate escaped-name checks in focused tests. This is an auditability concern, not a demonstrated incorrect parse.",
+      "criticality": "low",
+      "category": "code readability/maintainability"
+    }
+  ]
+}
