@@ -1,24 +1,23 @@
 import React, {useCallback, useState} from 'react';
-import {Alert, StyleSheet, View} from 'react-native';
+import {StyleSheet, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
-import {runCoreSelfTest} from '../services/storage';
 import Screen from '../components/Screen';
 import BrandHeader from '../components/BrandHeader';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
 import Card from '../components/Card';
-import StatusBanner from '../components/StatusBanner';
-import BusyOverlay from '../components/BusyOverlay';
-import {statusKind} from '../theme/statusKind';
 import {getServerUrl} from '../services/settings';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'MoreHome'>;
 
+// Metro removes the require and its developer-only dependencies in releases.
+const DeveloperTools = __DEV__
+  ? require('../components/DeveloperTools').default
+  : null;
+
 export default function MoreScreen({navigation}: Props): JSX.Element {
-  const [status, setStatus] = useState('');
-  const [busy, setBusy] = useState(false);
   const [serverUrl, setServerUrl] = useState('');
 
   useFocusEffect(
@@ -27,24 +26,9 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
     }, []),
   );
 
-  const onSelfTest = async () => {
-    setBusy(true);
-    setStatus('');
-    try {
-      const result = await runCoreSelfTest();
-      setStatus(result);
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
     <Screen scroll>
-      <BusyOverlay visible={busy} message="Running core self-test…" />
       <BrandHeader />
-      <StatusBanner message={status} kind={statusKind(status)} />
       <SectionTitle>Preferences</SectionTitle>
       <Card>
         <ListRow
@@ -77,33 +61,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           showDivider={false}
         />
       </Card>
-      <SectionTitle>Developer</SectionTitle>
-      <Card>
-        <ListRow
-          testID="more-self-test"
-          title="Core self-test"
-          subtitle="Run crypto parity checks"
-          onPress={() => {
-            Alert.alert('Core self-test', 'Run the built-in crypto self-test?', [
-              {text: 'Cancel', style: 'cancel'},
-              {text: 'Run', onPress: () => void onSelfTest()},
-            ]);
-          }}
-        />
-        <ListRow
-          testID="more-mail-trace"
-          title="Mail trace"
-          subtitle="Protocol stubs"
-          onPress={() => navigation.navigate('MailTrace')}
-        />
-        <ListRow
-          testID="more-diagnostics"
-          title="Diagnostics"
-          subtitle="Parity checks, paths"
-          onPress={() => navigation.navigate('Diagnostics')}
-          showDivider={false}
-        />
-      </Card>
+      {DeveloperTools ? <DeveloperTools navigation={navigation} /> : null}
       <View style={styles.spacer} />
     </Screen>
   );

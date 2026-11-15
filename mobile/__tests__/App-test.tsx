@@ -13,10 +13,6 @@ jest.mock('../src/navigation/AppNavigator', () => {
   };
 });
 
-jest.mock('../src/services/cryptoInit', () => ({
-  ensureNativeCryptoReady: jest.fn(() => Promise.resolve()),
-}));
-
 import App from '../App';
 
 it('renders correctly', async () => {

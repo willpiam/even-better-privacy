@@ -1,11 +1,13 @@
 import React, {useCallback, useState} from 'react';
-import {FlatList, StyleSheet, Text, View} from 'react-native';
+import {FlatList, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../../navigation/AppNavigator';
 import {
   clearMailTrace,
   listMailTrace,
+  isMailTraceEnabled,
+  setMailTraceEnabled,
   type MailTraceEntry,
 } from '../../services/mail/mailTrace';
 import Screen from '../../components/Screen';
@@ -25,6 +27,7 @@ function formatTime(at: number): string {
 
 export default function MailTraceScreen(_props: Props): JSX.Element {
   const [entries, setEntries] = useState<MailTraceEntry[]>([]);
+  const [enabled, setEnabled] = useState(isMailTraceEnabled);
 
   const refresh = useCallback(async () => {
     setEntries(await listMailTrace());
@@ -44,9 +47,20 @@ export default function MailTraceScreen(_props: Props): JSX.Element {
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
       <Text style={styles.hint}>
-        Newest first. Last stub before a hang is the stall point. Metro also
-        shows lines tagged [ebp-mail].
+        Turn on recording before reproducing a mail problem. Newest first; kept
+        in memory for this app session only.
       </Text>
+      <View style={styles.row}>
+        <Text style={styles.hint}>Record mail trace</Text>
+        <Switch
+          testID="mail-trace-enabled"
+          value={enabled}
+          onValueChange={value => {
+            setMailTraceEnabled(value);
+            setEnabled(isMailTraceEnabled());
+          }}
+        />
+      </View>
       <View style={styles.row}>
         <AppButton
           title="Refresh"

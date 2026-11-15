@@ -1,5 +1,11 @@
 import React from 'react';
-import {Image, Linking, StyleSheet, Text, useWindowDimensions} from 'react-native';
+import {
+  Image,
+  Linking,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import Screen from '../components/Screen';
@@ -10,7 +16,7 @@ import {colors, radius, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'ProjectInfo'>;
 
-const largeLogo = require('../../../assets/large-logo.png');
+const largeLogo = require('../assets/about-logo.jpg');
 
 export default function ProjectInfoScreen(_props: Props): JSX.Element {
   const {width} = useWindowDimensions();
@@ -37,8 +43,12 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
 
       <SectionTitle>How It Works</SectionTitle>
       <Card padded>
-        <Text style={styles.p}>1. Generate identity (signing + encryption keys)</Text>
-        <Text style={styles.p}>2. Share public identity and import contacts</Text>
+        <Text style={styles.p}>
+          1. Generate identity (signing + encryption keys)
+        </Text>
+        <Text style={styles.p}>
+          2. Share public identity and import contacts
+        </Text>
         <Text style={styles.p}>3. Sign/verify messages and files</Text>
         <Text style={styles.p}>4. Encrypt/decrypt messages and files</Text>
         <Text style={styles.p}>5. Publish public identity to key server</Text>

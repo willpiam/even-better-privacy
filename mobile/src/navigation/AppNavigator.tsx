@@ -37,10 +37,8 @@ import type {MailAuthenticitySummary} from '../services/mail/ebpMail';
 import MoreScreen from '../screens/MoreScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ActivityLogScreen from '../screens/ActivityLogScreen';
-import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 import CertificatesScreen from '../screens/CertificatesScreen';
 import ProjectInfoScreen from '../screens/ProjectInfoScreen';
-import MailTraceScreen from '../screens/mail/MailTraceScreen';
 
 export type IdentitiesStackParamList = {
   IdentitiesHome: undefined;
@@ -137,7 +135,9 @@ const stackScreenOptions = {
 
 function TabIcon({label, focused}: {label: string; focused: boolean}) {
   return (
-    <Text style={[styles.tabIcon, focused && styles.tabIconActive]}>{label}</Text>
+    <Text style={[styles.tabIcon, focused && styles.tabIconActive]}>
+      {label}
+    </Text>
   );
 }
 
@@ -249,13 +249,14 @@ function CryptoNavigator(): JSX.Element {
 
 function MailNavigator(): JSX.Element {
   return (
-    <MailStack.Navigator screenOptions={{
-      ...stackScreenOptions,
-      headerStyle: {backgroundColor: mailColors.page},
-      headerTintColor: mailColors.accent,
-      headerTitleStyle: {color: mailColors.text, fontWeight: '600'},
-      contentStyle: {backgroundColor: mailColors.page},
-    }}>
+    <MailStack.Navigator
+      screenOptions={{
+        ...stackScreenOptions,
+        headerStyle: {backgroundColor: mailColors.page},
+        headerTintColor: mailColors.accent,
+        headerTitleStyle: {color: mailColors.text, fontWeight: '600'},
+        contentStyle: {backgroundColor: mailColors.page},
+      }}>
       <MailStack.Screen
         name="MailAccounts"
         component={MailAccountsScreen}
@@ -320,11 +321,13 @@ function MoreNavigator(): JSX.Element {
         component={ActivityLogScreen}
         options={{title: 'Activity Log'}}
       />
-      <MoreStack.Screen
-        name="Diagnostics"
-        component={DiagnosticsScreen}
-        options={{title: 'Diagnostics'}}
-      />
+      {__DEV__ && (
+        <MoreStack.Screen
+          name="Diagnostics"
+          getComponent={() => require('../screens/DiagnosticsScreen').default}
+          options={{title: 'Diagnostics'}}
+        />
+      )}
       <MoreStack.Screen
         name="Certificates"
         component={CertificatesScreen}
@@ -335,11 +338,15 @@ function MoreNavigator(): JSX.Element {
         component={ProjectInfoScreen}
         options={{title: 'Project Info'}}
       />
-      <MoreStack.Screen
-        name="MailTrace"
-        component={MailTraceScreen}
-        options={{title: 'Mail Trace'}}
-      />
+      {__DEV__ && (
+        <MoreStack.Screen
+          name="MailTrace"
+          getComponent={() =>
+            require('../screens/mail/MailTraceScreen').default
+          }
+          options={{title: 'Mail Trace'}}
+        />
+      )}
     </MoreStack.Navigator>
   );
 }

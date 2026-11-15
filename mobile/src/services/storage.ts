@@ -1,7 +1,7 @@
 import {clearMailDataCache} from './mail/mailCache';
 import RNFS from 'react-native-fs';
 import {DecryptionAuthError} from '../../../core/AES';
-import {AES, Identity, randomBytes, shortFingerprint} from '../ebpCore';
+import {AES, Identity, randomBytes} from '../ebpCore';
 import {deriveIdentityKey} from './argon2';
 import type {IdentityPublicData} from '../../../core/Identity';
 import type {AppState, SigningType, StoredIdentityMeta} from '../types';
@@ -447,17 +447,4 @@ export async function readCurrentIdentityPublic(): Promise<{
     return null;
   }
   return {name, publicData};
-}
-
-export async function runCoreSelfTest(): Promise<string> {
-  const identity = new Identity('dilithium', 'kyber');
-  const fingerprint = identity.toFingerprint();
-  const signature = identity.signMessage('mobile-self-test');
-  const verified = identity.verifyMessage('mobile-self-test', signature);
-
-  if (!fingerprint || !verified) {
-    throw new Error('Core self-test failed');
-  }
-
-  return `Core OK (${shortFingerprint(fingerprint)})`;
 }

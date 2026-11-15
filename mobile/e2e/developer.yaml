@@ -1,0 +1,62 @@
+appId: com.mobile
+---
+# Development build only; release builds deliberately omit these controls.
+- launchApp:
+    clearState: true
+- extendedWaitUntil:
+    visible:
+      id: "tab-identities"
+    timeout: 30000
+- tapOn: "More"
+# Mail trace
+- extendedWaitUntil:
+    visible:
+      id: "more-mail-trace"
+    timeout: 10000
+- tapOn:
+    id: "more-mail-trace"
+- extendedWaitUntil:
+    visible: "No mail stubs recorded yet."
+    timeout: 10000
+- tapOn:
+    id: "mail-trace-enabled"
+- tapOn:
+    id: "mail-trace-refresh"
+- back
+
+# Diagnostics parity checks
+- extendedWaitUntil:
+    visible:
+      id: "more-diagnostics"
+    timeout: 10000
+- tapOn:
+    id: "more-diagnostics"
+- extendedWaitUntil:
+    visible:
+      id: "diagnostics-argon2"
+    timeout: 10000
+- tapOn:
+    id: "diagnostics-argon2"
+- extendedWaitUntil:
+    visible: "Argon2 parity OK"
+    timeout: 60000
+- tapOn:
+    id: "diagnostics-pbkdf2"
+- extendedWaitUntil:
+    visible: "Mail PBKDF2 parity OK"
+    timeout: 60000
+- back
+
+# Core self-test (generates in-memory identity; may take up to ~2 min)
+- scrollUntilVisible:
+    element:
+      id: "more-self-test"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "more-self-test"
+- tapOn:
+    text: "^Run$"
+- extendedWaitUntil:
+    visible: "Core OK.*"
+    timeout: 120000

@@ -81,7 +81,8 @@ modal. Flows that type into `password-modal-input` should run
 
 | File | Coverage |
 |------|----------|
-| `smoke.yaml` | Launch, Identities tab, More (About, Mail trace, Diagnostics, core self-test, Activity log, Settings toggles) |
+| `smoke.yaml` | Launch, Identities tab, More (About, Activity log, Settings toggles); works with debug and release builds |
+| `developer.yaml` | Development build only: mail trace, Argon2/PBKDF2 parity, core self-test |
 | `identity.yaml` | HD create, set server, wrong-password publish, successful publish |
 | `details.yaml` | HD create + publish, push email detail, Contacts browse/search |
 | `contacts-lifecycle.yaml` | HD create + publish, export public JSON, emergency cert, fetch contact, local notes, delete contact + identity |
@@ -96,6 +97,15 @@ runs after details (needs publish + server fetch).
 On Ubuntu 22.04, start Metro with **Node 22+** (`nvm use 22`) if system Node
 is too old for React Native 0.84, then:
 `MOBILE_E2E_SKIP_METRO=1 deno task test:e2e:mobile`.
+
+## Development tools
+
+Release builds omit Developer, Diagnostics, Mail trace, and the test-address toggle.
+Run `./scripts/mobile-e2e.sh ./mobile/e2e/developer.yaml` explicitly against a
+development build after native crypto changes. Normal `smoke.yaml` has no
+dependency on developer controls. Mail tracing is off by default; enable
+**Record mail trace** before reproducing a problem. Traces are bounded and
+memory-only, and disappear when the app process ends.
 
 ## testIDs
 

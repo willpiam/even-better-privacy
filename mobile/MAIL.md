@@ -23,7 +23,6 @@ After pulling parity changes, install dependencies (includes `react-native-tcp-s
 ```bash
 cd mobile
 npm install
-# or: bun install
 ```
 
 Then restart Metro with a clean cache: `npm start -- --reset-cache`.
@@ -123,7 +122,8 @@ cd ios && pod install && cd ..
 npm run android   # or npm run ios
 ```
 
-In **Settings → Diagnostics**, run **Verify mail PBKDF2 parity** once after a
+In a development build, open **More → Diagnostics** and run
+**Verify mail PBKDF2 parity** once after a
 native rebuild. Unlock should finish in a few seconds, not hang indefinitely.
 
 Accounts created in the desktop GUI under the same identity use the same storage

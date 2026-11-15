@@ -2,8 +2,10 @@ import React, {useState} from 'react';
 import {StyleSheet, Text} from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
-import {verifyArgon2NobleParity} from '../services/argon2';
-import {verifyMailPbkdf2Parity} from '../services/mail/pbkdf2Native';
+import {
+  verifyArgon2NobleParity,
+  verifyMailPbkdf2Parity,
+} from '../services/developerChecks';
 import {BASE_DIR} from '../services/storage';
 import {appendActivityLog} from '../services/activityLog';
 import Screen from '../components/Screen';
@@ -33,9 +35,7 @@ export default function DiagnosticsScreen(_props: Props): JSX.Element {
           setLoading(true);
           try {
             const result = await verifyArgon2NobleParity();
-            const msg = result.ok
-              ? 'Argon2 parity OK'
-              : 'Argon2 parity FAILED';
+            const msg = result.ok ? 'Argon2 parity OK' : 'Argon2 parity FAILED';
             await appendActivityLog(msg, result.ok ? 'success' : 'error');
             setStatus(msg);
           } catch (error) {

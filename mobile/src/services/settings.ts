@@ -34,7 +34,10 @@ export const MAIL_TEST_MODE_KEY = 'ebp.mail.testMode';
 /** Matches GUI localStorage key `ebp.identity.autoLockMinutes`. */
 export const AUTO_LOCK_MINUTES_KEY = 'ebp.identity.autoLockMinutes';
 
-async function getBooleanPref(key: string, fallback: boolean): Promise<boolean> {
+async function getBooleanPref(
+  key: string,
+  fallback: boolean,
+): Promise<boolean> {
   const value = await AsyncStorage.getItem(key);
   return parseStoredBoolean(value, fallback);
 }
@@ -58,7 +61,9 @@ export async function getEnforcePasswordPolicy(): Promise<boolean> {
   return parseEnforcePasswordPolicy(value);
 }
 
-export async function setEnforcePasswordPolicy(enforce: boolean): Promise<void> {
+export async function setEnforcePasswordPolicy(
+  enforce: boolean,
+): Promise<void> {
   await setBooleanPref(ENFORCE_PASSWORD_POLICY_KEY, enforce);
 }
 
@@ -75,11 +80,13 @@ export async function getMailIncludePublicKeys(): Promise<boolean> {
 }
 
 export async function getMailTestMode(): Promise<boolean> {
-  return getBooleanPref(MAIL_TEST_MODE_KEY, false);
+  return __DEV__ ? getBooleanPref(MAIL_TEST_MODE_KEY, false) : false;
 }
 
 export async function setMailTestMode(value: boolean): Promise<void> {
-  await setBooleanPref(MAIL_TEST_MODE_KEY, value);
+  if (__DEV__) {
+    await setBooleanPref(MAIL_TEST_MODE_KEY, value);
+  }
 }
 
 export async function setMailIncludePublicKeys(value: boolean): Promise<void> {
@@ -93,5 +100,8 @@ export async function getAutoLockMinutes(): Promise<number> {
 
 export async function setAutoLockMinutes(minutes: number): Promise<void> {
   const clamped = clampAutoLockMinutes(minutes);
-  await AsyncStorage.setItem(AUTO_LOCK_MINUTES_KEY, numberPrefToStorage(clamped));
+  await AsyncStorage.setItem(
+    AUTO_LOCK_MINUTES_KEY,
+    numberPrefToStorage(clamped),
+  );
 }

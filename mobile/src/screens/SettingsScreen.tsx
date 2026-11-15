@@ -49,14 +49,8 @@ export default function SettingsScreen(_props: Props): JSX.Element {
     useCallback(() => {
       installIdentityUnlockWatcher();
       void (async () => {
-        const [
-          url,
-          enforce,
-          lockMinutes,
-          renderHtml,
-          includeKeys,
-          testMode,
-        ] = await Promise.all([
+        const [url, enforce, lockMinutes, renderHtml, includeKeys, testMode] =
+          await Promise.all([
             getServerUrl(),
             getEnforcePasswordPolicy(),
             getAutoLockMinutes(),
@@ -147,22 +141,27 @@ export default function SettingsScreen(_props: Props): JSX.Element {
         }}
       />
 
-      <SectionTitle>Test mail</SectionTitle>
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Show test addresses</Text>
-        <Switch
-          testID="settings-mail-test-mode"
-          value={mailTestMode}
-          onValueChange={async value => {
-            setMailTestModeValue(value);
-            await setMailTestMode(value);
-          }}
-        />
-      </View>
-      <Text style={styles.advancedNote}>
-        When this is on, Get started offers @test.pqpost.com addresses paid with
-        Ethereum Sepolia or Cardano preview. Real addresses stay hidden.
-      </Text>
+      {__DEV__ && (
+        <>
+          <SectionTitle>Test mail</SectionTitle>
+          <View style={styles.switchRow}>
+            <Text style={styles.switchLabel}>Show test addresses</Text>
+            <Switch
+              testID="settings-mail-test-mode"
+              value={mailTestMode}
+              onValueChange={async value => {
+                setMailTestModeValue(value);
+                await setMailTestMode(value);
+              }}
+            />
+          </View>
+          <Text style={styles.advancedNote}>
+            When this is on, Get started offers @test.pqpost.com addresses paid
+            with Ethereum Sepolia or Cardano preview. Real addresses stay
+            hidden.
+          </Text>
+        </>
+      )}
 
       <SectionTitle>Mail preferences</SectionTitle>
       <View style={styles.switchRow}>
@@ -187,7 +186,6 @@ export default function SettingsScreen(_props: Props): JSX.Element {
           }}
         />
       </View>
-
     </Screen>
   );
 }

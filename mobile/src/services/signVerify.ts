@@ -16,6 +16,7 @@ import {
   type SignMessageOptions,
   signMessageWithIdentity,
   signFileBytesWithIdentity,
+  verifyMessagePayload,
 } from './signVerifyLogic';
 
 export type {SignMessageOptions};
@@ -30,7 +31,10 @@ export async function signMessage(params: {
   message: string;
   options?: SignMessageOptions;
 }): Promise<Record<string, unknown>> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
   return signMessageWithIdentity(identity, params.message, params.options);
 }
 
@@ -41,32 +45,13 @@ export async function verifyMessage(params: {
   publicIdentity?: ExternalIdentity;
 }): Promise<{verified: boolean}> {
   const payload = params.payload;
-  let message = '';
-  let messageHash = '';
-  let signature = '';
-  let salt = '';
-  let fingerprint = '';
-  if (payload.type === 'ebp-signed-message') {
-    message = String(payload.message ?? '');
-    messageHash = String(payload.messageHash ?? '');
-    signature = String(payload.signature ?? '');
-    salt = String(payload.salt ?? '');
-    fingerprint = String(payload.fingerprint ?? '');
-  } else if (payload.type === 'ebp-signature') {
-    message = params.message ?? '';
-    messageHash = String(payload.messageHash ?? '');
-    signature = String(payload.signature ?? '');
-    salt = String(payload.salt ?? '');
-    fingerprint = String(payload.fingerprint ?? '');
-  } else {
+  if (
+    payload.type !== 'ebp-signed-message' &&
+    payload.type !== 'ebp-signature'
+  ) {
     throw new Error('Unsupported payload type');
   }
-  if (!message || !messageHash || !signature) {
-    throw new Error('Payload missing required fields');
-  }
-  if (toHex(sha256(new TextEncoder().encode(message))) !== messageHash) {
-    throw new Error('Message hash mismatch');
-  }
+  const fingerprint = String(payload.fingerprint ?? '');
   const embedded =
     payload.identity && typeof payload.identity === 'object'
       ? externalIdentityFromEmbeddedRecord(
@@ -78,8 +63,11 @@ export async function verifyMessage(params: {
     params.publicIdentity ??
     embedded ??
     (await loadContact(params.sender ?? fingerprint.slice(0, 16)));
-  const verified = Identity.VerifySignature(senderIdentity, message, signature, salt);
-  return {verified};
+  return verifyMessagePayload({
+    payload,
+    message: params.message,
+    publicIdentity: senderIdentity,
+  });
 }
 
 export async function signFile(params: {
@@ -95,7 +83,10 @@ export async function signFile(params: {
   signedMessage: string;
   salt: string;
 }> {
-  const identity = await loadIdentityForUse(params.identityName, params.password);
+  const identity = await loadIdentityForUse(
+    params.identityName,
+    params.password,
+  );
   const path = normalizeFileUri(params.fileUri);
   const base64 = await RNFS.readFile(path, 'base64');
   const bytes = base64ToBytes(base64);
@@ -139,8 +130,17 @@ export async function verifyFileSignature(params: {
       signedMessage: '',
     };
   }
-  const signedMessage = buildFileSignMessage(computedHash, salt, contextMessage);
-  const verified = Identity.VerifySignature(identity, signedMessage, signature, '');
+  const signedMessage = buildFileSignMessage(
+    computedHash,
+    salt,
+    contextMessage,
+  );
+  const verified = Identity.VerifySignature(
+    identity,
+    signedMessage,
+    signature,
+    '',
+  );
   return {
     verified,
     details: verified

@@ -25,58 +25,7 @@ appId: com.mobile
 - assertVisible: "How It Works"
 - back
 
-# Mail trace
-- extendedWaitUntil:
-    visible:
-      id: "more-mail-trace"
-    timeout: 10000
-- tapOn:
-    id: "more-mail-trace"
-- extendedWaitUntil:
-    visible: "No mail stubs recorded yet."
-    timeout: 10000
-- tapOn:
-    id: "mail-trace-refresh"
-- back
-
-# Diagnostics parity checks
-- extendedWaitUntil:
-    visible:
-      id: "more-diagnostics"
-    timeout: 10000
-- tapOn:
-    id: "more-diagnostics"
-- extendedWaitUntil:
-    visible:
-      id: "diagnostics-argon2"
-    timeout: 10000
-- tapOn:
-    id: "diagnostics-argon2"
-- extendedWaitUntil:
-    visible: "Argon2 parity OK"
-    timeout: 60000
-- tapOn:
-    id: "diagnostics-pbkdf2"
-- extendedWaitUntil:
-    visible: "Mail PBKDF2 parity OK"
-    timeout: 60000
-- back
-
-# Core self-test (generates in-memory identity; may take up to ~2 min)
-- scrollUntilVisible:
-    element:
-      id: "more-self-test"
-    direction: DOWN
-    timeout: 10000
-- tapOn:
-    id: "more-self-test"
-- tapOn:
-    text: "^Run$"
-- extendedWaitUntil:
-    visible: "Core OK.*"
-    timeout: 120000
-
-# Activity log should show diagnostics entries
+# Activity log is available without diagnostics
 - extendedWaitUntil:
     visible:
       id: "more-activity-log"
@@ -87,8 +36,6 @@ appId: com.mobile
     visible:
       id: "activity-log-list"
     timeout: 15000
-- assertVisible:
-    id: "activity-log-entry"
 - back
 
 # Settings toggles + save
