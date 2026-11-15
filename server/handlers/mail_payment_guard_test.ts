@@ -16,7 +16,7 @@ Deno.test("short production names stay blocked and mainnet payment orders are re
     "MAIL_PAYMENT_ASSETS",
     "MAIL_PAYMENT_ETH_RPC_URL",
     "MAIL_PAYMENT_BLOCKFROST_KEY",
-    "MAIL_PAYMENT_COINGECKO_KEY",
+    "ETHEREUM_ALCHEMY_API_KEY",
   ];
   const previous = Object.fromEntries(keys.map((key) => [key, Deno.env.get(key)]));
   const db = new SqliteDatabaseAdapter(":memory:");
@@ -35,7 +35,7 @@ Deno.test("short production names stay blocked and mainnet payment orders are re
     }]));
     Deno.env.set("MAIL_PAYMENT_ETH_RPC_URL", "https://rpc.example");
     Deno.env.set("MAIL_PAYMENT_BLOCKFROST_KEY", "mainnet-key");
-    Deno.env.set("MAIL_PAYMENT_COINGECKO_KEY", "demo");
+    Deno.env.set("ETHEREUM_ALCHEMY_API_KEY", "demo");
     setStalwartClientForTests(new StalwartClient({
       baseUrl: "https://stalwart.test",
       token: "test",

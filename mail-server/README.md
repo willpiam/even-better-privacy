@@ -280,9 +280,11 @@ USDA, USDCx, DJED and iUSD on Cardano. Stablecoins are valued at $1 each.
 
 Set `MAIL_PAYMENT_ETH_RPC_URL` to an HTTPS JSON-RPC endpoint,
 `MAIL_PAYMENT_BLOCKFROST_KEY` to the appropriate Blockfrost project key, and
-`MAIL_PAYMENT_COINGECKO_KEY` to a CoinGecko demo API key. ETH and ADA quotes
-require a CoinGecko rate no more than two minutes old. Orders expire after 30
-minutes; transactions submitted in time have two additional hours to confirm.
+`ETHEREUM_ALCHEMY_API_KEY` to an Alchemy API key. ETH and ADA quotes read
+Chainlink through that key: ETH/USD on Ethereum mainnet, accepted for 70
+minutes, and ADA/USD on Polygon mainnet, accepted for 5 minutes. Orders expire
+after 30 minutes; transactions submitted in time have two additional hours to
+confirm.
 Confirmation counts default to 5 Ethereum blocks and 2 Cardano blocks; set
 `MAIL_PAYMENT_ETH_CONFIRMATIONS` and `MAIL_PAYMENT_CARDANO_CONFIRMATIONS` to
 positive integers to change the thresholds for new orders.
@@ -316,8 +318,9 @@ separate mode: a client sends `x-ebp-mail-mode: test` (or `?mode=test` on a
 GET) and the same server offers `test.pqpost.com` instead. Configure
 `MAIL_TEST_PAYMENT_ENABLED=true`, `MAIL_TEST_PAYMENT_ASSETS` with only
 `ethereum-sepolia` and `cardano-preview` recipients, `MAIL_TEST_PAYMENT_ETH_RPC_URL`,
-and `MAIL_TEST_PAYMENT_BLOCKFROST_KEY`. Prices and the CoinGecko key fall back
-to the `MAIL_PAYMENT_*` values when the test-specific ones are unset. Normal
+and `MAIL_TEST_PAYMENT_BLOCKFROST_KEY`. Prices fall back
+to the `MAIL_PAYMENT_*` values when the test-specific ones are unset. ETH and
+ADA quotes use `ETHEREUM_ALCHEMY_API_KEY` in both modes. Normal
 requests never see the test domain. The mobile app shows those addresses only
 while its test-mail setting is on, then sends the buyer to
 `https://test.pqpost.com/checkout.html` to pay from a computer or a wallet

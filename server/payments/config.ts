@@ -15,7 +15,7 @@ export type PaymentConfig = {
   assets: ConfiguredAsset[];
   ethereumRpcUrl: string;
   blockfrostKey: string;
-  coinGeckoKey: string;
+  alchemyApiKey: string;
   ethereumConfirmations: number;
   cardanoConfirmations: number;
 };
@@ -51,13 +51,13 @@ function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null 
     const assets = JSON.parse(paymentEnv(prefix, "ASSETS") ?? "null") as unknown;
     const ethereumRpcUrl = (paymentEnv(prefix, "ETH_RPC_URL") ?? "").trim();
     const blockfrostKey = (paymentEnv(prefix, "BLOCKFROST_KEY") ?? "").trim();
-    const coinGeckoKey = (paymentEnv(prefix, "COINGECKO_KEY", true) ?? "").trim();
+    const alchemyApiKey = (Deno.env.get("ETHEREUM_ALCHEMY_API_KEY") ?? "").trim();
     const ethereumConfirmations = Number(paymentEnv(prefix, "ETH_CONFIRMATIONS", true) ?? "5");
     const cardanoConfirmations = Number(paymentEnv(prefix, "CARDANO_CONFIRMATIONS", true) ?? "2");
     if (
       !prices || typeof prices !== "object" || !Array.isArray(assets) ||
       assets.length === 0 ||
-      !ethereumRpcUrl || !blockfrostKey || !coinGeckoKey
+      !ethereumRpcUrl || !blockfrostKey || !/^[A-Za-z0-9_-]+$/.test(alchemyApiKey)
     ) return null;
     if (
       ![ethereumConfirmations, cardanoConfirmations].every((value) =>
@@ -121,7 +121,7 @@ function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null 
       assets: assets as ConfiguredAsset[],
       ethereumRpcUrl,
       blockfrostKey,
-      coinGeckoKey,
+      alchemyApiKey,
       ethereumConfirmations,
       cardanoConfirmations,
     };

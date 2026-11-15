@@ -21,7 +21,7 @@ Deno.test("payment configuration is opt-in, complete and isolates testnets", () 
     }]),
     MAIL_PAYMENT_ETH_RPC_URL: "https://rpc.example",
     MAIL_PAYMENT_BLOCKFROST_KEY: "test",
-    MAIL_PAYMENT_COINGECKO_KEY: "test",
+    ETHEREUM_ALCHEMY_API_KEY: "test",
     MAIL_PAYMENT_ETH_CONFIRMATIONS: "5",
     MAIL_PAYMENT_CARDANO_CONFIRMATIONS: "2",
   };
@@ -32,6 +32,9 @@ Deno.test("payment configuration is opt-in, complete and isolates testnets", () 
     for (const [key, value] of Object.entries(env)) Deno.env.set(key, value);
     assertEquals(readPaymentConfig()?.assets[0].network, "ethereum-sepolia");
     assertEquals(readPaymentConfig()?.ethereumConfirmations, 5);
+    Deno.env.set("ETHEREUM_ALCHEMY_API_KEY", "not a key");
+    assertEquals(readPaymentConfig(), null);
+    Deno.env.set("ETHEREUM_ALCHEMY_API_KEY", "test");
     Deno.env.set("MAIL_PAYMENT_ETH_CONFIRMATIONS", "0");
     assertEquals(readPaymentConfig(), null);
     Deno.env.set("MAIL_PAYMENT_ETH_CONFIRMATIONS", "5");

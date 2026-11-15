@@ -53,7 +53,7 @@ Deno.test({
       }]),
       MAIL_PAYMENT_ETH_RPC_URL: "https://rpc.example",
       MAIL_PAYMENT_BLOCKFROST_KEY: "test",
-      MAIL_PAYMENT_COINGECKO_KEY: "test",
+      ETHEREUM_ALCHEMY_API_KEY: "test",
     };
     const previous = Object.fromEntries(
       Object.keys(env).map((key) => [key, Deno.env.get(key)]),

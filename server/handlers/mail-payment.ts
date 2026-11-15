@@ -142,7 +142,7 @@ export async function handlePaymentCreate(
   let rate = "1";
   try {
     if (asset === "ETH" || asset === "ADA") {
-      rate = await fetchUsdRate(asset, config.coinGeckoKey, now);
+      rate = await fetchUsdRate(asset, config.alchemyApiKey, now);
     }
   } catch {
     return json({ error: "exchange rate unavailable; please retry" }, 503);

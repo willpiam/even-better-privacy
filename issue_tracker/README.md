@@ -8,6 +8,11 @@ python3 issue_tracker/server.py
 
 Open http://127.0.0.1:8000 to view issues and add findings. All HTML is
 rendered by Python; JavaScript and third-party packages are not required.
+The Sort by dropdown reloads `/?sort=id` (newest first) or
+`/?sort=criticality` (critical, then high, medium, and low; equal
+criticality stays newest first). Choosing a value submits the form;
+without JavaScript, use the Apply button. Each row is tinted by
+criticality: rose, orange, amber, and violet. Green is not used.
 Use `--port 8080` to choose another port, or `--data /path/to/issues.json`
 to use a separate data file with the same structure.
 

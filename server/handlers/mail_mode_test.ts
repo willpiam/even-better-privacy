@@ -25,7 +25,7 @@ Deno.test("test mode on the production server serves only the test domain", () =
     "MAIL_PAYMENT_ASSETS",
     "MAIL_PAYMENT_ETH_RPC_URL",
     "MAIL_PAYMENT_BLOCKFROST_KEY",
-    "MAIL_PAYMENT_COINGECKO_KEY",
+    "ETHEREUM_ALCHEMY_API_KEY",
     "MAIL_TEST_PAYMENT_ENABLED",
     "MAIL_TEST_PAYMENT_ASSETS",
     "MAIL_TEST_PAYMENT_ETH_RPC_URL",
@@ -38,7 +38,7 @@ Deno.test("test mode on the production server serves only the test domain", () =
     Deno.env.set("MAIL_HOST", "mail.pqpost.com");
     Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
     Deno.env.set("MAIL_PAYMENT_PRICES_CENTS", PRICES);
-    Deno.env.set("MAIL_PAYMENT_COINGECKO_KEY", "demo");
+    Deno.env.set("ETHEREUM_ALCHEMY_API_KEY", "demo");
     Deno.env.set("MAIL_TEST_PAYMENT_ENABLED", "true");
     Deno.env.set("MAIL_TEST_PAYMENT_ASSETS", JSON.stringify([TEST_ASSET]));
     Deno.env.set("MAIL_TEST_PAYMENT_ETH_RPC_URL", "https://rpc.sepolia.example");
