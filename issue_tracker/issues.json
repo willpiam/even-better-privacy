@@ -1,5 +1,5 @@
 {
-  "next_id": 9,
+  "next_id": 12,
   "issues": [
     {
       "id": 1,
@@ -46,6 +46,24 @@
     {
       "id": 8,
       "description": "Strict JSON scanner obscures its cursor invariants and trust in JSON.parse. core/StrictJson.ts:8-37 packs delimiter advances, whitespace handling, recursion and early returns onto single lines, uses a helper named string, and advances past colons/commas without explaining that the initial JSON.parse has already validated grammar. This security-sensitive duplicate-key check is difficult to audit or debug when escaped keys or nested structures fail. Expand each state transition, use descriptive helper names and document the valid-input precondition and cursor positions; preserve duplicate escaped-name checks in focused tests. This is an auditability concern, not a demonstrated incorrect parse.",
+      "criticality": "low",
+      "category": "code readability/maintainability"
+    },
+    {
+      "id": 9,
+      "description": "Quoted display names containing commas create invalid recipient chips and block sending. Locations: common/ComposeRecipients.ts:38-73 (parseAddressList), gui/js/compose-recipients-logic.js:5-33 (GUI mirror), gui/js/compose-recipients.js:94-99 (addFromText), and mobile/src/services/mail/recipientChipsLogic.ts:70-82 (appendAddresses). The parser splits on every comma before unwrapping Name <address>, without respecting quoted display names. Reproduction against both actual implementations: parseAddressList('\"Doe, Jane\" <jane@example.com>') returns [{email:'\"Doe',valid:false},{email:'jane@example.com',valid:true}] instead of one valid jane@example.com recipient. deriveComposeIntent with the first chip invalid returns blocked, even when the valid address is explicitly plaintext. Pasting this valid mailbox representation therefore adds a spurious invalid recipient that the user must remove before sending. Node 24 type stripping and VM evaluation reproduced the actual functions; all existing shared parse/intent fixtures passed in both implementations. UI callers were traced by inspection; no interactive GUI/mobile session was run. This is independent of the previously recorded RFC822 message-header parser issues. Reviewed commit: 587a8873ac613507a4d180b67b7f85ea02cfcb6d.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 10,
+      "description": "Payment reconciliation repeats global expiry updates for every order in a batch. Locations: server/handlers/mail-payment.ts:449-473 (reconcilePendingPayments), server/handlers/mail-payment.ts:255-256 (handlePaymentOrder), and server/payments/orders.ts:118-131 (expirePaymentOrders). Reconciliation expires orders once, selects up to 50 pending orders, then calls handlePaymentOrder separately for each. That handler repeats expirePaymentOrders, which executes two unscoped-by-order UPDATE statements over eligible quoted/pending orders. A full batch consequently issues 2 + 50*2 = 102 global expiry UPDATE statements, in addition to per-order reads, timestamp writes and provider checks. server/main.ts:52-59 schedules batches every 30 seconds while preventing timer overlap; the overlap guard does not remove this redundant work. Verified by Node 24 type-stripped evaluation of the actual reconciliation, handler and expiry functions: a counting database stub returned 50 valid order IDs and pending orders with unavailable configuration; exactly 102 expiry UPDATE calls occurred. Provider calls were not needed because expiry happens before configuration checking. This establishes repeated database calls and avoidable write-statement/round-trip overhead as pending volume grows, not a measured speedup or a claim that each query scans the whole table. Reviewed commit: 587a8873ac613507a4d180b67b7f85ea02cfcb6d.",
+      "criticality": "medium",
+      "category": "efficiency"
+    },
+    {
+      "id": 11,
+      "description": "Background payment failures discard the context needed to diagnose individual orders. Locations: server/handlers/mail-payment.ts:275-279 and 334-340 (different verification failure responses), and server/handlers/mail-payment.ts:464-481 (reconcilePendingPayments response handling). The background worker routes each order through an HTTP handler, logs only 'payment reconciliation returned HTTP <status>' for non-OK responses, and cancels the response body without reading its error. Neither that log nor the catch log includes the orderId already available in the loop. Configuration unavailable and provider-verification failures both surface as HTTP 503, so operators cannot associate a failure with an order or distinguish these causes from the worker output. This is a concrete debugging/maintenance obstacle for a background workflow processing up to 50 payments, distinct from its repeated expiry queries. Reproduced with actual type-stripped reconciliation and handler functions, a 50-order database stub, missing payment configuration and captured console.error: all 50 messages were exactly 'payment reconciliation returned HTTP 503', with no order ID or response reason. Provider-error convergence and response-body cancellation were additionally confirmed by source inspection; no live chain service was used. Reviewed commit: 587a8873ac613507a4d180b67b7f85ea02cfcb6d.",
       "criticality": "low",
       "category": "code readability/maintainability"
     }
