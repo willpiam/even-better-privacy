@@ -1,3 +1,4 @@
+import { detailProofNonce } from "./detail-nonces.ts";
 export {
   coerceNumber,
   DatabaseAdapter,
@@ -6,7 +7,6 @@ export {
 export type { SqliteDatabaseAdapter } from "./sqlite.ts";
 export { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 
-import { hexToBytes } from "../crypto.ts";
 import { coerceNumber, DatabaseAdapter } from "./adapter.ts";
 import { loadEnvOnce, PostgresDatabaseAdapter } from "./postgres.ts";
 import type {
@@ -16,8 +16,6 @@ import type {
   PendingHierarchyProposalRow,
   RevocationRow,
 } from "../types.ts";
-
-const textDecoder = new TextDecoder();
 
 export function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
@@ -81,14 +79,15 @@ export async function insertDetail(db: DatabaseAdapter, record: {
   createdAt: number;
 }): Promise<void> {
   await db.query(
-    `INSERT INTO details (identity_fingerprint, path, detail, proof, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
+    `INSERT INTO details (identity_fingerprint, path, detail, proof, created_at, proof_nonce)
+     VALUES (?, ?, ?, ?, ?, ?)`,
     [
       record.fingerprint,
       record.path,
       record.detail,
       record.proof,
       record.createdAt,
+      detailProofNonce(record.proof),
     ],
   );
 }
@@ -166,7 +165,7 @@ export async function updateDetail(db: DatabaseAdapter, record: {
 }): Promise<void> {
   await db.query(
     `UPDATE details
-     SET detail = ?, proof = ?, created_at = ?, revoked_at = NULL, revocation_certificate = NULL,
+     SET detail = ?, proof = ?, created_at = ?, proof_nonce = ?, revoked_at = NULL, revocation_certificate = NULL,
          verified_at = NULL, verification_token = NULL, verification_token_hash = NULL,
          verification_expires_at = NULL, verification_sent_at = NULL
      WHERE identity_fingerprint = ? AND path = ?`,
@@ -174,6 +173,7 @@ export async function updateDetail(db: DatabaseAdapter, record: {
       record.detail,
       record.proof,
       record.createdAt,
+      detailProofNonce(record.proof),
       record.fingerprint,
       record.path,
     ],
@@ -428,29 +428,16 @@ export async function ensureNewNonce(
   fingerprint: string,
   nonce: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  let maxNonce = -1;
-  for (
-    const [proof] of await db.query<[string]>(
-      "SELECT proof FROM details WHERE identity_fingerprint = ?",
-      [fingerprint],
-    )
-  ) {
-    try {
-      const decoded = hexToBytes(proof);
-      const record = JSON.parse(textDecoder.decode(decoded)) as {
-        nonce?: number;
-      };
-      if (typeof record.nonce === "number") {
-        if (record.nonce === nonce) {
-          return { ok: false, error: "nonce already used" };
-        }
-        if (record.nonce > maxNonce) {
-          maxNonce = record.nonce;
-        }
-      }
-    } catch {
-      // Ignore malformed historical records; they will cause proof validation failure elsewhere.
-    }
+  if (!Number.isSafeInteger(nonce) || nonce < 0) {
+    return { ok: false, error: "nonce must be increasing" };
+  }
+  const rows = await db.query<[number | string | bigint | null]>(
+    "SELECT MAX(proof_nonce) FROM details WHERE identity_fingerprint = ?",
+    [fingerprint],
+  );
+  const maxNonce = coerceNumber(rows[0]?.[0] ?? null) ?? -1;
+  if (nonce === maxNonce && maxNonce >= 0) {
+    return { ok: false, error: "nonce already used" };
   }
 
   if (nonce <= maxNonce) {
@@ -482,6 +469,25 @@ export async function insertRevocation(db: DatabaseAdapter, record: {
   );
 }
 
+/** Exact upload retries are idempotent; a different certificate cannot reuse a nonce. */
+export async function hasMatchingRevocation(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  nonce: number,
+  certificate: string,
+  type: "detail" | "identity",
+  target?: string,
+): Promise<boolean> {
+  const rows = await db.query<[string, string, string | null]>(
+    "SELECT certificate, type, target FROM revocations WHERE identity_fingerprint = ? AND nonce = ?",
+    [fingerprint, nonce],
+  );
+  return rows.some(([storedCertificate, storedType, storedTarget]) =>
+    storedCertificate === certificate && storedType === type &&
+    storedTarget === (target ?? null)
+  );
+}
+
 export async function getMaxRevocationNonce(
   db: DatabaseAdapter,
   fingerprint: string,
@@ -509,19 +515,11 @@ export async function getMaxRevocationNonceBelow(
   fingerprint: string,
   ceiling: number,
 ): Promise<number> {
-  let maxNonce = -1;
-  for (
-    const [nonce] of await db.query<[number | string | bigint]>(
-      "SELECT nonce FROM revocations WHERE identity_fingerprint = ? AND nonce < ?",
-      [fingerprint, ceiling],
-    )
-  ) {
-    const parsedNonce = coerceNumber(nonce);
-    if (parsedNonce !== null && parsedNonce > maxNonce) {
-      maxNonce = parsedNonce;
-    }
-  }
-  return maxNonce;
+  const rows = await db.query<[number | string | bigint | null]>(
+    "SELECT MAX(nonce) FROM revocations WHERE identity_fingerprint = ? AND nonce < ?",
+    [fingerprint, ceiling],
+  );
+  return coerceNumber(rows[0]?.[0] ?? null) ?? -1;
 }
 
 export async function hasRevocationWithNonce(

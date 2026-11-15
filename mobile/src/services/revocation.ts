@@ -1,3 +1,4 @@
+import { prepareDetailRevocation, prepareIdentityRevocation } from "../../../common/RevocationRetry";
 import {loadIdentityForUse, mutateIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 
@@ -17,7 +18,7 @@ export async function revokeDetail(params: {
   const {identity, result: certificate} = await mutateIdentityForUse(
     params.identityName,
     params.password,
-    current => current.revokeDetail(params.path, params.reason),
+    current => prepareDetailRevocation(current, params.path, params.reason),
   );
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
@@ -50,7 +51,7 @@ export async function revokeIdentity(params: {
   const {identity, result: certificate} = await mutateIdentityForUse(
     params.identityName,
     params.password,
-    current => current.createIdentityRevocation(params.reason),
+    current => prepareIdentityRevocation(current, params.reason),
   );
   if (params.push) {
     const server = params.server ?? (await getServerUrl());

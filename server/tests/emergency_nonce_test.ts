@@ -95,7 +95,7 @@ Deno.test("F-CRYPTO-01: server accepts emergency cert whose nonce is in the emer
 	});
 });
 
-Deno.test("F-CRYPTO-01: replayed emergency cert is rejected", async () => {
+Deno.test("F-CRYPTO-01: exact emergency certificate retries are idempotent", async () => {
 	await withServer(async (mod) => {
 		const id = new Identity("dilithium", "kyber");
 		const fingerprint = id.toFingerprint();
@@ -124,6 +124,6 @@ Deno.test("F-CRYPTO-01: replayed emergency cert is rejected", async () => {
 				body: JSON.stringify({ fingerprint, type: "identity", certificate: emergencyCert }),
 			}),
 		);
-		assert(b.status === 400 || b.status === 409, `expected 400/409 got ${b.status}`);
+		assertEquals(b.status, 200); // Exact retries acknowledge the existing revocation.
 	});
 });

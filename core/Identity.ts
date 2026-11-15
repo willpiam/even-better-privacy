@@ -1,3 +1,8 @@
+import {
+  type DetailProofSigner,
+  validateDetailHistoryStructure,
+  verifyDetailProof,
+} from "./DetailProof.ts";
 import { parseStrictJson } from "./StrictJson.ts";
 import { externalIdentityFromEmbeddedRecord } from "./EmbeddedIdentity.ts";
 import { AsymmetricEncryptionKey, SigningKey } from "./Keys.ts";
@@ -7,7 +12,7 @@ import { KyberEncryptionKey } from "./Kyber.ts";
 import { Key } from "./Keys.ts";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import { AES, DecryptionAuthError, StorageFormatError } from "./AES.ts";
-import { hexToBytes, hexToString, stringToHex, toHex } from "./Hex.ts";
+import { hexToBytes, stringToHex, toHex } from "./Hex.ts";
 import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "./version.ts";
 import {
   computeEncryptionLeafRaw,
@@ -871,162 +876,52 @@ export class Identity extends Key {
     this.detailsNonce++;
   }
 
+  private detailProofSigner(): DetailProofSigner {
+    return {
+      signingKeyType: this.signingKeyType,
+      signingKey: this.signingKey.publicKey,
+      signingVariant:
+        (this.signingKey as DilithiumSigningKey | SphincsSigningKey).variant,
+    };
+  }
+
   getDetail(path: string): string | null {
     const entry = this.details.get(path);
-    if (!entry) {
-      return null;
-    }
-
+    if (!entry) return null;
     const [detail, proof] = entry;
+    const verified = verifyDetailProof({
+      ...this.detailProofSigner(),
+      path,
+      detail,
+      proof,
+    });
+    return verified.ok ? detail : null;
+  }
 
-    try {
-      // Decode the stored proof back into the signed record
-      const recordJson = hexToString(proof);
-      const record = parseStrictJson(recordJson) as {
-        version: number;
-        nonce: number;
-        path: string;
-        detail: string;
-        timestamp: number;
-        signature: string;
-      };
-
-      // Ensure the record is consistent with the current map entry
-      if (
-        record.version !== 2 || record.path !== path || record.detail !== detail
-      ) {
-        return null;
-      }
-
-      const { nonce, timestamp, signature } = record;
-      if (
-        !Number.isSafeInteger(nonce) || nonce < 0 ||
-        !Number.isSafeInteger(timestamp) ||
-        typeof signature !== "string" || !signature.length
-      ) {
-        return null;
-      }
-
-      // Reconstruct the original payload that was signed (with signature=null)
-      const signedPayload = canonicalJsonStringify({
-        version: 2,
-        nonce,
-        path,
-        detail,
-        timestamp,
-        signature: null,
-      });
-
-      const isValid = this.verifyMessage(
-        signedPayload,
-        signature,
-        undefined,
-        "detail-proof",
-      );
-      if (!isValid) {
-        return null;
-      }
-
-      return detail;
-    } catch {
-      // Any parsing/verification error means the proof is invalid
-      return null;
-    }
+  /**
+   * @deprecated Structure only. Use validateDetailHistoryStructure for structural
+   * checks, or the instance's verifyDetails() to authenticate the signer as well.
+   */
+  static VerifyDetails(details: Map<string, [string, string]>): boolean {
+    return Identity.ValidateDetailsStructure(details);
   }
 
   static ValidateDetailsStructure(
     details: Map<string, [string, string]>,
   ): boolean {
-    // Validate shape and history only. Signature authentication needs an identity.
-    // Nonces are unique and timestamps cannot go backwards; equal timestamps
-    // are valid when several details are signed in one millisecond.
-
-    // Collect parsed records so we can validate ordering by nonce/timestamp
-    const records: { nonce: number; timestamp: number }[] = [];
-    const seenNonces = new Set<number>();
-
-    for (const [path, [detail, proof]] of details.entries()) {
-      try {
-        const recordJson = hexToString(proof);
-        const record = parseStrictJson(recordJson) as {
-          version: number;
-          nonce: number;
-          path: string;
-          detail: string;
-          timestamp: number;
-          signature: string | null;
-        };
-
-        // Basic structural checks
-        if (
-          record.version !== 2 ||
-          typeof record.nonce !== "number" ||
-          !Number.isSafeInteger(record.nonce) ||
-          record.nonce < 0
-        ) {
-          return false;
-        }
-
-        if (
-          typeof record.timestamp !== "number" ||
-          !Number.isSafeInteger(record.timestamp)
-        ) {
-          return false;
-        }
-
-        if (
-          typeof record.path !== "string" || typeof record.detail !== "string"
-        ) {
-          return false;
-        }
-
-        // Ensure the record matches what is stored in the map
-        if (record.path !== path || record.detail !== detail) {
-          return false;
-        }
-
-        // Signature should at least be present and non-empty; cryptographic
-        // verification is handled by getDetail/instance-level verification.
-        if (
-          typeof record.signature !== "string" || record.signature.length === 0
-        ) {
-          return false;
-        }
-
-        // Ensure no nonce is repeated
-        if (seenNonces.has(record.nonce)) {
-          return false;
-        }
-        seenNonces.add(record.nonce);
-
-        records.push({ nonce: record.nonce, timestamp: record.timestamp });
-      } catch {
-        // Any decoding/parsing failure means invalid proof
-        return false;
-      }
-    }
-
-    // Ensure timestamps are nondecreasing when ordered by nonce
-    records.sort((a, b) => a.nonce - b.nonce);
-    let lastTimestamp = -Infinity;
-    for (const { timestamp } of records) {
-      if (timestamp < lastTimestamp) {
-        return false;
-      }
-      lastTimestamp = timestamp;
-    }
-
-    return true;
+    return validateDetailHistoryStructure(details);
   }
 
-  /** @deprecated Structural validation only; use instance verifyDetails for signatures. */
-  static VerifyDetails(details: Map<string, [string, string]>): boolean {
-    return Identity.ValidateDetailsStructure(details);
-  }
-
+  /** Authenticate all details against this identity and reject reused nonces. */
   verifyDetails(): boolean {
-    return Identity.ValidateDetailsStructure(this.details) &&
-      [...this.details.keys()].every((path) => this.getDetail(path) !== null);
+    const signer = this.detailProofSigner();
+    const seenNonces = new Set<number>();
+    for (const [path, [detail, proof]] of this.details) {
+      const verified = verifyDetailProof({ ...signer, path, detail, proof });
+      if (!verified.ok || seenNonces.has(verified.record.nonce)) return false;
+      seenNonces.add(verified.record.nonce);
+    }
+    return true;
   }
 
   /**

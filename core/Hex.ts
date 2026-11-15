@@ -1,8 +1,15 @@
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
+const HEX_DIGITS = "0123456789abcdef";
 
 export function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  // One output buffer, with no per-byte numbers or strings retained on the heap.
+  const encoded = new Uint8Array(bytes.length * 2);
+  for (let i = 0; i < bytes.length; i++) {
+    encoded[i * 2] = HEX_DIGITS.charCodeAt(bytes[i] >>> 4);
+    encoded[i * 2 + 1] = HEX_DIGITS.charCodeAt(bytes[i] & 15);
+  }
+  return textDecoder.decode(encoded);
 }
 
 export function hexToBytes(hex: string): Uint8Array {

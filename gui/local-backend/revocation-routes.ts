@@ -1,3 +1,7 @@
+import {
+  prepareDetailRevocation,
+  prepareIdentityRevocation,
+} from "../../common/RevocationRetry.ts";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { apiUrl, getContext } from "../../cli/utils.ts";
 import { HttpError, json, readJson, STATUS } from "./http.ts";
@@ -38,10 +42,10 @@ export async function handleRevocationRoutes(
       ctx,
       password,
       (current) => {
-        if (!current.details.has(path)) {
+        if (!current.details.has(path) && !current.revokedDetails.has(path)) {
           throw new HttpError(STATUS.NotFound, "detail not found");
         }
-        return current.revokeDetail(path, reason);
+        return prepareDetailRevocation(current, path, reason);
       },
     );
 
@@ -103,10 +107,7 @@ export async function handleRevocationRoutes(
       ctx,
       password,
       (current) => {
-        if (current.isRevoked()) {
-          throw new HttpError(STATUS.Conflict, "identity is already revoked");
-        }
-        return current.createIdentityRevocation(reason);
+        return prepareIdentityRevocation(current, reason);
       },
     );
 

@@ -6,6 +6,7 @@ import {
   getIdentity,
   getMaxRevocationNonceBelow,
   getRevocations,
+  hasMatchingRevocation,
   hasRevocationWithNonce,
   insertRevocation,
   isDetailRevoked,
@@ -88,6 +89,18 @@ export async function handlePostRevocation(
   const record = verifyResult.record;
 
   return await db.writeTransaction(async (db) => {
+    if (
+      await hasMatchingRevocation(
+        db,
+        fingerprint,
+        record.nonce,
+        certificate,
+        type,
+        target,
+      )
+    ) {
+      return json({ ok: true, type, target });
+    }
     if (type === "identity" && await isIdentityRevoked(db, fingerprint)) {
       return json({ error: "identity is already revoked" }, 409);
     }

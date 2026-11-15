@@ -1,3 +1,4 @@
+import { prepareDetailRevocation, prepareIdentityRevocation } from "../../common/RevocationRetry.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
@@ -79,12 +80,12 @@ export async function cmdRevokeDetail(args: ReturnType<typeof parseArgs>, ctx: C
 		Deno.exit(1);
 	}
 
-	if (!identity.details.has(path)) {
+	if (!identity.details.has(path) && !(push && identity.revokedDetails.has(path))) {
 		console.error(`Detail not found: ${path}`);
 		Deno.exit(1);
 	}
 	
-	const certificate = identity.revokeDetail(path, reason);
+	const certificate = prepareDetailRevocation(identity, path, reason);
 	
 	// Save changes
 	await saveIdentity(ctx, password, identity);
@@ -131,7 +132,7 @@ export async function cmdRevokeIdentity(args: ReturnType<typeof parseArgs>, ctx:
 	const push = args["push"] ?? false;
 	const force = args["force"] ?? false;
 
-	if (identity.isRevoked()) {
+	if (identity.isRevoked() && !push) {
 		console.error("Identity is already revoked.");
 		Deno.exit(1);
 	}
@@ -143,7 +144,7 @@ export async function cmdRevokeIdentity(args: ReturnType<typeof parseArgs>, ctx:
 		Deno.exit(1);
 	}
 	
-	const certificate = identity.createIdentityRevocation(reason);
+	const certificate = prepareIdentityRevocation(identity, reason);
 	
 	// Save changes
 	await saveIdentity(ctx, password, identity);

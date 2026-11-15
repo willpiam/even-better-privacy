@@ -1,3 +1,4 @@
+import { detailProofNonce } from "./detail-nonces.ts";
 import { loadSync } from "std/dotenv";
 import { Pool, type PoolClient } from "postgres";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
@@ -211,6 +212,29 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         UNIQUE(identity_fingerprint, path)
       )
     `);
+
+    await this.execute(
+      "ALTER TABLE details ADD COLUMN IF NOT EXISTS proof_nonce BIGINT",
+    );
+    for (
+      const [id, proof] of await this.query<[number | string | bigint, string]>(
+        "SELECT id, proof FROM details WHERE proof_nonce IS NULL",
+      )
+    ) {
+      const nonce = detailProofNonce(proof);
+      if (nonce !== null) {
+        await this.query(
+          "UPDATE details SET proof_nonce = ? WHERE id = ? AND proof_nonce IS NULL",
+          [
+            nonce,
+            id,
+          ],
+        );
+      }
+    }
+    await this.execute(
+      "CREATE INDEX IF NOT EXISTS detail_nonce_lookup ON details(identity_fingerprint, proof_nonce)",
+    );
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS revocations (

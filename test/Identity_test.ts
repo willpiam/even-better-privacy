@@ -222,7 +222,7 @@ Deno.test("Identity: VerifyDetails detects invalid nonce reuse", () => {
 	assertEquals(identity.verifyDetails(), false);
 });
 
-Deno.test("Identity: VerifyDetails detects non-increasing timestamps", () => {
+Deno.test("Identity: structural history accepts equal timestamps but authentication rejects tampering", () => {
 	const identity = new Identity("dilithium", "kyber");
 
 	identity.attachDetail("email", "user@example.com");
@@ -243,12 +243,12 @@ Deno.test("Identity: VerifyDetails detects non-increasing timestamps", () => {
 	const emailRecord = JSON.parse(hexToString(emailProof));
 	const nameRecord = JSON.parse(hexToString(nameProof));
 
-	nameRecord.timestamp = emailRecord.timestamp - 1;
+	nameRecord.timestamp = emailRecord.timestamp;
 
 	const corruptedNameProof = stringToHex(JSON.stringify(nameRecord));
 	detailsMap.set("name", [nameDetail, corruptedNameProof]);
 
-	assertEquals(Identity.VerifyDetails(detailsMap), false);
+	assertEquals(Identity.VerifyDetails(detailsMap), true);
 	assertEquals(identity.verifyDetails(), false);
 });
 

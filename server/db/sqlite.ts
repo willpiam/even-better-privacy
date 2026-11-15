@@ -1,3 +1,4 @@
+import { detailProofNonce } from "./detail-nonces.ts";
 import { Database } from "sqlite";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
 import { KeyedQueue } from "../../common/KeyedQueue.ts";
@@ -126,6 +127,39 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         UNIQUE(identity_fingerprint, path)
       )
     `);
+
+    // Protect schema upgrades from other processes opening the same database.
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      // Upgrade existing databases once, retaining nonces on revoked details.
+      const columns = this.db.prepare("PRAGMA table_info(details)").values<
+        [number, string]
+      >();
+      if (!columns.some((column) => column[1] === "proof_nonce")) {
+        this.db.exec("ALTER TABLE details ADD COLUMN proof_nonce INTEGER");
+      }
+      for (
+        const [id, proof] of this.db.prepare(
+          "SELECT CAST(id AS TEXT), proof FROM details WHERE proof_nonce IS NULL",
+        ).values<[string, string]>()
+      ) {
+        const nonce = detailProofNonce(proof);
+        if (nonce !== null) {
+          this.db.prepare("UPDATE details SET proof_nonce = ? WHERE id = ?")
+            .run(
+              nonce > 0x7fffffff ? String(nonce) : nonce,
+              id,
+            );
+        }
+      }
+      this.db.exec(
+        "CREATE INDEX IF NOT EXISTS detail_nonce_lookup ON details(identity_fingerprint, proof_nonce)",
+      );
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS revocations (

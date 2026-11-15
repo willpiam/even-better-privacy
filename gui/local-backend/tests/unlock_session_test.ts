@@ -1,4 +1,5 @@
-import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
+import { sha256Hex } from "../../../core/MessageHash.ts";
+import { assert, assertEquals } from "@std/assert";
 import { Identity } from "../../../core/Identity.ts";
 import { handleRequest } from "../routes.ts";
 import { initSecurity, setCsrfTokenForTest } from "../security.ts";
@@ -377,15 +378,172 @@ Deno.test({
 });
 
 Deno.test({
-  name: "obsolete mail PIN migration route is unavailable and leaves credentials untouched",
+  name:
+    "obsolete mail PIN migration route is unavailable and leaves credentials untouched",
   permissions: PERMS,
-  fn: () => withIdentityHome(async (home) => {
-    const path = `${home}/.ebp/mail-account.secrets.json`;
-    const original = JSON.stringify(await encryptSecretsStore({acct: {imapPassword: "imap", smtpPassword: "smtp"}}, "old-pin"));
-    await Deno.writeTextFile(path, original);
-    await post("/api/v1/identity/unlock", {home, identity: "me", password: PASSWORD});
-    assertEquals((await post("/api/v1/mail/unlock", {home, pin: "old-pin"})).status, 404);
-    assertEquals(await Deno.readTextFile(path), original);
-    assertEquals(mailSecretCache.has(`${home}/.ebp`), false);
-  }),
+  fn: () =>
+    withIdentityHome(async (home) => {
+      const path = `${home}/.ebp/mail-account.secrets.json`;
+      const original = JSON.stringify(
+        await encryptSecretsStore({
+          acct: { imapPassword: "imap", smtpPassword: "smtp" },
+        }, "old-pin"),
+      );
+      await Deno.writeTextFile(path, original);
+      await post("/api/v1/identity/unlock", {
+        home,
+        identity: "me",
+        password: PASSWORD,
+      });
+      assertEquals(
+        (await post("/api/v1/mail/unlock", { home, pin: "old-pin" })).status,
+        404,
+      );
+      assertEquals(await Deno.readTextFile(path), original);
+      assertEquals(mailSecretCache.has(`${home}/.ebp`), false);
+    }),
+});
+
+for (const type of ["detail", "identity"] as const) {
+  Deno.test({
+    name:
+      `revocation ${type}: retry uploads the saved certificate after a network failure`,
+    permissions: PERMS,
+    fn: () =>
+      withIdentityHome(async (home) => {
+        assertEquals(
+          (await post("/api/v1/identity/unlock", {
+            home,
+            identity: "me",
+            password: PASSWORD,
+          })).status,
+          200,
+        );
+        if (type === "detail") {
+          assertEquals(
+            (await post("/api/v1/detail", {
+              home,
+              identity: "me",
+              path: "name",
+              detail: "Alice",
+            })).status,
+            200,
+          );
+        }
+        const fetchOriginal = globalThis.fetch;
+        const uploads: Array<{ certificate: string }> = [];
+        globalThis.fetch = async (_url, options) => {
+          uploads.push(JSON.parse(options!.body as string));
+          if (uploads.length === 1) {
+            throw new TypeError("simulated network failure");
+          }
+          return new Response(JSON.stringify({ ok: true }), { status: 200 });
+        };
+        try {
+          const body = {
+            home,
+            identity: "me",
+            path: "name",
+            push: true,
+            server: "https://example.test",
+          };
+          assertEquals(
+            (await post(`/api/v1/revoke/${type}`, body)).status,
+            500,
+          );
+          assertEquals(
+            (await post(`/api/v1/revoke/${type}`, body)).status,
+            200,
+          );
+          assertEquals(uploads.length, 2);
+          assertEquals(uploads[1].certificate, uploads[0].certificate);
+          const saved = Identity.fromStorageFormat(
+            await Deno.readTextFile(`${home}/.ebp/me.identity.json`),
+            PASSWORD,
+          );
+          assertEquals(saved.revocationNonce, 1);
+        } finally {
+          globalThis.fetch = fetchOriginal;
+        }
+      }),
+  });
+}
+
+Deno.test({
+  name:
+    "domain routing preserves authenticated signing, message, and file round trips",
+  permissions: PERMS,
+  fn: () =>
+    withIdentityHome(async (home) => {
+      assertEquals(
+        (await post("/api/v1/identity/unlock", {
+          home,
+          identity: "me",
+          password: PASSWORD,
+        })).status,
+        200,
+      );
+      const contact = Identity.readPublicData(
+        await Deno.readTextFile(`${home}/.ebp/me.identity.json`),
+      );
+      assertEquals(
+        (await post("/api/v1/contacts/import", { home, contact, name: "self" }))
+          .status,
+        200,
+      );
+      const message = "Routing regression";
+      const signed = await post("/api/v1/sign", {
+        home,
+        identity: "me",
+        message,
+        includeIdentity: true,
+        signConfirmation: {
+          approved: true,
+          approvedAt: Date.now(),
+          messageHash: sha256Hex(message),
+        },
+      });
+      assertEquals(signed.status, 200);
+      const verified = await post("/api/v1/verify", {
+        home,
+        payload: signed.body,
+      });
+      assertEquals(verified.status, 200);
+      assertEquals(verified.body.verified, true);
+      const encrypted = await post("/api/v1/encrypt", {
+        home,
+        identity: "me",
+        message,
+        recipient: "self",
+        sign: true,
+      });
+      assertEquals(encrypted.status, 200);
+      const decrypted = await post("/api/v1/decrypt", {
+        home,
+        identity: "me",
+        payload: encrypted.body,
+        sender: "self",
+      });
+      assertEquals(decrypted.status, 200);
+      assertEquals(decrypted.body.message, message);
+      assertEquals(decrypted.body.verified, true);
+      const file = await post("/api/v1/encrypt-file", {
+        home,
+        identity: "me",
+        recipient: "self",
+        sign: true,
+        fileName: "routing.txt",
+        fileDataBase64: btoa(message),
+      });
+      assertEquals(file.status, 200);
+      const clearFile = await post("/api/v1/decrypt-file", {
+        home,
+        identity: "me",
+        payload: file.body,
+        sender: "self",
+      });
+      assertEquals(clearFile.status, 200);
+      assertEquals(clearFile.body.fileDataBase64, btoa(message));
+      assertEquals(clearFile.body.verified, true);
+    }),
 });
