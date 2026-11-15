@@ -30,6 +30,7 @@ import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
 import {radius, spacing, typography} from '../../theme/tokens';
 import {mailColors as colors} from './MailAppearance';
+import PlaceHeader from '../../components/PlaceHeader';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailAccounts'>;
 
@@ -179,10 +180,12 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         visible={unlocking || busyMessage !== null}
         message={busyMessage ?? 'Unlocking mail secrets…'}
       />
-      <Text style={styles.eyebrow}>
-        CURRENT IDENTITY · {identityName || '…'}
-      </Text>
-      <Text style={styles.header}>Your mail accounts</Text>
+      <PlaceHeader
+        place="mail"
+        title="Your mail"
+        subtitle="A quiet place for your letters. All your accounts, together."
+        eyebrow={`CURRENT IDENTITY · ${identityName || '…'}`}
+      />
       {accounts.length > 0 ? (
         <AppButton
           title="Open inbox"
@@ -268,17 +271,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
 const styles = StyleSheet.create({
   screen: {backgroundColor: colors.page},
   primary: {backgroundColor: colors.accent},
-  eyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-    color: colors.muted,
-    marginTop: 8,
-  },
-  header: {
-    fontWeight: '700',
-    fontSize: 26,
-    color: colors.text,
-  },
   empty: {
     color: colors.muted,
     fontSize: typography.body,

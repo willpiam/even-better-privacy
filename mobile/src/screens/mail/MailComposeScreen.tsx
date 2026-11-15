@@ -21,6 +21,8 @@ import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import type {MailAttachmentPart} from '../../services/mail/mime';
 import {statusKind} from '../../theme/statusKind';
 import {MailIcon, mailColors} from './MailAppearance';
+import PlaceHeader from '../../components/PlaceHeader';
+import {places, PlaceThemeProvider} from '../../theme/PlaceTheme';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
@@ -159,101 +161,98 @@ export default function MailComposeScreen({
       : 'Add recipients. Separate addresses with a comma.';
 
   return (
-    <Screen scroll style={styles.screen} contentStyle={styles.content}>
-      {unlockPrompt}
-      <View style={styles.composeHeading}>
-        <MailIcon name="compose" />
-        <View style={styles.headingCopy}>
-          <Text style={styles.title}>A new conversation</Text>
-          <Text style={styles.note}>
-            Encrypted when every recipient has a contact identity.
-          </Text>
-        </View>
-      </View>
+    <PlaceThemeProvider place="compose">
+      <Screen scroll style={styles.screen} contentStyle={styles.content}>
+        {unlockPrompt}
+        <PlaceHeader
+          title="A new letter"
+          subtitle="Encrypted when every recipient has a contact identity."
+        />
 
-      {intent.kind === 'plaintext' ? (
+        {intent.kind === 'plaintext' ? (
+          <StatusBanner
+            kind="error"
+            message="This message will not be encrypted."
+          />
+        ) : null}
+
         <StatusBanner
-          kind="error"
-          message="This message will not be encrypted."
+          message={status}
+          kind={
+            status === ENCRYPTED_MAIL_ATTACHMENT_ERROR
+              ? 'error'
+              : statusKind(status)
+          }
         />
-      ) : null}
 
-      <StatusBanner
-        message={status}
-        kind={
-          status === ENCRYPTED_MAIL_ATTACHMENT_ERROR
-            ? 'error'
-            : statusKind(status)
-        }
-      />
+        <View style={styles.editor}>
+          <RecipientChipsField chips={chips} onChange={setChips} />
 
-      <View style={styles.editor}>
-        <RecipientChipsField chips={chips} onChange={setChips} />
-
-        <TextField
-          label="Subject"
-          value={subject}
-          onChangeText={setSubject}
-          placeholder="Subject"
-          accessibilityLabel="Subject"
-        />
-        <TextField
-          label="Message"
-          value={message}
-          onChangeText={setMessage}
-          placeholder="Write your message…"
-          multiline
-          accessibilityLabel="Message body"
-          style={styles.bodyField}
-        />
-      </View>
-      {attachments.length > 0 ? (
-        <Text style={styles.sectionLabel}>ATTACHMENTS</Text>
-      ) : null}
-      {attachments.map((item, index) => (
-        <View key={`${item.filename}-${index}`} style={styles.attachmentRow}>
-          <Text style={styles.attachmentName}>{item.filename}</Text>
-          <AppButton
-            title="Remove"
-            variant="secondary"
-            onPress={() =>
-              setAttachments(prev => prev.filter((_, i) => i !== index))
-            }
+          <TextField
+            label="Subject"
+            value={subject}
+            onChangeText={setSubject}
+            placeholder="Subject"
+            accessibilityLabel="Subject"
+          />
+          <TextField
+            label="Message"
+            value={message}
+            onChangeText={setMessage}
+            placeholder="Write your message…"
+            multiline
+            accessibilityLabel="Message body"
+            style={styles.bodyField}
           />
         </View>
-      ))}
-      <AppButton
-        title="Add attachment"
-        variant="secondary"
-        onPress={() => void pickAttachment()}
-      />
-      {intent.kind === 'encrypted' && attachments.length > 0 ? (
-        <Text style={styles.hint}>
-          Attachments are not encrypted on mobile yet. Remove them to send this
-          message, or mark every recipient as unencrypted.
-        </Text>
-      ) : null}
+        {attachments.length > 0 ? (
+          <Text style={styles.sectionLabel}>ATTACHMENTS</Text>
+        ) : null}
+        {attachments.map((item, index) => (
+          <View key={`${item.filename}-${index}`} style={styles.attachmentRow}>
+            <Text style={styles.attachmentName}>{item.filename}</Text>
+            <AppButton
+              title="Remove"
+              variant="secondary"
+              onPress={() =>
+                setAttachments(prev => prev.filter((_, i) => i !== index))
+              }
+            />
+          </View>
+        ))}
+        <AppButton
+          title="Add attachment"
+          variant="secondary"
+          onPress={() => void pickAttachment()}
+        />
+        {intent.kind === 'encrypted' && attachments.length > 0 ? (
+          <Text style={styles.hint}>
+            Attachments are not encrypted on mobile yet. Remove them to send
+            this message, or mark every recipient as unencrypted.
+          </Text>
+        ) : null}
 
-      <View style={styles.sendContext}>
-        <MailIcon name={intent.kind === 'encrypted' ? 'lock' : 'mail'} />
-        <Text style={styles.sendHint}>{sendHint}</Text>
-      </View>
-      <AppButton
-        title={sendTitle}
-        style={
-          intent.kind === 'encrypted' || intent.kind === 'plaintext'
-            ? styles.primary
-            : undefined
-        }
-        onPress={onSend}
-        disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
-      />
-    </Screen>
+        <View style={styles.sendContext}>
+          <MailIcon name={intent.kind === 'encrypted' ? 'lock' : 'mail'} />
+          <Text style={styles.sendHint}>{sendHint}</Text>
+        </View>
+        <AppButton
+          title={sendTitle}
+          style={
+            intent.kind === 'encrypted' || intent.kind === 'plaintext'
+              ? styles.primary
+              : undefined
+          }
+          onPress={onSend}
+          disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
+        />
+      </Screen>
+    </PlaceThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {backgroundColor: mailColors.page},
+  screen: {backgroundColor: places.compose.page},
   content: {padding: 20, paddingBottom: 40, gap: 16},
   composeHeading: {
     flexDirection: 'row',
@@ -290,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   sendHint: {flex: 1, fontSize: 13, lineHeight: 20, color: mailColors.muted},
-  primary: {backgroundColor: mailColors.accent},
+  primary: {backgroundColor: places.compose.accent},
   note: {
     fontSize: 13,
     color: mailColors.muted,

@@ -44,6 +44,7 @@ import {
   type PaymentAsset,
 } from '../services/mail/ebpSignupLogic';
 import {colors} from '../theme/tokens';
+import FoxArt, {FoxMotion} from '../components/FoxArt';
 
 type Step = OnboardingWizardStep;
 type TaskState = 'pending' | 'running' | 'done' | 'error';
@@ -441,6 +442,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
       {secretPrompt}
       {step === 'welcome' ? (
         <Card padded>
+          <View style={styles.welcomeArt}>
+            <FoxArt place="compose" size={180} />
+          </View>
           <Text style={styles.title}>Get a quantum-secure email address</Text>
           <Text style={styles.body}>
             In about a minute you'll have a new email address and a set of
@@ -632,6 +636,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
       {step === 'create' ? (
         <Card padded>
           <Text style={styles.title}>Setting things up</Text>
+          {taskKeys.some(key => tasks[key] === 'running') ? (
+            <View style={styles.welcomeArt}>
+              <FoxMotion motion="watch" size={112} />
+            </View>
+          ) : null}
           {taskKeys.map(key => (
             <Text
               key={key}
@@ -754,6 +763,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  welcomeArt: {alignItems: 'center'},
   title: {fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8},
   body: {fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 12},
   hint: {fontSize: 13, color: colors.muted, marginBottom: 8, lineHeight: 18},

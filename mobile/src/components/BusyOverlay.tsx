@@ -1,6 +1,8 @@
 import React from 'react';
 import {ActivityIndicator, Modal, StyleSheet, Text, View} from 'react-native';
 import {colors, radius} from '../theme/tokens';
+import {FoxMotion} from './FoxArt';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function BusyOverlay({
   visible,
@@ -9,12 +11,24 @@ export default function BusyOverlay({
   visible: boolean;
   message?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   return (
     <Modal visible={visible} transparent animationType="fade">
       <View style={styles.overlay}>
         <View style={styles.box}>
-          <ActivityIndicator size="large" color={colors.accent} />
-          <Text style={styles.message}>{message}</Text>
+          {visible ? (
+            <FoxMotion
+              motion={theme.place === 'mail' ? 'carry' : 'watch'}
+              size={112}
+            />
+          ) : null}
+          <ActivityIndicator size="small" color={theme.accent} />
+          <Text
+            accessibilityRole="text"
+            accessibilityLiveRegion="polite"
+            style={styles.message}>
+            {message}
+          </Text>
         </View>
       </View>
     </Modal>
@@ -24,7 +38,7 @@ export default function BusyOverlay({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.35)',
+    backgroundColor: 'rgba(25, 42, 32, 0.4)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,

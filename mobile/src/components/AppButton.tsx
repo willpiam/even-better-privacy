@@ -7,6 +7,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import {colors, radius, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 type Variant = 'primary' | 'secondary' | 'danger';
 
@@ -27,6 +28,7 @@ export default function AppButton({
   style?: ViewStyle;
   testID?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   const isDisabled = disabled || loading;
   return (
     <Pressable
@@ -34,13 +36,15 @@ export default function AppButton({
       accessible
       accessibilityRole="button"
       accessibilityLabel={title}
-      accessibilityState={{disabled: isDisabled}}
+      accessibilityState={{disabled: isDisabled, busy: loading}}
       disabled={isDisabled}
       onPress={onPress}
       style={({pressed}) => [
         styles.base,
         variant === 'primary' && styles.primary,
+        variant === 'primary' && {backgroundColor: theme.accent},
         variant === 'secondary' && styles.secondary,
+        variant === 'secondary' && {borderColor: theme.border},
         variant === 'danger' && styles.danger,
         isDisabled && styles.disabled,
         pressed && !isDisabled && styles.pressed,
@@ -49,13 +53,14 @@ export default function AppButton({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={variant === 'secondary' ? colors.accent : '#fff'}
+          color={variant === 'secondary' ? theme.accent : '#fff'}
         />
       ) : null}
       <Text
         style={[
           styles.label,
           variant === 'secondary' && styles.labelSecondary,
+          variant === 'secondary' && {color: theme.accent},
           variant === 'danger' && styles.labelDanger,
           variant === 'primary' && styles.labelPrimary,
           isDisabled && styles.labelDisabled,
@@ -68,7 +73,8 @@ export default function AppButton({
 
 const styles = StyleSheet.create({
   base: {
-    height: 44,
+    minHeight: 48,
+    paddingVertical: 12,
     borderRadius: radius.md,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -89,10 +95,12 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     opacity: 0.85,
   },
-  pressed: {opacity: 0.85},
+  pressed: {opacity: 0.8, transform: [{scale: 0.985}]},
   label: {
     fontSize: typography.body,
     fontWeight: '600',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   labelPrimary: {color: '#fff'},
   labelSecondary: {color: colors.accent},

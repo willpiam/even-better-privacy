@@ -2,6 +2,7 @@ import React from 'react';
 import {ScrollView, StyleSheet, View, ViewStyle} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {colors, spacing} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function Screen({
   children,
@@ -14,11 +15,15 @@ export default function Screen({
   style?: ViewStyle;
   contentStyle?: ViewStyle;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   if (scroll) {
     return (
-      <SafeAreaView style={[styles.safe, style]} edges={['left', 'right']}>
+      <SafeAreaView
+        style={[styles.safe, {backgroundColor: theme.page}, style]}
+        edges={['left', 'right']}>
         <ScrollView
           contentContainerStyle={[styles.content, contentStyle]}
+          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">
           {children}
         </ScrollView>
@@ -27,8 +32,12 @@ export default function Screen({
   }
 
   return (
-    <SafeAreaView style={[styles.safe, style]} edges={['left', 'right']}>
-      <View style={[styles.content, styles.flex, contentStyle]}>{children}</View>
+    <SafeAreaView
+      style={[styles.safe, {backgroundColor: theme.page}, style]}
+      edges={['left', 'right']}>
+      <View style={[styles.content, styles.flex, contentStyle]}>
+        {children}
+      </View>
     </SafeAreaView>
   );
 }
@@ -40,8 +49,8 @@ const styles = StyleSheet.create({
   },
   flex: {flex: 1},
   content: {
-    padding: spacing.md,
-    paddingBottom: 96,
-    gap: 10,
+    padding: spacing.lg + 4,
+    paddingBottom: 32,
+    gap: 14,
   },
 });

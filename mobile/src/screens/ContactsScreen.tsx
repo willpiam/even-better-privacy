@@ -29,10 +29,14 @@ import FetchContactModal from '../components/FetchContactModal';
 import BrowseContactsModal from '../components/BrowseContactsModal';
 import {colors, typography} from '../theme/tokens';
 import {statusKind} from '../theme/statusKind';
+import PlaceHeader from '../components/PlaceHeader';
+import AppIcon from '../components/AppIcon';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactsList'>;
 
 export default function ContactsScreen({navigation}: Props): JSX.Element {
+  const theme = usePlaceTheme();
   const [menuOpen, setMenuOpen] = useState(false);
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [importVisible, setImportVisible] = useState(false);
@@ -77,11 +81,11 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
           accessibilityState={{expanded: menuOpen}}
           style={styles.headerAction}
           onPress={() => setMenuOpen(open => !open)}>
-          <Text style={styles.headerActionText}>+</Text>
+          <AppIcon name="plus" color={theme.accent} />
         </Pressable>
       ),
     });
-  }, [navigation, menuOpen]);
+  }, [navigation, menuOpen, theme.accent]);
 
   const contactFingerprints = new Set(contacts.map(c => c.contact.fingerprint));
 
@@ -130,11 +134,21 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
         accessibilityElementsHidden={menuOpen}
         importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
         <BusyOverlay visible={fetching} message="Fetching contact…" />
+        <PlaceHeader
+          title="Your people"
+          subtitle="Familiar faces. Trusted connections."
+        />
         <StatusBanner message={status} kind={statusKind(status)} />
 
-        <SectionTitle>Local</SectionTitle>
+        <SectionTitle>{`Local contacts · ${contacts.length}`}</SectionTitle>
         {contacts.length === 0 ? (
-          <Text style={styles.empty}>No contacts yet.</Text>
+          <Card padded>
+            <Text style={styles.emptyTitle}>Good connections start here</Text>
+            <Text style={styles.empty}>
+              No contacts yet. Use + to import someone you know, or find their
+              identity on your server.
+            </Text>
+          </Card>
         ) : (
           <Card>
             {contacts.map(item => (
@@ -189,7 +203,9 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
                   setMenuOpen(false);
                   item.open(true);
                 }}>
-                <Text style={styles.menuText}>{item.title}</Text>
+                <Text style={[styles.menuText, {color: theme.accent}]}>
+                  {item.title}
+                </Text>
               </Pressable>
             ))}
           </Card>
@@ -219,16 +235,15 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  content: {flex: 1},
+  content: {flex: 1, paddingBottom: 16},
   body: {flex: 1},
-  bodyContent: {gap: 10, paddingBottom: 96},
+  bodyContent: {gap: 14, paddingBottom: 16},
   headerAction: {
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerActionText: {color: colors.accent, fontSize: 24, fontWeight: '500'},
   menu: {
     position: 'absolute',
     top: 0,
@@ -247,5 +262,11 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   menuText: {fontSize: typography.body, color: colors.accent},
-  empty: {color: colors.muted, marginBottom: 4},
+  emptyTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  empty: {color: colors.muted, fontSize: 14, lineHeight: 22},
 });

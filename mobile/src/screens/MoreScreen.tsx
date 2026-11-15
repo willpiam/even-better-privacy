@@ -4,7 +4,7 @@ import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
 import Screen from '../components/Screen';
-import BrandHeader from '../components/BrandHeader';
+import PlaceHeader from '../components/PlaceHeader';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
 import Card from '../components/Card';
@@ -28,12 +28,16 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
 
   return (
     <Screen scroll>
-      <BrandHeader />
+      <PlaceHeader
+        title="Your space"
+        subtitle="Make yourself at home. Your preferences, your pace."
+      />
       <SectionTitle>Preferences</SectionTitle>
       <Card>
         <ListRow
           testID="more-settings"
           title="Settings"
+          icon="settings"
           subtitle={serverUrl || 'Server, auto-lock, password policy, mail'}
           onPress={() => navigation.navigate('Settings')}
           showDivider={false}
@@ -44,6 +48,7 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
         <ListRow
           testID="more-about"
           title="About EBP"
+          icon="info"
           subtitle="Project info"
           onPress={() => navigation.navigate('ProjectInfo')}
           showDivider={false}

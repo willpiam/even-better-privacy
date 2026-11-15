@@ -1,13 +1,9 @@
 import React, {useEffect, useState} from 'react';
-import {
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {Modal, StyleSheet, Text, TextInput, View} from 'react-native';
 import AppButton from './AppButton';
 import {colors, radius, spacing, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
+import AppIcon from './AppIcon';
 
 export default function PasswordModal({
   visible,
@@ -26,6 +22,7 @@ export default function PasswordModal({
   onCancel: () => void;
   onSubmit: (password: string) => void;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   const [password, setPassword] = useState('');
 
   useEffect(() => {
@@ -45,18 +42,26 @@ export default function PasswordModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={cancel}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={cancel}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
+          <View style={[styles.mark, {backgroundColor: theme.pale}]}>
+            <AppIcon name="lock" color={theme.accent} size={26} />
+          </View>
           <Text style={styles.title}>{title}</Text>
           <TextInput
             testID="password-modal-input"
-            style={styles.input}
+            accessibilityLabel={placeholder}
+            style={[styles.input, {borderColor: theme.border}]}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={secureTextEntry}
             placeholder={placeholder}
-            placeholderTextColor="#aaa"
+            placeholderTextColor={colors.muted}
             autoCapitalize="none"
             autoCorrect={false}
             autoFocus
@@ -85,12 +90,20 @@ export default function PasswordModal({
 }
 
 const styles = StyleSheet.create({
+  mark: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
+    backgroundColor: 'rgba(25,42,32,0.4)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.lg,
+    padding: spacing.xl,
   },
   modal: {
     width: '100%',

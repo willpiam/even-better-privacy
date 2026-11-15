@@ -1,11 +1,14 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {colors, spacing, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
+import AppIcon, {type IconName} from './AppIcon';
 
 export default function ListRow({
   title,
   subtitle,
   avatarText,
+  icon,
   badge,
   badgeVariant = 'default',
   onPress,
@@ -17,6 +20,7 @@ export default function ListRow({
   title: string;
   subtitle?: string;
   avatarText?: string;
+  icon?: IconName;
   badge?: string;
   badgeVariant?: 'default' | 'danger';
   onPress?: () => void;
@@ -26,11 +30,24 @@ export default function ListRow({
   showDivider?: boolean;
   testID?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   const content = (
     <>
-      {avatarText ? (
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{avatarText.slice(0, 1).toUpperCase()}</Text>
+      {avatarText || icon ? (
+        <View style={[styles.avatar, {backgroundColor: theme.pale}]}>
+          {icon ? (
+            <AppIcon name={icon} color={theme.accent} size={20} />
+          ) : (
+            <Text style={[styles.avatarText, {color: theme.accent}]}>
+              {avatarText
+                ?.trim()
+                .split(/\s+/)
+                .map(word => word[0])
+                .slice(0, 2)
+                .join('')
+                .toUpperCase()}
+            </Text>
+          )}
         </View>
       ) : null}
       <View style={styles.meta}>
@@ -47,11 +64,13 @@ export default function ListRow({
         <View
           style={[
             styles.badge,
+            {backgroundColor: theme.pale},
             badgeVariant === 'danger' && styles.badgeDanger,
           ]}>
           <Text
             style={[
               styles.badgeText,
+              {color: theme.accent},
               badgeVariant === 'danger' && styles.badgeTextDanger,
             ]}>
             {badge}
@@ -59,18 +78,28 @@ export default function ListRow({
         </View>
       ) : null}
       {right}
-      {showChevron && onPress ? <Text style={styles.chevron}>›</Text> : null}
+      {showChevron && onPress ? (
+        <AppIcon name="chevron" color={theme.accent} size={16} />
+      ) : null}
     </>
   );
 
-  const rowStyle = [styles.row, showDivider && styles.divider];
+  const rowStyle = [
+    styles.row,
+    showDivider && styles.divider,
+    {borderBottomColor: theme.border},
+  ];
 
   if (onPress) {
     return (
       <Pressable
         testID={testID}
         onPress={onPress}
-        style={({pressed}) => [...rowStyle, pressed && styles.pressed]}>
+        accessibilityRole="button"
+        style={({pressed}) => [
+          ...rowStyle,
+          pressed && {backgroundColor: theme.soft},
+        ]}>
         {content}
       </Pressable>
     );
@@ -87,20 +116,19 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingVertical: spacing.md,
-    paddingHorizontal: 14,
+    gap: 13,
+    paddingVertical: spacing.lg + 2,
+    paddingHorizontal: 16,
     backgroundColor: colors.surface,
   },
   divider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  pressed: {backgroundColor: colors.accentSoft},
   avatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 16,
     backgroundColor: colors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
@@ -117,8 +145,9 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   subtitle: {
-    marginTop: 2,
+    marginTop: 5,
     fontSize: typography.caption,
+    lineHeight: 18,
     color: colors.muted,
   },
   badge: {
@@ -140,9 +169,5 @@ const styles = StyleSheet.create({
   },
   badgeTextDanger: {
     color: colors.danger,
-  },
-  chevron: {
-    color: '#ccc',
-    fontSize: 18,
   },
 });

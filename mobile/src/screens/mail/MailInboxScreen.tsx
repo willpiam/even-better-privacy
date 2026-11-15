@@ -39,6 +39,7 @@ import AppButton from '../../components/AppButton';
 import Card from '../../components/Card';
 import StatusBanner from '../../components/StatusBanner';
 import TextField from '../../components/TextField';
+import FoxArt from '../../components/FoxArt';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import {
   MailAvatar,
@@ -527,7 +528,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           ListEmptyComponent={
             !loading && !loadError ? (
               <View style={styles.empty}>
-                <MailIcon name="mail" />
+                <FoxArt place="mail" size={120} />
                 <Text style={styles.emptyTitle}>
                   {search ? 'No matching messages' : emptyLabel}
                 </Text>
@@ -649,7 +650,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: mailColors.border,
   },
-  unreadRow: {backgroundColor: '#fbfcf9'},
+  unreadRow: {backgroundColor: '#fcfaf5'},
   pressedRow: {backgroundColor: mailColors.soft},
   messageCopy: {flex: 1, gap: 7},
   rowTop: {flexDirection: 'row', alignItems: 'baseline', gap: 8},

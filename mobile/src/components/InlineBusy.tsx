@@ -1,16 +1,22 @@
 import React from 'react';
 import {ActivityIndicator, StyleSheet, Text, View} from 'react-native';
-import {colors, spacing, typography} from '../theme/tokens';
+import {colors, spacing} from '../theme/tokens';
+import {FoxMotion} from './FoxArt';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function InlineBusy({
   message = 'Loading…',
 }: {
   message?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   return (
     <View style={styles.wrap}>
-      <ActivityIndicator size="small" color={colors.accent} />
-      <Text style={styles.message}>{message}</Text>
+      <FoxMotion motion="sniff" size={56} />
+      <ActivityIndicator size="small" color={theme.accent} />
+      <Text accessibilityLiveRegion="polite" style={styles.message}>
+        {message}
+      </Text>
     </View>
   );
 }
@@ -26,5 +32,6 @@ const styles = StyleSheet.create({
   message: {
     fontSize: 13,
     color: colors.muted,
+    flexShrink: 1,
   },
 });

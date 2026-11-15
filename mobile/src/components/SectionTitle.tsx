@@ -17,7 +17,8 @@ const styles = StyleSheet.create({
     color: colors.muted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    paddingVertical: spacing.xs,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.xs,
     paddingHorizontal: 2,
   },
 });

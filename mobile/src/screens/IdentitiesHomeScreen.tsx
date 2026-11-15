@@ -3,6 +3,7 @@ import {
   BackHandler,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -36,6 +37,8 @@ import StatusBanner from '../components/StatusBanner';
 import {statusKind} from '../theme/statusKind';
 import {colors, typography} from '../theme/tokens';
 import {shortFingerprint} from '../ebpCore';
+import PlaceHeader from '../components/PlaceHeader';
+import AppIcon from '../components/AppIcon';
 
 type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentitiesHome'>;
 
@@ -90,7 +93,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           accessibilityState={{expanded: menuOpen}}
           style={styles.headerAction}
           onPress={() => setMenuOpen(open => !open)}>
-          <Text style={styles.headerActionText}>+</Text>
+          <AppIcon name="plus" />
         </Pressable>
       ),
     });
@@ -133,27 +136,30 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
-      <View
-        style={styles.body}
+      <ScrollView
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
         accessibilityElementsHidden={menuOpen}
         importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
+        <PlaceHeader
+          title="Your identities"
+          subtitle="A little space for every part of you."
+        />
         {currentIdentity ? (
           <Chip label={`Current: ${currentIdentity}`} />
         ) : null}
-        <Text style={styles.meta}>
-          Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
-          {'\n'}
-          Protocol: <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
-        </Text>
         <StatusBanner message={status} kind={statusKind(status)} />
-        <SectionTitle>Local identities</SectionTitle>
+        <SectionTitle>{`Local identities · ${identities.length}`}</SectionTitle>
         {identities.length === 0 ? (
           <View style={styles.empty} testID="identities-empty">
-            <Text style={styles.emptyIcon}>◎</Text>
+            <View style={styles.emptyMark}>
+              <AppIcon name="key" size={28} />
+            </View>
             <Text style={styles.emptyTitle}>No identities yet</Text>
             <Text style={styles.emptySub}>
-              Get a quantum-secure email address and keys in one step, or use
-              the + button above to create or import an identity.
+              Make yourself at home. Create a quantum-secure email address and
+              keys, or use + to create or import an identity.
             </Text>
             <AppButton
               title="Get started with EBP email"
@@ -185,7 +191,12 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
             />
           </Card>
         )}
-      </View>
+        <Text style={styles.meta}>
+          Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
+          {'\n'}Protocol:{' '}
+          <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
+        </Text>
+      </ScrollView>
       {menuOpen ? (
         <View style={StyleSheet.absoluteFill}>
           <Pressable
@@ -227,18 +238,13 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
 
 const styles = StyleSheet.create({
   screen: {flex: 1},
-  content: {flex: 1},
-  body: {flex: 1, gap: 10},
+  content: {flex: 1, paddingBottom: 16},
+  body: {flexGrow: 1, gap: 14, paddingBottom: 16},
   headerAction: {
     minWidth: 44,
     minHeight: 44,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerActionText: {
-    color: colors.accent,
-    fontSize: 24,
-    fontWeight: '500',
   },
   menu: {
     position: 'absolute',
@@ -262,6 +268,8 @@ const styles = StyleSheet.create({
     fontSize: typography.caption,
     color: colors.muted,
     lineHeight: 18,
+    marginTop: 12,
+    paddingHorizontal: 4,
   },
   metaStrong: {
     color: colors.text,
@@ -269,15 +277,26 @@ const styles = StyleSheet.create({
   },
   fullBtn: {alignSelf: 'stretch', width: '100%'},
   empty: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 24,
-    gap: 8,
+    padding: 24,
+    gap: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  emptyIcon: {fontSize: 40, opacity: 0.35, marginBottom: 4},
+  emptyMark: {
+    width: 60,
+    height: 60,
+    borderRadius: 22,
+    backgroundColor: colors.accentSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
   emptyTitle: {
-    fontSize: typography.body,
+    fontSize: 20,
     fontWeight: '600',
     color: colors.text,
   },

@@ -31,6 +31,7 @@ import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import {statusKind} from '../theme/statusKind';
 import {colors, spacing, typography} from '../theme/tokens';
+import PlaceHeader from '../components/PlaceHeader';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
 
@@ -82,6 +83,10 @@ export default function SettingsScreen(_props: Props): JSX.Element {
 
   return (
     <Screen scroll>
+      <PlaceHeader
+        title="Settings"
+        subtitle="Your privacy, just the way you like it."
+      />
       <StatusBanner message={status} kind={statusKind(status)} />
 
       <SectionTitle>Key Server</SectionTitle>

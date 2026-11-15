@@ -1,12 +1,7 @@
 import React from 'react';
-import {
-  StyleSheet,
-  Text,
-  TextInput,
-  TextInputProps,
-  View,
-} from 'react-native';
+import {StyleSheet, Text, TextInput, TextInputProps, View} from 'react-native';
 import {colors, radius, spacing, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function TextField({
   label,
@@ -18,13 +13,28 @@ export default function TextField({
   label: string;
   testID?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
+  const [focused, setFocused] = React.useState(false);
   return (
-    <View style={styles.wrap}>
+    <View
+      style={[
+        styles.wrap,
+        {borderColor: focused ? theme.accent : theme.border},
+      ]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
-        placeholderTextColor="#aaa"
+        placeholderTextColor={colors.muted}
         scrollEnabled={multiline}
         {...rest}
+        accessibilityLabel={rest.accessibilityLabel ?? label}
+        onFocus={event => {
+          setFocused(true);
+          rest.onFocus?.(event);
+        }}
+        onBlur={event => {
+          setFocused(false);
+          rest.onBlur?.(event);
+        }}
         testID={testID}
         multiline={multiline}
         style={[styles.input, multiline && styles.multiline, style]}
@@ -40,21 +50,19 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    paddingVertical: 10,
+    paddingVertical: 12,
   },
   label: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-    marginBottom: 4,
+    marginBottom: 7,
   },
   input: {
     fontSize: typography.body,
     color: colors.text,
     padding: 0,
-    minHeight: 20,
+    minHeight: 24,
   },
   multiline: {
     minHeight: 72,

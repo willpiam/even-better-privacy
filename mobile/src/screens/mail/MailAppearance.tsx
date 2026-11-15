@@ -2,17 +2,14 @@ import {decodeHeaderWords} from '../../services/mail/headerWords';
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Svg, {Path} from 'react-native-svg';
+import {places} from '../../theme/PlaceTheme';
+import {colors} from '../../theme/tokens';
 
-// Shared with the mail mockup, scoped to mail so other app surfaces keep their theme.
+// Mail keeps the golden meadow palette throughout its list and reader.
 export const mailColors = {
-  page: '#f7f8f4',
-  surface: '#ffffff',
-  soft: '#f1f4ee',
-  text: '#24392e',
-  muted: '#626f65',
-  border: '#e5e9e1',
-  accent: '#285e47',
-  accentSoft: '#e8efe4',
+  ...colors,
+  ...places.mail,
+  accentSoft: places.mail.pale,
 };
 
 const paths = {

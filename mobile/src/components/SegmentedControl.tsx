@@ -1,6 +1,7 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
 import {colors, radius, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function SegmentedControl({
   options,
@@ -13,8 +14,9 @@ export default function SegmentedControl({
   onChange: (value: string) => void;
   testID?: string;
 }): JSX.Element {
+  const theme = usePlaceTheme();
   return (
-    <View style={styles.track} testID={testID}>
+    <View style={[styles.track, {backgroundColor: theme.soft}]} testID={testID}>
       {options.map(option => {
         const active = option.value === value;
         return (
@@ -22,8 +24,15 @@ export default function SegmentedControl({
             key={option.value}
             testID={testID ? `${testID}-${option.value}` : undefined}
             onPress={() => onChange(option.value)}
+            accessibilityRole="button"
+            accessibilityState={{selected: active}}
             style={[styles.item, active && styles.itemActive]}>
-            <Text style={[styles.label, active && styles.labelActive]}>
+            <Text
+              style={[
+                styles.label,
+                active && styles.labelActive,
+                active && {color: theme.accent},
+              ]}>
               {option.label}
             </Text>
           </Pressable>
@@ -42,7 +51,9 @@ const styles = StyleSheet.create({
   },
   item: {
     flex: 1,
-    paddingVertical: 7,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: 9,
     paddingHorizontal: 4,
     borderRadius: 7,
     alignItems: 'center',

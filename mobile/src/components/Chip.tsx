@@ -1,12 +1,14 @@
 import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {colors, radius, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function Chip({label}: {label: string}): JSX.Element {
+  const theme = usePlaceTheme();
   return (
-    <View style={styles.chip}>
-      <View style={styles.dot} />
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.chip, {backgroundColor: theme.pale}]}>
+      <View style={[styles.dot, {backgroundColor: theme.accent}]} />
+      <Text style={[styles.label, {color: theme.accent}]}>{label}</Text>
     </View>
   );
 }

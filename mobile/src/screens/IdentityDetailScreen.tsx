@@ -92,6 +92,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
         <Card>
           <ListRow
             title="Publish identity"
+            icon="shield"
             subtitle="Make your public keys available on this server"
             testID="identity-open-publish"
             onPress={() => navigation.navigate('IdentityPublish', params)}
@@ -141,18 +142,21 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
       <Card>
         <ListRow
           title="Identity details"
+          icon="key"
           subtitle="View, add, and verify details"
           testID="identity-open-details"
           onPress={() => navigation.navigate('IdentityDetails', params)}
         />
         <ListRow
           title="Export and backup"
+          icon="file"
           subtitle="Share public keys, save your identity, or create an emergency certificate"
           testID="identity-open-export"
           onPress={() => navigation.navigate('IdentityExport', params)}
         />
         <ListRow
           title="Revocation and removal"
+          icon="lock"
           subtitle="Revoke details or identity, or remove it from this device"
           testID="identity-open-security"
           onPress={() => navigation.navigate('IdentitySecurity', params)}
