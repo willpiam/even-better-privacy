@@ -1,5 +1,5 @@
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert";
-import { Identity } from "./Identity.ts";
+import { getIdentityStorageAad, Identity } from "./Identity.ts";
 import type { MultiRecipientAttachmentManifestEntry } from "./MessageHash.ts";
 import {
   createRevocationCertificate,
@@ -123,10 +123,13 @@ Deno.test("Identity storage rejects private payload without key types", () => {
   storage.encrypted = AES.encrypt(
     password,
     JSON.stringify(legacyPrivateData),
-    "ebp:identity-storage:v2",
+    getIdentityStorageAad(storage.public, storage.version),
   );
 
-  assertThrows(() => Identity.fromStorageFormat(JSON.stringify(storage), password), StorageFormatError);
+  assertThrows(
+    () => Identity.fromStorageFormat(JSON.stringify(storage), password),
+    StorageFormatError,
+  );
 });
 
 Deno.test("Identity multi-recipient inner payload includes explicit type tag", () => {

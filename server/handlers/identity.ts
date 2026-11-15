@@ -18,8 +18,8 @@ import {
   insertDetail,
   insertIdentity,
   isIdentityRevoked,
+  issueDetailVerification,
   updateDetail,
-  updateDetailVerification,
 } from "../db/index.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 import {
@@ -131,10 +131,17 @@ export async function handlePostIdentity(
   if (!validatePostQuantumSigningKey(signingKeyType, signingKey)) {
     return invalidIdentitySubmission();
   }
-  if (!externalIdentityFromEmbeddedRecord({
-    signingKeyType, encryptionKeyType, signingKey, encryptionKey,
-    signingKeyDetails, encryptionKeyDetails, ...(providedFingerprint ? {fingerprint: providedFingerprint} : {}),
-  }, providedFingerprint)) return invalidIdentitySubmission();
+  if (
+    !externalIdentityFromEmbeddedRecord({
+      signingKeyType,
+      encryptionKeyType,
+      signingKey,
+      encryptionKey,
+      signingKeyDetails,
+      encryptionKeyDetails,
+      ...(providedFingerprint ? { fingerprint: providedFingerprint } : {}),
+    }, providedFingerprint)
+  ) return invalidIdentitySubmission();
 
   let fingerprint: string;
   try {
@@ -327,50 +334,57 @@ export async function handlePostDetail(
   if (!identity) {
     return json({ error: "unknown subject" }, 400);
   }
-  if (await isIdentityRevoked(db, fingerprint)) {
-    return json({ error: "identity is revoked" }, 400);
-  }
-
-  const existingDetail = await getDetailRecord(db, fingerprint, path);
-  if (existingDetail && existingDetail.revoked_at === null) {
-    return json({ error: "detail already exists for path" }, 409);
-  }
-
   const proofVerifyResult = verifyDetailProof(identity, path, detail, proof);
   if (!proofVerifyResult.ok) {
     return json({ error: proofVerifyResult.error ?? "invalid proof" }, 400);
   }
 
-  const nonceCheck = await ensureNewNonce(
-    db,
-    fingerprint,
-    proofVerifyResult.record.nonce,
-  );
-  if (!nonceCheck.ok) {
-    return json({ error: nonceCheck.error }, 400);
-  }
+  const stored = await db.writeTransaction(async (db) => {
+    if (await isIdentityRevoked(db, fingerprint)) {
+      return json({ error: "identity is revoked" }, 400);
+    }
 
-  try {
-    const createdAt = proofVerifyResult.record.timestamp ?? Date.now();
-    if (existingDetail && existingDetail.revoked_at !== null) {
+    const existingDetail = await getDetailRecord(db, fingerprint, path);
+    if (existingDetail && existingDetail.revoked_at === null) {
+      return json({ error: "detail already exists for path" }, 409);
+    }
+
+    const nonceCheck = await ensureNewNonce(
+      db,
+      fingerprint,
+      proofVerifyResult.record.nonce,
+    );
+    if (!nonceCheck.ok) return json({ error: nonceCheck.error }, 400);
+    const createdAt = proofVerifyResult.record.timestamp;
+    if (existingDetail) {
       await updateDetail(db, { fingerprint, path, detail, proof, createdAt });
     } else {
       await insertDetail(db, { fingerprint, path, detail, proof, createdAt });
     }
+    return null;
+  }, `identity:${fingerprint}`);
+  if (stored) return stored;
 
+  try {
     if (path === "email") {
       const token = generateVerificationToken();
       const tokenHash = computeTokenHash(token);
       const now = Date.now();
-      await updateDetailVerification(db, {
+      const issued = await issueDetailVerification(db, {
         fingerprint,
         path,
-        verifiedAt: null,
-        verificationToken: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
-        verificationTokenHash: tokenHash,
-        verificationExpiresAt: now + EMAIL_VERIFICATION_TTL_MS,
-        verificationSentAt: now,
+        detail,
+        proof,
+        token: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
+        tokenHash,
+        expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+        sentAt: now,
       });
+      if (!issued) {
+        return json({
+          error: "email detail changed; request verification again",
+        }, 409);
+      }
 
       const baseUrl = getPublicBaseUrl(req);
       if (!baseUrl) {

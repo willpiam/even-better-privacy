@@ -21,7 +21,7 @@ import { KyberEncryptionKey } from "../../core/Kyber.ts";
 import { verifyDetailProof } from "../../core/DetailProof.ts";
 import { createRevocationCertificate, getRevocationSignaturePayload, encodeRevocationCertificate, decodeAndVerifyRevocationCertificate } from "../../core/Revocation.ts";
 import { createHierarchyCertificate, getHierarchySignaturePayload, encodeHierarchyCertificate, decodeAndVerifyHierarchyCertificate, validateHierarchy, isHierarchyCertificateExpired } from "../../core/HierarchyCertificate.ts";
-import { Identity } from "../../core/Identity.ts";
+import { getIdentityStorageAad, Identity } from "../../core/Identity.ts";
 import { buildPurposeHashEnvelope, buildRecipientBoundEnvelope, buildMultiRecipientBoundEnvelope, type SignaturePurpose } from "../../core/MessageHash.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import { canonicalJsonStringify } from "../../core/CanonicalJson.ts";
@@ -342,9 +342,9 @@ Deno.test("current identity storage and signatures exchange in both directions",
 Deno.test("identity storage rejects mismatched encrypted and public keys", async () => {
   const password = "identity-password", alice = new Identity("dilithium", "kyber"), bob = new Identity("dilithium", "kyber");
   const storage = JSON.parse(alice.toStorageFormat(password));
-  const privateData = JSON.parse(AES.decrypt(password, storage.encrypted, "ebp:identity-storage:v2"));
+  const privateData = JSON.parse(AES.decrypt(password, storage.encrypted, getIdentityStorageAad(storage.public, storage.version)));
   privateData.signingKey = bob.signingKey.toJSON();
-  storage.encrypted = AES.encrypt(password, JSON.stringify(privateData), "ebp:identity-storage:v2");
+  storage.encrypted = AES.encrypt(password, JSON.stringify(privateData), getIdentityStorageAad(storage.public, storage.version));
   assertEquals((await python({operation: "identity_load", storage: JSON.stringify(storage), password, unlock: "yes"})).error, "invalid ciphertext");
 });
 
@@ -408,13 +408,13 @@ Deno.test("ML-KEM-512 and 768 ciphertext formats interoperate", async () => {
 Deno.test("identity import rejects an inconsistent SLH-DSA private key", async () => {
   const password = "identity-password", identity = new Identity("sphincs", "kyber");
   const storage = JSON.parse(identity.toStorageFormat(password));
-  const privateData = JSON.parse(AES.decrypt(password, storage.encrypted, "ebp:identity-storage:v2"));
+  const privateData = JSON.parse(AES.decrypt(password, storage.encrypted, getIdentityStorageAad(storage.public, storage.version)));
   const key = JSON.parse(privateData.signingKey);
   const privateBytes = Uint8Array.from(atob(key.secretKey), (ch) => ch.charCodeAt(0));
   privateBytes[0] ^= 1;
   key.secretKey = btoa(String.fromCharCode(...privateBytes));
   privateData.signingKey = JSON.stringify(key);
-  storage.encrypted = AES.encrypt(password, JSON.stringify(privateData), "ebp:identity-storage:v2");
+  storage.encrypted = AES.encrypt(password, JSON.stringify(privateData), getIdentityStorageAad(storage.public, storage.version));
   assertEquals((await python({operation: "identity_load", storage: JSON.stringify(storage), password, unlock: "yes"})).error, "invalid ciphertext");
 });
 
@@ -702,6 +702,24 @@ Deno.test("identity storage with derived keys interoperates", async () => {
   const c = (await python({operation: "identity_storage_with_key", storage, password, key: hex(key), salt: hex(salt)})).result;
   assertEquals(Identity.fromStorageFormatWithKey(c, key).toFingerprint(), identity.toFingerprint());
   assertEquals((await python({operation: "identity_load_with_key", storage: ts, key: hex(new Uint8Array(32))})).error, "invalid ciphertext");
+});
+
+Deno.test("v3 storage rejects public state tampering in TypeScript and C", async () => {
+  const identity = new Identity("dilithium", "kyber");
+  identity.attachDetail("name", "Alice");
+  identity.createIdentityRevocation();
+  const raw = identity.toStorageFormatWithKey(key, salt);
+  assertEquals((await python({operation: "identity_load_with_key", storage: raw, key: hex(key)})).result, identity.toFingerprint());
+  for (const property of ["detailsNonce", "revocationNonce", "revocationCertificate", "details", "hdProvenance"]) {
+    const storage = JSON.parse(raw);
+    if (property === "revocationCertificate") delete storage.public[property];
+    else storage.public[property] = property.endsWith("Nonce") ? 0 : {};
+    const changed = JSON.stringify(storage);
+    assertEquals((await python({operation: "identity_load_with_key", storage: changed, key: hex(key)})).error, "invalid ciphertext");
+    let accepted = true;
+    try { Identity.fromStorageFormatWithKey(changed, key); } catch { accepted = false; }
+    assertEquals(accepted, false);
+  }
 });
 
 Deno.test("non-default identity key variants interoperate", async () => {

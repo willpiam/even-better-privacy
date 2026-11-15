@@ -16,7 +16,7 @@ export const PROTOCOL_VERSION = "0.1.1";
  * File/payload/ciphertext format versions.
  */
 export const FILE_FORMAT_VERSIONS = {
-  identityStorage: 2,
+  identityStorage: 3,
   publicIdentity: 1,
   detailProof: 2,
   revocationCertificate: 2,

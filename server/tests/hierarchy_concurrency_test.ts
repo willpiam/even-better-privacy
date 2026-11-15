@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import { Identity } from "../../core/Identity.ts";
 import {
   createHierarchyCertificate,
@@ -8,6 +8,7 @@ import {
 } from "../../core/HierarchyCertificate.ts";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
 import { insertIdentity } from "../db/index.ts";
+import type { DatabaseAdapter, DatabaseQueryParams } from "../db/adapter.ts";
 import {
   getHierarchyForIdentity,
   listHierarchyCertificates,
@@ -91,6 +92,111 @@ Deno.test("concurrent graph writes cannot commit a cycle and failed transactions
       Error,
       "cycle",
     );
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("hierarchy reads materialize only the focused family", async () => {
+  const db = new SqliteDatabaseAdapter(":memory:");
+  try {
+    const identity = new Identity("dilithium", "kyber");
+    for (
+      const fingerprint of [
+        "root",
+        "child",
+        "grandchild",
+        ...Array.from({ length: 30 }, (_, i) => `other-${i}`),
+      ]
+    ) {
+      await insertIdentity(db, {
+        ...identity.summary,
+        fingerprint,
+        createdAt: 0,
+      });
+    }
+    for (
+      const [master, child] of [
+        ["root", "child"],
+        ["child", "grandchild"],
+        ...Array.from(
+          { length: 29 },
+          (_, i) => [`other-${i}`, `other-${i + 1}`],
+        ),
+      ]
+    ) {
+      await db.query(
+        "INSERT INTO hierarchy_certificates (master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at) VALUES (?, ?, 0, 0, '', 'certificate', 0)",
+        [master, child],
+      );
+    }
+    let materialized = 0;
+    const instrumented: DatabaseAdapter = {
+      execute: db.execute.bind(db),
+      close: db.close.bind(db),
+      writeTransaction: db.writeTransaction.bind(db),
+      query: async <T extends unknown[]>(
+        sql: string,
+        params?: DatabaseQueryParams,
+      ) => {
+        const rows = await db.query<T>(sql, params);
+        materialized += rows.length;
+        return rows;
+      },
+    };
+    const family = await getHierarchyForIdentity(instrumented, "child");
+    assertEquals(family.root, "root");
+    assertEquals(family.descendants, ["child", "grandchild"]);
+    assertEquals(materialized, 2);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("hierarchy database failures preserve the original cause and roll back", async () => {
+  const db = new SqliteDatabaseAdapter(":memory:");
+  try {
+    const master = new Identity("dilithium", "kyber"),
+      child = new Identity("dilithium", "kyber");
+    for (const identity of [master, child]) {
+      await insertIdentity(db, { ...identity.summary, createdAt: Date.now() });
+    }
+    const cause = Object.assign(new Error("storage unavailable"), {
+      code: "08006",
+    });
+    const failing: DatabaseAdapter = {
+      execute: db.execute.bind(db),
+      query: db.query.bind(db),
+      close: db.close.bind(db),
+      writeTransaction: (operation) =>
+        db.writeTransaction((tx) =>
+          operation({
+        execute: tx.execute.bind(tx),
+        close: tx.close.bind(tx),
+        writeTransaction: tx.writeTransaction.bind(tx),
+            query: <T extends unknown[]>(
+              sql: string,
+              params?: DatabaseQueryParams,
+            ): Promise<T[]> => {
+              if (sql.includes("INSERT INTO hierarchy_certificates")) {
+                throw cause;
+              }
+              return tx.query<T>(sql, params);
+            },
+          })
+        ),
+    };
+    const error = await assertRejects(
+      () =>
+        verifyAndInsertHierarchyCertificate(
+          failing,
+          encodeHierarchyCertificate(certificate(master, child)),
+        ),
+      Error,
+      "Failed to insert hierarchy certificate",
+    );
+    assertEquals(error.cause, cause);
+    assertEquals((await listHierarchyCertificates(db)).length, 0);
   } finally {
     await db.close();
   }

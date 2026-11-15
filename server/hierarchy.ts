@@ -2,11 +2,11 @@ import {
   decodeAndVerifyHierarchyCertificate,
   decodeHierarchyCertificate,
   getHierarchySignaturePayload,
+  type HierarchyCertificateData,
   isHierarchyCertificateExpired,
+  type SignedHierarchyCertificate,
   validateHierarchy,
   validateHierarchyCertificateDraft,
-  type HierarchyCertificateData,
-  type SignedHierarchyCertificate,
 } from "../core/HierarchyCertificate.ts";
 import { hexToString } from "../core/Hex.ts";
 import { buildPurposeHashEnvelope } from "../core/MessageHash.ts";
@@ -14,14 +14,17 @@ import { parseStrictJson } from "../core/StrictJson.ts";
 import { DilithiumSigningKey } from "../core/Dilithium.ts";
 import { SphincsSigningKey } from "../core/Sphincs.ts";
 import {
+  type DatabaseAdapter,
+  deletePendingProposal,
   getIdentity,
   getPendingProposal,
   getPendingProposalByPair,
   insertPendingProposal,
-  deletePendingProposal,
-  type DatabaseAdapter,
 } from "./db/index.ts";
-import type { HierarchyCertificateRow, PendingHierarchyProposalRow } from "./types.ts";
+import type {
+  HierarchyCertificateRow,
+  PendingHierarchyProposalRow,
+} from "./types.ts";
 
 function coerceNumber(value: number | string | bigint | null): number | null {
   if (value === null) return null;
@@ -36,14 +39,37 @@ export type VerifiedHierarchyRecord = {
   expired: boolean;
 };
 
-export async function listHierarchyCertificates(db: DatabaseAdapter): Promise<HierarchyCertificateRow[]> {
+async function queryHierarchyCertificates(
+  db: DatabaseAdapter,
+  sql: string,
+  params: string[] = [],
+): Promise<HierarchyCertificateRow[]> {
   const rows: HierarchyCertificateRow[] = [];
   for (
-    const [id, masterFingerprint, childFingerprint, timestamp, expiry, context, certificate, createdAt] of await db
-      .query<[number | string | bigint, string, string, number | string | bigint, number | string | bigint, string, string, number | string | bigint]>(
-        `SELECT id, master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
-         FROM hierarchy_certificates
-         ORDER BY timestamp ASC, id ASC`,
+    const [
+      id,
+      masterFingerprint,
+      childFingerprint,
+      timestamp,
+      expiry,
+      context,
+      certificate,
+      createdAt,
+    ] of await db
+      .query<
+        [
+          number | string | bigint,
+          string,
+          string,
+          number | string | bigint,
+          number | string | bigint,
+          string,
+          string,
+          number | string | bigint,
+        ]
+      >(
+        sql,
+        params,
       )
   ) {
     rows.push({
@@ -58,6 +84,43 @@ export async function listHierarchyCertificates(db: DatabaseAdapter): Promise<Hi
     });
   }
   return rows;
+}
+
+export async function listHierarchyCertificates(
+  db: DatabaseAdapter,
+): Promise<HierarchyCertificateRow[]> {
+  return await queryHierarchyCertificates(
+    db,
+    `SELECT id, master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
+     FROM hierarchy_certificates ORDER BY timestamp ASC, id ASC`,
+  );
+}
+
+/** UNION deduplicates vertices so corrupt cyclic data cannot recurse forever. */
+async function listHierarchyFamily(
+  db: DatabaseAdapter,
+  fingerprint: string,
+): Promise<HierarchyCertificateRow[]> {
+  return await queryHierarchyCertificates(
+    db,
+    `
+    WITH RECURSIVE lineage(fingerprint) AS (
+      SELECT CAST(? AS TEXT)
+      UNION
+      SELECT h.master_fingerprint FROM hierarchy_certificates h
+      JOIN lineage l ON h.child_fingerprint = l.fingerprint
+    ), family(fingerprint) AS (
+      SELECT fingerprint FROM lineage
+      UNION
+      SELECT h.child_fingerprint FROM hierarchy_certificates h
+      JOIN family f ON h.master_fingerprint = f.fingerprint
+    )
+    SELECT h.id, h.master_fingerprint, h.child_fingerprint, h.timestamp,
+           h.expiry, h.context, h.certificate, h.created_at
+    FROM hierarchy_certificates h JOIN family f ON h.master_fingerprint = f.fingerprint
+    ORDER BY h.timestamp ASC, h.id ASC`,
+    [fingerprint],
+  );
 }
 
 export async function getHierarchyCertificateByChild(
@@ -80,7 +143,16 @@ export async function getHierarchyCertificateByChild(
     [childFingerprint],
   );
   if (rows.length === 0) return null;
-  const [id, masterFingerprint, child, timestamp, expiry, context, certificate, createdAt] = rows[0];
+  const [
+    id,
+    masterFingerprint,
+    child,
+    timestamp,
+    expiry,
+    context,
+    certificate,
+    createdAt,
+  ] = rows[0];
   return {
     id: coerceNumber(id) ?? 0,
     master_fingerprint: masterFingerprint,
@@ -99,8 +171,28 @@ export async function getDirectChildren(
 ): Promise<HierarchyCertificateRow[]> {
   const rows: HierarchyCertificateRow[] = [];
   for (
-    const [id, master, child, timestamp, expiry, context, certificate, createdAt] of await db
-      .query<[number | string | bigint, string, string, number | string | bigint, number | string | bigint, string, string, number | string | bigint]>(
+    const [
+      id,
+      master,
+      child,
+      timestamp,
+      expiry,
+      context,
+      certificate,
+      createdAt,
+    ] of await db
+      .query<
+        [
+          number | string | bigint,
+          string,
+          string,
+          number | string | bigint,
+          number | string | bigint,
+          string,
+          string,
+          number | string | bigint,
+        ]
+      >(
         `SELECT id, master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
          FROM hierarchy_certificates
          WHERE master_fingerprint = ?
@@ -132,7 +224,9 @@ export async function getMaster(
 export async function verifyAndInsertHierarchyCertificate(
   db: DatabaseAdapter,
   encodedCertificate: string,
-): Promise<{ ok: true; row: HierarchyCertificateRow } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; row: HierarchyCertificateRow } | { ok: false; error: string }
+> {
   const decoded = decodeHierarchyCertificate(encodedCertificate);
   if (!decoded) {
     return { ok: false, error: "invalid hierarchy certificate encoding" };
@@ -141,7 +235,10 @@ export async function verifyAndInsertHierarchyCertificate(
   const master = await getIdentity(db, decoded.masterFingerprint);
   const child = await getIdentity(db, decoded.childFingerprint);
   if (!master || !child) {
-    return { ok: false, error: "both master and child identities must exist on server" };
+    return {
+      ok: false,
+      error: "both master and child identities must exist on server",
+    };
   }
 
   const verifyResult = decodeAndVerifyHierarchyCertificate(
@@ -150,13 +247,17 @@ export async function verifyAndInsertHierarchyCertificate(
       fingerprint: master.fingerprint,
       signingKeyType: master.signing_key_type,
       signingKey: master.signing_key,
-      signingKeyDetails: (master.signing_key_details ?? {}) as { variant: string } & Record<string, unknown>,
+      signingKeyDetails: (master.signing_key_details ?? {}) as {
+        variant: string;
+      } & Record<string, unknown>,
     },
     {
       fingerprint: child.fingerprint,
       signingKeyType: child.signing_key_type,
       signingKey: child.signing_key,
-      signingKeyDetails: (child.signing_key_details ?? {}) as { variant: string } & Record<string, unknown>,
+      signingKeyDetails: (child.signing_key_details ?? {}) as {
+        variant: string;
+      } & Record<string, unknown>,
     },
   );
   if (!verifyResult.ok) {
@@ -178,10 +279,11 @@ export async function verifyAndInsertHierarchyCertificate(
     }
 
     try {
-      await db.query(
+      const insertedIds = await db.query<[number]>(
         `INSERT INTO hierarchy_certificates (
            master_fingerprint, child_fingerprint, timestamp, expiry, context, certificate, created_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (child_fingerprint) DO NOTHING RETURNING id`,
         [
           decoded.masterFingerprint,
           decoded.childFingerprint,
@@ -192,42 +294,71 @@ export async function verifyAndInsertHierarchyCertificate(
           Date.now(),
         ],
       );
-    } catch (error) {
-      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (message.includes("unique") || message.includes("duplicate")) {
+      if (insertedIds.length === 0) {
         return { ok: false, error: "child already has a master" };
       }
-      return { ok: false, error: "failed to insert hierarchy certificate" };
+    } catch (error) {
+      throw new Error("Failed to insert hierarchy certificate", {
+        cause: error,
+      });
     }
 
-    const inserted = await getHierarchyCertificateByChild(db, decoded.childFingerprint);
+    const inserted = await getHierarchyCertificateByChild(
+      db,
+      decoded.childFingerprint,
+    );
     if (!inserted) {
-      return { ok: false, error: "hierarchy certificate was not found after insert" };
+      return {
+        ok: false,
+        error: "hierarchy certificate was not found after insert",
+      };
     }
     return { ok: true, row: inserted };
   });
 }
 
-type PendingHierarchyCertificate = Omit<HierarchyCertificateData, "masterSignature" | "childSignature"> & {
-  masterSignature: string | null;
-  childSignature: string | null;
-};
+type PendingHierarchyCertificate =
+  & Omit<HierarchyCertificateData, "masterSignature" | "childSignature">
+  & {
+    masterSignature: string | null;
+    childSignature: string | null;
+  };
 
-function decodePendingHierarchyCertificate(encoded: string): PendingHierarchyCertificate | null {
+function decodePendingHierarchyCertificate(
+  encoded: string,
+): PendingHierarchyCertificate | null {
   try {
-    const parsed = parseStrictJson(hexToString(encoded)) as PendingHierarchyCertificate;
+    const parsed = parseStrictJson(
+      hexToString(encoded),
+    ) as PendingHierarchyCertificate;
     if (!parsed || typeof parsed !== "object") return null;
     if (parsed.version !== 2) return null;
     if (!validateHierarchyCertificateDraft(parsed).ok) return null;
-    if (typeof parsed.masterFingerprint !== "string" || parsed.masterFingerprint.length === 0) return null;
-    if (typeof parsed.childFingerprint !== "string" || parsed.childFingerprint.length === 0) return null;
+    if (
+      typeof parsed.masterFingerprint !== "string" ||
+      parsed.masterFingerprint.length === 0
+    ) return null;
+    if (
+      typeof parsed.childFingerprint !== "string" ||
+      parsed.childFingerprint.length === 0
+    ) return null;
     if (parsed.masterFingerprint === parsed.childFingerprint) return null;
-    if (typeof parsed.timestamp !== "number" || !Number.isSafeInteger(parsed.timestamp) || parsed.timestamp < 0) return null;
-    if (typeof parsed.expiry !== "number" || !Number.isSafeInteger(parsed.expiry) || parsed.expiry < 0) return null;
+    if (
+      typeof parsed.timestamp !== "number" ||
+      !Number.isSafeInteger(parsed.timestamp) || parsed.timestamp < 0
+    ) return null;
+    if (
+      typeof parsed.expiry !== "number" ||
+      !Number.isSafeInteger(parsed.expiry) || parsed.expiry < 0
+    ) return null;
     if (typeof parsed.context !== "string") return null;
-    if (typeof parsed.salt !== "string" || parsed.salt.length === 0) return null;
-    const masterSigOk = parsed.masterSignature === null || typeof parsed.masterSignature === "string";
-    const childSigOk = parsed.childSignature === null || typeof parsed.childSignature === "string";
+    if (typeof parsed.salt !== "string" || parsed.salt.length === 0) {
+      return null;
+    }
+    const masterSigOk = parsed.masterSignature === null ||
+      typeof parsed.masterSignature === "string";
+    const childSigOk = parsed.childSignature === null ||
+      typeof parsed.childSignature === "string";
     if (!masterSigOk || !childSigOk) return null;
     return parsed;
   } catch {
@@ -236,16 +367,30 @@ function decodePendingHierarchyCertificate(encoded: string): PendingHierarchyCer
 }
 
 function verifySignerEnvelope(
-  signer: { signingKeyType: "dilithium" | "sphincs"; signingKey: string; variant: string },
+  signer: {
+    signingKeyType: "dilithium" | "sphincs";
+    signingKey: string;
+    variant: string;
+  },
   payload: string,
   signature: string,
 ): boolean {
   const envelope = buildPurposeHashEnvelope("hierarchy", payload);
   try {
     if (signer.signingKeyType === "dilithium") {
-      return DilithiumSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
+      return DilithiumSigningKey.verify(
+        signer.variant,
+        envelope,
+        signature,
+        signer.signingKey,
+      );
     }
-    return SphincsSigningKey.verify(signer.variant, envelope, signature, signer.signingKey);
+    return SphincsSigningKey.verify(
+      signer.variant,
+      envelope,
+      signature,
+      signer.signingKey,
+    );
   } catch {
     return false;
   }
@@ -255,16 +400,26 @@ export async function verifyAndStorePendingHierarchyProposal(
   db: DatabaseAdapter,
   encodedCertificate: string,
   proposerFingerprint: string,
-): Promise<{ ok: true; proposal: PendingHierarchyProposalRow } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; proposal: PendingHierarchyProposalRow } | {
+    ok: false;
+    error: string;
+  }
+> {
   const decoded = decodePendingHierarchyCertificate(encodedCertificate);
   if (!decoded) {
     return { ok: false, error: "invalid hierarchy certificate encoding" };
   }
 
-  const masterSigned = typeof decoded.masterSignature === "string" && decoded.masterSignature.length > 0;
-  const childSigned = typeof decoded.childSignature === "string" && decoded.childSignature.length > 0;
+  const masterSigned = typeof decoded.masterSignature === "string" &&
+    decoded.masterSignature.length > 0;
+  const childSigned = typeof decoded.childSignature === "string" &&
+    decoded.childSignature.length > 0;
   if ((masterSigned ? 1 : 0) + (childSigned ? 1 : 0) !== 1) {
-    return { ok: false, error: "pending proposal must include exactly one signature" };
+    return {
+      ok: false,
+      error: "pending proposal must include exactly one signature",
+    };
   }
 
   const proposerRole = proposerFingerprint === decoded.masterFingerprint
@@ -273,7 +428,10 @@ export async function verifyAndStorePendingHierarchyProposal(
     ? "child"
     : null;
   if (!proposerRole) {
-    return { ok: false, error: "proposer must be either master or child in the certificate" };
+    return {
+      ok: false,
+      error: "proposer must be either master or child in the certificate",
+    };
   }
   if (proposerRole === "master" && !masterSigned) {
     return { ok: false, error: "proposer signature missing for master" };
@@ -285,7 +443,10 @@ export async function verifyAndStorePendingHierarchyProposal(
   const master = await getIdentity(db, decoded.masterFingerprint);
   const child = await getIdentity(db, decoded.childFingerprint);
   if (!master || !child) {
-    return { ok: false, error: "both master and child identities must exist on server" };
+    return {
+      ok: false,
+      error: "both master and child identities must exist on server",
+    };
   }
 
   const variant = proposerRole === "master"
@@ -294,11 +455,21 @@ export async function verifyAndStorePendingHierarchyProposal(
   if (!variant) {
     return { ok: false, error: "missing signing variant" };
   }
-  const signingKeyType = proposerRole === "master" ? master.signing_key_type : child.signing_key_type;
-  const signingKey = proposerRole === "master" ? master.signing_key : child.signing_key;
-  const signature = proposerRole === "master" ? decoded.masterSignature! : decoded.childSignature!;
+  const signingKeyType = proposerRole === "master"
+    ? master.signing_key_type
+    : child.signing_key_type;
+  const signingKey = proposerRole === "master"
+    ? master.signing_key
+    : child.signing_key;
+  const signature = proposerRole === "master"
+    ? decoded.masterSignature!
+    : decoded.childSignature!;
   const payload = getHierarchySignaturePayload(decoded);
-  const verified = verifySignerEnvelope({ signingKeyType, signingKey, variant }, payload, signature);
+  const verified = verifySignerEnvelope(
+    { signingKeyType, signingKey, variant },
+    payload,
+    signature,
+  );
   if (!verified) {
     return { ok: false, error: "invalid proposer signature" };
   }
@@ -319,7 +490,7 @@ export async function verifyAndStorePendingHierarchyProposal(
   }
 
   try {
-    await insertPendingProposal(db, {
+    const inserted = await insertPendingProposal(db, {
       masterFingerprint: decoded.masterFingerprint,
       childFingerprint: decoded.childFingerprint,
       proposerFingerprint,
@@ -328,15 +499,23 @@ export async function verifyAndStorePendingHierarchyProposal(
       expiry: decoded.expiry,
       createdAt: Date.now(),
     });
-  } catch (error) {
-    const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-    if (message.includes("unique") || message.includes("duplicate")) {
-      return { ok: false, error: "a pending proposal for this relationship already exists" };
+    if (!inserted) {
+      return {
+        ok: false,
+        error: "a pending proposal for this relationship already exists",
+      };
     }
-    return { ok: false, error: "failed to store pending hierarchy proposal" };
+  } catch (error) {
+    throw new Error("Failed to store pending hierarchy proposal", {
+      cause: error,
+    });
   }
 
-  const proposal = await getPendingProposalByPair(db, decoded.masterFingerprint, decoded.childFingerprint);
+  const proposal = await getPendingProposalByPair(
+    db,
+    decoded.masterFingerprint,
+    decoded.childFingerprint,
+  );
   if (!proposal) {
     return { ok: false, error: "proposal was not found after insert" };
   }
@@ -347,23 +526,34 @@ export async function acceptPendingHierarchyProposal(
   db: DatabaseAdapter,
   proposalId: number,
   encodedCertificate: string,
-): Promise<{ ok: true; row: HierarchyCertificateRow } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; row: HierarchyCertificateRow } | { ok: false; error: string }
+> {
   const pending = await getPendingProposal(db, proposalId);
   if (!pending) {
     return { ok: false, error: "pending proposal not found" };
   }
   const decoded = decodeHierarchyCertificate(encodedCertificate);
   if (!decoded) {
-    return { ok: false, error: "accepted certificate must include both signatures" };
+    return {
+      ok: false,
+      error: "accepted certificate must include both signatures",
+    };
   }
   if (
     decoded.masterFingerprint !== pending.master_fingerprint ||
     decoded.childFingerprint !== pending.child_fingerprint
   ) {
-    return { ok: false, error: "accepted certificate does not match pending proposal" };
+    return {
+      ok: false,
+      error: "accepted certificate does not match pending proposal",
+    };
   }
 
-  const insertResult = await verifyAndInsertHierarchyCertificate(db, encodedCertificate);
+  const insertResult = await verifyAndInsertHierarchyCertificate(
+    db,
+    encodedCertificate,
+  );
   if (!insertResult.ok) return insertResult;
   await deletePendingProposal(db, proposalId);
   return insertResult;
@@ -380,7 +570,7 @@ export async function getHierarchyForIdentity(
   descendants: string[];
   allFingerprints: string[];
 }> {
-  const allRows = await listHierarchyCertificates(db);
+  const allRows = await listHierarchyFamily(db, fingerprint);
 
   const childToRow = new Map<string, HierarchyCertificateRow>();
   const masterToChildren = new Map<string, HierarchyCertificateRow[]>();
@@ -407,11 +597,12 @@ export async function getHierarchyForIdentity(
 
   // Collect descendants via BFS from root.
   const descendants: string[] = [];
-  const relationships: Array<HierarchyCertificateRow & { expired: boolean }> = [];
+  const relationships: Array<HierarchyCertificateRow & { expired: boolean }> =
+    [];
   const queue = [root];
   const seen = new Set<string>([root]);
-  while (queue.length > 0) {
-    const node = queue.shift()!;
+  for (let index = 0; index < queue.length; index++) {
+    const node = queue[index]!;
     const children = masterToChildren.get(node) ?? [];
     for (const edge of children) {
       relationships.push({
@@ -426,6 +617,15 @@ export async function getHierarchyForIdentity(
     }
   }
 
-  const allFingerprints = Array.from(new Set([root, ...ancestors, ...descendants, fingerprint]));
-  return { focus: fingerprint, relationships, root, ancestors, descendants, allFingerprints };
+  const allFingerprints = Array.from(
+    new Set([root, ...ancestors, ...descendants, fingerprint]),
+  );
+  return {
+    focus: fingerprint,
+    relationships,
+    root,
+    ancestors,
+    descendants,
+    allFingerprints,
+  };
 }

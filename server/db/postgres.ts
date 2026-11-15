@@ -138,13 +138,16 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
 
   async writeTransaction<T>(
     operation: (db: DatabaseAdapter) => Promise<T>,
+    resource = "hierarchy",
   ): Promise<T> {
     return await this.withClient(async (client) => {
       await client.queryArray("BEGIN");
       try {
-        // A transaction-scoped lock also serializes graph edits from other processes.
+        // Advisory locks serialize the same resource across connections and processes.
+        // Hash collisions only serialize unrelated writers; they cannot weaken locking.
         await client.queryArray(
-          "LOCK TABLE hierarchy_certificates IN SHARE ROW EXCLUSIVE MODE",
+          "SELECT pg_advisory_xact_lock(hashtext($1))",
+          [resource],
         );
         const scope: DatabaseAdapter = {
           execute: async (sql) => {
@@ -158,12 +161,10 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
             return (await client.queryArray(rewritten.sql, rewritten.params))
               .rows as R[];
           },
-          close: async () => {
-            throw new Error("Cannot close a transaction connection");
-          },
-          writeTransaction: async () => {
-            throw new Error("Nested transactions are unsupported");
-          },
+          close: () =>
+            Promise.reject(new Error("Cannot close a transaction connection")),
+          writeTransaction: () =>
+            Promise.reject(new Error("Nested transactions are unsupported")),
         };
         const result = await operation(scope);
         await client.queryArray("COMMIT");
@@ -240,6 +241,9 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
       )
     `);
 
+    await this.execute(`CREATE INDEX IF NOT EXISTS hierarchy_master_idx
+      ON hierarchy_certificates (master_fingerprint)`);
+
     await this.execute(`
       CREATE TABLE IF NOT EXISTS pending_hierarchy_proposals (
         id BIGSERIAL PRIMARY KEY,
@@ -296,14 +300,22 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         active INTEGER NOT NULL DEFAULT 1
       )
     `);
-    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
-      ON mail_payment_orders (username, domain) WHERE active = 1`);
-    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_proof_nonce
-      ON mail_payment_orders (identity_fingerprint, proof_nonce)`);
-    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
-      ON mail_payment_orders (identity_fingerprint) WHERE active = 1`);
-    await this.execute(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
-      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`);
+    await this.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
+      ON mail_payment_orders (username, domain) WHERE active = 1`,
+    );
+    await this.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_proof_nonce
+      ON mail_payment_orders (identity_fingerprint, proof_nonce)`,
+    );
+    await this.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
+      ON mail_payment_orders (identity_fingerprint) WHERE active = 1`,
+    );
+    await this.execute(
+      `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
+      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`,
+    );
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (

@@ -33,12 +33,15 @@ import {
   updateDetail,
 } from "../db/index.ts";
 import { timingSafeEqual } from "node:crypto";
-import { expirePaymentOrders, getConfirmedPaymentOrder } from "../payments/orders.ts";
 import {
+  expirePaymentOrders,
+  getConfirmedPaymentOrder,
+} from "../payments/orders.ts";
+import {
+  type PaymentConfig,
   paymentConfigMatchesDomain,
   readPaymentConfig,
   readTestPaymentConfig,
-  type PaymentConfig,
 } from "../payments/config.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 import { verifyDetailProof } from "../detail.ts";
@@ -58,7 +61,8 @@ const E2E_SWEEP_MIN_HOURS = 1;
 const E2E_SWEEP_DEFAULT_HOURS = 6;
 const E2E_CLEANUP_MAX = 10;
 const PQPOST_FREE_USERNAME_MIN = 9;
-const SHORT_ADDRESS_REASON = `Names shorter than ${PQPOST_FREE_USERNAME_MIN} characters are not available for registration yet.`;
+const SHORT_ADDRESS_REASON =
+  `Names shorter than ${PQPOST_FREE_USERNAME_MIN} characters are not available for registration yet.`;
 export const PRODUCTION_MAIL_DOMAIN = "pqpost.com";
 export const TEST_MAIL_DOMAIN = "test.pqpost.com";
 export const MAIL_MODE_HEADER = "x-ebp-mail-mode";
@@ -66,7 +70,9 @@ export type MailMode = "production" | "test";
 
 /** Test addresses are a separate mode. A normal request stays on the server's primary domain. */
 export function mailModeFromRequest(req: Request): MailMode {
-  if ((req.headers.get(MAIL_MODE_HEADER) ?? "").trim().toLowerCase() === "test") {
+  if (
+    (req.headers.get(MAIL_MODE_HEADER) ?? "").trim().toLowerCase() === "test"
+  ) {
     return "test";
   }
   try {
@@ -116,7 +122,9 @@ export function readMailSignupSettings(): MailSignupSettings {
     enabled: flag === "true" && domain.length > 0,
     domain,
     host,
-    quotaBytes: Number.isFinite(quota) && quota > 0 ? quota : DEFAULT_QUOTA_BYTES,
+    quotaBytes: Number.isFinite(quota) && quota > 0
+      ? quota
+      : DEFAULT_QUOTA_BYTES,
   };
 }
 
@@ -139,17 +147,22 @@ export function paymentConfigForSettings(
   const primary = readMailSignupSettings();
   const config = settings.domain === primary.domain
     ? readPaymentConfig()
-    : settings.domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN
-      ? readTestPaymentConfig()
-      : null;
-  if (!config || !paymentConfigMatchesDomain(settings.domain, config)) return null;
+    : settings.domain === TEST_MAIL_DOMAIN &&
+        primary.domain === PRODUCTION_MAIL_DOMAIN
+    ? readTestPaymentConfig()
+    : null;
+  if (!config || !paymentConfigMatchesDomain(settings.domain, config)) {
+    return null;
+  }
   return config;
 }
 
 export function paymentConfigForDomain(domain: string): PaymentConfig | null {
   const primary = readMailSignupSettings();
   if (domain === primary.domain) return paymentConfigForSettings(primary);
-  if (domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN) {
+  if (
+    domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN
+  ) {
     return paymentConfigForSettings({ ...primary, domain: TEST_MAIL_DOMAIN });
   }
   return null;
@@ -184,10 +197,16 @@ function disabled(): Response {
 }
 
 export function handleMailSignupConfig(req?: Request): Response {
-  const settings = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
+  const settings = mailSettingsForMode(
+    req ? mailModeFromRequest(req) : "production",
+  );
   const enabled = settings.enabled && getStalwartClient() !== null;
   if (!enabled) return json({ enabled: false });
-  return json({ enabled: true, domain: settings.domain, ...connectionInfo(settings) });
+  return json({
+    enabled: true,
+    domain: settings.domain,
+    ...connectionInfo(settings),
+  });
 }
 
 export async function handleMailUsernameAvailable(
@@ -195,27 +214,52 @@ export async function handleMailUsernameAvailable(
   db: DatabaseAdapter,
   req?: Request,
 ): Promise<Response> {
-  const settings = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
+  const settings = mailSettingsForMode(
+    req ? mailModeFromRequest(req) : "production",
+  );
   if (!settings.enabled) return disabled();
   const check = validateMailUsername(url.searchParams.get("u") ?? "");
   if (!check.ok) {
-    return json({ available: false, username: check.username, reason: check.reason });
+    return json({
+      available: false,
+      username: check.username,
+      reason: check.reason,
+    });
   }
   if (isShortPqpostUsername(check.username, settings.domain)) {
     // Production short names stay unavailable. Test mode is the only purchase path.
     if (settings.domain !== TEST_MAIL_DOMAIN) {
-      return json({ available: false, username: check.username, reason: SHORT_ADDRESS_REASON });
+      return json({
+        available: false,
+        username: check.username,
+        reason: SHORT_ADDRESS_REASON,
+      });
     }
     const config = paymentConfigForSettings(settings);
-    if (config && isMailSignupReady() &&
-      !await isMailboxUsernameTaken(db, check.username, settings.domain)) {
-      return json({ available: false, purchasable: true, username: check.username,
-        email: `${check.username}@${settings.domain}`, usdCents: config.prices[check.username.length],
-        reason: "This address requires a one-time purchase." });
+    if (
+      config && isMailSignupReady() &&
+      !await isMailboxUsernameTaken(db, check.username, settings.domain)
+    ) {
+      return json({
+        available: false,
+        purchasable: true,
+        username: check.username,
+        email: `${check.username}@${settings.domain}`,
+        usdCents: config.prices[check.username.length],
+        reason: "This address requires a one-time purchase.",
+      });
     }
-    return json({ available: false, username: check.username, reason: SHORT_ADDRESS_REASON });
+    return json({
+      available: false,
+      username: check.username,
+      reason: SHORT_ADDRESS_REASON,
+    });
   }
-  const taken = await isMailboxUsernameTaken(db, check.username, settings.domain);
+  const taken = await isMailboxUsernameTaken(
+    db,
+    check.username,
+    settings.domain,
+  );
   return json({
     available: !taken,
     username: check.username,
@@ -231,6 +275,8 @@ function validateMailPassword(value: unknown): string | null {
   }
   return value;
 }
+
+class MailSignupConflict extends Error {}
 
 export async function handleMailSignup(
   req: Request,
@@ -261,10 +307,16 @@ export async function handleMailSignup(
   const username = usernameCheck.ok
     ? usernameCheck.username
     : normalizeMailUsername(usernameCheck.username);
-  if (!usernameCheck.ok && !(isE2eMailUsername(username) && isMailE2eAuthorized(req))) {
+  if (
+    !usernameCheck.ok &&
+    !(isE2eMailUsername(username) && isMailE2eAuthorized(req))
+  ) {
     return json({ error: usernameCheck.reason }, 400);
   }
-  if (isShortPqpostUsername(username, settings.domain) && settings.domain !== TEST_MAIL_DOMAIN) {
+  if (
+    isShortPqpostUsername(username, settings.domain) &&
+    settings.domain !== TEST_MAIL_DOMAIN
+  ) {
     return json({ error: SHORT_ADDRESS_REASON }, 400);
   }
   const paidOrder = isShortPqpostUsername(username, settings.domain)
@@ -286,7 +338,8 @@ export async function handleMailSignup(
   const mailPassword = validateMailPassword(payload.mailPassword);
   if (!mailPassword) {
     return json({
-      error: `mailPassword must be ${MAIL_PASSWORD_MIN}-${MAIL_PASSWORD_MAX} characters`,
+      error:
+        `mailPassword must be ${MAIL_PASSWORD_MIN}-${MAIL_PASSWORD_MAX} characters`,
     }, 400);
   }
 
@@ -300,7 +353,10 @@ export async function handleMailSignup(
 
   const identity = await getIdentity(db, fingerprint);
   if (!identity) {
-    return json({ error: "publish this identity before creating a mailbox" }, 400);
+    return json(
+      { error: "publish this identity before creating a mailbox" },
+      400,
+    );
   }
   if (await isIdentityRevoked(db, fingerprint)) {
     return json({ error: "identity is revoked" }, 400);
@@ -320,7 +376,11 @@ export async function handleMailSignup(
   if (!proofResult.ok) {
     return json({ error: proofResult.error ?? "invalid proof" }, 400);
   }
-  const nonceCheck = await ensureNewNonce(db, fingerprint, proofResult.record.nonce);
+  const nonceCheck = await ensureNewNonce(
+    db,
+    fingerprint,
+    proofResult.record.nonce,
+  );
   if (!nonceCheck.ok) return json({ error: nonceCheck.error }, 400);
 
   const now = Date.now();
@@ -358,27 +418,68 @@ export async function handleMailSignup(
   }
 
   try {
-    await setMailboxStalwartId(db, username, settings.domain, stalwartId);
-    const createdAt = proofResult.record.timestamp ?? now;
-    if (existingEmail) {
-      await updateDetail(db, { fingerprint, path: "email", detail: email, proof: detailProof, createdAt });
-    } else {
-      await insertDetail(db, { fingerprint, path: "email", detail: email, proof: detailProof, createdAt });
-    }
-    await markDetailVerified(db, fingerprint, "email", now);
+    await db.writeTransaction(async (db) => {
+      // Provisioning happens outside the transaction. Recheck the signed
+      // identity state before committing anything after that external call.
+      if (await isIdentityRevoked(db, fingerprint)) {
+        throw new MailSignupConflict("identity is revoked");
+      }
+      const currentEmail = await getDetailRecord(db, fingerprint, "email");
+      if (currentEmail && currentEmail.revoked_at === null) {
+        throw new MailSignupConflict(
+          "this identity already has an email detail",
+        );
+      }
+      const currentNonce = await ensureNewNonce(
+        db,
+        fingerprint,
+        proofResult.record.nonce,
+      );
+      if (!currentNonce.ok) throw new MailSignupConflict(currentNonce.error);
+      await setMailboxStalwartId(db, username, settings.domain, stalwartId);
+      const createdAt = proofResult.record.timestamp;
+      if (currentEmail) {
+        await updateDetail(db, {
+          fingerprint,
+          path: "email",
+          detail: email,
+          proof: detailProof,
+          createdAt,
+        });
+      } else {
+        await insertDetail(db, {
+          fingerprint,
+          path: "email",
+          detail: email,
+          proof: detailProof,
+          createdAt,
+        });
+      }
+      await markDetailVerified(db, fingerprint, "email", now);
+    }, `identity:${fingerprint}`);
   } catch (err) {
-    console.error("mailbox signup rollback:", err);
+    if (!(err instanceof MailSignupConflict)) {
+      console.error("mailbox signup rollback:", err);
+    }
     await stalwart.destroyUser(stalwartId).catch((e) =>
       console.error("stalwart rollback failed:", e)
     );
     await deleteMailbox(db, username, settings.domain);
+    if (err instanceof MailSignupConflict) {
+      return json({ error: err.message }, 409);
+    }
     return json({ error: "failed to store mailbox" }, 500);
   }
 
   if (paidOrder) {
     // A bookkeeping failure must not destroy an already-created mailbox.
-    await db.query("UPDATE mail_payment_orders SET status = 'fulfilled' WHERE order_id = ? AND status = 'confirmed'", [paidOrder.orderId])
-      .catch((err) => console.error("payment fulfillment bookkeeping failed:", err));
+    await db.query(
+      "UPDATE mail_payment_orders SET status = 'fulfilled' WHERE order_id = ? AND status = 'confirmed'",
+      [paidOrder.orderId],
+    )
+      .catch((err) =>
+        console.error("payment fulfillment bookkeeping failed:", err)
+      );
   }
 
   return json({
@@ -415,7 +516,8 @@ export async function handleMailResetPassword(
   const mailPassword = validateMailPassword(payload.mailPassword);
   if (!mailPassword) {
     return json({
-      error: `mailPassword must be ${MAIL_PASSWORD_MIN}-${MAIL_PASSWORD_MAX} characters`,
+      error:
+        `mailPassword must be ${MAIL_PASSWORD_MIN}-${MAIL_PASSWORD_MAX} characters`,
     }, 400);
   }
   const proofCheck = validateStringLength(payload.proof, "proof", LIMITS.proof);
@@ -431,7 +533,10 @@ export async function handleMailResetPassword(
   }
 
   const email = `${mailbox.username}@${mailbox.domain}`;
-  const expectedDetail = buildMailPasswordResetDetail(email, sha256Hex(mailPassword));
+  const expectedDetail = buildMailPasswordResetDetail(
+    email,
+    sha256Hex(mailPassword),
+  );
   const proofResult = verifyDetailProof(
     identity,
     MAIL_PASSWORD_RESET_PATH,
@@ -556,13 +661,20 @@ export async function handleMailE2eCleanup(
   if (!settings.enabled || !stalwart) return disabled();
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(req);
-  if (!bodyResult.ok) return json({ error: bodyResult.error }, bodyResult.status);
+  if (!bodyResult.ok) {
+    return json({ error: bodyResult.error }, bodyResult.status);
+  }
   const payload = bodyResult.data;
 
   const requested: string[] = [];
   if (payload.usernames !== undefined) {
-    if (!Array.isArray(payload.usernames) || payload.usernames.length > E2E_CLEANUP_MAX) {
-      return json({ error: `usernames must be a list of at most ${E2E_CLEANUP_MAX}` }, 400);
+    if (
+      !Array.isArray(payload.usernames) ||
+      payload.usernames.length > E2E_CLEANUP_MAX
+    ) {
+      return json({
+        error: `usernames must be a list of at most ${E2E_CLEANUP_MAX}`,
+      }, 400);
     }
     for (const raw of payload.usernames) {
       const username = normalizeMailUsername(String(raw ?? ""));
@@ -577,7 +689,9 @@ export async function handleMailE2eCleanup(
   if (payload.sweepOlderThanHours !== undefined) {
     const hours = Number(payload.sweepOlderThanHours);
     if (!Number.isFinite(hours) || hours < E2E_SWEEP_MIN_HOURS) {
-      return json({ error: `sweepOlderThanHours must be at least ${E2E_SWEEP_MIN_HOURS}` }, 400);
+      return json({
+        error: `sweepOlderThanHours must be at least ${E2E_SWEEP_MIN_HOURS}`,
+      }, 400);
     }
     sweepHours = hours;
   } else if (requested.length === 0) {
@@ -601,7 +715,10 @@ export async function handleMailE2eCleanup(
     }
   } catch (err) {
     console.error("e2e mailbox cleanup failed:", err);
-    return json({ error: "mail server could not delete the mailbox", removed }, 502);
+    return json(
+      { error: "mail server could not delete the mailbox", removed },
+      502,
+    );
   }
   return json({ ok: true, removed });
 }

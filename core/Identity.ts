@@ -8,10 +8,7 @@ import { Key } from "./Keys.ts";
 import type { ExternalIdentity } from "./ExternalIdentity.ts";
 import { AES, DecryptionAuthError, StorageFormatError } from "./AES.ts";
 import { hexToBytes, hexToString, stringToHex, toHex } from "./Hex.ts";
-import {
-  FILE_FORMAT_VERSIONS,
-  PROTOCOL_VERSION,
-} from "./version.ts";
+import { FILE_FORMAT_VERSIONS, PROTOCOL_VERSION } from "./version.ts";
 import {
   computeEncryptionLeafRaw,
   computeIdentityFingerprint,
@@ -21,10 +18,11 @@ import {
 } from "./Fingerprint.ts";
 import {
   buildMultiRecipientBoundEnvelope,
-  compareAttachmentEntries,
   buildPurposeHashEnvelope,
   buildRecipientBoundEnvelope,
+  compareAttachmentEntries,
   type MultiRecipientAttachmentManifestEntry,
+  sha256Hex,
   type SignaturePurpose,
 } from "./MessageHash.ts";
 import {
@@ -45,7 +43,6 @@ import {
   EMERGENCY_NONCE_BASE,
   encodeRevocationCertificate,
   getRevocationSignaturePayload,
-  type RevocationType,
   type SignedRevocationCertificate,
   verifyRevocationCertificate,
 } from "./Revocation.ts";
@@ -103,7 +100,7 @@ export type IdentityPublicExportOptions = {
 
 /** Storage format: public data unencrypted, private keys encrypted */
 export type IdentityStorageFormat = {
-  version: typeof FILE_FORMAT_VERSIONS.identityStorage;
+  version: typeof FILE_FORMAT_VERSIONS.identityStorage | 2;
   protocolVersion: string;
   public: IdentityPublicData;
   encrypted: string; // AES-encrypted private keys
@@ -131,9 +128,19 @@ type IdentityPrivateStorageData = {
   encryptionKeyType: EncryptionKeyOptions;
 };
 
-function identityStorageAad(): string {
-  return `ebp:identity-storage:v${FILE_FORMAT_VERSIONS.identityStorage}`;
+/** v2 is read for migration; every new save authenticates the public snapshot. */
+export function getIdentityStorageAad(
+  pub: IdentityPublicData,
+  version: number = FILE_FORMAT_VERSIONS.identityStorage,
+): string {
+  if (version === 2) return "ebp:identity-storage:v2";
+  return `ebp:identity-storage:v3:${canonicalJsonStringify(pub)}`;
 }
+
+// Only a digest is retained, scoped to the caller's live storage-key object.
+// Decryption and public-key comparisons still run on every load. Any private
+// key change invalidates the cached self-test, including authenticated edits.
+const validatedStorageKeys = new WeakMap<Uint8Array, string>();
 
 function readDetailsNonce(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
@@ -156,7 +163,10 @@ function parseIdentityStorageJson(storageData: string): {
     throw new StorageFormatError("Identity storage must be a JSON object");
   }
   const storage = parsed as Partial<IdentityStorageFormat>;
-  if (storage.version !== FILE_FORMAT_VERSIONS.identityStorage) {
+  if (
+    storage.version !== FILE_FORMAT_VERSIONS.identityStorage &&
+    storage.version !== 2
+  ) {
     throw new StorageFormatError("Unknown identity storage format");
   }
   const pub = storage.public as IdentityPublicData | undefined;
@@ -189,8 +199,14 @@ function parseIdentityStorageJson(storageData: string): {
       `Unsupported encryption key type: ${pub.encryptionKeyType}`,
     );
   }
-  if (typeof pub.fingerprint !== "string" || !pub.fingerprint || !pub.signingKeyDetails?.variant || !pub.encryptionKeyDetails?.variant ||
-      !externalIdentityFromEmbeddedRecord(pub as unknown as Record<string, unknown>, pub.fingerprint)) {
+  if (
+    typeof pub.fingerprint !== "string" || !pub.fingerprint ||
+    !pub.signingKeyDetails?.variant || !pub.encryptionKeyDetails?.variant ||
+    !externalIdentityFromEmbeddedRecord(
+      pub as unknown as Record<string, unknown>,
+      pub.fingerprint,
+    )
+  ) {
     throw new StorageFormatError("Invalid public identity keys or fingerprint");
   }
   return { storage: storage as IdentityStorageFormat, pub };
@@ -218,6 +234,7 @@ function applyPrivateKeysFromJson(
   identity: Identity,
   pub: IdentityPublicData,
   privateJson: string,
+  storageKey?: Uint8Array,
 ): void {
   identity.isPrivateLoaded = true;
   let privateData: IdentityPrivateStorageData;
@@ -280,13 +297,34 @@ function applyPrivateKeysFromJson(
           `Unsupported encryption key type: ${pub.encryptionKeyType}`,
         );
     }
-    const signing = identity.signingKey as DilithiumSigningKey | SphincsSigningKey;
+    const signing = identity.signingKey as
+      | DilithiumSigningKey
+      | SphincsSigningKey;
     const encryption = identity.encryptionKey as KyberEncryptionKey;
     const challenge = "ebp::identity-storage::key-check::v1";
-    if (signing.variant !== pub.signingKeyDetails.variant || encryption.variant !== pub.encryptionKeyDetails.variant ||
-        signing.publicKey !== pub.signingKey || encryption.publicKey.toLowerCase() !== pub.encryptionKey.toLowerCase() ||
-        !signing.verify(challenge, signing.sign(challenge)) || encryption.decrypt(encryption.encrypt(challenge)) !== challenge) {
-      throw new StorageFormatError("Private identity keys do not match public metadata");
+    if (
+      signing.variant !== pub.signingKeyDetails.variant ||
+      encryption.variant !== pub.encryptionKeyDetails.variant ||
+      signing.publicKey !== pub.signingKey ||
+      encryption.publicKey.toLowerCase() !== pub.encryptionKey.toLowerCase()
+    ) {
+      throw new StorageFormatError(
+        "Private identity keys do not match public metadata",
+      );
+    }
+    const validationDigest = sha256Hex(`${pub.fingerprint}:${privateJson}`);
+    if (
+      !storageKey || validatedStorageKeys.get(storageKey) !== validationDigest
+    ) {
+      if (
+        !signing.verify(challenge, signing.sign(challenge)) ||
+        encryption.decrypt(encryption.encrypt(challenge)) !== challenge
+      ) {
+        throw new StorageFormatError(
+          "Private identity keys do not match public metadata",
+        );
+      }
+      if (storageKey) validatedStorageKeys.set(storageKey, validationDigest);
     }
   } catch (e) {
     if (e instanceof StorageFormatError) throw e;
@@ -312,7 +350,9 @@ function readPublicOnlyKeys(pub: IdentityPublicData): IdentityKeys {
       );
       break;
     default:
-      throw new StorageFormatError(`Unsupported signing key type: ${pub.signingKeyType}`);
+      throw new StorageFormatError(
+        `Unsupported signing key type: ${pub.signingKeyType}`,
+      );
   }
 
   switch (pub.encryptionKeyType) {
@@ -325,7 +365,9 @@ function readPublicOnlyKeys(pub: IdentityPublicData): IdentityKeys {
         ),
       };
     default:
-      throw new StorageFormatError(`Unsupported encryption key type: ${pub.encryptionKeyType}`);
+      throw new StorageFormatError(
+        `Unsupported encryption key type: ${pub.encryptionKeyType}`,
+      );
   }
 }
 
@@ -451,23 +493,26 @@ export class Identity extends Key {
     this.encryptionKeyType = encryptionKeyType;
     switch (signingKeyType) {
       case "dilithium":
-        this.signingKey = options?.keys?.signingKey ?? new DilithiumSigningKey("ml_dsa87", {
-          seed: options?.signingSeed,
-        });
+        this.signingKey = options?.keys?.signingKey ??
+          new DilithiumSigningKey("ml_dsa87", {
+            seed: options?.signingSeed,
+          });
         break;
       case "sphincs":
-        this.signingKey = options?.keys?.signingKey ?? new SphincsSigningKey("slh_dsa_sha2_256s", {
-          seed: options?.signingSeed,
-        });
+        this.signingKey = options?.keys?.signingKey ??
+          new SphincsSigningKey("slh_dsa_sha2_256s", {
+            seed: options?.signingSeed,
+          });
         break;
       default:
         throw new Error(`Unsupported signing key type: ${signingKeyType}`);
     }
     switch (encryptionKeyType) {
       case "kyber":
-        this.encryptionKey = options?.keys?.encryptionKey ?? new KyberEncryptionKey("ml_kem1024", {
-          seed: options?.encryptionSeed,
-        });
+        this.encryptionKey = options?.keys?.encryptionKey ??
+          new KyberEncryptionKey("ml_kem1024", {
+            seed: options?.encryptionSeed,
+          });
         break;
       default:
         throw new Error(
@@ -736,7 +781,9 @@ export class Identity extends Key {
       payload.contentNonce,
       contentKey,
     );
-    const parsed = parseStrictJson(new TextDecoder().decode(decryptedBytes)) as {
+    const parsed = parseStrictJson(
+      new TextDecoder().decode(decryptedBytes),
+    ) as {
       type?: string;
       message: string;
       signature: string;
@@ -845,13 +892,18 @@ export class Identity extends Key {
       };
 
       // Ensure the record is consistent with the current map entry
-      if (record.version !== 2 || record.path !== path || record.detail !== detail) {
+      if (
+        record.version !== 2 || record.path !== path || record.detail !== detail
+      ) {
         return null;
       }
 
       const { nonce, timestamp, signature } = record;
-      if (!Number.isSafeInteger(nonce) || nonce < 0 || !Number.isSafeInteger(timestamp) ||
-          typeof signature !== "string" || !signature.length) {
+      if (
+        !Number.isSafeInteger(nonce) || nonce < 0 ||
+        !Number.isSafeInteger(timestamp) ||
+        typeof signature !== "string" || !signature.length
+      ) {
         return null;
       }
 
@@ -882,11 +934,12 @@ export class Identity extends Key {
     }
   }
 
-  static VerifyDetails(details: Map<string, [string, string]>): boolean {
-    // check all the proofs are valid.
-    // ensure no nonce is repeated.
-    // ensure the timestamp of each proof is > the previous proof
-    // ensure the detail in the proof matches the detail in the map
+  static ValidateDetailsStructure(
+    details: Map<string, [string, string]>,
+  ): boolean {
+    // Validate shape and history only. Signature authentication needs an identity.
+    // Nonces are unique and timestamps cannot go backwards; equal timestamps
+    // are valid when several details are signed in one millisecond.
 
     // Collect parsed records so we can validate ordering by nonce/timestamp
     const records: { nonce: number; timestamp: number }[] = [];
@@ -953,11 +1006,11 @@ export class Identity extends Key {
       }
     }
 
-    // Ensure timestamps are strictly increasing when ordered by nonce
+    // Ensure timestamps are nondecreasing when ordered by nonce
     records.sort((a, b) => a.nonce - b.nonce);
     let lastTimestamp = -Infinity;
     for (const { timestamp } of records) {
-      if (timestamp <= lastTimestamp) {
+      if (timestamp < lastTimestamp) {
         return false;
       }
       lastTimestamp = timestamp;
@@ -966,8 +1019,14 @@ export class Identity extends Key {
     return true;
   }
 
+  /** @deprecated Structural validation only; use instance verifyDetails for signatures. */
+  static VerifyDetails(details: Map<string, [string, string]>): boolean {
+    return Identity.ValidateDetailsStructure(details);
+  }
+
   verifyDetails(): boolean {
-    return Identity.VerifyDetails(this.details);
+    return Identity.ValidateDetailsStructure(this.details) &&
+      [...this.details.keys()].every((path) => this.getDetail(path) !== null);
   }
 
   /**
@@ -1287,7 +1346,7 @@ export class Identity extends Key {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Storage Format (v2): Public data unencrypted, private keys encrypted
+  // Storage Format (v3): Public snapshot authenticated, private keys encrypted
   // ─────────────────────────────────────────────────────────────────────────
 
   /** Get the public portion of the identity (safe to store unencrypted) */
@@ -1328,15 +1387,16 @@ export class Identity extends Key {
 
   /** Convert to storage format with encrypted private keys */
   toStorageFormat(password: string): string {
+    const pub = this.publicData;
     const encrypted = AES.encrypt(
       password,
       this.privateStorageJson(),
-      identityStorageAad(),
+      getIdentityStorageAad(pub),
     );
     const storage: IdentityStorageFormat = {
       version: FILE_FORMAT_VERSIONS.identityStorage,
       protocolVersion: PROTOCOL_VERSION,
-      public: this.publicData,
+      public: pub,
       encrypted,
     };
     return JSON.stringify(storage, null, 2);
@@ -1344,16 +1404,17 @@ export class Identity extends Key {
 
   /** Store with a pre-derived AES key (mobile native Argon2 path). */
   toStorageFormatWithKey(key: Uint8Array, salt: Uint8Array): string {
+    const pub = this.publicData;
     const encrypted = AES.encryptWithKey(
       key,
       this.privateStorageJson(),
       salt,
-      identityStorageAad(),
+      getIdentityStorageAad(pub),
     );
     const storage: IdentityStorageFormat = {
       version: FILE_FORMAT_VERSIONS.identityStorage,
       protocolVersion: PROTOCOL_VERSION,
-      public: this.publicData,
+      public: pub,
       encrypted,
     };
     return JSON.stringify(storage, null, 2);
@@ -1390,7 +1451,7 @@ export class Identity extends Key {
       privateJson = AES.decryptWithKey(
         key,
         storage.encrypted,
-        identityStorageAad(),
+        getIdentityStorageAad(pub, storage.version),
       );
     } catch (e) {
       if (e instanceof DecryptionAuthError) throw e;
@@ -1399,7 +1460,7 @@ export class Identity extends Key {
         "Encrypted private identity data is invalid",
       );
     }
-    applyPrivateKeysFromJson(identity, pub, privateJson);
+    applyPrivateKeysFromJson(identity, pub, privateJson, key);
     return identity as PrivateIdentity;
   }
 
@@ -1425,7 +1486,7 @@ export class Identity extends Key {
         privateJson = AES.decrypt(
           password,
           storage.encrypted!,
-          identityStorageAad(),
+          getIdentityStorageAad(pub, storage.version),
         );
       } catch (e) {
         if (e instanceof DecryptionAuthError) throw e;

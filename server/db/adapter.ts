@@ -9,9 +9,10 @@ export abstract class DatabaseAdapter {
     params?: DatabaseQueryParams,
   ): Promise<T[]>;
   abstract close(): Promise<void>;
-  /** Serialize a graph write and commit its validation and changes atomically. */
+  /** Commit validation and writes atomically, serializing writers to a resource. */
   abstract writeTransaction<T>(
     operation: (db: DatabaseAdapter) => Promise<T>,
+    resource?: string,
   ): Promise<T>;
 }
 

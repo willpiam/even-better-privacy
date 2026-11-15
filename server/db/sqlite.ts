@@ -14,8 +14,9 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
   }
 
   execute(sql: string): Promise<void> {
-    return this.operations.run("connection", async () => {
+    return this.operations.run("connection", () => {
       this.db.exec(sql);
+      return Promise.resolve();
     });
   }
 
@@ -56,27 +57,28 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
   }
 
   close(): Promise<void> {
-    return this.operations.run("connection", async () => {
+    return this.operations.run("connection", () => {
       this.db.close();
+      return Promise.resolve();
     });
   }
 
   writeTransaction<T>(
     operation: (db: DatabaseAdapter) => Promise<T>,
+    _resource?: string,
   ): Promise<T> {
     return this.operations.run("connection", async () => {
       this.db.exec("BEGIN IMMEDIATE");
       const scope: DatabaseAdapter = {
-        execute: async (sql) => {
+        execute: (sql) => {
           this.db.exec(sql);
+          return Promise.resolve();
         },
         query: (sql, params) => this.queryDirect(sql, params),
-        close: async () => {
-          throw new Error("Cannot close a transaction connection");
-        },
-        writeTransaction: async () => {
-          throw new Error("Nested transactions are unsupported");
-        },
+        close: () =>
+          Promise.reject(new Error("Cannot close a transaction connection")),
+        writeTransaction: () =>
+          Promise.reject(new Error("Nested transactions are unsupported")),
       };
       try {
         const result = await operation(scope);
@@ -154,6 +156,9 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         UNIQUE(child_fingerprint)
       )
     `);
+
+    this.db.exec(`CREATE INDEX IF NOT EXISTS hierarchy_master_idx
+      ON hierarchy_certificates (master_fingerprint)`);
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS pending_hierarchy_proposals (

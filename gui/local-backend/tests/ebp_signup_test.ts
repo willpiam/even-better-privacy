@@ -1,6 +1,8 @@
 import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
 import { handleRequest } from "../routes.ts";
 import { initSecurity, setCsrfTokenForTest } from "../security.ts";
+import { Identity } from "../../../core/Identity.ts";
+import { hexToString } from "../../../core/Hex.ts";
 
 const TEST_TOKEN = "s".repeat(64);
 const PASSWORD = "Correct-Horse-Battery-9";
@@ -178,6 +180,31 @@ Deno.test({
       assertEquals(orderProof.path, "ebp-mail::payment-order");
       assertEquals(orderProof.detail, JSON.stringify(["alice@test.pqpost.com", "ethereum-sepolia", "USDC"]));
       assertEquals(orderProof.nonce, recoveryProof.nonce + 1);
+    });
+  },
+});
+
+Deno.test({
+  name: "concurrent payment proofs and detail changes preserve state and distinct nonces",
+  permissions: { read: true, write: true, env: true, net: true, sys: ["hostname"] },
+  fn: async () => {
+    await withEnv(async (home, _signups, _setStatus, payments) => {
+      await createIdentity(home);
+      const common = { home, server: SERVER, identity: "wizard", password: PASSWORD, username: "Alice" };
+      const unlocked = await handleRequest(req("POST", "/api/v1/identity/unlock", common));
+      assertEquals(unlocked.status, 200);
+      const responses = await Promise.all([
+        handleRequest(req("POST", "/api/v1/mail/ebp-payment/recover", common)),
+        handleRequest(req("POST", "/api/v1/mail/ebp-payment/order", { ...common, network: "ethereum-sepolia", asset: "USDC" })),
+        handleRequest(req("POST", "/api/v1/detail", { home, identity: "wizard", path: "name", detail: "Alice" })),
+      ]);
+      assertEquals(responses.map(response => response.status), [200, 200, 200]);
+      const identity = Identity.fromStorageFormat(await Deno.readTextFile(`${home}/.ebp/wizard.identity.json`), PASSWORD);
+      assertEquals(identity.getDetail("name"), "Alice");
+      assertEquals(identity.detailsNonce, 3);
+      const nonces = payments.map(payment => JSON.parse(hexToString(String(payment.proof))).nonce);
+      nonces.push(JSON.parse(hexToString(identity.details.get("name")![1])).nonce);
+      assertEquals(nonces.sort(), [0, 1, 2]);
     });
   },
 });

@@ -1,5 +1,6 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import {Buffer} from 'buffer';
+import {NativeModules} from 'react-native';
 import {Identity} from '../../core/Identity';
 import {
   persistIdentity,
@@ -11,6 +12,15 @@ import {
 import {unlockMailWithIdentityPassword} from '../src/services/mail/accountStore';
 
 const mockFiles = new Map<string, string>();
+jest.mock('react-native', () => ({
+  NativeModules: {
+    EbpAtomicFile: {
+      write: jest.fn(async (path: string, content: string) => {
+        mockFiles.set(path, content);
+      }),
+    },
+  },
+}));
 jest.mock('react-native-fs', () => ({
   DocumentDirectoryPath: '/documents',
   exists: jest.fn(async () => true),
@@ -41,6 +51,28 @@ jest.mock('../src/services/mail/accountStore', () => ({
 }));
 
 describe('mobile identity storage passwords and mutations', () => {
+  it('preserves the existing identity when atomic replacement fails', async () => {
+    const identity = new Identity('dilithium', 'kyber');
+    await persistIdentity({
+      name: 'atomic',
+      password: 'password',
+      identity,
+      overwrite: true,
+    });
+    await unlockIdentity('atomic', 'password');
+    const path = '/documents/ebp/atomic.identity.json';
+    const original = mockFiles.get(path);
+    NativeModules.EbpAtomicFile.write.mockRejectedValueOnce(
+      new Error('disk full'),
+    );
+    await expect(
+      mutateIdentityForUse('atomic', undefined, current =>
+        current.attachDetail('name', 'Alice'),
+      ),
+    ).rejects.toThrow('disk full');
+    expect(mockFiles.get(path)).toBe(original);
+    expect((await loadIdentityUnlocked('atomic')).details.size).toBe(0);
+  });
   it('creates, loads, and unlocks with exact password bytes', async () => {
     const identity = new Identity('dilithium', 'kyber');
     const password = ' Exact-Password-42! ';

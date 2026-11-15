@@ -243,7 +243,7 @@ Deno.test("Identity: VerifyDetails detects non-increasing timestamps", () => {
 	const emailRecord = JSON.parse(hexToString(emailProof));
 	const nameRecord = JSON.parse(hexToString(nameProof));
 
-	nameRecord.timestamp = emailRecord.timestamp;
+	nameRecord.timestamp = emailRecord.timestamp - 1;
 
 	const corruptedNameProof = stringToHex(JSON.stringify(nameRecord));
 	detailsMap.set("name", [nameDetail, corruptedNameProof]);

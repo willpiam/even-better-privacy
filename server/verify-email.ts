@@ -1,12 +1,18 @@
-import nodemailer from "npm:nodemailer";
-import { readJsonBody, readTextBody, validateStringLength, LIMITS } from "./body.ts";
-import { json, escapeHtml } from "./response.ts";
+import nodemailer from "nodemailer";
+import {
+  LIMITS,
+  readJsonBody,
+  readTextBody,
+  validateStringLength,
+} from "./body.ts";
+import { escapeHtml, json } from "./response.ts";
 import { buildSecurityHeaders } from "./cors.ts";
 import { computeTokenHash, toHex } from "./crypto.ts";
 import {
+  consumeDetailVerification,
   getDetailByVerificationToken,
   getDetailRecord,
-  updateDetailVerification,
+  issueDetailVerification,
 } from "./db/index.ts";
 import type { DatabaseAdapter } from "./db/index.ts";
 import { isValidFingerprintBech32 } from "../core/Fingerprint.ts";
@@ -16,11 +22,13 @@ import { sha256Hex } from "../core/MessageHash.ts";
 // Email Verification Configuration
 // =============================================================================
 
-export const EMAIL_VERIFICATION_TTL_MS =
-  Number(Deno.env.get("EMAIL_VERIFICATION_TTL_MS") ?? String(24 * 60 * 60 * 1000));
+export const EMAIL_VERIFICATION_TTL_MS = Number(
+  Deno.env.get("EMAIL_VERIFICATION_TTL_MS") ?? String(24 * 60 * 60 * 1000),
+);
 
 export const EMAIL_VERIFICATION_STORE_PLAINTEXT =
-  (Deno.env.get("EMAIL_VERIFICATION_STORE_PLAINTEXT") ?? "false").toLowerCase() === "true";
+  (Deno.env.get("EMAIL_VERIFICATION_STORE_PLAINTEXT") ?? "false")
+    .toLowerCase() === "true";
 
 export const VERIFY_EMAIL_PATHS = ["email", "opaque::email"] as const;
 export type VerifyEmailPath = (typeof VERIFY_EMAIL_PATHS)[number];
@@ -36,7 +44,9 @@ export function generateVerificationToken(): string {
 }
 
 export function isLocalHostname(hostname: string): boolean {
-  if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1") return true;
+  if (
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+  ) return true;
   return hostname.endsWith(".localhost");
 }
 
@@ -50,17 +60,22 @@ export function getPublicBaseUrl(req: Request): string | null {
   return null;
 }
 
-export async function sendVerificationEmail(to: string, link: string, fingerprint: string): Promise<void> {
+export async function sendVerificationEmail(
+  to: string,
+  link: string,
+  fingerprint: string,
+): Promise<void> {
   const host = Deno.env.get("SMTP_HOST");
   const from = Deno.env.get("SMTP_FROM");
   if (!host || !from) {
-    console.log(`[email-verification] ${to}: ${link} (fingerprint: ${fingerprint})`);
+    console.log(
+      `[email-verification] ${to}: ${link} (fingerprint: ${fingerprint})`,
+    );
     return;
   }
 
   const port = Number(Deno.env.get("SMTP_PORT") ?? "587");
-  const secure =
-    (Deno.env.get("SMTP_SECURE") ?? "").toLowerCase() === "true" ||
+  const secure = (Deno.env.get("SMTP_SECURE") ?? "").toLowerCase() === "true" ||
     port === 465;
   const user = Deno.env.get("SMTP_USER") ?? undefined;
   const pass = Deno.env.get("SMTP_PASS") ?? undefined;
@@ -77,8 +92,7 @@ export async function sendVerificationEmail(to: string, link: string, fingerprin
     from,
     to,
     subject: "Verify your email",
-    text:
-      `Please verify your email by visiting this link:\n\n${link}\n\n` +
+    text: `Please verify your email by visiting this link:\n\n${link}\n\n` +
       `Identity fingerprint:\n${fingerprint}\n\n` +
       `If you did not request this, you can ignore this message.`,
   });
@@ -89,13 +103,18 @@ export function wantsJson(req: Request): boolean {
   return accept.includes("application/json");
 }
 
-export function html(body: string, status = 200, corsHeaders?: HeadersInit): Response {
+export function html(
+  body: string,
+  status = 200,
+  corsHeaders?: HeadersInit,
+): Response {
   const securityHeaders = buildSecurityHeaders();
   // F-SERVER-01: strong CSP on verify-email HTML so an attacker who finds a
   // future escape path still cannot execute script. `unsafe-inline` on
   // `style-src` is intentional because the page uses none today and adding
   // it is cheap; no inline <style> is needed but future tweaks won't break.
-  const csp = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+  const csp =
+    "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
   return new Response(body, {
     status,
     headers: {
@@ -164,41 +183,69 @@ export function renderVerifyEmailPage(options: {
 </html>`;
 }
 
-export async function readVerificationTokenFromRequest(req: Request): Promise<{ ok: true; token: string } | { ok: false; error: string; status: number }> {
+export async function readVerificationTokenFromRequest(
+  req: Request,
+): Promise<
+  { ok: true; token: string } | { ok: false; error: string; status: number }
+> {
   const contentType = req.headers.get("content-type") ?? "";
   if (contentType.includes("application/json")) {
     const bodyResult = await readJsonBody<Record<string, unknown>>(req);
     if (!bodyResult.ok) {
       return { ok: false, error: bodyResult.error, status: bodyResult.status };
     }
-    const tokenCheck = validateStringLength(bodyResult.data.token, "token", LIMITS.verificationToken);
-    if (!tokenCheck.ok) return { ok: false, error: tokenCheck.error, status: 400 };
+    const tokenCheck = validateStringLength(
+      bodyResult.data.token,
+      "token",
+      LIMITS.verificationToken,
+    );
+    if (!tokenCheck.ok) {
+      return { ok: false, error: tokenCheck.error, status: 400 };
+    }
     return { ok: true, token: tokenCheck.value };
   }
 
   const bodyResult = await readTextBody(req);
   if (!bodyResult.ok) return bodyResult;
   const params = new URLSearchParams(bodyResult.data);
-  const tokenCheck = validateStringLength(params.get("token"), "token", LIMITS.verificationToken);
-  if (!tokenCheck.ok) return { ok: false, error: tokenCheck.error, status: 400 };
+  const tokenCheck = validateStringLength(
+    params.get("token"),
+    "token",
+    LIMITS.verificationToken,
+  );
+  if (!tokenCheck.ok) {
+    return { ok: false, error: tokenCheck.error, status: 400 };
+  }
   return { ok: true, token: tokenCheck.value };
 }
 
-export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter): Promise<Response> {
+export async function handleRequestVerifyEmail(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
   const bodyResult = await readJsonBody<Record<string, unknown>>(req);
   if (!bodyResult.ok) {
     return json({ error: bodyResult.error }, bodyResult.status);
   }
   const payload = bodyResult.data;
 
-  const fingerprintCheck = validateStringLength(payload.fingerprint, "fingerprint", LIMITS.fingerprint);
+  const fingerprintCheck = validateStringLength(
+    payload.fingerprint,
+    "fingerprint",
+    LIMITS.fingerprint,
+  );
   if (!fingerprintCheck.ok) return json({ error: fingerprintCheck.error }, 400);
   const fingerprint = fingerprintCheck.value;
   if (!isValidFingerprintBech32(fingerprint)) {
     return json({ error: "fingerprint must be valid bech32" }, 400);
   }
 
-  const detailCheck = validateStringLength(payload.detail, "detail", LIMITS.detail, true);
+  const detailCheck = validateStringLength(
+    payload.detail,
+    "detail",
+    LIMITS.detail,
+    true,
+  );
   if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
   const providedDetail = detailCheck.value;
 
@@ -240,15 +287,22 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
   const token = generateVerificationToken();
   const tokenHash = computeTokenHash(token);
   const now = Date.now();
-  await updateDetailVerification(db, {
+  const issued = await issueDetailVerification(db, {
     fingerprint,
     path,
-    verifiedAt: null,
-    verificationToken: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
-    verificationTokenHash: tokenHash,
-    verificationExpiresAt: now + EMAIL_VERIFICATION_TTL_MS,
-    verificationSentAt: now,
+    detail: record.detail,
+    proof: record.proof,
+    token: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
+    tokenHash,
+    expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+    sentAt: now,
   });
+  if (!issued) {
+    return json(
+      { error: "email detail changed; request verification again" },
+      409,
+    );
+  }
 
   const baseUrl = getPublicBaseUrl(req);
   if (!baseUrl) {
@@ -257,7 +311,9 @@ export async function handleRequestVerifyEmail(req: Request, db: DatabaseAdapter
 
   // F-SERVER-09: keep tokens out of request URLs/logs by placing them in the
   // fragment; fragments are processed client-side and never sent to the server.
-  const link = `${baseUrl}/api/v1/verify-email#token=${encodeURIComponent(token)}`;
+  const link = `${baseUrl}/api/v1/verify-email#token=${
+    encodeURIComponent(token)
+  }`;
   try {
     await sendVerificationEmail(mailTo, link, fingerprint);
   } catch (err) {
@@ -277,51 +333,68 @@ export function handleVerifyEmailPage(url: URL): Response {
   }));
 }
 
-export async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter): Promise<Response> {
+export async function handleVerifyEmailConfirm(
+  req: Request,
+  db: DatabaseAdapter,
+): Promise<Response> {
   const tokenResult = await readVerificationTokenFromRequest(req);
   if (!tokenResult.ok) {
     return wantsJson(req)
       ? json({ error: tokenResult.error }, tokenResult.status)
-      : html(renderVerifyEmailPage({
-        title: "Email verification failed",
-        message: tokenResult.error,
-      }), tokenResult.status);
+      : html(
+        renderVerifyEmailPage({
+          title: "Email verification failed",
+          message: tokenResult.error,
+        }),
+        tokenResult.status,
+      );
   }
   const token = tokenResult.token;
   const tokenHash = computeTokenHash(token);
 
   const record = await getDetailByVerificationToken(db, tokenHash);
   if (!record) {
-    return wantsJson(req)
-      ? json({ error: "token not found" }, 404)
-      : html(renderVerifyEmailPage({
+    return wantsJson(req) ? json({ error: "token not found" }, 404) : html(
+      renderVerifyEmailPage({
         title: "Email verification failed",
         message: "Token not found.",
-      }), 404);
+      }),
+      404,
+    );
   }
   if (!isVerifyEmailPath(record.path)) {
     return wantsJson(req)
       ? json({ error: "token not valid for email verification" }, 400)
-      : html(renderVerifyEmailPage({
-        title: "Email verification failed",
-        message: "Token not valid for email verification.",
-      }), 400);
+      : html(
+        renderVerifyEmailPage({
+          title: "Email verification failed",
+          message: "Token not valid for email verification.",
+        }),
+        400,
+      );
   }
   if (record.revoked_at !== null) {
     return wantsJson(req)
       ? json({ error: "email detail is revoked" }, 409)
-      : html(renderVerifyEmailPage({
-        title: "Email verification failed",
-        message: "Email detail is revoked.",
-      }), 409);
+      : html(
+        renderVerifyEmailPage({
+          title: "Email verification failed",
+          message: "Email detail is revoked.",
+        }),
+        409,
+      );
   }
-  if (record.verification_expires_at !== null && Date.now() > record.verification_expires_at) {
-    return wantsJson(req)
-      ? json({ error: "token expired" }, 400)
-      : html(renderVerifyEmailPage({
+  if (
+    record.verification_expires_at !== null &&
+    Date.now() > record.verification_expires_at
+  ) {
+    return wantsJson(req) ? json({ error: "token expired" }, 400) : html(
+      renderVerifyEmailPage({
         title: "Email verification failed",
         message: "Token expired.",
-      }), 400);
+      }),
+      400,
+    );
   }
   if (record.verified_at !== null) {
     return wantsJson(req)
@@ -333,15 +406,17 @@ export async function handleVerifyEmailConfirm(req: Request, db: DatabaseAdapter
   }
 
   const now = Date.now();
-  await updateDetailVerification(db, {
-    fingerprint: record.fingerprint,
-    path: record.path,
-    verifiedAt: now,
-    verificationToken: null,
-    verificationTokenHash: null,
-    verificationExpiresAt: null,
-    verificationSentAt: record.verification_sent_at,
-  });
+  if (!await consumeDetailVerification(db, tokenHash, now)) {
+    return wantsJson(req)
+      ? json({ error: "token is no longer valid" }, 409)
+      : html(
+        renderVerifyEmailPage({
+          title: "Email verification failed",
+          message: "The email claim changed or the token is no longer valid.",
+        }),
+        409,
+      );
+  }
 
   return wantsJson(req)
     ? json({ ok: true, status: "verified" })

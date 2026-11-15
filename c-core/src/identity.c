@@ -1,5 +1,6 @@
 #include "ebp_core.h"
 #include "json_compat.h"
+#include "jcs.h"
 #include <jansson.h>
 #include <limits.h>
 #include <stdio.h>
@@ -11,6 +12,27 @@
 
 #define PROTOCOL_VERSION "0.1.1"
 static const uint8_t identity_aad[] = "ebp:identity-storage:v2";
+/* v3 binds the complete canonical public snapshot; v2 remains readable for migration. */
+static uint8_t *storage_aad(const json_t *pub, int version, size_t *len) {
+    static const char prefix[] = "ebp:identity-storage:v3:";
+    char *canonical = NULL; uint8_t *out = NULL; size_t n;
+    *len = 0;
+    if (version == 2) {
+        *len = sizeof(identity_aad)-1;
+        out = malloc(*len);
+        if (out) memcpy(out,identity_aad,*len);
+        return out;
+    }
+    canonical = ebp_jcs_dump(pub);
+    if (!canonical) return NULL;
+    n = strlen(canonical);
+    if (n <= SIZE_MAX-(sizeof(prefix)-1)) {
+        *len = sizeof(prefix)-1+n;
+        out = malloc(*len);
+        if (out) { memcpy(out,prefix,sizeof(prefix)-1); memcpy(out+sizeof(prefix)-1,canonical,n); }
+    }
+    free(canonical); return out;
+}
 struct ebp_identity {
     int sphincs;
     int sign_algorithm, kem_algorithm;
@@ -362,7 +384,7 @@ int ebp_identity_store_with_key(const ebp_identity *id, const uint8_t key[32], c
                                 uint8_t **out, size_t *out_len) {
     char *sign=NULL,*kem=NULL,*private_text=NULL,*encoded=NULL;
     json_t *private_obj=NULL,*storage=NULL;
-    uint8_t *cipher=NULL; size_t cipher_len=0; int ok=0;
+    uint8_t *cipher=NULL,*aad=NULL; size_t cipher_len=0,aad_len=0; int ok=0;
     if (!out || !out_len) return 0;
     *out=NULL; *out_len=0;
     if (!ebp_identity_is_private(id) || !key || !salt) return 0;
@@ -372,9 +394,10 @@ int ebp_identity_store_with_key(const ebp_identity *id, const uint8_t key[32], c
     private_obj=json_pack("{s:s,s:s,s:s,s:s}","signingKey",sign,"encryptionKey",kem,
                           "signingKeyType",id->sphincs?"sphincs":"dilithium","encryptionKeyType","kyber");
     if (!private_obj || !(private_text=json_dumps(private_obj,JSON_COMPACT | JSON_ENSURE_ASCII)) ||
-        !ebp_aes_encrypt(key,salt,(const uint8_t *)private_text,strlen(private_text),identity_aad,sizeof(identity_aad)-1,&cipher,&cipher_len) ||
+        !(aad=storage_aad(id->public_data,3,&aad_len)) ||
+        !ebp_aes_encrypt(key,salt,(const uint8_t *)private_text,strlen(private_text),aad,aad_len,&cipher,&cipher_len) ||
         !(encoded=b64encode(cipher,cipher_len))) goto done;
-    storage=json_pack("{s:i,s:s,s:O,s:s}","version",2,"protocolVersion",PROTOCOL_VERSION,"public",id->public_data,"encrypted",encoded);
+    storage=json_pack("{s:i,s:s,s:O,s:s}","version",3,"protocolVersion",PROTOCOL_VERSION,"public",id->public_data,"encrypted",encoded);
     if (!storage || !dump_json(storage,out,out_len)) goto done;
     ok=1;
 done:
@@ -382,7 +405,7 @@ done:
     if (kem) ebp_secure_free(kem,strlen(kem));
     if (private_text) ebp_secure_free(private_text,strlen(private_text));
     if (private_obj) { wipe_json_strings(private_obj); json_decref(private_obj); }
-    json_decref(storage); free(encoded); free(cipher); return ok;
+    json_decref(storage); free(encoded); free(cipher); free(aad); return ok;
 }
 int ebp_identity_store(const ebp_identity *id, const uint8_t *password, size_t password_len,
                        uint8_t **out, size_t *out_len) {
@@ -436,23 +459,23 @@ done:
 static int identity_load_internal(const uint8_t *data, size_t len, const uint8_t *password, size_t password_len,
                                   const uint8_t *provided_key, int unlock, ebp_identity **out) {
     json_error_t error; json_t *root=NULL,*private_obj=NULL,*pub,*version;
-    ebp_identity *id=NULL; uint8_t *cipher=NULL,*plain=NULL, key[32]={0};
-    size_t cipher_len=0,plain_len=0; const char *encoded; int ok=0;
+    ebp_identity *id=NULL; uint8_t *cipher=NULL,*plain=NULL,*aad=NULL, key[32]={0};
+    size_t cipher_len=0,plain_len=0,aad_len=0; const char *encoded; int ok=0;
     if (!out) return 0;
     *out=NULL;
     if (!data || !len || (unlock != 0 && unlock != 1) || (!password && password_len)) return 0;
     root=json_loadb((const char *)data,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(root)) goto done;
     version=json_object_get(root,"version"); pub=json_object_get(root,"public"); encoded=strfield(root,"encrypted");
-    if (!ebp_json_is_safe_integer(version) || ebp_json_safe_integer(version)!=2 || !equals(strfield(root,"protocolVersion"),PROTOCOL_VERSION) ||
+    if (!ebp_json_is_safe_integer(version) || (ebp_json_safe_integer(version)!=2 && ebp_json_safe_integer(version)!=3) || !equals(strfield(root,"protocolVersion"),PROTOCOL_VERSION) ||
         !json_is_object(pub) || !encoded) goto done;
     id=calloc(1,sizeof(*id)); if (!id || !(id->public_data=json_deep_copy(pub)) || !validate_public(id) || !id->sign_pub || !id->kem_pub) goto done;
     if (unlock) {
         if (!b64decode(encoded,&cipher,&cipher_len) || cipher_len < 45 || cipher[0] != 4) goto done;
         if (provided_key) memcpy(key,provided_key,sizeof(key));
         else if (!ebp_derive_storage_key(password,password_len,cipher+1,key)) goto done;
-        if (
-            !ebp_aes_decrypt(key,cipher,cipher_len,identity_aad,sizeof(identity_aad)-1,&plain,&plain_len)) goto done;
+        aad=storage_aad(pub,(int)ebp_json_safe_integer(version),&aad_len);
+        if (!aad || !ebp_aes_decrypt(key,cipher,cipher_len,aad,aad_len,&plain,&plain_len)) goto done;
         private_obj=json_loadb((const char *)plain,plain_len,JSON_REJECT_DUPLICATES,&error);
         if (!json_is_object(private_obj) ||
             !equals(strfield(private_obj,"signingKeyType"),id->sphincs?"sphincs":"dilithium") ||
@@ -463,7 +486,7 @@ static int identity_load_internal(const uint8_t *data, size_t len, const uint8_t
     *out=id; id=NULL; ok=1;
 done:
     if (private_obj) { wipe_json_strings(private_obj); json_decref(private_obj); }
-    json_decref(root); free(cipher); ebp_secure_free(plain,plain_len);
+    json_decref(root); free(cipher); free(aad); ebp_secure_free(plain,plain_len);
     OPENSSL_cleanse(key,sizeof(key)); ebp_identity_free(id); return ok;
 }
 int ebp_identity_load(const uint8_t *data, size_t len, const uint8_t *password, size_t password_len,

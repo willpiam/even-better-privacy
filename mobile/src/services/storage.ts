@@ -1,5 +1,6 @@
 import {clearMailDataCache} from './mail/mailCache';
 import RNFS from 'react-native-fs';
+import {writeFileAtomic} from './atomicFile';
 import {DecryptionAuthError} from '../../../core/AES';
 import {AES, Identity, randomBytes} from '../ebpCore';
 import {deriveIdentityKey} from './argon2';
@@ -55,7 +56,7 @@ async function writeIdentityStorage(
   const key = await deriveIdentityKey(passwordBytes(password), salt);
   try {
     const storageData = identity.toStorageFormatWithKey(key, salt);
-    await RNFS.writeFile(path, storageData, 'utf8');
+    await writeFileAtomic(path, storageData);
     return storageData;
   } finally {
     key.fill(0);
@@ -283,7 +284,7 @@ export async function saveIdentityUnlocked(
     material.key,
     material.salt,
   );
-  await RNFS.writeFile(identityPath(normalized), storageData, 'utf8');
+  await writeFileAtomic(identityPath(normalized), storageData);
 }
 
 /** Password path for creation flows; otherwise the unlock session. */
@@ -347,7 +348,7 @@ export async function importIdentity(params: {
   if (exists && !params.overwrite) {
     throw new Error('Identity already exists; enable overwrite to replace');
   }
-  await RNFS.writeFile(path, params.storageJson, 'utf8');
+  await writeFileAtomic(path, params.storageJson);
   return publicDataToMeta(name, publicData);
 }
 

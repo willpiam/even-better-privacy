@@ -359,7 +359,11 @@ switch between them, inspect fingerprints and details, exchange signed/encrypted
 messages with contacts, and encrypt/decrypt full file payloads.
 
 Private identity files use Argon2id and metadata-bound AES-GCM (AES format v4).
-Older identity formats are unsupported. See the [legacy inventory](docs/legacy-inventory.md)
+Identity storage v3 authenticates the complete public snapshot, including details,
+revocations, counters, and HD provenance. Storage v2 remains readable for recovery
+and is upgraded on the next save; its public metadata was not authenticated.
+Keep a trusted backup when recovering a v2 file. Older AES formats are unsupported.
+See the [legacy inventory](docs/legacy-inventory.md)
 for the removed compatibility paths and current formats retained.
 
 - create and switch identities (`ebp generate [name]`, `ebp identities`,

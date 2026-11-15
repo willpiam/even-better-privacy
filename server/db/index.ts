@@ -205,6 +205,58 @@ export async function updateDetailVerification(db: DatabaseAdapter, record: {
   );
 }
 
+/** Issue a token only for the exact signed claim that was inspected. */
+export async function issueDetailVerification(
+  db: DatabaseAdapter,
+  record: {
+    fingerprint: string;
+    path: string;
+    detail: string;
+    proof: string;
+    token: string | null;
+    tokenHash: string;
+    expiresAt: number;
+    sentAt: number;
+  },
+): Promise<boolean> {
+  const rows = await db.query<[number]>(
+    `UPDATE details SET verified_at = NULL, verification_token = ?,
+       verification_token_hash = ?, verification_expires_at = ?, verification_sent_at = ?
+     WHERE identity_fingerprint = ? AND path = ? AND detail = ? AND proof = ?
+       AND revoked_at IS NULL AND verified_at IS NULL
+     RETURNING id`,
+    [
+      record.token,
+      record.tokenHash,
+      record.expiresAt,
+      record.sentAt,
+      record.fingerprint,
+      record.path,
+      record.detail,
+      record.proof,
+    ],
+  );
+  return rows.length === 1;
+}
+
+/** Consume a live token and verify its claim in one database operation. */
+export async function consumeDetailVerification(
+  db: DatabaseAdapter,
+  tokenHash: string,
+  now: number,
+): Promise<boolean> {
+  const rows = await db.query<[number]>(
+    `UPDATE details SET verified_at = ?, verification_token = NULL,
+       verification_token_hash = NULL, verification_expires_at = NULL
+     WHERE verification_token_hash = ? AND revoked_at IS NULL AND verified_at IS NULL
+       AND (verification_expires_at IS NULL OR verification_expires_at >= ?)
+       AND path IN ('email', 'opaque::email')
+     RETURNING id`,
+    [now, tokenHash, now],
+  );
+  return rows.length === 1;
+}
+
 export async function getDetailByVerificationToken(
   db: DatabaseAdapter,
   tokenHash: string,
@@ -597,11 +649,12 @@ export async function insertPendingProposal(db: DatabaseAdapter, record: {
   context: string;
   expiry: number;
   createdAt: number;
-}): Promise<void> {
-  await db.query(
+}): Promise<boolean> {
+  const rows = await db.query<[number]>(
     `INSERT INTO pending_hierarchy_proposals (
        master_fingerprint, child_fingerprint, proposer_fingerprint, certificate, context, expiry, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (master_fingerprint, child_fingerprint) DO NOTHING RETURNING id`,
     [
       record.masterFingerprint,
       record.childFingerprint,
@@ -612,6 +665,7 @@ export async function insertPendingProposal(db: DatabaseAdapter, record: {
       record.createdAt,
     ],
   );
+  return rows.length === 1;
 }
 
 export async function getPendingProposal(

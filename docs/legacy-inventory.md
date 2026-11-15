@@ -1,9 +1,12 @@
 # Legacy and compatibility inventory
 
-This project has no deployed users to migrate. Unsupported data is rejected;
-there is no automatic upgrade path. An older identity must be replaced with a
-new identity. Keep a backup before deliberately discarding local development
-data.
+Unsupported data is rejected. Identity storage v2 with current AES v4 ciphertext
+is the one supported recovery format: loading it preserves keys and state, and
+the next save writes authenticated identity storage v3. V2 public metadata was
+not authenticated, so use a trusted copy for recovery. V3 binds its entire public
+snapshot to the ciphertext; changing the version to v2 does not bypass that
+authentication. Older AES formats remain unsupported. Keep a backup before
+deliberately discarding local development data.
 
 ## Removed
 
@@ -34,7 +37,7 @@ payload reader validates its current format tag.
 | Protocol version checks                          | These validate current protocol interchange and reject unsupported versions; private identity storage requires the current protocol version. |
 | Cross-client compatibility tests                 | CLI, GUI, mobile, website, C and Python interoperability is active functionality, not an older-format fallback.                              |
 | PBKDF2 for the current mail vault and BIP39      | These are separate, current formats. Removing old identity PBKDF2 does not change mail-vault or mnemonic key derivation.                     |
-| Native C and Python identity readers             | They already require the current identity/AES formats; no compatibility reader was needed or added.                                          |
+| Native C and Python identity readers             | Like TypeScript, they write authenticated v3 storage and accept v2/AES-v4 storage for recovery and upgrade on save.                            |
 | Old-format rejection tests                       | Historical inputs remain useful regression cases, but production code cannot create or accept those old formats.                             |
 | Optional verification-token debug storage        | Local tests can inspect a generated token; confirmation still requires its stored hash. Plaintext-only records are unsupported.              |
 | Historical audit/wiki/planning documents         | These describe past behavior and findings; they are not runtime support.                                                                     |

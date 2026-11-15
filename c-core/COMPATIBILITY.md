@@ -20,7 +20,7 @@ The shared TypeScript application logic in `common/` is outside this port.
 | HD account derivation | Account seed derivation implemented | Both profiles and account paths compared with TypeScript |
 | Mnemonics | Entropy, validation, generation and seed derivation implemented | Existing vectors, supported entropy sizes and Unicode normalization compared with TypeScript |
 | HD path strings | Five-segment path parsing, formatting, node derivation and identity creation implemented | Named, numeric, hardened, whitespace and invalid paths compared with TypeScript |
-| Identity and storage | Public/private loading, public export options, password- and derived-key v2 storage, and exposed signing/KEM variants implemented | Identity profiles, variants, signatures and encrypted storage exchanged with TypeScript |
+| Identity and storage | Public/private loading, public export options, password- and derived-key v3 storage, v2 recovery, and exposed signing/KEM variants implemented | Identity profiles, variants, signatures and encrypted storage exchanged with TypeScript |
 | Detail proofs | Creation and verification implemented for safe integer nonces and timestamps | Current proofs exchanged with TypeScript, including Unicode/control characters and tamper rejection |
 | Identity details | Signed detail attachment and verified retrieval implemented | Details attached by each implementation survive storage and verify in the other |
 | Revocations | Current certificate creation, verification and identity state changes implemented | Certificates and state exchanged with TypeScript |
@@ -45,8 +45,10 @@ reports the OpenSSL version used by the C library.
 
 Public imports may omit one public key if its hash is supplied; verification
 requires the signing key and encryption requires the encryption key.
-Identity storage accepts the current protocol version `0.1.1` and v2 identity
-storage containing v4 ciphertext. It rejects older formats, duplicate JSON
+Identity storage writes v3 with the current protocol version `0.1.1` and v4 AES
+ciphertext. Its AAD is `ebp:identity-storage:v3:` followed by the RFC 8785 canonical
+JSON of the complete public snapshot. V2 storage remains readable for recovery
+and upgrades on save; its public metadata is unauthenticated. It rejects older AES formats, duplicate JSON
 keys, mismatched fingerprints, and private keys that do not match the public
 metadata. The shared strict JSON contract rejects duplicate keys, object keys
 containing embedded NUL, unpaired Unicode surrogates and non-finite numbers.
