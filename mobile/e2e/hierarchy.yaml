@@ -19,18 +19,7 @@ env:
 - copyTextFrom:
     id: "identity-fingerprint"
 - evalScript: ${output.masterFp = maestro.copiedText}
-- tapOn:
-    id: "identity-password"
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
-- tapOn:
-    id: "identity-publish"
-- extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
-    timeout: 120000
-- assertVisible:
-    text: "Published.*"
+- runFlow: helpers/publish-identity.yaml
 - back
 
 # --- Child identity ---
@@ -42,18 +31,7 @@ env:
 - copyTextFrom:
     id: "identity-fingerprint"
 - evalScript: ${output.childFp = maestro.copiedText}
-- tapOn:
-    id: "identity-password"
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
-- tapOn:
-    id: "identity-publish"
-- extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
-    timeout: 120000
-- assertVisible:
-    text: "Published.*"
+- runFlow: helpers/publish-identity.yaml
 - back
 
 # --- Propose as master ---

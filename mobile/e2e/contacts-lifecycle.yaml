@@ -21,20 +21,13 @@ env:
 - copyTextFrom:
     id: "identity-fingerprint"
 - evalScript: ${output.fp = maestro.copiedText}
-- tapOn:
-    id: "identity-password"
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
-- tapOn:
-    id: "identity-publish"
-- extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
-    timeout: 120000
-- assertVisible:
-    text: "Published.*"
+- runFlow: helpers/publish-identity.yaml
 
-# Emergency certificate before export (avoids a huge JSON field pushing UI around)
+# Export and backup is a focused screen.
+- tapOn:
+    id: "identity-open-export"
+
+# Emergency certificate before public export.
 - scrollUntilVisible:
     element:
       id: "identity-emergency-cert"
@@ -122,6 +115,7 @@ env:
 - tapOn:
     id: "tab-identities"
 - back
+- back
 - extendedWaitUntil:
     visible:
       id: "identity-row-${IDENTITY_NAME}"
@@ -132,6 +126,8 @@ env:
     visible:
       id: "identity-fingerprint"
     timeout: 15000
+- tapOn:
+    id: "identity-open-security"
 - scrollUntilVisible:
     element:
       id: "identity-delete"

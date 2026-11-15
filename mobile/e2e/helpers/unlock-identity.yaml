@@ -1,0 +1,12 @@
+appId: com.mobile
+---
+- runFlow: dismiss-autofill.yaml
+- extendedWaitUntil:
+    visible:
+      id: "password-modal-input"
+    timeout: 15000
+- tapOn:
+    id: "password-modal-input"
+- inputText: ${IDENTITY_PASSWORD}
+- tapOn:
+    id: "password-modal-submit"

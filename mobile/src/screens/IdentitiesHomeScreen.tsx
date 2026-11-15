@@ -1,7 +1,19 @@
-import React, {useCallback, useState} from 'react';
-import {FlatList, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useState} from 'react';
+import {
+  BackHandler,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
-import {pick, keepLocalCopy} from '@react-native-documents/picker';
+import {
+  pick,
+  keepLocalCopy,
+  errorCodes,
+  isErrorWithCode,
+} from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
@@ -35,6 +47,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   );
   const [serverUrl, setServerUrl] = useState<string>('');
   const [status, setStatus] = useState('');
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const refresh = useCallback(async () => {
     const [list, current, server] = await Promise.all([
@@ -50,20 +63,39 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   useFocusEffect(
     useCallback(() => {
       refresh();
+      return () => setMenuOpen(false);
     }, [refresh]),
   );
+
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        setMenuOpen(false);
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [menuOpen]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <Text
+        <Pressable
+          testID="identities-add"
+          accessibilityRole="button"
+          accessibilityLabel="Add identity"
+          accessibilityState={{expanded: menuOpen}}
           style={styles.headerAction}
-          onPress={() => navigation.navigate('HdCreate')}>
-          +
-        </Text>
+          onPress={() => setMenuOpen(open => !open)}>
+          <Text style={styles.headerActionText}>+</Text>
+        </Pressable>
       ),
     });
-  }, [navigation]);
+  }, [navigation, menuOpen]);
 
   const onSelectIdentity = async (name: string) => {
     await setCurrentIdentity(name);
@@ -91,102 +123,106 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
       setStatus(`Imported ${meta.name}`);
       await refresh();
     } catch (error) {
+      if (
+        isErrorWithCode(error) &&
+        error.code === errorCodes.OPERATION_CANCELED
+      ) {
+        return;
+      }
       setStatus(error instanceof Error ? error.message : String(error));
     }
   };
 
   return (
     <Screen style={styles.screen} contentStyle={styles.content}>
-      {currentIdentity ? (
-        <Chip label={`Current: ${currentIdentity}`} />
-      ) : null}
-      <Text style={styles.meta}>
-        Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
-        {'\n'}
-        Protocol: <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
-      </Text>
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <View style={styles.row}>
-        <AppButton
-          title="Create"
-          testID="identities-create"
-          onPress={() => navigation.navigate('HdCreate')}
-          style={styles.flexBtn}
-        />
-        <AppButton
-          title="Import"
-          testID="identities-import"
-          variant="secondary"
-          onPress={() => void onImport()}
-          style={styles.flexBtn}
-        />
+      <View
+        style={styles.body}
+        accessibilityElementsHidden={menuOpen}
+        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
+        {currentIdentity ? (
+          <Chip label={`Current: ${currentIdentity}`} />
+        ) : null}
+        <Text style={styles.meta}>
+          Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
+          {'\n'}
+          Protocol: <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
+        </Text>
+        <StatusBanner message={status} kind={statusKind(status)} />
+        <SectionTitle>Local identities</SectionTitle>
+        {identities.length === 0 ? (
+          <View style={styles.empty} testID="identities-empty">
+            <Text style={styles.emptyIcon}>◎</Text>
+            <Text style={styles.emptyTitle}>No identities yet</Text>
+            <Text style={styles.emptySub}>
+              Get a quantum-secure email address and keys in one step, or use
+              the + button above to create or import an identity.
+            </Text>
+            <AppButton
+              title="Get started with EBP email"
+              testID="identities-onboarding-empty"
+              onPress={() => navigation.navigate('OnboardingWizard')}
+              style={styles.fullBtn}
+            />
+          </View>
+        ) : (
+          <Card>
+            <FlatList
+              data={identities}
+              keyExtractor={item => item.name}
+              scrollEnabled={false}
+              testID="identities-list"
+              renderItem={({item, index}) => (
+                <ListRow
+                  testID={`identity-row-${item.name}`}
+                  avatarText={item.name}
+                  title={item.name}
+                  subtitle={`${
+                    item.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA'
+                  } · ${shortFingerprint(item.fingerprint)}`}
+                  badge={item.name === currentIdentity ? 'Current' : undefined}
+                  onPress={() => onSelectIdentity(item.name)}
+                  showDivider={index < identities.length - 1}
+                />
+              )}
+            />
+          </Card>
+        )}
       </View>
-      <AppButton
-        title="Create random"
-        testID="identities-create-random"
-        variant="secondary"
-        onPress={() => navigation.navigate('RandomCreate')}
-      />
-      <SectionTitle>Local identities</SectionTitle>
-      {identities.length === 0 ? (
-        <View style={styles.empty} testID="identities-empty">
-          <Text style={styles.emptyIcon}>◎</Text>
-          <Text style={styles.emptyTitle}>No identities yet</Text>
-          <Text style={styles.emptySub}>
-            New here? Get a quantum-secure email address and keys in one step,
-            or create, generate, or import an identity yourself.
-          </Text>
-          <AppButton
-            title="Get started with EBP email"
-            testID="identities-onboarding-empty"
-            onPress={() => navigation.navigate('OnboardingWizard')}
-            style={styles.fullBtn}
+      {menuOpen ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Pressable
+            testID="identities-menu-dismiss"
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss identity menu"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMenuOpen(false)}
           />
-          <AppButton
-            title="Create identity"
-            testID="identities-create-empty"
-            variant="secondary"
-            onPress={() => navigation.navigate('HdCreate')}
-            style={styles.fullBtn}
-          />
-          <AppButton
-            title="Create random identity"
-            testID="identities-create-random-empty"
-            variant="secondary"
-            onPress={() => navigation.navigate('RandomCreate')}
-            style={styles.fullBtn}
-          />
-          <AppButton
-            title="Import identity file"
-            testID="identities-import-empty"
-            variant="secondary"
-            onPress={() => void onImport()}
-            style={styles.fullBtn}
-          />
+          <Card style={styles.menu}>
+            <Pressable
+              testID="identities-create"
+              accessibilityRole="button"
+              accessibilityLabel="Create identity"
+              style={styles.menuItem}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('HdCreate');
+              }}>
+              <Text style={styles.menuText}>Create identity</Text>
+            </Pressable>
+            <Pressable
+              testID="identities-import"
+              accessibilityRole="button"
+              accessibilityLabel="Import identity file"
+              style={[styles.menuItem, styles.menuDivider]}
+              onPress={() => {
+                setMenuOpen(false);
+                void onImport();
+              }}>
+              <Text style={styles.menuText}>Import identity file</Text>
+            </Pressable>
+          </Card>
         </View>
-      ) : (
-        <Card>
-          <FlatList
-            data={identities}
-            keyExtractor={item => item.name}
-            scrollEnabled={false}
-            testID="identities-list"
-            renderItem={({item, index}) => (
-              <ListRow
-                testID={`identity-row-${item.name}`}
-                avatarText={item.name}
-                title={item.name}
-                subtitle={`${
-                  item.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA'
-                } · ${shortFingerprint(item.fingerprint)}`}
-                badge={item.name === currentIdentity ? 'Current' : undefined}
-                onPress={() => onSelectIdentity(item.name)}
-                showDivider={index < identities.length - 1}
-              />
-            )}
-          />
-        </Card>
-      )}
+      ) : null}
     </Screen>
   );
 }
@@ -194,12 +230,36 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
 const styles = StyleSheet.create({
   screen: {flex: 1},
   content: {flex: 1},
+  body: {flex: 1, gap: 10},
   headerAction: {
+    minWidth: 44,
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionText: {
     color: colors.accent,
     fontSize: 24,
     fontWeight: '500',
-    paddingHorizontal: 8,
   },
+  menu: {
+    position: 'absolute',
+    top: 0,
+    right: 12,
+    width: 240,
+    maxWidth: '100%',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
+  menuItem: {minHeight: 48, justifyContent: 'center', padding: 14},
+  menuDivider: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  menuText: {fontSize: typography.body, color: colors.accent},
   meta: {
     fontSize: typography.caption,
     color: colors.muted,
@@ -209,8 +269,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontWeight: '600',
   },
-  row: {flexDirection: 'row', gap: 8},
-  flexBtn: {flex: 1},
   fullBtn: {alignSelf: 'stretch', width: '100%'},
   empty: {
     flex: 1,

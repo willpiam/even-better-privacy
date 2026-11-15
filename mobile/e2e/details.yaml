@@ -18,18 +18,9 @@ env:
     visible:
       id: "identity-fingerprint"
     timeout: 60000
+- runFlow: helpers/publish-identity.yaml
 - tapOn:
-    id: "identity-password"
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
-- tapOn:
-    id: "identity-publish"
-- extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
-    timeout: 120000
-- assertVisible:
-    text: "Published.*"
+    id: "identity-open-details"
 - scrollUntilVisible:
     element:
       id: "identity-detail-path"
@@ -57,8 +48,7 @@ env:
     timeout: 15000
 - tapOn:
     id: "identity-add-detail"
-# Status banner lives at the top of the ScrollView; after adding a detail the
-# viewport is still near the form, so assert the new row instead of the banner.
+# The new email appears in the detail manager after the upload.
 - scrollUntilVisible:
     element: ${DETAIL_EMAIL}
     direction: UP

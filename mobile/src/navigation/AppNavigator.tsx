@@ -11,9 +11,9 @@ import {colors} from '../theme/tokens';
 import {mailColors} from '../screens/mail/MailAppearance';
 import IdentitiesHomeScreen from '../screens/IdentitiesHomeScreen';
 import HdCreateScreen from '../screens/HdCreateScreen';
-import RandomCreateScreen from '../screens/RandomCreateScreen';
 import OnboardingWizardScreen from '../screens/OnboardingWizardScreen';
 import IdentityDetailScreen from '../screens/IdentityDetailScreen';
+import IdentityActionsScreen from '../screens/IdentityActionsScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ContactDetailScreen from '../screens/ContactDetailScreen';
 import CryptoHubScreen from '../screens/CryptoHubScreen';
@@ -43,9 +43,12 @@ import ProjectInfoScreen from '../screens/ProjectInfoScreen';
 export type IdentitiesStackParamList = {
   IdentitiesHome: undefined;
   HdCreate: undefined;
-  RandomCreate: undefined;
   OnboardingWizard: undefined;
   IdentityDetail: {identityName: string};
+  IdentityPublish: {identityName: string};
+  IdentityDetails: {identityName: string};
+  IdentityExport: {identityName: string};
+  IdentitySecurity: {identityName: string};
 };
 
 export type ContactsStackParamList = {
@@ -155,11 +158,6 @@ function IdentitiesNavigator(): JSX.Element {
         options={{title: 'Create Identity'}}
       />
       <IdentitiesStack.Screen
-        name="RandomCreate"
-        component={RandomCreateScreen}
-        options={{title: 'Create Random Identity'}}
-      />
-      <IdentitiesStack.Screen
         name="OnboardingWizard"
         component={OnboardingWizardScreen}
         options={{title: 'Get started'}}
@@ -168,6 +166,26 @@ function IdentitiesNavigator(): JSX.Element {
         name="IdentityDetail"
         component={IdentityDetailScreen}
         options={{title: 'Identity'}}
+      />
+      <IdentitiesStack.Screen
+        name="IdentityPublish"
+        component={IdentityActionsScreen}
+        options={{title: 'Publish identity'}}
+      />
+      <IdentitiesStack.Screen
+        name="IdentityDetails"
+        component={IdentityActionsScreen}
+        options={{title: 'Identity details'}}
+      />
+      <IdentitiesStack.Screen
+        name="IdentityExport"
+        component={IdentityActionsScreen}
+        options={{title: 'Export and backup'}}
+      />
+      <IdentitiesStack.Screen
+        name="IdentitySecurity"
+        component={IdentityActionsScreen}
+        options={{title: 'Revocation and removal'}}
       />
     </IdentitiesStack.Navigator>
   );

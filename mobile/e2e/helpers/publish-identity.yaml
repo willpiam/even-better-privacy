@@ -1,0 +1,28 @@
+appId: com.mobile
+---
+- extendedWaitUntil:
+    visible:
+      id: "identity-open-publish"
+    timeout: 20000
+- tapOn:
+    id: "identity-open-publish"
+- extendedWaitUntil:
+    visible:
+      id: "identity-publish"
+    timeout: 20000
+- tapOn:
+    id: "identity-publish"
+- runFlow: unlock-identity.yaml
+- extendedWaitUntil:
+    visible:
+      id: "identity-published"
+    timeout: 120000
+- assertNotVisible:
+    id: "identity-publish"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "identity-published"
+    timeout: 20000
+- assertNotVisible:
+    id: "identity-open-publish"

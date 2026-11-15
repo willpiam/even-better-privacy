@@ -47,18 +47,18 @@ Sources: `src/screens/{ProjectInfoScreen,ActivityLogScreen,SettingsScreen,Identi
 | 15  | Multiple local identities            | List, select current identity, switch identity context, unlock.                                      |
 | 16  | Manual HD identity creation/recovery | Generate or enter a mnemonic, confirm it, optional passphrase, local name and encryption password.   |
 | 17  | Advanced HD derivation               | Account, index, external/internal change chain; discovery on the server with raw discovery output.   |
-| 18  | Alternate signing profile            | ML-DSA or SLH-DSA selection for HD and random identities.                                            |
-| 19  | Random identity creation             | Separate creation screen and entry points alongside HD creation.                                     |
-| 20  | Overwrite existing identity          | Explicit overwrite switches in manual HD and random creation.                                        |
-| 21  | Import/export identity files         | Import from the device file picker; export encrypted private identity files through the share sheet. |
+| 18  | Alternate signing profile            | ML-DSA or SLH-DSA selection for HD identities.                                            |
+| 19  | Identity overview                    | Publication and email verification indicators; links to focused management screens.                                     |
+| 20  | Overwrite existing identity          | Explicit overwrite switch in manual HD creation.                                        |
+| 21  | Import/export identity files         | Create/import through the home-screen plus menu; export encrypted identity files from Export and backup. |
 | 22  | Public identity export               | JSON output with separate switches for signing key, encryption key, and details; copy/share output.  |
-| 23  | Publish to key server                | Publish the current identity, optionally to a per-action server override.                            |
+| 23  | Publish to key server                | Publish an unpublished identity on a focused screen, with an optional server override; show a check when published.                            |
 | 24  | Attach identity details              | Arbitrary detail path/value, opaque hash-only publication, optional push to server.                  |
-| 25  | Email ownership verification         | Request verification for cleartext or opaque email details.                                          |
+| 25  | Email ownership verification         | Request verification for cleartext or opaque email details; replace completed actions with verified indicators.                                          |
 | 26  | Emergency revocation certificate     | Generate and copy a certificate for revoking the identity later.                                     |
 | 27  | Revocation and local deletion        | Revoke a detail, revoke the identity, optional reason/server push, or delete its local device file.  |
 
-Sources: `src/screens/{IdentitiesHomeScreen,HdCreateScreen,RandomCreateScreen,IdentityDetailScreen}.tsx`.
+Sources: `src/screens/{IdentitiesHomeScreen,HdCreateScreen,IdentityDetailScreen,IdentityActionsScreen}.tsx`.
 Recovery, revocation, and auto-lock are security capabilities even if their screens
 are considered secondary; removing an entry point should be an explicit product
 choice.

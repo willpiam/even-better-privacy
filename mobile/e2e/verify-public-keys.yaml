@@ -17,11 +17,9 @@ env:
       id: "identity-fingerprint"
     timeout: 60000
 
-# Export public JSON (also copies compact JSON onto the Android clipboard)
+# Open the focused export screen.
 - tapOn:
-    id: "identity-password"
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
+    id: "identity-open-export"
 - scrollUntilVisible:
     element:
       id: "identity-export-public"
@@ -29,6 +27,7 @@ env:
     timeout: 15000
 - tapOn:
     id: "identity-export-public"
+- runFlow: helpers/unlock-identity.yaml
 - scrollUntilVisible:
     element:
       id: "identity-export-public-output"

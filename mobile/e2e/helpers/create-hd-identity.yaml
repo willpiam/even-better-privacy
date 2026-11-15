@@ -4,8 +4,10 @@ appId: com.mobile
     id: "tab-identities"
 - extendedWaitUntil:
     visible:
-      id: "identities-create"
+      id: "identities-add"
     timeout: 15000
+- tapOn:
+    id: "identities-add"
 - tapOn:
     id: "identities-create"
 - extendedWaitUntil:

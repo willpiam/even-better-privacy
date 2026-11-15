@@ -17,31 +17,40 @@ env:
     visible:
       id: "identity-fingerprint"
     timeout: 60000
-- tapOn:
-    id: "identity-password"
-- inputText: definitely-wrong-password
-- hideKeyboard
-- tapOn:
-    id: "identity-publish"
 - extendedWaitUntil:
     visible:
-      id: "status-banner-text"
+      id: "identity-open-publish"
+    timeout: 20000
+- tapOn:
+    id: "identity-open-publish"
+- extendedWaitUntil:
+    visible:
+      id: "identity-publish"
+    timeout: 20000
+- tapOn:
+    id: "identity-publish"
+- runFlow:
+    file: helpers/unlock-identity.yaml
+    env:
+      IDENTITY_PASSWORD: definitely-wrong-password
+- extendedWaitUntil:
+    visible: "Wrong password.*"
     timeout: 60000
-- assertVisible: "Wrong password.*"
-- assertNotVisible: "Published.*"
-- tapOn:
-    id: "identity-password"
-- pressKey: Backspace
-- eraseText: 80
-- inputText: ${IDENTITY_PASSWORD}
-- hideKeyboard
+- assertNotVisible:
+    id: "identity-published"
 - tapOn:
     id: "identity-publish"
+- runFlow: helpers/unlock-identity.yaml
 - extendedWaitUntil:
     visible:
-      id: "status-banner-text"
+      id: "identity-published"
     timeout: 120000
-- assertVisible:
-    id: "status-banner-text"
-- assertVisible:
-    text: "Published.*"
+- assertNotVisible:
+    id: "identity-publish"
+- back
+- extendedWaitUntil:
+    visible:
+      id: "identity-published"
+    timeout: 20000
+- assertNotVisible:
+    id: "identity-open-publish"

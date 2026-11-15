@@ -26,7 +26,7 @@ Keep `adb reverse tcp:8081 tcp:8081` so the debug app can reach Metro.
 From the repo root:
 
 ```bash
-# Full suite (smoke + identity + create-random + details + contacts-lifecycle + sign-verify + hierarchy)
+# Full suite (smoke + identity + details + contacts-lifecycle + sign-verify + hierarchy)
 deno task test:e2e:mobile
 
 # Smoke only
@@ -89,6 +89,11 @@ modal. Flows that type into `password-modal-input` should run
 | `sign-verify.yaml` | Sign attached message, paste payload, verify |
 | `hierarchy.yaml` | Two identities, propose/accept, Load Tree |
 | `helpers/` | Shared subflows (create HD identity, set server, dismiss autofill) |
+
+The identity overview shows server publication and email verification status.
+Forms live on the Identity details, Export and backup, and Revocation and removal
+screens. `helpers/publish-identity.yaml` opens publication, unlocks the identity,
+and returns to the overview after confirming the published indicator.
 
 Default suite order puts details and sign-verify **before** hierarchy so a
 details failure fails faster than the long HD keygen. `contacts-lifecycle`

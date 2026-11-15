@@ -193,7 +193,6 @@ if [[ ${#FLOW_ARGS[@]} -eq 0 ]]; then
     "${ROOT}/mobile/e2e/smoke.yaml"
     "${ROOT}/mobile/e2e/mail-help.yaml"
     "${ROOT}/mobile/e2e/identity.yaml"
-    "${ROOT}/mobile/e2e/create-random.yaml"
     "${ROOT}/mobile/e2e/onboarding.yaml"
     "${ROOT}/mobile/e2e/details.yaml"
     "${ROOT}/mobile/e2e/contacts-lifecycle.yaml"

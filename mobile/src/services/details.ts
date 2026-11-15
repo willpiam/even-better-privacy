@@ -3,23 +3,71 @@ import {getServerUrl} from './settings';
 import {apiUrl} from './contactsLogic';
 import {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
 
+async function pushStoredDetail(
+  fingerprint: string,
+  path: string,
+  entry: [string, string] | undefined,
+  server: string,
+): Promise<void> {
+  if (!entry) throw new Error('Failed to locate attached detail');
+  const [detail, proof] = entry;
+  const res = await fetch(apiUrl(server, '/api/v1/detail'), {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: JSON.stringify({fingerprint, path, detail, proof}),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as {error?: string};
+    throw new Error(
+      `Failed to push detail: ${body.error ?? `HTTP ${res.status}`}`,
+    );
+  }
+}
+
+/** Publish an existing signed detail without changing or re-hashing its value. */
+export async function publishDetail(params: {
+  identityName: string;
+  path: string;
+  server?: string;
+}): Promise<void> {
+  const identity = await loadIdentityForUse(params.identityName);
+  await pushStoredDetail(
+    identity.toFingerprint(),
+    params.path,
+    identity.details.get(params.path),
+    params.server ?? (await getServerUrl()),
+  );
+}
+
 export {prepareDetailValue, requirePathAndDetail} from './detailsLogic';
 
 export async function listDetails(params: {
   identityName: string;
   password?: string;
 }): Promise<Array<{path: string; detail: string; proof: string}>> {
+  return (await getIdentityDetails(params)).details;
+}
+
+export async function getIdentityDetails(params: {
+  identityName: string;
+  password?: string;
+}) {
   const identity = await loadIdentityForUse(
     params.identityName,
     params.password,
   );
-  return Array.from(identity.details.entries()).map(
+  const details = Array.from(identity.details.entries()).map(
     ([path, [detail, proof]]) => ({
       path,
       detail,
       proof,
     }),
   );
+  return {
+    details,
+    revokedPaths: [...identity.revokedDetails.keys()],
+    revoked: identity.revocationCertificate !== null,
+  };
 }
 
 export async function addDetail(params: {
@@ -42,26 +90,11 @@ export async function addDetail(params: {
 
   if (params.push) {
     const server = params.server ?? (await getServerUrl());
-    const entry = identity.details.get(params.path);
-    if (!entry) {
-      throw new Error('Failed to locate attached detail');
-    }
-    const [detailValue, proof] = entry;
-    const res = await fetch(apiUrl(server, '/api/v1/detail'), {
-      method: 'POST',
-      headers: {'content-type': 'application/json'},
-      body: JSON.stringify({
-        fingerprint: identity.toFingerprint(),
-        path: params.path,
-        detail: detailValue,
-        proof,
-      }),
-    });
-    if (!res.ok) {
-      const body = (await res.json().catch(() => ({}))) as {error?: string};
-      throw new Error(
-        `Failed to push detail: ${body.error ?? `HTTP ${res.status}`}`,
-      );
-    }
+    await pushStoredDetail(
+      identity.toFingerprint(),
+      params.path,
+      identity.details.get(params.path),
+      server,
+    );
   }
 }
