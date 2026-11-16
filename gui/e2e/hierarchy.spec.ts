@@ -1,4 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
+import { completePrivateOperation } from "./private-operation.ts";
+
+// Each flow creates, unlocks, publishes, and signs with multiple PQ identities.
+test.describe.configure({ timeout: 120_000 });
 
 const testPassword = "Smoke-test-password1";
 const testServerUrl = "http://localhost:8788";
@@ -17,9 +21,7 @@ async function expandSection(page: Page, sectionTitle: string) {
 }
 
 async function submitPassword(page: Page, password = testPassword) {
-  await expect(page.locator("#password-modal")).toBeVisible();
-  await page.fill("#password-modal-input", password);
-  await page.getByRole("button", { name: "Submit", exact: true }).click();
+  await completePrivateOperation(page, password);
 }
 
 async function setServer(page: Page, serverUrl = testServerUrl) {

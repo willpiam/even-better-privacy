@@ -160,7 +160,10 @@ test("onboarding provisions a mailbox for the selected identity", async ({ page 
   const username = generateHumanName().toLowerCase().replace(/[^a-z0-9]+/g, "").slice(0, 20) || "currentid";
   let signupBody: Record<string, unknown> | null = null;
 
+  const csrf = await page.request.get("/api/v1/csrf-token");
+  const { token } = await csrf.json();
   const created = await page.request.post("/api/v1/identity/generate", {
+    headers: { "x-ebp-csrf": token },
     data: {
       name: identityName,
       signingType: "dilithium",
@@ -170,6 +173,10 @@ test("onboarding provisions a mailbox for the selected identity", async ({ page 
     },
   });
   expect(created.ok()).toBeTruthy();
+  const locked = await page.request.post("/api/v1/identity/lock", {
+    headers: { "x-ebp-csrf": token }, data: { all: true },
+  });
+  expect(locked.ok()).toBeTruthy();
 
   await page.route("**/api/v1/mail/ebp-signup/config**", (route) =>
     fulfillJson(route, {

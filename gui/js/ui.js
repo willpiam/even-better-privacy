@@ -96,12 +96,36 @@ if (statusEl) {
 }
 
 export function setButtonLoading(btn, loading) {
+  if (!btn) return;
+  const form = btn.closest("form");
+  const progressKinds = {
+    "sign-form": ["carry", "Signing your message…"],
+    "verify-form": ["sniff", "Checking the signature…"],
+    "encrypt-form": ["watch", "Encrypting your message…"],
+    "decrypt-form": ["watch", "Decrypting your message…"],
+    "sign-file-form": ["carry", "Signing your file…"],
+    "verify-file-form": ["sniff", "Checking the file signature…"],
+    "encrypt-file-form": ["watch", "Encrypting your file…"],
+    "decrypt-file-form": ["watch", "Decrypting your file…"],
+    "mail-compose-form": ["carry", "Sending your message…"],
+  };
+  const progressKind = progressKinds[form?.id];
   if (loading) {
     btn.classList.add("loading");
     btn.disabled = true;
+    btn.setAttribute("aria-busy", "true");
+    if (progressKind && !form.querySelector(".fox-progress")) {
+      const progress = document.createElement("div");
+      progress.className = "fox-progress";
+      progress.setAttribute("role", "status");
+      progress.innerHTML = `<span class="fox-loop fox-${progressKind[0]} is-playing" aria-hidden="true"></span><span>${progressKind[1]}</span>`;
+      form.appendChild(progress);
+    }
   } else {
     btn.classList.remove("loading");
     btn.disabled = false;
+    btn.removeAttribute("aria-busy");
+    if (progressKind) form.querySelector(".fox-progress")?.remove();
   }
 }
 
@@ -134,7 +158,7 @@ export async function api(path, init = {}) {
     });
   } catch (err) {
     const maybeAbort = err && typeof err === "object" ? err.name : "";
-    if (maybeAbort === "AbortError") throw new Error("request aborted");
+    if (maybeAbort === "AbortError" || init.signal?.aborted) throw new Error("request aborted");
     throw err;
   }
   let body = null;

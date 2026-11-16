@@ -32,6 +32,7 @@ async function mockBackend(page: Page): Promise<SentRequests> {
       });
 
     if (pathname === "/api/v1/csrf-token") return json({ token: "test-csrf" });
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked: true });
     if (pathname === "/api/v1/health") {
       return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
     }

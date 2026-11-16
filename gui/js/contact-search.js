@@ -132,9 +132,13 @@ function renderContactDropdown(contacts, dropdown, query, input) {
       <div class="contact-search-item-fingerprint">${highlightMatch(escapeHtml(shortFp), query)}</div>
     `;
 
-    item.addEventListener("click", () => {
+    item.addEventListener("mousedown", (event) => event.preventDefault());
+    item.addEventListener("click", (event) => {
+      // Suggestions live inside a label. Avoid its default click refocusing
+      // the input and reopening the menu after a selection.
+      event.preventDefault();
+      input.focus();
       selectContact(input, c);
-      dropdown.classList.remove("active");
     });
 
     item.addEventListener("mouseenter", () => {
@@ -242,13 +246,33 @@ export function setMailTab(tabName) {
     const active = btn.dataset.mailTab === safeTab;
     btn.classList.toggle("active", active);
     btn.setAttribute("aria-expanded", String(active));
+    btn.setAttribute("aria-selected", String(active));
+    btn.tabIndex = active ? 0 : -1;
+    btn.setAttribute("role", "tab");
+    btn.setAttribute("aria-controls", `mail-tab-${btn.dataset.mailTab === "sent" ? "inbox" : btn.dataset.mailTab}`);
   });
   document.querySelectorAll("[data-mail-tab-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.mailTabPanel === panelName);
+    panel.setAttribute("role", "tabpanel");
   });
+  document.dispatchEvent(new CustomEvent("ebp:mail-tab"));
 }
 
 export function initMailTabs() {
+  const tabs = [...document.querySelectorAll("[data-mail-tab]")];
+  tabs.forEach((btn, index) => {
+    btn.addEventListener("keydown", (event) => {
+      let target;
+      if (event.key === "ArrowRight") target = tabs[(index + 1) % tabs.length];
+      if (event.key === "ArrowLeft") target = tabs[(index - 1 + tabs.length) % tabs.length];
+      if (event.key === "Home") target = tabs[0];
+      if (event.key === "End") target = tabs[tabs.length - 1];
+      if (!target) return;
+      event.preventDefault();
+      target.focus();
+      target.click();
+    });
+  });
   document.querySelectorAll("[data-mail-tab]").forEach((btn) => {
     btn.addEventListener("click", () => {
       setMailTab(btn.dataset.mailTab || "inbox");

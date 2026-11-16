@@ -55,6 +55,8 @@ import {
 } from "./js/mail.js";
 import { updateRevokeDetailPathOptions } from "./js/revocation.js";
 import { initOnboarding, maybeOpenOnboardingOnFirstRun } from "./js/onboarding.js";
+import { initWorkspace, updateWorkspace } from "./js/workspace.js";
+import { icon } from "./js/icons.js";
 
 // Wire late-bound mail loaders into render.js to break the circular dependency
 setMailLoaders({
@@ -69,8 +71,14 @@ setMailLoaders({
 
 const navItems = document.querySelectorAll(".nav-item[data-page]");
 const pages = document.querySelectorAll(".page");
+let activePage = null;
 
 function navigateTo(pageId) {
+  if (activePage === pageId) {
+    if (window.location.hash !== `#${pageId}`) window.location.hash = pageId;
+    return;
+  }
+  activePage = pageId;
   navItems.forEach((item) => {
     item.classList.toggle("active", item.dataset.page === pageId);
   });
@@ -78,6 +86,9 @@ function navigateTo(pageId) {
   pages.forEach((page) => {
     page.classList.toggle("active", page.id === `page-${pageId}`);
   });
+
+  updateWorkspace(pageId);
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 
   window.location.hash = pageId;
 
@@ -96,7 +107,8 @@ function navigateTo(pageId) {
 }
 
 navItems.forEach((item) => {
-  item.addEventListener("click", () => {
+  item.addEventListener("click", (event) => {
+    event.preventDefault();
     navigateTo(item.dataset.page);
   });
 });
@@ -193,6 +205,7 @@ function makeSectionCollapsible(section) {
 
 function initCollapsibleSections() {
   document.querySelectorAll(".page section:not(.onboarding-cta)").forEach((section) => {
+    if (section.closest(".mail-inbox-layout")) return;
     makeSectionCollapsible(section);
   });
 }
@@ -298,14 +311,16 @@ document.getElementById("copy-fingerprint-btn").addEventListener(
   async (e) => {
     e.preventDefault();
     if (!state.currentFingerprint) return;
+    const btn = e.currentTarget;
 
     try {
       await navigator.clipboard.writeText(state.currentFingerprint);
-      const btn = e.target;
-      btn.textContent = "✓";
+      btn.innerHTML = icon("check");
+      btn.title = "Fingerprint copied";
       btn.classList.add("copied");
       setTimeout(() => {
-        btn.textContent = "📋";
+        btn.innerHTML = icon("copy");
+        btn.title = "Copy fingerprint";
         btn.classList.remove("copied");
       }, 2000);
     } catch (err) {
@@ -1764,8 +1779,9 @@ if (enforcePasswordPolicyToggle) {
 }
 
 onStatusChange(() => renderToastLogs());
-initNavigation();
 initCollapsibleSections();
+initWorkspace({ navigateTo });
+initNavigation();
 initContactSearch();
 initMailPage();
 initUnlockUi();

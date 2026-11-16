@@ -2,10 +2,12 @@ import { clearMailCache } from "./mail-cache.js";
 import { state, getDetailValue, getDetailMeta, isOpaqueDetailPath, formatOpaqueHash, DEFAULT_SERVER_URL, LOCAL_BACKEND_ORIGIN, STARTUP_RETRY_ATTEMPTS, STARTUP_RETRY_DELAY_MS } from "./state.js";
 import { api, sleep, setStatus, setButtonLoading, escapeHtml } from "./ui.js";
 import { showConfirmModal, requestTextInput } from "./modals.js";
-import { withIdentity } from "./unlock.js";
+import { refreshUnlockStatus, withIdentity } from "./unlock.js";
 import { updateRevokeDetailPathOptions, updateRevocationStatus } from "./revocation.js";
 import { renderHierarchyTreeSVG, loadContactHierarchyDiagram, renderCertificatesPage } from "./hierarchy.js";
 import { shortFingerprint } from "./fingerprint.js";
+import { icon, initials } from "./icons.js";
+import { updateWorkspaceIdentity } from "./workspace.js";
 
 const ctxCurrent = document.getElementById("ctx-current");
 const ctxServer = document.getElementById("ctx-server");
@@ -245,6 +247,7 @@ export function renderContext() {
     ctxProtocol.textContent = state.protocolVersion ?? "-";
   }
   renderFingerprint();
+  updateWorkspaceIdentity();
 }
 
 export function renderIdentities() {
@@ -281,7 +284,7 @@ export function renderIdentities() {
   fillIdentitySelect(deleteSelect);
 
   if (!state.identities.length) {
-    identityList.innerHTML = "<li class='muted'>(no identities yet)</li>";
+    identityList.innerHTML = `<li class="workspace-empty"><span class="place-art place-identities" aria-hidden="true"></span><strong>A place for your first identity.</strong><p>Create an identity to keep your keys on this device, or import one you already use.</p></li>`;
     return;
   }
   for (const identity of state.identities) {
@@ -300,14 +303,29 @@ export function renderIdentities() {
       : '';
 
     li.innerHTML = `
-      <div class="identity-item">
-        <span class="identity-item-name">${escapeHtml(name)}${isCurrent ? '<span class="badge">current</span>' : ""}${serverStatus}</span>
-        <span class="identity-item-action">${isCurrent ? "" : "Click to switch →"}</span>
+      <div class="identity-card-top">
+        <span class="avatar" aria-hidden="true">${escapeHtml(initials(name))}</span>
+        <div class="identity-card-copy"><strong class="identity-item-name">${escapeHtml(name)}</strong><small>Private key on this device</small></div>
+        ${isCurrent ? '<span class="badge">Active</span>' : ""}
+      </div>
+      <div class="identity-card-fingerprint">${escapeHtml(identity.fingerprint || "Public fingerprint available after selecting this identity")}</div>
+      <div class="identity-card-footer">
+        <span>${serverStatus || "Stored locally"}</span>
+        <span class="identity-item-action">${isCurrent ? `${icon("check")} In use` : `Use identity ${icon("arrow")}`}</span>
       </div>
     `;
 
     if (!isCurrent) {
+      li.tabIndex = 0;
+      li.setAttribute("role", "button");
+      li.setAttribute("aria-label", `Use identity ${name}`);
       li.addEventListener("click", () => handleIdentityClick(name));
+      li.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          li.click();
+        }
+      });
     }
 
     identityList.appendChild(li);
@@ -338,7 +356,7 @@ export async function handleIdentityClick(name) {
 export function renderContacts() {
   contactsList.innerHTML = "";
   if (!state.contacts.length) {
-    contactsList.innerHTML = "<li class='muted'>(no contacts yet)</li>";
+    contactsList.innerHTML = `<li class="workspace-empty"><span class="place-art place-contacts" aria-hidden="true"></span><strong>Your people belong here.</strong><p>Add a contact by importing their public identity or finding them on your key server.</p></li>`;
     return;
   }
   for (const c of state.contacts) {
@@ -358,6 +376,7 @@ export function renderContacts() {
     const isLocalEmail = !detailEmail && !!c.localEmail;
 
     li.innerHTML = `
+      <span class="avatar" aria-hidden="true">${escapeHtml(initials(alias || detailName || c.name))}</span>
       <div class="contact-info">
         <div class="contact-header">
           <strong>${escapeHtml(c.name)}</strong>
@@ -367,21 +386,30 @@ export function renderContacts() {
         </div>
         ${detailName || displayEmail ? `
           <div class="contact-details-preview">
-            ${detailName ? `<span class="detail-tag">👤 ${escapeHtml(detailName)}</span>` : ''}
+            ${detailName ? `<span class="detail-tag">${escapeHtml(detailName)}</span>` : ''}
             ${displayEmail ? (isLocalEmail
-              ? `<span class="detail-tag" title="Local email">✉️ ${escapeHtml(displayEmail)}</span>`
-              : `<span class="detail-tag ${emailTagClass}" title="${emailTagTitle}">✉️ ${escapeHtml(displayEmail)}</span>`
+              ? `<span class="detail-tag" title="Local email">${escapeHtml(displayEmail)}</span>`
+              : `<span class="detail-tag ${emailTagClass}" title="${emailTagTitle}">${escapeHtml(displayEmail)}</span>`
             ) : ''}
           </div>
         ` : ''}
         <div class="fingerprint">${escapeHtml(c.fingerprint)}</div>
       </div>
       <div class="contact-actions">
-        <span class="click-hint">View details →</span>
+        ${icon("chevron")}
       </div>
     `;
     
     li.addEventListener("click", () => showContactDetails(c));
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+    li.setAttribute("aria-label", `View ${c.name}`);
+    li.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        li.click();
+      }
+    });
     contactsList.appendChild(li);
   }
 }
@@ -881,6 +909,8 @@ export async function loadAll() {
     
     renderContext();
     renderContacts();
+    // The session belongs to the selected identity, including after creation.
+    await refreshUnlockStatus().catch(() => {});
     
     if (state.server) {
       await loadServerIdentities(1, null, state.serverIdentitiesSearch);

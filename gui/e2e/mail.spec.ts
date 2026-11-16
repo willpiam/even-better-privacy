@@ -96,6 +96,17 @@ async function expandSection(page: Page, sectionTitle: string) {
 }
 
 async function expandMailSection(page: Page, sectionTitle: string) {
+  const tabs: Record<string, string> = {
+    "Account Setup (Local Device)": "account",
+    "Compose": "compose",
+    "How to Connect Your Email": "help",
+  };
+  const tab = tabs[sectionTitle];
+  if (tab) {
+    await page.locator(`[data-mail-tab="${tab}"]`).click();
+    await expect(page.locator(`[data-mail-tab-panel="${tab}"]`)).toBeVisible();
+    return;
+  }
   const toggle = page.getByRole("button", { name: sectionTitle, exact: true }).first();
   await expect(toggle).toBeVisible();
   const expanded = await toggle.getAttribute("aria-expanded");
@@ -384,6 +395,8 @@ test("mail reader defaults to plaintext and can render HTML from settings", asyn
       body: JSON.stringify(body),
     });
 
+    if (pathname === "/api/v1/csrf-token") return json({ token: "mail-test-csrf" });
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked: true });
     if (pathname === "/api/v1/health") {
       return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
     }
@@ -483,7 +496,7 @@ test("mail reader defaults to plaintext and can render HTML from settings", asyn
   await expect(page.locator("#mail-message-html-wrap")).toBeHidden();
 
   await page.locator(".nav-item", { hasText: "Settings" }).click();
-  await expandSection(page, "Mail Reader");
+  await expandSection(page, "Email");
   const htmlToggle = page.locator("#settings-mail-render-html");
   await expect(htmlToggle).not.toBeChecked();
   await htmlToggle.check();
@@ -505,7 +518,7 @@ test("mail message load timeout surfaces error and later selection still loads",
   await page.addInitScript(() => {
     const originalSetTimeout = window.setTimeout.bind(window);
     window.setTimeout = ((handler: any, timeout?: number, ...args: any[]) => {
-      const ms = timeout === 30_000 ? 60 : timeout;
+      const ms = timeout === 30_000 ? 200 : timeout;
       return originalSetTimeout(handler, ms as number, ...args);
     }) as typeof window.setTimeout;
   });
@@ -525,6 +538,8 @@ test("mail message load timeout surfaces error and later selection still loads",
       body: JSON.stringify(body),
     });
 
+    if (pathname === "/api/v1/csrf-token") return json({ token: "mail-test-csrf" });
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked: true });
     if (pathname === "/api/v1/health") {
       return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
     }
@@ -607,7 +622,7 @@ test("mail message load timeout surfaces error and later selection still loads",
     if (pathname === "/api/v1/mail/message") {
       const uid = Number(url.searchParams.get("uid") || "0");
       if (uid === slowUid) {
-        await new Promise((resolve) => setTimeout(resolve, 250));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
       return json({
         accountId: "mock-account",
@@ -759,6 +774,8 @@ test("inbox search passes search param and filters displayed messages", async ({
       body: JSON.stringify(body),
     });
 
+    if (pathname === "/api/v1/csrf-token") return json({ token: "mail-test-csrf" });
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked: true });
     if (pathname === "/api/v1/health") {
       return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
     }
@@ -841,12 +858,12 @@ test("inbox search passes search param and filters displayed messages", async ({
   await expect(page.locator("#mail-message-list")).toContainText("Meeting notes");
   await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
-  expect(lastSearchParam).toBeNull();
+  await expect.poll(() => lastSearchParam).toBeNull();
 
   // Type a search term and refresh – only matching message shown and param sent
   await page.fill("#mail-search", "invoice");
   await page.locator("#mail-inbox-form button[type='submit']").click();
-  expect(lastSearchParam).toBe("invoice");
+  await expect.poll(() => lastSearchParam).toBe("invoice");
   await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
   await expect(page.locator("#mail-message-list")).not.toContainText("Meeting notes");
   await expect(page.locator("#mail-message-list")).not.toContainText("Hello world");
@@ -854,14 +871,14 @@ test("inbox search passes search param and filters displayed messages", async ({
   // Search by sender
   await page.fill("#mail-search", "carol");
   await page.locator("#mail-inbox-form button[type='submit']").click();
-  expect(lastSearchParam).toBe("carol");
+  await expect.poll(() => lastSearchParam).toBe("carol");
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
   await expect(page.locator("#mail-message-list")).not.toContainText("Invoice #42");
 
   // Clear search – all messages shown again
   await page.fill("#mail-search", "");
   await page.locator("#mail-inbox-form button[type='submit']").click();
-  expect(lastSearchParam).toBeNull();
+  await expect.poll(() => lastSearchParam).toBeNull();
   await expect(page.locator("#mail-message-list")).toContainText("Meeting notes");
   await expect(page.locator("#mail-message-list")).toContainText("Invoice #42");
   await expect(page.locator("#mail-message-list")).toContainText("Hello world");
@@ -890,6 +907,8 @@ test("inbox pagination navigates between pages", async ({ page }) => {
       body: JSON.stringify(body),
     });
 
+    if (pathname === "/api/v1/csrf-token") return json({ token: "mail-test-csrf" });
+    if (pathname === "/api/v1/identity/unlock-status") return json({ unlocked: true });
     if (pathname === "/api/v1/health") {
       return json({ ok: true, protocolVersion: "test", componentVersion: "test" });
     }

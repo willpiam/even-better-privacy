@@ -141,11 +141,20 @@ test("locked reader hides armor until decrypt, then shows body, badge, and techn
   await page.locator(".nav-item", { hasText: "Mail" }).click();
   await expect(page.getByRole("heading", { name: "Mail", exact: true })).toBeVisible();
 
+  // Keep private keys locked while inspecting message metadata and ciphertext.
+  // Mail navigation now asks to unlock; dismiss that prompt for this scenario.
+  await expect(page.locator("#password-modal")).toBeVisible();
+  await page.locator("#password-modal-cancel").click();
+  await page.evaluate(async () => {
+    await (await import("/js/mail.js")).loadMailMessages(1);
+  });
+
   await expect(page.locator("#mail-message-list")).toContainText("Encrypted hello");
   await page.locator("#mail-message-list li", { hasText: "Encrypted hello" }).click();
 
   await expect(page.locator("#mail-reader-locked")).toBeVisible();
   await expect(page.locator("#mail-reader-locked")).toContainText("This message is encrypted");
+  await expect(page.locator("#mail-security-line")).toContainText("Encrypted EBP message");
   await expect(page.locator("#mail-message-body")).toBeHidden();
   await expect(page.locator("#mail-message-body")).toHaveValue("");
   await expect(page.locator("#mail-technical-armor")).toBeHidden();

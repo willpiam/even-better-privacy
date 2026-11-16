@@ -6,6 +6,7 @@ import { ensureIdentityUnlocked, isIdentityUnlocked, isUnlockCancelled, withIden
 import { updateMailComposeSendState, setMailTab, initMailTabs, syncMailFolderCustomUi, getSelectedMailFolder } from "./contact-search.js";
 import { updateVerifyResult, applyVerifyResultBadge, autoFillSenderContact, extractEbpPayloadFromText, extractEmailAddress, renderMailVerifyMeta, loadAll } from "./render.js";
 import { renderMailAuthenticityBadge, openMailAuthenticityModal, initMailAuthenticityModal } from "./mail-authenticity.js";
+import { icon, initials } from "./icons.js";
 import {
   deriveComposeIntent,
   getChips as getComposeChips,
@@ -298,7 +299,15 @@ function setMailReaderPlaintext(text) {
   if (bodyWrap) bodyWrap.style.display = "";
   if (htmlWrap) htmlWrap.style.display = "none";
   if (bodyEl) bodyEl.value = text || "";
+  fitMailReaderBody();
   if (frame) frame.removeAttribute("srcdoc");
+}
+
+function fitMailReaderBody() {
+  const body = document.getElementById("mail-message-body");
+  if (!body || !body.offsetParent) return;
+  body.style.height = "auto";
+  body.style.height = `${Math.max(240, body.scrollHeight)}px`;
 }
 
 function setMailReaderHtml(html) {
@@ -501,6 +510,7 @@ function renderMailReaderHeader() {
   const dateEl = document.getElementById("mail-reader-date");
   const emptyEl = document.getElementById("mail-reader-empty");
   const hasDetail = Boolean(detail);
+  document.getElementById("mail-tab-inbox")?.classList.toggle("reader-open", hasDetail || state.mailMessageLoading);
   if (emptyEl) emptyEl.style.display = hasDetail ? "none" : "block";
   if (!subjectEl || !fromEl || !toEl || !dateEl) return;
   if (!detail) {
@@ -566,6 +576,16 @@ function setMailReaderLocked(locked) {
 function renderSelectedMailMessageBody() {
   const detail = state.selectedMailMessage;
   renderMailReaderHeader();
+  const security = document.getElementById("mail-security-line");
+  if (security) {
+    security.hidden = !detail;
+    if (detail) {
+      const encrypted = isEncryptedMailPayload(getSelectedMailPayload());
+      security.innerHTML = encrypted
+        ? `${icon("lock")}<span>Encrypted EBP message · Sender verification is shown separately.</span>`
+        : `${icon("mail")}<span>Standard email · Not end-to-end encrypted.</span>`;
+    }
+  }
   if (!detail) {
     setMailReaderLocked(false);
     renderMailTechnicalDetails(null);
@@ -637,6 +657,8 @@ function setMailMessageLoading(loading) {
   state.mailMessageLoading = loading;
   const loadingEl = document.getElementById("mail-message-loading");
   if (loadingEl) loadingEl.style.display = loading ? "block" : "none";
+  document.getElementById("mail-reader-empty")?.setAttribute("aria-busy", String(loading));
+  document.getElementById("mail-tab-inbox")?.classList.toggle("reader-open", loading || Boolean(state.selectedMailMessage));
 }
 
 function renderMailMessages() {
@@ -645,9 +667,9 @@ function renderMailMessages() {
   list.innerHTML = "";
   if (!state.mailMessages.length) {
     const emptyText = isSentFolderView(getSelectedMailFolder())
-      ? "(no sent messages)"
-      : "(no messages)";
-    list.innerHTML = `<li class='muted'>${emptyText}</li>`;
+      ? "No sent messages yet."
+      : "No messages in this view.";
+    list.innerHTML = `<li class="workspace-empty"><span class="fox-loop fox-rest" aria-hidden="true"></span><strong>${emptyText}</strong><p>Connect an account or try another folder or search.</p></li>`;
     return;
   }
   const selectedUid = state.selectedMailMessageUid != null
@@ -664,13 +686,18 @@ function renderMailMessages() {
       : (msg.from || "(unknown sender)");
     const fromMeta = [who, sizeText ? `Size: ${sizeText}` : ""].filter(Boolean).join(" • ");
     li.className = isSelected ? "clickable current mail-message-item" : "clickable mail-message-item";
+    li.tabIndex = 0;
+    li.setAttribute("role", "button");
+    li.setAttribute("aria-label", `${who}: ${msg.subject || "(no subject)"}`);
+    if (isSelected) li.setAttribute("aria-current", "true");
     if (!msg.seen) li.classList.add("unread");
     li.innerHTML = `
-      <div class="row" style="justify-content: space-between; align-items: center; gap: 8px;">
+      <span class="avatar" aria-hidden="true">${escapeHtml(initials(who.replace(/<[^>]*>/g, "").replace(/["<>]/g, "")))}</span>
+      <div class="mail-row-copy">
+        <div class="mail-row-top"><strong class="mail-message-sender">${escapeHtml(who)}</strong><span class="muted mail-message-date">${escapeHtml(dateText)}</span></div>
         <span class="mail-message-subject">${escapeHtml(msg.subject || "(no subject)")}</span>
-        <span class="small muted mail-message-date">${escapeHtml(dateText)}</span>
+        <div class="muted mail-message-from">${escapeHtml(fromMeta)}</div>
       </div>
-      <div class="small muted mail-message-from">${escapeHtml(fromMeta)}</div>
     `;
     li.addEventListener("click", async () => {
       cancelMailMessageRequest();
@@ -747,6 +774,12 @@ function renderMailMessages() {
         setMailMessageLoading(false);
         if (isUnlockCancelled(err)) return;
         setStatus(err.message, "error");
+      }
+    });
+    li.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        li.click();
       }
     });
     list.appendChild(li);
@@ -912,6 +945,8 @@ async function showMailboxFolder(folder) {
 
 export function initMailPage() {
   initMailTabs();
+  window.addEventListener("resize", () => requestAnimationFrame(fitMailReaderBody));
+  document.addEventListener("ebp:workspace-changed", () => requestAnimationFrame(fitMailReaderBody));
   renderMailReaderHeader();
   syncMailFolderCustomUi();
 

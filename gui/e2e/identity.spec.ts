@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { Buffer } from "node:buffer";
 import { generateHumanName } from "./name_generator.ts";
+import { completePrivateOperation } from "./private-operation.ts";
 
 const testPassword = "Smoke-test-password1";
 const testServerUrl = "http://localhost:8788";
@@ -19,9 +20,7 @@ async function expandSection(page: Page, sectionTitle: string) {
 }
 
 async function submitPassword(page: Page, password = testPassword) {
-  await expect(page.locator("#password-modal")).toBeVisible();
-  await page.fill("#password-modal-input", password);
-  await page.getByRole("button", { name: "Submit", exact: true }).click();
+  await completePrivateOperation(page, password);
 }
 
 async function setServer(page: Page, serverUrl = testServerUrl) {
@@ -366,8 +365,19 @@ test("wrong password blocks publish and does not push identity to server", async
   const fingerprint = (await page.locator("#ctx-fingerprint").textContent())?.trim() ?? "";
   expect(fingerprint).toBeTruthy();
 
-  await publishIdentity(page, testServerUrl, "definitely-wrong-password");
-  await expectStatus(page, /error|failed|invalid|decrypt/i, "error");
+  if (await page.locator("#ctx-unlock-pill").getAttribute("data-state") === "unlocked") {
+    await page.locator("#ctx-unlock-btn").click();
+  }
+  await expect(page.locator("#ctx-unlock-pill")).toHaveAttribute("data-state", "locked");
+  await page.locator('.nav-item[data-page="identities"]').click();
+  await expandSection(page, "Publish to Server");
+  await page.locator("#publish-server").fill(testServerUrl);
+  await page.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(page.locator("#password-modal")).toBeVisible();
+  await page.locator("#password-modal-input").fill("definitely-wrong-password");
+  await page.locator("#password-modal-confirm").click();
+  await expectStatus(page, /wrong password/i, "error");
+  await page.locator("#password-modal-cancel").click();
   await expectServerIdentitiesNotContains(page, fingerprint, fingerprint);
 });
 

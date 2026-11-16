@@ -10,6 +10,21 @@ The Tauri configuration currently treats Linux AppImage as the primary bundled
 target. macOS and Windows release artifacts are produced by the external desktop
 build scripts rather than by a checked-in Tauri bundle target.
 
+The desktop workspace is served from `gui/`. Its place palettes and local
+watercolor atlases match the mobile app. `gui/styles.css` contains shared
+workflow components; `gui/workspace.css` defines the desktop shell, themes,
+responsive mail reader, and artwork. Appearance is saved locally as
+`ebp.ui.appearance` (`light`, `dark`, or `system`). Private keys and mail bodies
+continue to use their existing storage and session rules.
+
+The sidecar build embeds both stylesheets, `gui/js/`, and `gui/assets/` along
+with the entry page. The native startup screen lives in `desktop/dist/`, with
+an external `loader.js` compatible with the Tauri script policy. No remote
+fonts or new runtime dependencies are needed for the design.
+
+Run `deno task gui` to review the workspace, `deno task test:e2e` for browser
+coverage, and `deno task desktop:backend:build` to rebuild the packaged backend.
+
 Security expectations for all platforms:
 
 - Desktop releases must include the same local backend sidecar build produced by
