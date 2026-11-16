@@ -1,4 +1,4 @@
-import { getContext, readState, updateState } from "../../cli/utils.ts";
+import { getContext, readState, updateState, normalizeServerUrl } from "../../cli/utils.ts";
 import { HttpError, json, readJson, STATUS } from "./http.ts";
 import { resolveVerifiedEmailContact } from "./resolve-verified-email.ts";
 
@@ -43,7 +43,10 @@ export async function handleDirectoryRoutes(
     }
 
     if (!urlValue) throw new HttpError(STATUS.BadRequest, "url is required");
-    const state = await updateState(ctx.identityDir, { server: urlValue });
+    let normalized: string;
+    try { normalized = normalizeServerUrl(urlValue); }
+    catch (error) { throw new HttpError(STATUS.BadRequest, String(error)); }
+    const state = await updateState(ctx.identityDir, { server: normalized });
     return json({ ok: true, server: state.server ?? null });
   }
 

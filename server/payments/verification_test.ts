@@ -167,7 +167,7 @@ Deno.test("Cardano checks CIP-20, outputs, asset, canonical block and depth", ()
   };
   const payment = {
     txHash: hash,
-    transaction: { hash, block, block_height: 10 },
+    transaction: { hash, block, block_height: 10, valid_contract: true },
     outputs: [{
       address: expected.recipient,
       amount: [{ unit: "lovelace", quantity: "10" }],

@@ -1,3 +1,5 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
+import { validateContact, validOpaqueResolutions } from "../../../common/Contacts.ts";
 /**
  * Pure contact helpers (Deno/Jest-testable; no RNFS / network).
  */
@@ -60,6 +62,7 @@ export function normalizeExternalIdentity(
   source: Record<string, unknown>,
   fallbackFingerprint?: string,
 ): ExternalIdentity {
+  const validated = validateContact({...source, fingerprint: source.fingerprint || fallbackFingerprint});
   const signingKeyType =
     source.signingKeyType === 'sphincs' ? 'sphincs' : 'dilithium';
   const fingerprint =
@@ -84,6 +87,7 @@ export function normalizeExternalIdentity(
   );
 
   return {
+    ...validated,
     fingerprint,
     signingKeyType,
     encryptionKeyType: 'kyber',
@@ -159,7 +163,7 @@ export function contactMatchesEmail(
   if (detailEmail && emailsEqualIgnoreCase(detailEmail, normalizedEmail)) {
     return true;
   }
-  const resolved = contact.resolvedOpaqueDetails?.['opaque::email'];
+  const resolved = validOpaqueResolutions(contact)['opaque::email'];
   if (resolved && emailsEqualIgnoreCase(resolved, normalizedEmail)) {
     return true;
   }
@@ -171,6 +175,6 @@ export function contactMatchesEmail(
 }
 
 export function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
+  const base = normalizeServerUrl(server);
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }

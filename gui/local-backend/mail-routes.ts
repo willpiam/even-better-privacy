@@ -248,9 +248,6 @@ export async function handleMailRoutes(
           : existingSecrets.smtpPassword,
     };
     secretStore[accountId] = nextSecrets;
-    if (!accountConfig.persistSecrets) {
-      delete secretStore[accountId];
-    }
     await saveMailSecretsStore(ctx.identityDir, secretStore);
     return json({
       ok: true,

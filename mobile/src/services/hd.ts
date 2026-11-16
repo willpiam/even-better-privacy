@@ -1,3 +1,5 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
+import {identityIsPublished} from "../../../common/Discovery.ts";
 import {
   Identity,
   generateMnemonic,
@@ -11,7 +13,7 @@ import {getServerUrl, getEnforcePasswordPolicy} from './settings';
 import {importIdentity, listIdentities, persistIdentity} from './storage';
 
 function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
+  const base = normalizeServerUrl(server);
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
@@ -115,10 +117,8 @@ export async function discoverHdIdentities(params: {
       const res = await fetch(
         apiUrl(server, `/api/v1/identity/${encodeURIComponent(fingerprint)}`),
       );
-      publishedToServer = res.ok;
-    } catch {
-      // ignore unreachable server
-    }
+      publishedToServer = await identityIsPublished(res);
+    } catch (error) { throw new Error(`Discovery incomplete: ${String(error)}`); }
     if (localName || publishedToServer) {
       gap = 0;
       matches.push({index, fingerprint, localName, publishedToServer});

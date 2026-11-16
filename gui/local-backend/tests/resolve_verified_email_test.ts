@@ -1,10 +1,12 @@
+import {Identity} from "../../../core/Identity.ts";
 import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
 import { handleRequest } from "../routes.ts";
 import { initSecurity, setCsrfTokenForTest } from "../security.ts";
 
 const TEST_TOKEN = "s".repeat(64);
 const SERVER = "https://keys.test";
-const FINGERPRINT = "ebpdk1a7cluc75lj5mhxcts3fpf7cwteev7ez2ur0qf8ksayfg2amksy5sn6c8gt";
+const PUBLIC = new Identity("dilithium", "kyber").summary;
+const FINGERPRINT = PUBLIC.fingerprint;
 const EMAIL = "alice@pqpost.com";
 
 function req(path: string): Request {
@@ -20,11 +22,12 @@ function req(path: string): Request {
 
 function identityBody(fingerprint: string, email: string, verified: boolean) {
   return {
+    ...PUBLIC,
     fingerprint,
     signingKeyType: "dilithium",
     encryptionKeyType: "kyber",
-    signingKey: "signing-key",
-    encryptionKey: "encryption-key",
+    signingKey: PUBLIC.signingKey,
+    encryptionKey: PUBLIC.encryptionKey,
     signingKeyDetails: { variant: "ml_dsa87" },
     encryptionKeyDetails: { variant: "ml_kem1024" },
     details: { email: [email, "proof"] },
@@ -58,6 +61,7 @@ async function withServer(
   globalThis.fetch = ((input: string | URL | Request) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     calls.push(url.pathname);
+    if (url.pathname === "/api/v1/identities/by-verified-email") return Promise.resolve(new Response(null, {status: 404}));
     if (url.pathname === "/api/v1/identities/search") {
       return Promise.resolve(searchPage(identities));
     }
@@ -98,7 +102,7 @@ Deno.test({
       const saved = JSON.parse(await Deno.readTextFile(
         `${home}/.ebp/contacts/${body.name}.json`,
       ));
-      assertEquals(saved.encryptionKey, "encryption-key");
+      assertEquals(saved.encryptionKey, PUBLIC.encryptionKey);
       assertEquals(saved.details.email[0], EMAIL);
       assert(calls.some((path) => path.startsWith("/api/v1/identity/")));
     });
@@ -133,9 +137,7 @@ Deno.test({
       const dir = `${home}/.ebp/contacts`;
       await Deno.mkdir(dir, { recursive: true });
       await Deno.writeTextFile(`${dir}/Alice.json`, JSON.stringify({
-        fingerprint: "local-fingerprint",
-        signingKey: "local-sign",
-        encryptionKey: "local-key",
+        ...PUBLIC,
         details: { email: [EMAIL, "local-proof"] },
       }));
       const res = await handleRequest(req(resolveUrl(home)));
@@ -143,12 +145,12 @@ Deno.test({
       assertEquals(body, {
         status: "unique",
         name: "Alice",
-        fingerprint: "local-fingerprint",
+        fingerprint: FINGERPRINT,
         imported: false,
       });
       assertEquals(calls.length, 0);
       const stillLocal = JSON.parse(await Deno.readTextFile(`${dir}/Alice.json`));
-      assertEquals(stillLocal.encryptionKey, "local-key");
+      assertEquals(stillLocal.encryptionKey, PUBLIC.encryptionKey);
     });
   },
 });

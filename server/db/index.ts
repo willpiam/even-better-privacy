@@ -1,3 +1,4 @@
+import {sha256Hex} from "../../core/MessageHash.ts";
 import { detailProofNonce } from "./detail-nonces.ts";
 export {
   coerceNumber,
@@ -208,35 +209,33 @@ export async function updateDetailVerification(db: DatabaseAdapter, record: {
 /** Issue a token only for the exact signed claim that was inspected. */
 export async function issueDetailVerification(
   db: DatabaseAdapter,
-  record: {
-    fingerprint: string;
-    path: string;
-    detail: string;
-    proof: string;
-    token: string | null;
-    tokenHash: string;
-    expiresAt: number;
-    sentAt: number;
-  },
+  record: { fingerprint: string; path: string; detail: string; proof: string; token: string | null;
+    tokenHash: string; expiresAt: number; sentAt: number; recipientHash?: string },
 ): Promise<boolean> {
-  const rows = await db.query<[number]>(
-    `UPDATE details SET verified_at = NULL, verification_token = ?,
-       verification_token_hash = ?, verification_expires_at = ?, verification_sent_at = ?
-     WHERE identity_fingerprint = ? AND path = ? AND detail = ? AND proof = ?
-       AND revoked_at IS NULL AND verified_at IS NULL
-     RETURNING id`,
-    [
-      record.token,
-      record.tokenHash,
-      record.expiresAt,
-      record.sentAt,
-      record.fingerprint,
-      record.path,
-      record.detail,
-      record.proof,
-    ],
-  );
-  return rows.length === 1;
+  const recipient = record.recipientHash ?? sha256Hex(record.detail.trim().toLowerCase());
+  // Shared across automatic issuance and signed resends, across server processes.
+  return db.writeTransaction(async tx => {
+    const budgets = await tx.query<[number | bigint, number | bigint]>(
+      "SELECT window_start, sent_count FROM verification_recipient_budget WHERE recipient_hash = ?", [recipient]);
+    const current = budgets[0];
+    const sameWindow = current && Number(current[0]) > record.sentAt - 24 * 60 * 60_000;
+    const windowStart = sameWindow ? Number(current[0]) : record.sentAt;
+    const sentCount = sameWindow ? Number(current[1]) : 0;
+    if (sentCount >= 3) return false;
+    const rows = await tx.query<[number]>(`UPDATE details SET verified_at = NULL, verification_token = ?,
+      verification_token_hash = ?, verification_expires_at = ?, verification_sent_at = ?
+      WHERE identity_fingerprint = ? AND path = ? AND detail = ? AND proof = ?
+        AND revoked_at IS NULL AND verified_at IS NULL
+        AND (verification_expires_at IS NULL OR verification_expires_at <= ?)
+        AND (verification_sent_at IS NULL OR verification_sent_at <= ?)
+      RETURNING id`, [record.token, record.tokenHash, record.expiresAt, record.sentAt,
+        record.fingerprint, record.path, record.detail, record.proof, record.sentAt, record.sentAt - 15 * 60_000]);
+    if (!rows.length) return false;
+    await tx.query(`INSERT INTO verification_recipient_budget(recipient_hash, window_start, sent_count) VALUES (?, ?, ?)
+      ON CONFLICT(recipient_hash) DO UPDATE SET window_start = excluded.window_start, sent_count = excluded.sent_count`,
+      [recipient, windowStart, sentCount + 1]);
+    return true;
+  }, "verification-issuance");
 }
 
 /** Consume a live token and verify its claim in one database operation. */
@@ -362,6 +361,21 @@ export async function getIdentity(
   };
 }
 
+/** One detail projection supplies values, verification flags, and revocation paths. */
+export async function getIdentityDetailView(db: DatabaseAdapter, fingerprint: string) {
+  const details: DetailsMap = {};
+  const detailsMeta: Record<string, {verified: boolean; verifiedAt: number | null}> = {};
+  const revokedDetails: string[] = [];
+  const rows = await db.query<[string, string, string, number | bigint | null, number | bigint | null]>(
+    "SELECT path, detail, proof, verified_at, revoked_at FROM details WHERE identity_fingerprint = ? ORDER BY id ASC", [fingerprint]);
+  for (const [path, detail, proof, verified, revoked] of rows) {
+    Object.defineProperty(details, path, {value: [detail, proof], enumerable: true});
+    Object.defineProperty(detailsMeta, path, {value: {verified: verified !== null && revoked === null, verifiedAt: coerceNumber(verified)}, enumerable: true});
+    if (revoked !== null) revokedDetails.push(path);
+  }
+  return {details, detailsMeta, revokedDetails};
+}
+
 export async function getDetailsMap(
   db: DatabaseAdapter,
   fingerprint: string,
@@ -432,8 +446,12 @@ export async function ensureNewNonce(
     return { ok: false, error: "nonce must be increasing" };
   }
   const rows = await db.query<[number | string | bigint | null]>(
-    "SELECT MAX(proof_nonce) FROM details WHERE identity_fingerprint = ?",
-    [fingerprint],
+    `SELECT MAX(nonce) FROM (
+      SELECT proof_nonce AS nonce FROM details WHERE identity_fingerprint = ?
+      UNION ALL SELECT proof_nonce AS nonce FROM mail_payment_orders WHERE identity_fingerprint = ?
+      UNION ALL SELECT nonce FROM authorization_nonces WHERE identity_fingerprint = ?
+    ) AS accepted_nonces`,
+    [fingerprint, fingerprint, fingerprint],
   );
   const maxNonce = coerceNumber(rows[0]?.[0] ?? null) ?? -1;
   if (nonce === maxNonce && maxNonce >= 0) {
@@ -445,6 +463,16 @@ export async function ensureNewNonce(
   }
 
   return { ok: true };
+}
+
+/** Atomic reservation; callers combine this with their mutation in an identity transaction. */
+export async function consumeNonce(db: DatabaseAdapter, fingerprint: string, nonce: number): Promise<{ok: true} | {ok: false; error: string}> {
+  const check = await ensureNewNonce(db, fingerprint, nonce);
+  if (!check.ok) return check;
+  const rows = await db.query<[number]>(`INSERT INTO authorization_nonces(identity_fingerprint, nonce)
+    VALUES (?, ?) ON CONFLICT(identity_fingerprint) DO UPDATE SET nonce = excluded.nonce
+    WHERE authorization_nonces.nonce < excluded.nonce RETURNING nonce`, [fingerprint, nonce]);
+  return rows.length ? {ok: true} : {ok: false, error: "nonce already used"};
 }
 
 export async function insertRevocation(db: DatabaseAdapter, record: {

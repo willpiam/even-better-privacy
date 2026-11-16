@@ -22,7 +22,7 @@ export function quantityHex(atomic) {
  * Sepolia ETH or preview ADA. Production names and every other asset stay manual.
  */
 export function walletPayKind(order) {
-  if (!order || order.status !== "quoted") return null;
+  if (!order || order.status !== "quoted" || !Number.isFinite(order.expiresAt) || order.expiresAt <= Date.now()) return null;
   if (typeof order.email !== "string" || !order.email.endsWith(`@${TEST_MAIL_DOMAIN}`)) {
     return null;
   }
@@ -48,6 +48,16 @@ export function sepoliaPayment(order, from) {
     from,
     to: order.recipient,
     value: quantityHex(order.amountAtomic),
-    input: messageInput(order.message),
+    data: messageInput(order.message),
   };
+}
+
+/** CIP-30 amount is a CBOR Value, here a positive lovelace integer. */
+export function cip30LovelaceAmount(amount) {
+  const n = BigInt(amount);
+  if (n < 0n || n > 0xffffffffffffffffn) throw new Error("Invalid wallet amount");
+  if (n < 24n) return n.toString(16).padStart(2, "0");
+  for (const [bytes, prefix] of [[1, "18"], [2, "19"], [4, "1a"], [8, "1b"]]) {
+    if (n < (1n << BigInt(bytes * 8))) return prefix + n.toString(16).padStart(bytes * 2, "0");
+  }
 }

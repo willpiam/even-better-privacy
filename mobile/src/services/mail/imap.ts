@@ -33,7 +33,7 @@ export function quoteImap(value: string): string {
     if (code < 32 || code === 127)
       throw new Error('IMAP strings cannot contain control characters');
   }
-  if (value.length > 0 && !/[ (){%*"\\\]]/.test(value)) {
+  if (value.length > 0 && !/[^\x21-\x7e]|[ (){%*"\\\]]/.test(value)) {
     return value;
   }
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
@@ -89,7 +89,7 @@ export function buildUidSearchCommand(tag: string, search?: string): string {
   if (!q) {
     return `${tag} UID SEARCH ALL`;
   }
-  return `${tag} UID SEARCH TEXT ${quoteImap(q)}`;
+  return `${tag} UID SEARCH${/[^\x00-\x7f]/.test(q) ? " CHARSET UTF-8" : ""} TEXT ${quoteImap(q)}`;
 }
 
 async function maybeImapStartTls(

@@ -365,13 +365,16 @@ export default function IdentityActionsScreen({
           throw new Error('Email is required');
         }
       }
-      await requestVerifyEmail({
+      const unlocked = await ensureUnlocked(identity.name);
+      if (!unlocked) return;
+      const result = await requestVerifyEmail({
+        identityName: identity.name,
         fingerprint: identity.fingerprint,
         detail: cleartext,
         path: verifyPath,
         server: serverUrl,
       });
-      setStatus(`Verification email requested for ${cleartext}`);
+      setStatus((result as {status?: string}).status === 'pending' ? 'Your existing verification link remains valid, or the recipient limit has been reached.' : `Verification email requested for ${cleartext}`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     }

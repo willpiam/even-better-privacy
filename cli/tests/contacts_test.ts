@@ -1,3 +1,4 @@
+import {FILE_FORMAT_VERSIONS} from "../../core/version.ts";
 import { assertEquals, assertRejects } from "jsr:@std/assert@^1.0.6";
 import { Identity } from "../../core/Identity.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
@@ -89,7 +90,7 @@ Deno.test("import and stored contact loads reject keys bound to another fingerpr
     await assertRejects(
       () => loadContact(ctx, alice.toFingerprint().slice(0, 16)),
       Error,
-      "fingerprint mismatch",
+      "Contact not found",
     );
   });
 });
@@ -109,6 +110,7 @@ Deno.test("valid contacts retain aliases and verify legitimate signatures but re
     const message = "contact regression";
     const signed = {
       type: "ebp-signed-message",
+      version: FILE_FORMAT_VERSIONS.signedMessage,
       message,
       messageHash: sha256Hex(message),
       signature: alice.signMessage(message),

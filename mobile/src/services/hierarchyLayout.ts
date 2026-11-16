@@ -29,16 +29,14 @@ export function layoutHierarchyTree(
   relationships: LayoutRelationship[],
   roots: string[],
 ): TreeLayoutResult {
-  const childrenOf = new Map<string, string[]>();
+  const childrenOf = new Map<string, Set<string>>();
   const allFingerprints = new Set(nodes.map(n => n.fingerprint));
   for (const fp of allFingerprints) {
-    childrenOf.set(fp, []);
+    childrenOf.set(fp, new Set());
   }
   for (const rel of relationships) {
-    const arr = childrenOf.get(rel.masterFingerprint) || [];
-    if (!arr.includes(rel.childFingerprint)) {
-      arr.push(rel.childFingerprint);
-    }
+    const arr = childrenOf.get(rel.masterFingerprint) || new Set<string>();
+    arr.add(rel.childFingerprint);
     childrenOf.set(rel.masterFingerprint, arr);
   }
 
@@ -54,9 +52,10 @@ export function layoutHierarchyTree(
     }
   }
 
+  let head = 0;
   const runBfs = () => {
-    while (queue.length > 0) {
-      const {fp, level} = queue.shift()!;
+    while (head < queue.length) {
+      const {fp, level} = queue[head++];
       const children = childrenOf.get(fp) || [];
       for (const child of children) {
         if (!levels.has(child)) {

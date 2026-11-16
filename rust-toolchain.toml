@@ -1,0 +1,4 @@
+[toolchain]
+# The locked Tauri build helper expects Cargo's pre-1.100 OUT_DIR layout.
+channel = "1.93.1"
+profile = "minimal"

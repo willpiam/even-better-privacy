@@ -1,9 +1,11 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
+import {FILE_FORMAT_VERSIONS} from "../../../core/version.ts";
 import { prepareDetailRevocation, prepareIdentityRevocation } from "../../../common/RevocationRetry";
 import {loadIdentityForUse, mutateIdentityForUse} from './storage';
 import {getServerUrl} from './settings';
 
 function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
+  const base = normalizeServerUrl(server);
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
@@ -78,6 +80,7 @@ export async function generateEmergencyCert(params: {
   password?: string;
 }): Promise<{
   type: string;
+  version: number;
   fingerprint: string;
   certificate: string;
   createdAt: string;
@@ -90,6 +93,7 @@ export async function generateEmergencyCert(params: {
   const certificate = identity.generateEmergencyRevocationCertificate();
   return {
     type: 'ebp-emergency-revocation-certificate',
+    version: FILE_FORMAT_VERSIONS.emergencyRevocationCertificate,
     fingerprint: identity.toFingerprint(),
     certificate,
     createdAt: new Date().toISOString(),

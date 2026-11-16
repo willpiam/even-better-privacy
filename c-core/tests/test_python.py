@@ -1,3 +1,4 @@
+import json
 import base64
 import hashlib
 import ssl
@@ -10,6 +11,13 @@ from ebp_core import openssl_version
 
 
 class CoreTests(unittest.TestCase):
+    def test_empty_attachment_and_file_signature_field_contract(self):
+        from ebp_core import create_email_attachment, parse_email_attachment, build_file_sign_message
+        envelope = create_email_attachment(b"", "empty.txt", "empty-id")
+        self.assertEqual(parse_email_attachment(json.dumps(envelope))["fileBytes"], b"")
+        with self.assertRaises(ValueError):
+            build_file_sign_message("abc123", "ab::shifted", "context")
+
     def test_openssl_version_after_python_ssl_import(self):
         self.assertTrue(ssl.OPENSSL_VERSION.startswith("OpenSSL "))
         version = openssl_version()

@@ -10,8 +10,10 @@ import { LIMITS, readJsonBody, validateStringLength } from "../body.ts";
 import { json } from "../response.ts";
 import {
   ensureNewNonce,
+  consumeNonce,
   getDetailRecord,
   getDetailsMap,
+  getIdentityDetailView,
   getDetailsMetaMap,
   getIdentity,
   getRevokedDetailPaths,
@@ -261,13 +263,11 @@ export async function handleGetIdentity(
 
   const identity = await getIdentity(db, fingerprint);
   if (!identity) {
-    return json({ error: "unknown subject" }, 400);
+    return json({ error: "unknown subject" }, 404);
   }
 
-  const details = await getDetailsMap(db, fingerprint);
-  const detailsMeta = await getDetailsMetaMap(db, fingerprint);
+  const {details, detailsMeta, revokedDetails: revokedDetailPaths} = await getIdentityDetailView(db, fingerprint);
   const revoked = await isIdentityRevoked(db, fingerprint);
-  const revokedDetailPaths = await getRevokedDetailPaths(db, fingerprint);
 
   return json({
     fingerprint,
@@ -309,6 +309,7 @@ export async function handlePostDetail(
   const pathCheck = validateStringLength(payload.path, "path", LIMITS.path);
   if (!pathCheck.ok) return json({ error: pathCheck.error }, 400);
   const path = pathCheck.value;
+  if (path.startsWith("ebp-mail::")) return json({error: "authorization paths cannot be published as details"}, 400);
 
   const detailCheck = validateStringLength(
     payload.detail,
@@ -349,7 +350,7 @@ export async function handlePostDetail(
       return json({ error: "detail already exists for path" }, 409);
     }
 
-    const nonceCheck = await ensureNewNonce(
+    const nonceCheck = await consumeNonce(
       db,
       fingerprint,
       proofVerifyResult.record.nonce,
@@ -379,12 +380,9 @@ export async function handlePostDetail(
         tokenHash,
         expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
         sentAt: now,
+        recipientHash: sha256Hex(detail.trim().toLowerCase()),
       });
-      if (!issued) {
-        return json({
-          error: "email detail changed; request verification again",
-        }, 409);
-      }
+      if (!issued) return json({ok:true,fingerprint,path,verificationStatus:"pending"});
 
       const baseUrl = getPublicBaseUrl(req);
       if (!baseUrl) {

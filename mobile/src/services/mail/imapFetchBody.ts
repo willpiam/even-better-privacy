@@ -1,3 +1,5 @@
+import {splitHeadersAndBody} from "../../../../common/mail/Headers.ts";
+import {taggedImapStatus} from "../../../../common/mail/ImapStatus.ts";
 import type {MailMessageDetail} from './types';
 import {Buffer} from 'buffer';
 import {MAX_MAIL_SOURCE_BYTES} from '../../../../common/MailLimits';
@@ -5,7 +7,7 @@ import {decodeHeaderWords} from './headerWords';
 
 export type FetchBodyClient = {
   readLine: () => Promise<string>;
-  readBytes: (n: number) => Promise<string>;
+  readBytes: (n: number) => Promise<Uint8Array>;
 };
 
 const BODY_LITERAL_RE = /BODY(?:\.PEEK)?\[\] \{(\d+)\}\s*$/i;
@@ -17,38 +19,10 @@ const BODY_QUOTED_RE = /BODY(?:\.PEEK)?\[\] "((?:\\.|[^"\\])*)"/i;
  * (e.g. a line containing `from:to:cc:...`).
  */
 export function rfc822HeaderBlock(source: string): string {
-  const normalized = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  const idx = normalized.search(/\n\n/);
-  if (idx < 0) {
-    return normalized;
-  }
-  return normalized.slice(0, idx);
+  return splitHeadersAndBody(source).headerBlock;
 }
-
-/**
- * Parse a header field from an RFC822 message or header-only blob.
- * Matches only at the start of a line within the header section and unfolds
- * RFC 5322 continuation lines.
- */
-export function parseHeaderField(blob: string, name: string): string {
-  const headers = rfc822HeaderBlock(blob);
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const re = new RegExp(`^${escaped}:\\s*(.*)$`, 'im');
-  const m = headers.match(re);
-  if (!m || m.index === undefined) {
-    return '';
-  }
-  let value = m[1] ?? '';
-  // Unfold continuation lines that follow the matched header line.
-  const after = headers.slice(m.index + m[0].length);
-  const cont = after.match(/^(?:\n[ \t]+(.*))+/);
-  if (cont) {
-    const parts = cont[0].split(/\n[ \t]+/).filter(Boolean);
-    value = [value, ...parts].join(' ').replace(/\s+/g, ' ').trim();
-  } else {
-    value = value.trim();
-  }
-  // Decode display text without changing mailbox addresses used for authentication.
+export function parseHeaderField(blob: string | Uint8Array, name: string): string {
+  const value = splitHeadersAndBody(typeof blob === 'string' ? blob : Buffer.from(blob).toString('utf8')).headers[name.toLowerCase()] ?? '';
   return name.toLowerCase() === 'subject' ? decodeHeaderWords(value) : value;
 }
 
@@ -59,13 +33,13 @@ export function parseHeaderField(blob: string, name: string): string {
 export async function readFetchRfc822Source(
   client: FetchBodyClient,
   fetchTag: string,
-): Promise<string> {
-  let rfc822 = '';
+): Promise<Uint8Array> {
+  let rfc822 = new Uint8Array();
   let totalBytes = 0;
   while (true) {
     const line = await client.readLine();
     if (line.startsWith(`${fetchTag} `)) {
-      if (!line.includes(' OK')) {
+      if (taggedImapStatus(line, fetchTag) !== 'OK') {
         throw new Error(line);
       }
       break;
@@ -81,7 +55,7 @@ export async function readFetchRfc822Source(
         throw new Error('Mail message exceeds size limit');
       }
       totalBytes += n;
-      rfc822 = await client.readBytes(n);
+      rfc822 = new Uint8Array(await client.readBytes(n));
       continue;
     }
     const quoted = line.match(BODY_QUOTED_RE);
@@ -89,10 +63,10 @@ export async function readFetchRfc822Source(
       totalBytes += Buffer.byteLength(quoted[1], 'utf8');
       if (totalBytes > MAX_MAIL_SOURCE_BYTES)
         throw new Error('Mail message exceeds size limit');
-      rfc822 = quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      rfc822 = Buffer.from(quoted[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\'), 'latin1');
     }
   }
-  if (!rfc822) {
+  if (!rfc822.length) {
     throw new Error('FETCH response contained no BODY[] payload');
   }
   return rfc822;
@@ -103,19 +77,21 @@ export async function readFetchRfc822Source(
  */
 export function messageDetailFromRfc822(
   uid: number,
-  source: string,
+  source: string | Uint8Array,
   parsed: {text: string; html: string},
   ebpPayload: string | null,
 ): MailMessageDetail {
+  const rawSource = typeof source === 'string' ? source : Buffer.from(source).toString('utf8');
+  const headers = splitHeadersAndBody(rawSource).headers;
   return {
     uid,
-    subject: parseHeaderField(source, 'Subject') || '',
-    from: parseHeaderField(source, 'From') || '',
-    to: parseHeaderField(source, 'To') || '',
-    date: parseHeaderField(source, 'Date') || '',
+    subject: decodeHeaderWords(headers['subject'] ?? '') || '',
+    from: headers['from'] || '',
+    to: headers['to'] || '',
+    date: headers['date'] || '',
     bodyText: parsed.text,
     bodyHtml: parsed.html,
-    rawSource: source,
+    rawSource,
     ebpPayload,
   };
 }

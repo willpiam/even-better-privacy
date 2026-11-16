@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Prereqs (once): sudo apt install libwebkit2gtk-4.0-dev libssl-dev build-essential"
+echo "Prereqs (once): sudo apt install libwebkit2gtk-4.1-dev libssl-dev build-essential"
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 APPIMAGE_DIR="${ROOT}/desktop/src-tauri/target/release/bundle/appimage"

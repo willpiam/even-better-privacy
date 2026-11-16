@@ -1,3 +1,5 @@
+import { withFileLock } from "../../cli/json-store.ts";
+import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import {
 	decodeHierarchyCertificate,
 	isHierarchyCertificateExpired,
@@ -79,7 +81,7 @@ export async function storeHierarchyCertificateLocal(ctx: CLIContext, encodedCer
 	}
 	await ensurePrivateDir(getHierarchyDir(ctx));
 	const path = `${getHierarchyDir(ctx)}/${decoded.childFingerprint}.json`;
-	await Deno.writeTextFile(path, JSON.stringify({ certificate: encodedCertificate }, null, 2), { mode: 0o600 });
+	await writePrivateFileAtomic(path, JSON.stringify({ certificate: encodedCertificate }, null, 2));
 }
 
 export function getPendingHierarchyPath(ctx: CLIContext): string {
@@ -102,13 +104,22 @@ export async function readPendingHierarchyLocal(ctx: CLIContext): Promise<LocalP
 
 export async function writePendingHierarchyLocal(ctx: CLIContext, proposals: LocalPendingHierarchyProposal[]): Promise<void> {
 	await ensurePrivateDir(ctx.identityDir);
-	await Deno.writeTextFile(getPendingHierarchyPath(ctx), JSON.stringify(proposals, null, 2), { mode: 0o600 });
+	await writePrivateFileAtomic(getPendingHierarchyPath(ctx), JSON.stringify(proposals, null, 2));
+}
+
+export async function removePendingHierarchyLocal(ctx: CLIContext, id: number): Promise<void> {
+  await withFileLock(getPendingHierarchyPath(ctx), async () => {
+    const current = await readPendingHierarchyLocal(ctx);
+    await writePendingHierarchyLocal(ctx, current.filter(item => item.id !== id));
+  });
 }
 
 export async function addPendingHierarchyLocal(
 	ctx: CLIContext,
 	record: Omit<LocalPendingHierarchyProposal, "id" | "createdAt">,
 ): Promise<LocalPendingHierarchyProposal> {
+	await ensurePrivateDir(ctx.identityDir);
+	return withFileLock(getPendingHierarchyPath(ctx), async () => {
 	const all = await readPendingHierarchyLocal(ctx);
 	const duplicate = all.find((p) => p.masterFingerprint === record.masterFingerprint && p.childFingerprint === record.childFingerprint);
 	if (duplicate) {
@@ -123,6 +134,7 @@ export async function addPendingHierarchyLocal(
 	all.push(proposal);
 	await writePendingHierarchyLocal(ctx, all);
 	return proposal;
+	});
 }
 
 export function buildHierarchyTreeFromCertificates(

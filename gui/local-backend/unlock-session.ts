@@ -37,6 +37,8 @@ export interface UnlockStatus {
 }
 
 const sessions = new Map<string, UnlockSession>();
+let lockEpoch = 0;
+const identityEpochs = new Map<string, number>();
 const mutations = new KeyedQueue();
 
 /** Hold the lock across the complete load, mutation, and save operation. */
@@ -169,10 +171,13 @@ export async function unlockIdentity(
   if (!password) {
     throw new HttpError(STATUS.BadRequest, "password is required");
   }
+  const epoch = lockEpoch, identityEpoch = identityEpochs.get(sessionId(ctx)) ?? 0;
+  const isCurrent = () => epoch === lockEpoch && identityEpoch === (identityEpochs.get(sessionId(ctx)) ?? 0);
   const storageData = await readIdentityStorage(ctx);
   const header = readEncryptedHeader(storageData);
   const key = AES.deriveKeyForStorage(password, header.salt, header.version);
   const identity = decryptWithKey(storageData, key);
+  if (!isCurrent()) { key.fill(0); throw identityLockedError(); }
   const id = sessionId(ctx);
   const previous = sessions.get(id);
   const timeoutMs = (timeoutMinutes === undefined && previous)
@@ -190,11 +195,13 @@ export async function unlockIdentity(
     ctx.identityDir,
     password,
   );
+  if (!isCurrent()) { clearMailSecrets(ctx.identityDir); throw identityLockedError(); }
   return { identity, status: getUnlockStatus(ctx), mailUnlocked };
 }
 
 export function lockIdentity(ctx: CLIContext): boolean {
   const id = sessionId(ctx);
+  identityEpochs.set(id, (identityEpochs.get(id) ?? 0) + 1);
   const had = sessions.has(id);
   dropSession(id);
   clearMailSecrets(ctx.identityDir);
@@ -202,6 +209,7 @@ export function lockIdentity(ctx: CLIContext): boolean {
 }
 
 export function lockAll(): number {
+  lockEpoch++;
   const count = sessions.size;
   const dirs = new Set<string>();
   for (const [id, session] of [...sessions]) {

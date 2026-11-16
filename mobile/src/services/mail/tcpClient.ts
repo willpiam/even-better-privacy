@@ -1,3 +1,4 @@
+import {taggedImapStatus} from "../../../../common/mail/ImapStatus.ts";
 import TcpSocket from 'react-native-tcp-socket';
 import {Buffer} from 'buffer';
 import {mailStub} from './mailTrace';
@@ -14,7 +15,7 @@ export type TcpLineClient = {
   writeBytes: (data: string | Uint8Array) => void;
   readLine: () => Promise<string>;
   /** Consume exactly `n` octets from the stream (IMAP/SMTP literals). */
-  readBytes: (n: number) => Promise<string>;
+  readBytes: (n: number) => Promise<Uint8Array>;
   close: () => void;
   /**
    * Upgrade a plain-TCP client to TLS after a successful STARTTLS command.
@@ -40,7 +41,7 @@ type Waiter =
   | {
       kind: 'bytes';
       n: number;
-      resolve: (chunk: string) => void;
+      resolve: (chunk: Uint8Array) => void;
       reject: (err: Error) => void;
       timer: ReturnType<typeof setTimeout>;
     };
@@ -206,7 +207,7 @@ function attachLineClient(
         waiters.push({kind: 'line', resolve: res, reject: rej, timer});
       }),
     readBytes: (n: number) =>
-      new Promise<string>((res, rej) => {
+      new Promise<Uint8Array>((res, rej) => {
         if (closed) {
           rej(new Error('TCP connection closed'));
           return;
@@ -290,9 +291,11 @@ export function connectTlsLineClient(params: {
   port: number;
   timeoutMs?: number;
   readTimeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<TcpLineClient> {
   const endpoint = `${params.host}:${params.port}`;
   const readTimeoutMs = params.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+  if (params.signal?.aborted) return Promise.reject(new Error('Mail operation cancelled'));
 
   return new Promise((resolve, reject) => {
     void mailStub('tcp.connect.start', endpoint);
@@ -337,6 +340,16 @@ export function connectTlsLineClient(params: {
       }
     }, params.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
+    const abort = () => {
+      clearTimeout(connectTimer);
+      client?.close();
+      if (!settledConnect) { settledConnect = true; reject(new Error('Mail operation cancelled')); }
+    };
+    params.signal?.addEventListener('abort', abort, {once: true});
+    if (params.signal?.aborted) abort();
+    const originalClose = client.close;
+    client.close = () => { params.signal?.removeEventListener('abort', abort); originalClose(); };
+
     socket.on('error', (err: Error) => {
       clearTimeout(connectTimer);
       if (!settledConnect) {
@@ -354,9 +367,11 @@ export function connectPlainLineClient(params: {
   port: number;
   timeoutMs?: number;
   readTimeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<TcpLineClient> {
   const endpoint = `${params.host}:${params.port}`;
   const readTimeoutMs = params.readTimeoutMs ?? DEFAULT_READ_TIMEOUT_MS;
+  if (params.signal?.aborted) return Promise.reject(new Error('Mail operation cancelled'));
 
   return new Promise((resolve, reject) => {
     void mailStub('tcp.connect.start', `${endpoint} plain`);
@@ -399,6 +414,16 @@ export function connectPlainLineClient(params: {
       }
     }, params.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS);
 
+    const abort = () => {
+      clearTimeout(connectTimer);
+      client?.close();
+      if (!settledConnect) { settledConnect = true; reject(new Error('Mail operation cancelled')); }
+    };
+    params.signal?.addEventListener('abort', abort, {once: true});
+    if (params.signal?.aborted) abort();
+    const originalClose = client.close;
+    client.close = () => { params.signal?.removeEventListener('abort', abort); originalClose(); };
+
     socket.on('error', (err: Error) => {
       clearTimeout(connectTimer);
       if (!settledConnect) {
@@ -420,7 +445,9 @@ export async function connectMailLineClient(params: {
   secure: boolean;
   timeoutMs?: number;
   readTimeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<TcpLineClient> {
+  if (params.signal?.aborted) throw new Error('Mail operation cancelled');
   const mode = resolveMailTlsMode(params.secure);
   await mailStub('tcp.connect.mode', mode);
   if (mode === 'implicit-tls') {
@@ -437,9 +464,14 @@ export async function readTaggedOk(
   const lines: string[] = [];
   while (true) {
     const line = await client.readLine();
-    lines.push(line);
+    const literal = /^\* LIST /i.test(line) ? /\{(\d+)\}\s*$/.exec(line) : null;
+    if (literal) {
+      const bytes = await client.readBytes(Number(literal[1]));
+      const mailbox = Buffer.from(bytes).toString('utf8');
+      lines.push(line.replace(/\{\d+\}\s*$/, JSON.stringify(mailbox)));
+    } else { lines.push(line); }
     if (line.startsWith(`${tag} `)) {
-      if (!line.includes(' OK')) {
+      if (taggedImapStatus(line, tag) !== 'OK') {
         await mailStub(
           'tcp.readLine.ok',
           `tag=${tag} fail=${line.slice(0, 80)}`,

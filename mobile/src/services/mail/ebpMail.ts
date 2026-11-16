@@ -90,7 +90,7 @@ export async function sendEbpMail(params: {
       recipientFingerprint: contact.fingerprint,
       senderFingerprint: identity.toFingerprint(),
       ciphertext,
-      senderIdentity: publicIdentityBlock(identity),
+      senderIdentity: includePublicKeys ? publicIdentityBlock(identity) : undefined,
     });
     armor = armorPayload(payload);
   } else if (encryptFor.length === 1) {
@@ -111,7 +111,7 @@ export async function sendEbpMail(params: {
       recipients: encrypted.recipients,
       contentNonce: encrypted.contentNonce,
       ciphertext: encrypted.ciphertext,
-      senderIdentity: publicIdentityBlock(identity),
+      senderIdentity: includePublicKeys ? publicIdentityBlock(identity) : undefined,
     });
     armor = armorPayload(payload);
   }

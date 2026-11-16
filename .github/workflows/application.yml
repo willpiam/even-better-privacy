@@ -1,0 +1,77 @@
+name: Application contracts
+on:
+  push:
+  pull_request:
+jobs:
+  deno:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        task: [test:core, test:cli-utils, test:gui-backend, test:server]
+    env:
+      DB_TYPE: sqlite
+      DENO_SQLITE_PATH: /usr/lib/x86_64-linux-gnu/libsqlite3.so.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+      - run: deno task ${{ matrix.task }}
+      - if: matrix.task == 'test:core'
+        run: npm run test:review-contracts
+  mobile:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci --prefix mobile
+      - run: npm --prefix mobile test -- --runInBand --watchAll=false
+  postgres:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: review
+          POSTGRES_PASSWORD: review-local
+          POSTGRES_DB: review
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U review" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DB_TYPE: psql
+      PG_HOST: 127.0.0.1
+      PG_PORT: '5432'
+      PG_USER: review
+      PG_PASSWORD: review-local
+      PG_DATABASE: review
+      HOLISTIC_TEST_POSTGRES: 'true'
+      RUN_POSTGRES_ATOMICITY: 'true'
+      PAYMENT_TEST_POSTGRES: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno test --allow-read --allow-write --allow-env --allow-net --allow-sys=hostname server/tests/holistic_remediation_test.ts server/tests/state_atomicity_postgres_test.ts server/payments/orders_postgres_test.ts
+  desktop:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.93.1'
+      - run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - run: deno task desktop:backend:build
+      - run: cargo check --locked --manifest-path desktop/src-tauri/Cargo.toml

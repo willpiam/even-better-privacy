@@ -1,3 +1,4 @@
+import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from "../../common/MailVerification.ts";
 import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
 import {
   createIdentityPayload,
@@ -362,6 +363,7 @@ Deno.test("opaque::email verify-email request endorses without storing cleartext
           fingerprint,
           detail: cleartext,
           path: "opaque::email",
+          authorization: createSignedProof(signingKey, {nonce:1,path:EMAIL_VERIFY_REQUEST_PATH,detail:verificationRequestDetail('opaque::email',cleartext),timestamp:Date.now()}).proof,
         }),
       }),
     );

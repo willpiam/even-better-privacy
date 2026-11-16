@@ -3,7 +3,7 @@ import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import { ensurePrivateDir, getContext } from "../../cli/utils.ts";
 import { HttpError, json, readJson, STATUS } from "./http.ts";
-import { deleteContact, findContactRecord, listContacts } from "./contacts.ts";
+import { deleteContact, findContactRecord, listContacts, saveExternalContact, updateContactRecord } from "./contacts.ts";
 
 export async function handleContactsRoutes(
   req: Request,
@@ -60,28 +60,7 @@ export async function handleContactsRoutes(
     }
 
     const ctx = await getContext(home);
-    await ensurePrivateDir(ctx.contactsDir);
-    const contactName = name ?? contact.fingerprint.substring(0, 16);
-    const contactPath = `${ctx.contactsDir}/${contactName}.json`;
-    try {
-      const existingRaw = await Deno.readTextFile(contactPath);
-      const existing = JSON.parse(existingRaw) as Record<string, unknown>;
-      const localFields = [
-        "localAlias",
-        "localDescription",
-        "localEmail",
-      ] as const;
-      for (const key of localFields) {
-        if (typeof existing[key] === "string" && existing[key]) {
-          (contact as Record<string, unknown>)[key] = existing[key];
-        }
-      }
-    } catch {
-      // no existing file to preserve from
-    }
-    await Deno.writeTextFile(contactPath, JSON.stringify(contact, null, 2), {
-      mode: 0o600,
-    });
+    const {name: contactName} = await saveExternalContact(ctx, contact, name);
 
     return json({
       ok: true,
@@ -129,10 +108,8 @@ export async function handleContactsRoutes(
     if (!value) throw new HttpError(STATUS.BadRequest, "value is required");
 
     const ctx = await getContext(home);
-    const found = await findContactRecord(ctx, fingerprint);
-    if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
-
-    const detailEntry = found.contact.details?.[path];
+    await updateContactRecord(ctx, fingerprint, contact => {
+    const detailEntry = contact.details?.[path];
     const expectedHash = Array.isArray(detailEntry)
       ? detailEntry[0]
       : detailEntry;
@@ -148,15 +125,11 @@ export async function handleContactsRoutes(
       );
     }
 
-    found.contact.resolvedOpaqueDetails = {
-      ...(found.contact.resolvedOpaqueDetails ?? {}),
+    contact.resolvedOpaqueDetails = {
+      ...(contact.resolvedOpaqueDetails ?? {}),
       [path]: value,
     };
-    await Deno.writeTextFile(
-      found.path,
-      JSON.stringify(found.contact, null, 2),
-      { mode: 0o600 },
-    );
+    });
     return json({ ok: true, matched: true, path });
   }
 
@@ -180,10 +153,8 @@ export async function handleContactsRoutes(
     }
 
     const ctx = await getContext(home);
-    const found = await findContactRecord(ctx, fingerprint);
-    if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
-
-    const raw = found.contact as Record<string, unknown>;
+    await updateContactRecord(ctx, fingerprint, contact => {
+    const raw = contact as Record<string, unknown>;
     if (typeof body.localAlias === "string") {
       raw.localAlias = body.localAlias || undefined;
     } else if (body.localAlias === null) {
@@ -199,11 +170,7 @@ export async function handleContactsRoutes(
     } else if (body.localEmail === null) {
       delete raw.localEmail;
     }
-    await Deno.writeTextFile(
-      found.path,
-      JSON.stringify(found.contact, null, 2),
-      { mode: 0o600 },
-    );
+    });
     return json({ ok: true, fingerprint });
   }
 

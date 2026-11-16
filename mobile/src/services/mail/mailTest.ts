@@ -12,6 +12,7 @@ export async function testImapConnection(
   config: MailAccountConfig,
   secrets: MailAuthSecrets,
   onProgress?: MailTestProgress,
+  signal?: AbortSignal,
 ): Promise<void> {
   onProgress?.('Connecting IMAP…');
   await mailStub(
@@ -22,10 +23,15 @@ export async function testImapConnection(
     host: config.imapHost,
     port: config.imapPort,
     secure: config.imapSecure,
+    signal,
   });
+  const abort = () => client.close();
+  signal?.addEventListener('abort', abort, {once: true});
   try {
+    if (signal?.aborted) throw new Error('Mail operation cancelled');
     onProgress?.('Authenticating IMAP…');
     await imapAuthenticate(client, config, secrets);
+    if (signal?.aborted) throw new Error('Mail operation cancelled');
     await mailStub('imap.select.wait', 'INBOX');
     onProgress?.('Selecting INBOX…');
     client.writeLine('t2 SELECT INBOX');
@@ -33,6 +39,7 @@ export async function testImapConnection(
     await mailStub('imap.select.ok');
     await mailStub('test.imap.done');
   } finally {
+    signal?.removeEventListener('abort', abort);
     client.close();
   }
 }
@@ -41,6 +48,7 @@ export async function testSmtpConnection(
   config: MailAccountConfig,
   secrets: MailAuthSecrets,
   onProgress?: MailTestProgress,
+  signal?: AbortSignal,
 ): Promise<void> {
   onProgress?.('Connecting SMTP…');
   await mailStub(
@@ -51,14 +59,19 @@ export async function testSmtpConnection(
     host: config.smtpHost,
     port: config.smtpPort,
     secure: config.smtpSecure,
+    signal,
   });
+  const abort = () => client.close();
+  signal?.addEventListener('abort', abort, {once: true});
   try {
+    if (signal?.aborted) throw new Error('Mail operation cancelled');
     await expectSmtpReady(client);
     onProgress?.('Authenticating SMTP…');
     await smtpAuth(client, config, secrets);
     client.writeLine('QUIT');
     await mailStub('test.smtp.done');
   } finally {
+    signal?.removeEventListener('abort', abort);
     client.close();
   }
 }
@@ -67,9 +80,11 @@ function withTimeout<T>(
   promise: Promise<T>,
   ms: number,
   label: string,
+  onTimeout: () => void,
 ): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
+      onTimeout();
       reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`));
     }, ms);
     promise.then(
@@ -93,20 +108,22 @@ export async function testMailConnection(
     overallTimeoutMs?: number;
   },
 ): Promise<void> {
-  const onProgress = options?.onProgress;
+  const controller = new AbortController();
+  const onProgress = (step: string) => { if (!controller.signal.aborted) options?.onProgress?.(step); };
   const overallTimeoutMs =
     options?.overallTimeoutMs ?? DEFAULT_OVERALL_TIMEOUT_MS;
   await mailStub('test.start');
   const run = async () => {
     try {
-      await testImapConnection(config, secrets, onProgress);
+      await testImapConnection(config, secrets, onProgress, controller.signal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await mailStub('test.error', `IMAP: ${message}`);
       throw new Error(`IMAP failed: ${message}`);
     }
+    if (controller.signal.aborted) throw new Error('Mail operation cancelled');
     try {
-      await testSmtpConnection(config, secrets, onProgress);
+      await testSmtpConnection(config, secrets, onProgress, controller.signal);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await mailStub('test.error', `SMTP: ${message}`);
@@ -115,5 +132,5 @@ export async function testMailConnection(
     onProgress?.('Mail connection test passed');
     await mailStub('test.done');
   };
-  await withTimeout(run(), overallTimeoutMs, 'Mail connection test');
+  await withTimeout(run(), overallTimeoutMs, 'Mail connection test', () => controller.abort());
 }

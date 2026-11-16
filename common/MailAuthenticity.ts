@@ -34,6 +34,8 @@ export type AuthenticityContact = {
   details?: Record<string, unknown>;
   resolvedOpaqueDetails?: Record<string, string>;
   detailsMeta?: Record<string, unknown>;
+  revoked?: boolean;
+  revokedDetails?: string[];
 };
 
 function getDetailValue(
@@ -103,7 +105,7 @@ export function matchFromToIdentity(
     };
   }
 
-  const clearEmail = getDetailValue(contact.details, "email");
+  const clearEmail = contact.revoked || contact.revokedDetails?.includes("email") ? null : getDetailValue(contact.details, "email");
   if (clearEmail && clearEmail.trim().toLowerCase() === fromNorm) {
     return {
       matches: true,
@@ -113,7 +115,9 @@ export function matchFromToIdentity(
     };
   }
 
-  const resolved = contact.resolvedOpaqueDetails?.["opaque::email"];
+  const cached = contact.resolvedOpaqueDetails?.["opaque::email"];
+  const currentHash = contact.revoked || contact.revokedDetails?.includes("opaque::email") ? null : getDetailValue(contact.details, "opaque::email");
+  const resolved = cached && sha256Hex(cached) === currentHash ? cached : undefined;
   if (resolved && resolved.trim().toLowerCase() === fromNorm) {
     return {
       matches: true,
@@ -123,7 +127,7 @@ export function matchFromToIdentity(
     };
   }
 
-  const opaqueHash = getDetailValue(contact.details, "opaque::email");
+  const opaqueHash = currentHash;
   if (
     opaqueHash &&
     (sha256Hex(fromRaw) === opaqueHash || sha256Hex(fromNorm) === opaqueHash)

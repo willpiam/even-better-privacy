@@ -114,14 +114,14 @@ function fromRow(row: OrderRow): StoredOrder {
   };
 }
 
-/** Release only expired unpaid holds; confirmed purchases are never released. */
+/** Hold inventory through the recovery grace period so delayed wallet approvals can still submit. */
 export async function expirePaymentOrders(
   db: DatabaseAdapter,
   now: number,
 ): Promise<void> {
   await db.query(
     `UPDATE mail_payment_orders SET status = 'expired', active = 0
-    WHERE active = 1 AND status = 'quoted' AND expires_at <= ?`,
+    WHERE active = 1 AND status = 'quoted' AND grace_until <= ?`,
     [now],
   );
   await db.query(
@@ -212,7 +212,7 @@ export async function getConfirmedPaymentOrder(
   return rows[0] ? fromRow(rows[0]) : null;
 }
 
-/** A transaction can be bound to only one order on a given network. */
+/** Bind a transaction once, including delayed submission within the reserved grace period. */
 export async function submitPaymentTransaction(
   db: DatabaseAdapter,
   orderId: string,
@@ -225,7 +225,7 @@ export async function submitPaymentTransaction(
   try {
     const rows = await db.query<[string]>(
       `UPDATE mail_payment_orders SET transaction_id = ?, status = 'pending'
-      WHERE order_id = ? AND identity_fingerprint = ? AND status = 'quoted' AND active = 1 AND expires_at > ?
+      WHERE order_id = ? AND identity_fingerprint = ? AND status = 'quoted' AND active = 1 AND grace_until > ?
       RETURNING order_id`,
       [hash, orderId, fingerprint, now],
     );

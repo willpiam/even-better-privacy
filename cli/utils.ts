@@ -1,3 +1,7 @@
+import { normalizeServerUrl } from "../common/ServerPolicy.ts";
+export { normalizeServerUrl, isLoopbackHost } from "../common/ServerPolicy.ts";
+import { parseStrictJson } from "../core/StrictJson.ts";
+import { withFileLock } from "./json-store.ts";
 import { ExternalIdentity, Identity } from "../core/Identity.ts";
 import { writePrivateFileAtomic } from "./atomic-file.ts";
 import { DecryptionAuthError, StorageFormatError } from "../core/AES.ts";
@@ -69,7 +73,11 @@ async function readOrCreateStateAuthKey(
   await ensurePrivateDir(identityDir);
   const key = new Uint8Array(32);
   crypto.getRandomValues(key);
-  await Deno.writeTextFile(path, bytesToHex(key), { mode: 0o600 });
+  try { await Deno.writeTextFile(path, bytesToHex(key), { mode: 0o600, createNew: true }); }
+  catch (error) {
+    if (!(error instanceof Deno.errors.AlreadyExists)) throw error;
+    return hexToBytesStrict((await Deno.readTextFile(path)).trim());
+  }
   return key;
 }
 
@@ -97,13 +105,13 @@ export async function readState(
 ): Promise<CLIState | undefined> {
   try {
     const json = await Deno.readTextFile(`${identityDir}/state.json`);
-    const parsed = JSON.parse(json);
-    if (!isAuthenticatedState(parsed)) return parsed as CLIState;
+    const parsed = parseStrictJson(json);
+    if (!isAuthenticatedState(parsed)) throw new StorageFormatError("Unauthenticated legacy state.json is unsupported; restore authenticated state or explicitly recreate preferences");
     const expected = await stateMac(identityDir, parsed.state);
     if (parsed.mac !== expected) {
       throw new StorageFormatError("state.json authentication failed");
     }
-    return parsed.state;
+    return {...parsed.state, ...(parsed.state.server ? {server: normalizeServerUrl(parsed.state.server)} : {})};
   } catch (e) {
     if (e instanceof Deno.errors.NotFound) return undefined;
     throw e;
@@ -115,27 +123,27 @@ export async function writeState(
   state: CLIState,
 ): Promise<void> {
   await ensurePrivateDir(identityDir);
+  state = {...state, ...(state.server ? {server: normalizeServerUrl(state.server)} : {})};
   const envelope: AuthenticatedCLIState = {
     version: 2,
     state,
     mac: await stateMac(identityDir, state),
   };
-  await Deno.writeTextFile(
-    `${identityDir}/state.json`,
-    JSON.stringify(envelope, null, 2),
-    { mode: 0o600 },
-  );
+  await writePrivateFileAtomic(`${identityDir}/state.json`, JSON.stringify(envelope, null, 2));
 }
 
 export async function updateState(
   identityDir: string,
   updates: Partial<CLIState>,
 ): Promise<CLIState> {
+  await ensurePrivateDir(identityDir);
+  return withFileLock(`${identityDir}/state.json`, async () => {
   const existing = (await readState(identityDir)) ??
     { currentIdentity: "identity" };
   const next = { ...existing, ...updates };
   await writeState(identityDir, next);
   return next;
+  });
 }
 
 export async function listIdentityNames(
@@ -183,7 +191,8 @@ export async function getContext(
   const state = await readState(identityDir);
   const currentIdentity = identityOverride ?? state?.currentIdentity ??
     "identity";
-  const server = serverOverride ?? state?.server;
+  const requestedServer = serverOverride ?? state?.server;
+  const server = requestedServer ? normalizeServerUrl(requestedServer) : undefined;
   const identityPath = await getIdentityPath(identityDir, currentIdentity);
   return {
     identityDir,
@@ -327,32 +336,6 @@ export function buildStateFromExternal(
 
 export type ParsedArgs = Record<string, unknown> & { [key: string]: unknown };
 
-export function isLoopbackHost(hostname: string): boolean {
-  const normalized = hostname.toLowerCase();
-  return normalized === "localhost" || normalized === "127.0.0.1" ||
-    normalized === "::1" || normalized === "[::1]";
-}
-
-export function normalizeServerUrl(server: string): string {
-  let url: URL;
-  try {
-    url = new URL(server);
-  } catch {
-    throw new Error("server URL must be an absolute URL");
-  }
-
-  if (url.protocol === "https:") {
-    return server.replace(/\/+$/, "");
-  }
-  if (url.protocol === "http:" && isLoopbackHost(url.hostname)) {
-    return server.replace(/\/+$/, "");
-  }
-
-  throw new Error(
-    "server URL must use https:// unless it targets localhost/127.0.0.1",
-  );
-}
-
 export function ensureServer(ctx: CLIContext, args: ParsedArgs): string {
   const override = args["server"] as string | undefined;
   const server = override ?? ctx.server;
@@ -373,7 +356,7 @@ export function ensureServer(ctx: CLIContext, args: ParsedArgs): string {
 }
 
 export function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, "");
+  const base = normalizeServerUrl(server);
   const suffix = path.startsWith("/") ? path : `/${path}`;
   return `${base}${suffix}`;
 }

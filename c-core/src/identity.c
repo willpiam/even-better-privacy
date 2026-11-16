@@ -776,7 +776,7 @@ static int fingerprint_in_array(const json_t *array, const char *fp) {
 int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identity *const *recipients, size_t count,
                                    const uint8_t *message, size_t message_len, const uint8_t *manifest, size_t manifest_len,
                                    const uint8_t *content_key, uint8_t **out, size_t *out_len) {
-    const ebp_identity **unique=NULL; size_t unique_count=0; json_t *fps=NULL,*norm=NULL,*normalized_fps,*normalized_manifest,*inner=NULL,*entries=NULL,*result=NULL;
+    const ebp_identity **unique=NULL; size_t unique_count=0; json_t *seen=NULL,*fps=NULL,*norm=NULL,*normalized_fps,*normalized_manifest,*inner=NULL,*entries=NULL,*result=NULL;
     uint8_t key[32]={0},nonce[12]={0},*fps_json=NULL,*manifest_json=NULL,*signature=NULL,*cipher=NULL,*wrapped=NULL;
     size_t fps_len=0,manifest_len2=0,signature_len=0,cipher_len=0,wrapped_len=0;
     char *sig64=NULL,*inner_text=NULL,*key_hex=NULL,*nonce_hex=NULL,*cipher_hex=NULL; int ok=0;
@@ -784,12 +784,13 @@ int ebp_identity_sign_encrypt_many(const ebp_identity *sender, const ebp_identit
     *out=NULL; *out_len=0;
     if (!ebp_identity_is_private(sender) || !recipients || !count || count>SIZE_MAX/sizeof(*unique) ||
         (!message && message_len) || !manifest) return 0;
-    unique=calloc(count,sizeof(*unique)); fps=json_array(); entries=json_array();
-    if (!unique || !fps || !entries) goto done;
+    unique=calloc(count,sizeof(*unique)); fps=json_array(); entries=json_array(); seen=json_object();
+    if (!unique || !fps || !entries || !seen) goto done;
     for (size_t i=0; i<count; i++) {
         const char *fp;
         if (!recipients[i] || !(fp=strfield(recipients[i]->public_data,"fingerprint")) || !*fp) goto done;
-        if (fingerprint_in_array(fps,fp)) continue;
+        if (json_object_get(seen,fp)) continue;
+        if (json_object_set(seen,fp,json_true())!=0) goto done;
         unique[unique_count++]=recipients[i];
         if (!append_owned(fps,json_string(fp))) goto done;
     }
@@ -834,7 +835,7 @@ done:
     if (inner_text) ebp_secure_free(inner_text,strlen(inner_text));
     if (inner) { wipe_json_strings(inner); json_decref(inner); }
     if (result) { wipe_json_strings(result); json_decref(result); }
-    json_decref(entries); json_decref(fps); json_decref(norm);
+    json_decref(entries); json_decref(fps); json_decref(norm); json_decref(seen);
     OPENSSL_cleanse(key,sizeof(key)); OPENSSL_cleanse(nonce,sizeof(nonce)); return ok;
 }
 static int empty_multi_result(uint8_t **out, size_t *out_len) {

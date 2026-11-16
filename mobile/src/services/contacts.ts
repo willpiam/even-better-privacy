@@ -1,3 +1,10 @@
+import {lookupVerifiedEmail} from "../../../common/VerifiedEmailLookup.ts";
+import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from "../../../common/MailVerification.ts";
+import {mutateIdentityForUse} from "./storage";
+import {KeyedQueue} from "../../../common/KeyedQueue.ts";
+import {mergeContactRefresh, validateContact} from "../../../common/Contacts.ts";
+import {writeFileAtomic} from "./atomicFile";
+const contactUpdates = new KeyedQueue();
 import RNFS from 'react-native-fs';
 import type {ExternalIdentity} from '../ebpCore';
 import {sha256Hex} from '../../../core/MessageHash.ts';
@@ -54,7 +61,7 @@ export type BrowseServerIdentitiesResult = {
 };
 
 function contactPath(name: string): string {
-  return `${getContactsDir()}/${name}.json`;
+  return `${getContactsDir()}/${normalizeContactName(name)}.json`;
 }
 
 export async function listContacts(): Promise<StoredContact[]> {
@@ -66,13 +73,15 @@ export async function listContacts(): Promise<StoredContact[]> {
     if (!entry.isFile() || !entry.name.endsWith('.json')) {
       continue;
     }
+    try {
     const name = entry.name.replace(/\.json$/, '');
     const raw = await RNFS.readFile(entry.path, 'utf8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
-    const contact = parsed as unknown as ExternalIdentity;
+    const contact = validateContact(parsed);
     const localAlias =
       typeof parsed.localAlias === 'string' ? parsed.localAlias : undefined;
     contacts.push({name, contact, localAlias});
+    } catch (error) { console.warn(`Skipping damaged contact ${JSON.stringify(entry.name)}`, String(error)); }
   }
   contacts.sort((a, b) => a.name.localeCompare(b.name));
   return contacts;
@@ -84,13 +93,14 @@ export async function listContacts(): Promise<StoredContact[]> {
  */
 export async function findContactsByEmail(
   email: string,
+  snapshot?: StoredContact[],
 ): Promise<StoredContact[]> {
   const trimmed = email.trim();
   if (!trimmed) {
     return [];
   }
   const normalized = trimmed.toLowerCase();
-  const contacts = await listContacts();
+  const contacts = snapshot ?? await listContacts();
   const matches: StoredContact[] = [];
   for (const item of contacts) {
     if (!contactMatchesEmail(item.contact, trimmed, normalized)) {
@@ -109,7 +119,7 @@ export async function findContactsByEmail(
           fingerprint: item.contact.fingerprint,
           path: 'opaque::email',
           value: trimmed,
-        });
+        }, item);
       } catch {
         // Lookup still succeeds even if persist fails.
       }
@@ -131,24 +141,16 @@ export type VerifiedRecipientResolution =
 export async function resolveVerifiedRecipient(
   email: string,
 ): Promise<VerifiedRecipientResolution> {
-  const local = await findContactsByEmail(email);
+  const contacts = await listContacts();
+  const local = await findContactsByEmail(email, contacts);
   if (local.length === 1) {
     return {status: 'unique', name: local[0].name};
   }
   if (local.length > 1) {
     return {status: 'ambiguous'};
   }
-  const serverMatch = await searchVerifiedEmailIdentity(
-    email,
-    async (page, limit) => {
-      const result = await browseServerIdentities({query: email, page, limit});
-      return {
-        identities: result.identities,
-        hasNextPage: result.hasNextPage,
-      };
-    },
-  );
-  const contacts = await listContacts();
+  const serverMatch = await lookupVerifiedEmail(await getServerUrl(), email);
+  if (serverMatch.status !== 'unique') return {status: serverMatch.status === 'ambiguous' ? 'ambiguous' : 'none'};
   const decision = decideRecipientResolution({
     localEmailMatches: [],
     serverMatch,
@@ -161,10 +163,10 @@ export async function resolveVerifiedRecipient(
     return {status: 'unique', name: decision.name};
   }
   if (decision.action !== 'import') {
-    return {status: serverMatch.status === 'ambiguous' ? 'ambiguous' : 'none'};
+    return {status: 'none'};
   }
   const saved = await fetchContactFromServer({fingerprint: decision.fingerprint});
-  const imported = (await listContacts()).find(item => item.name === saved.name);
+  const imported = {name: saved.name, contact: await loadContact(saved.name)};
   const confirmed = imported
     ? matchVerifiedEmailIdentities([imported.contact], email)
     : {status: 'none' as const};
@@ -190,26 +192,15 @@ export async function importContact(
     typeof payload === 'string'
       ? (JSON.parse(payload) as Record<string, unknown>)
       : (payload as unknown as Record<string, unknown>);
-  const contact = normalizeExternalIdentity(parsed);
+  let contact = normalizeExternalIdentity(parsed);
   const contactName = normalizeContactName(name ?? contact.fingerprint.slice(0, 16));
   const path = contactPath(contactName);
-  if (await RNFS.exists(path)) {
-    try {
-      const existingRaw = await RNFS.readFile(path, 'utf8');
-      const existing = JSON.parse(existingRaw) as ExternalIdentity;
-      const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {}).filter(
-        ([detailPath, value]) =>
-          typeof value === 'string' && contact.details[detailPath] !== undefined,
-      );
-      if (preservedEntries.length > 0) {
-        contact.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
-      }
-    } catch {
-      // Ignore parse/read errors and continue with normalized contact payload.
-    }
-  }
-  await RNFS.writeFile(path, JSON.stringify(contact, null, 2), 'utf8');
+  return contactUpdates.run(path, async () => {
+    const existing = await RNFS.exists(path) ? validateContact(JSON.parse(await RNFS.readFile(path, 'utf8'))) : null;
+    contact = mergeContactRefresh(existing, contact);
+    await writeFileAtomic(path, JSON.stringify(contact, null, 2));
   return {name: contactName, fingerprint: contact.fingerprint};
+  });
 }
 
 export async function deleteContact(params: {
@@ -236,7 +227,7 @@ export async function loadContact(nameOrFingerprint: string): Promise<ExternalId
   const byNamePath = contactPath(nameOrFingerprint);
   if (await RNFS.exists(byNamePath)) {
     const raw = await RNFS.readFile(byNamePath, 'utf8');
-    return JSON.parse(raw) as ExternalIdentity;
+    return validateContact(JSON.parse(raw));
   }
   const contacts = await listContacts();
   const byPrefix = contacts.find(c =>
@@ -284,6 +275,7 @@ export async function fetchContactFromServer(params: {
     throw new Error(`Failed to fetch identity: ${reason}`);
   }
   const normalized = normalizeExternalIdentity(body, params.fingerprint);
+  if (normalized.fingerprint !== params.fingerprint) throw new Error('Server returned a different identity');
   return importContact(normalized, params.name);
 }
 
@@ -302,11 +294,14 @@ export async function resolveOpaqueDetail(params: {
   fingerprint: string;
   path: string;
   value: string;
-}): Promise<{ok: boolean; path: string}> {
+}, known?: StoredContact): Promise<{ok: boolean; path: string}> {
   if (!params.path.startsWith('opaque::')) {
     throw new Error('path must start with opaque::');
   }
-  const found = await findContactByFingerprint(params.fingerprint);
+  const found = known ? {...known, path: contactPath(known.name)} : await findContactByFingerprint(params.fingerprint);
+  return contactUpdates.run(found.path, async () => {
+  found.contact = validateContact(JSON.parse(await RNFS.readFile(found.path, 'utf8')));
+  if (found.contact.fingerprint !== params.fingerprint) throw new Error('Contact changed');
   const detailEntry = found.contact.details?.[params.path];
   const expectedHash = Array.isArray(detailEntry) ? detailEntry[0] : detailEntry;
   if (typeof expectedHash !== 'string' || !expectedHash.length) {
@@ -320,12 +315,9 @@ export async function resolveOpaqueDetail(params: {
     ...(found.contact.resolvedOpaqueDetails ?? {}),
     [params.path]: params.value,
   };
-  await RNFS.writeFile(
-    found.path,
-    JSON.stringify(found.contact, null, 2),
-    'utf8',
-  );
+  await writeFileAtomic(found.path, JSON.stringify(found.contact, null, 2));
   return {ok: true, path: params.path};
+  });
 }
 
 export async function updateContactLocalNotes(params: {
@@ -335,6 +327,8 @@ export async function updateContactLocalNotes(params: {
   localEmail?: string | null;
 }): Promise<void> {
   const found = await findContactByFingerprint(params.fingerprint);
+  return contactUpdates.run(found.path, async () => {
+  found.contact = validateContact(JSON.parse(await RNFS.readFile(found.path, 'utf8')));
   const raw = found.contact as ExternalIdentity & {
     localAlias?: string;
     localDescription?: string;
@@ -361,22 +355,30 @@ export async function updateContactLocalNotes(params: {
       raw.localEmail = params.localEmail;
     }
   }
-  await RNFS.writeFile(found.path, JSON.stringify(raw, null, 2), 'utf8');
+  await writeFileAtomic(found.path, JSON.stringify(raw, null, 2));
+  });
 }
 
 export async function requestVerifyEmail(params: {
   fingerprint: string;
+  identityName: string;
+  password?: string;
   detail: string;
   path?: string;
   server?: string;
 }): Promise<unknown> {
   const server = params.server ?? (await getServerUrl());
+  const {result: authorization} = await mutateIdentityForUse(params.identityName, params.password, identity => {
+    if (identity.toFingerprint() !== params.fingerprint) throw new Error('Only the identity owner can request verification');
+    return identity.createDetailProof(EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail(params.path ?? 'email', params.detail));
+  });
   const res = await fetch(apiUrl(server, '/api/v1/verify-email/request'), {
     method: 'POST',
     headers: {'content-type': 'application/json'},
     body: JSON.stringify({
       fingerprint: params.fingerprint,
       detail: params.detail,
+      authorization,
       ...(params.path ? {path: params.path} : {}),
     }),
   });
@@ -401,6 +403,7 @@ export async function browseServerIdentities(params?: {
   const query = (params?.query ?? '').trim();
   const path = query ? '/api/v1/identities/search' : '/api/v1/identities';
   const url = new URL(apiUrl(server, path));
+  url.searchParams.set("view", "summary");
   if (params?.page && Number.isFinite(params.page)) {
     url.searchParams.set('page', String(Math.max(1, Math.floor(params.page))));
   }

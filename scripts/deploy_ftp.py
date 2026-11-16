@@ -227,12 +227,13 @@ def ensure_remote_dir(ftp: FTP, rel: str, known: set[str]) -> None:
     known.add(rel)
 
 
-def cwd_remote(ftp: FTP, remote_dir: str) -> None:
+def cwd_remote(ftp: FTP, remote_dir: str, *, create: bool = True) -> None:
     try:
         ftp.cwd(remote_dir)
         return
     except error_perm:
-        pass
+        if not create:
+            raise
     ftp.cwd("/")
     for part in (p for p in remote_dir.strip("/").split("/") if p):
         try:
@@ -280,7 +281,7 @@ def site_ready() -> None:
         raise SystemExit("website/ is empty.")
 
 
-def connect(host: str, port: int, user: str, password: str, remote_dir: str) -> FTP:
+def connect(host: str, port: int, user: str, password: str, remote_dir: str, *, create: bool = True) -> FTP:
     ftp = FTP()
     ftp.connect(host, port, timeout=30)
     ftp.login(user, password)
@@ -289,13 +290,21 @@ def connect(host: str, port: int, user: str, password: str, remote_dir: str) -> 
         ftp.voidcmd("TYPE I")
     except error_perm:
         pass
-    cwd_remote(ftp, remote_dir)
+    try:
+        cwd_remote(ftp, require_remote_dir(remote_dir), create=create)
+        require_remote_dir(ftp.pwd())
+        ftp.destination_missing = False
+    except error_perm:
+        if create:
+            ftp.close()
+            raise
+        ftp.destination_missing = True
     return ftp
 
 
 def require_remote_dir(remote_dir: str) -> str:
     parts = [part for part in remote_dir.strip("/").split("/") if part]
-    if len(parts) < 2:
+    if len(parts) < 2 or any(part in (".", "..") for part in parts) or any(ord(c) < 32 or ord(c) == 127 for c in remote_dir) or "\\" in remote_dir:
         raise SystemExit(
             "FTP_REMOTE_DIR must be a subdirectory such as /williamdoyle.ca/ebp"
         )
@@ -326,9 +335,13 @@ def deploy(dry_run: bool, force: bool) -> None:
             "contents; later deploys skip that."
         )
 
-    ftp = connect(host, port, user, password, remote_dir)
+    ftp = connect(host, port, user, password, remote_dir, create=not dry_run)
     try:
-        remote_files, remote_dirs = remote_tree(ftp)
+        if ftp.destination_missing:
+            print(f"  mkdir {remote_dir}")
+            remote_files, remote_dirs = {}, set()
+        else:
+            remote_files, remote_dirs = remote_tree(ftp)
         known_dirs = set(remote_dirs)
         for rel in sorted(local_dirs, key=lambda p: p.count("/")):
             if rel in known_dirs:

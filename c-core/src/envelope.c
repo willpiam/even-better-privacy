@@ -60,6 +60,9 @@ int ebp_file_sign_message(const uint8_t *hash, size_t hash_len, const uint8_t *s
     if ((!hash && hash_len) || (!salt && salt_len) || (!context && context_len) ||
         hash_len>SIZE_MAX-(sizeof(prefix)-1)-4 || salt_len>SIZE_MAX-(sizeof(prefix)-1)-4-hash_len ||
         context_len>SIZE_MAX-(sizeof(prefix)-1)-4-hash_len-salt_len) return 0;
+    if (!hash_len) return 0;
+    for (size_t i=0; i<hash_len; i++) if (!((hash[i]>='0' && hash[i]<='9') || (hash[i]>='a' && hash[i]<='f'))) return 0;
+    for (size_t i=0; i<salt_len; i++) if (!((salt[i]>='0' && salt[i]<='9') || (salt[i]>='a' && salt[i]<='f'))) return 0;
     total=sizeof(prefix)-1+hash_len+salt_len+context_len+4; buf=malloc(total); if (!buf) return 0;
     n=sizeof(prefix)-1; memcpy(buf,prefix,n);
     if (hash_len) memcpy(buf+n,hash,hash_len);

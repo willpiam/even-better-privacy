@@ -1,5 +1,11 @@
 # Desktop Packaging
 
+`rust-toolchain.toml` pins Rust 1.93.1. The locked Tauri build helper expects
+the Cargo output-directory layout used by that release; Cargo 1.100 changes
+the layout and fails during Windows resource packaging. Update the framework
+and toolchain together, with a compiler/package check. Linux builds require
+the WebKitGTK 4.1 development libraries used by Tauri 2.
+
 The Tauri configuration currently treats Linux AppImage as the primary bundled
 target. macOS and Windows release artifacts are produced by the external desktop
 build scripts rather than by a checked-in Tauri bundle target.

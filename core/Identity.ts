@@ -855,7 +855,7 @@ export class Identity extends Key {
     return this.signingKey.verify(envelope, signature);
   }
 
-  attachDetail(path: string, detail: string) {
+  createDetailProof(path: string, detail: string): string {
     if (path.includes("\0")) throw new TypeError("Detail path contains NUL");
     const detailRecord = {
       version: 2,
@@ -872,8 +872,12 @@ export class Identity extends Key {
     );
     detailRecord.signature = detailRecordSignature;
     const proof = stringToHex(canonicalJsonStringify(detailRecord));
-    this.details.set(path, [detail, proof]);
     this.detailsNonce++;
+    return proof;
+  }
+
+  attachDetail(path: string, detail: string) {
+    this.details.set(path, [detail, this.createDetailProof(path, detail)]);
   }
 
   private detailProofSigner(): DetailProofSigner {

@@ -1,3 +1,23 @@
+export function splitMailboxList(text) {
+  const result = [];
+  let start = 0, quoted = false, escaped = false, angle = 0, comment = 0;
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (escaped) { escaped = false; continue; }
+    if (character === "\\" && (quoted || comment)) { escaped = true; continue; }
+    if (character === '"' && !comment) { quoted = !quoted; continue; }
+    if (quoted) continue;
+    if (character === "(") comment++;
+    else if (character === ")" && comment) comment--;
+    if (comment) continue;
+    if (character === "<") angle++;
+    else if (character === ">" && angle) angle--;
+    if (!angle && /[,;\r\n]/.test(character)) { result.push(text.slice(start, index)); start = index + 1; }
+  }
+  result.push(text.slice(start));
+  return result;
+}
+
 // Mirror of parseAddressList / deriveComposeIntent in common/ComposeRecipients.ts.
 // Kept in sync by common/ComposeRecipients.test.ts, which runs both against
 // common/tests/fixtures/compose-recipients.json.
@@ -22,7 +42,7 @@ export function isValidAddress(address) {
 export function parseAddressList(text, existing = []) {
   const seen = new Set(existing.map((email) => String(email).toLowerCase()));
   const out = [];
-  for (const token of String(text ?? "").split(ADDRESS_SEPARATORS)) {
+  for (const token of splitMailboxList(String(text ?? ""))) {
     const email = normalizeAddress(token);
     if (!email) continue;
     const key = email.toLowerCase();

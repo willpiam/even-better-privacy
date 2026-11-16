@@ -81,7 +81,7 @@ export class MailByteBuffer {
         const line = this.consume(this.scanned + lf - this.scanOffset + 1);
         let end = line.length - 1;
         if (end > 0 && line[end - 1] === 0x0d) end--;
-        return line.toString('utf8', 0, end);
+        return line.toString('latin1', 0, end);
       }
       this.scanned += chunk.length - this.scanOffset;
       this.scanChunk++;
@@ -90,12 +90,12 @@ export class MailByteBuffer {
     return null;
   }
 
-  takeBytes(n: number): string | null {
+  takeBytes(n: number): Uint8Array | null {
     if (!Number.isSafeInteger(n) || n < 0 || n > this.maxBytes) {
       throw new Error('Invalid or oversized mail literal length');
     }
     if (this.length < n) return null;
-    return this.consume(n).toString('utf8');
+    return this.consume(n);
   }
 }
 
@@ -122,7 +122,7 @@ export function takeLineFromBuffer(buffer: Buffer): {
     end -= 1;
   }
   return {
-    line: buf.toString('utf8', 0, end),
+    line: buf.toString('latin1', 0, end),
     rest: asBuffer(buf.subarray(lf + 1)),
   };
 }
@@ -133,19 +133,19 @@ export function takeLineFromBuffer(buffer: Buffer): {
 export function takeBytesFromBuffer(
   buffer: Buffer,
   n: number,
-): {chunk: string; rest: Buffer} | null {
+): {chunk: Uint8Array; rest: Buffer} | null {
   if (n < 0) {
     throw new Error('readBytes count must be non-negative');
   }
   const buf = asBuffer(buffer);
   if (n === 0) {
-    return {chunk: '', rest: buf};
+    return {chunk: new Uint8Array(), rest: buf};
   }
   if (buf.length < n) {
     return null;
   }
   return {
-    chunk: buf.toString('utf8', 0, n),
+    chunk: buf.subarray(0, n),
     rest: asBuffer(buf.subarray(n)),
   };
 }

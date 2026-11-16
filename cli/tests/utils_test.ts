@@ -34,10 +34,10 @@ Deno.test({
     await writeState(dir, { currentIdentity: "identity-1" });
     assertEquals(await readState(dir), { currentIdentity: "identity-1" });
 
-    const updated = await updateState(dir, { server: "http://example.com" });
+    const updated = await updateState(dir, { server: "https://example.com" });
     assertEquals(updated, {
       currentIdentity: "identity-1",
-      server: "http://example.com",
+      server: "https://example.com",
     });
     assertEquals(await readState(dir), updated);
 
@@ -106,15 +106,15 @@ Deno.test({
 
     await writeState(`${root}/.ebp`, {
       currentIdentity: "saved",
-      server: "http://saved",
+      server: "https://saved.example",
     });
     const ctxOverride = await getContext(
       root,
       "override-id",
-      "http://override",
+      "https://override.example",
     );
     assertEquals(ctxOverride.currentIdentity, "override-id");
-    assertEquals(ctxOverride.server, "http://override");
+    assertEquals(ctxOverride.server, "https://override.example");
     assertEquals(ctxOverride.contactsDir, `${root}/.ebp/contacts`);
 
     await Deno.remove(root, { recursive: true });
@@ -213,8 +213,8 @@ Deno.test("ensureServer uses override then context and trims slashes", () => {
 });
 
 Deno.test("apiUrl joins paths safely", () => {
-  assertEquals(apiUrl("http://example.com", "/api"), "http://example.com/api");
-  assertEquals(apiUrl("http://example.com/", "api"), "http://example.com/api");
+  assertEquals(apiUrl("https://example.com", "/api"), "https://example.com/api");
+  assertEquals(apiUrl("https://example.com/", "api"), "https://example.com/api");
 });
 
 Deno.test("safeFileName sanitizes path traversal and caps long names", () => {

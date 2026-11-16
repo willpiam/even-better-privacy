@@ -1,3 +1,6 @@
+import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from "../common/MailVerification.ts";
+import {verifyDetailProof} from "./detail.ts";
+import {getIdentity, consumeNonce, isIdentityRevoked} from "./db/index.ts";
 import nodemailer from "nodemailer";
 import {
   LIMITS,
@@ -284,9 +287,20 @@ export async function handleRequestVerifyEmail(
     return json({ ok: true, status: "already_verified" });
   }
 
+  const identity = await getIdentity(db, fingerprint);
+  const authorization = typeof payload.authorization === "string" ? payload.authorization : "";
+  const verified = identity && authorization.length <= LIMITS.proof
+    ? verifyDetailProof(identity, EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail(path, providedDetail), authorization) : null;
+  const now = Date.now();
+  if (!verified?.ok || await isIdentityRevoked(db, fingerprint) || verified.record.timestamp < now - 10 * 60_000 || verified.record.timestamp > now + 2 * 60_000) {
+    return json({error: "owner authorization required"}, 401);
+  }
+  const accepted = await db.writeTransaction(tx => consumeNonce(tx, fingerprint, verified.record.nonce), `identity:${fingerprint}`);
+  if (!accepted.ok) return json({error: accepted.error}, 409);
+  const baseUrl = getPublicBaseUrl(req);
+  if (!baseUrl) return json({error: "public base url not configured"}, 500);
   const token = generateVerificationToken();
   const tokenHash = computeTokenHash(token);
-  const now = Date.now();
   const issued = await issueDetailVerification(db, {
     fingerprint,
     path,
@@ -296,18 +310,9 @@ export async function handleRequestVerifyEmail(
     tokenHash,
     expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
     sentAt: now,
+    recipientHash: sha256Hex(mailTo.trim().toLowerCase()),
   });
-  if (!issued) {
-    return json(
-      { error: "email detail changed; request verification again" },
-      409,
-    );
-  }
-
-  const baseUrl = getPublicBaseUrl(req);
-  if (!baseUrl) {
-    return json({ error: "public base url not configured" }, 500);
-  }
+  if (!issued) return json({ok: true, status: "pending", message: "An existing link remains valid, or the recipient issuance limit has been reached."}, 202);
 
   // F-SERVER-09: keep tokens out of request URLs/logs by placing them in the
   // fragment; fragments are processed client-side and never sent to the server.
@@ -318,6 +323,7 @@ export async function handleRequestVerifyEmail(
     await sendVerificationEmail(mailTo, link, fingerprint);
   } catch (err) {
     console.error("failed to send verification email:", err);
+    return json({error: "verification delivery could not be confirmed; an issued link remains valid"}, 503);
   }
 
   return json({ ok: true, status: "sent" });

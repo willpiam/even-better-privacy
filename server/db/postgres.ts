@@ -103,10 +103,13 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
             client.release();
           }
         }
-        if (attempt === 0 && transient) {
+        if (attempt === 0 && transient && !client) {
           await this.replacePool();
           continue;
         }
+        // Once run has started, even COMMIT response loss has an unknown
+        // outcome. Repair the connection for future calls, never replay it.
+        if (transient) await this.replacePool();
         throw err;
       }
     }
@@ -171,7 +174,7 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         await client.queryArray("COMMIT");
         return result;
       } catch (error) {
-        await client.queryArray("ROLLBACK");
+        await client.queryArray("ROLLBACK").catch(() => {});
         throw error;
       }
     });
@@ -192,6 +195,11 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         revocation_certificate TEXT
       )
     `);
+
+    await this.execute(`CREATE TABLE IF NOT EXISTS authorization_nonces (
+      identity_fingerprint TEXT PRIMARY KEY, nonce BIGINT NOT NULL)`);
+    await this.execute(`CREATE TABLE IF NOT EXISTS verification_recipient_budget (
+      recipient_hash TEXT PRIMARY KEY, window_start BIGINT NOT NULL, sent_count BIGINT NOT NULL)`);
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS details (
@@ -235,6 +243,8 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     await this.execute(
       "CREATE INDEX IF NOT EXISTS detail_nonce_lookup ON details(identity_fingerprint, proof_nonce)",
     );
+
+    await this.execute("CREATE INDEX IF NOT EXISTS verified_email_lookup ON details(LOWER(TRIM(detail))) WHERE path = 'email' AND verified_at IS NOT NULL AND revoked_at IS NULL");
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS revocations (

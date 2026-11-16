@@ -23,6 +23,9 @@ export function generateRandomSaltHex(byteLength = 16) {
 }
 
 export function buildFileSignMessage(fileHash, salt, contextMessage) {
+  if (!/^[0-9a-f]+$/.test(fileHash) || !/^[0-9a-f]*$/.test(salt)) {
+    throw new Error("File signature hash and salt must be canonical hexadecimal");
+  }
   return `ebp::filehash::${fileHash}::${salt || ""}::${contextMessage || ""}`;
 }
 

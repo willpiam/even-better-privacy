@@ -1,3 +1,5 @@
+import { parseEbpPayloadInput } from "../../core/PayloadInput.ts";
+type CryptoInput = {type: string; message: string; signature: string; fingerprint: string; messageHash: string; salt?: string; ciphertext: string; senderFingerprint?: string};
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../../core/Identity.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
@@ -97,7 +99,7 @@ export async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLICont
 		// Detached signature mode
 		message = input;
 		const sigJson = await Deno.readTextFile(sigFile);
-		const sigData = JSON.parse(sigJson);
+		const sigData = parseEbpPayloadInput(sigJson) as CryptoInput;
 		if (sigData.type !== "ebp-signature") {
 			console.error("Invalid signature file format.");
 			Deno.exit(1);
@@ -108,7 +110,7 @@ export async function cmdVerify(args: ReturnType<typeof parseArgs>, ctx: CLICont
 		salt = typeof sigData.salt === "string" ? sigData.salt : "";
 	} else {
 		// Combined message + signature
-		const data = JSON.parse(input);
+		const data = parseEbpPayloadInput(input) as CryptoInput;
 		if (data.type !== "ebp-signed-message") {
 			console.error("Invalid signed message format.");
 			Deno.exit(1);
@@ -224,7 +226,7 @@ export async function cmdDecrypt(args: ReturnType<typeof parseArgs>, ctx: CLICon
 		input = await readStdin();
 	}
 	
-	const data = JSON.parse(input);
+	const data = parseEbpPayloadInput(input) as CryptoInput;
 	
 	if (data.type === "ebp-encrypted-message") {
 		// Unsigned encrypted message
@@ -249,6 +251,7 @@ export async function cmdDecrypt(args: ReturnType<typeof parseArgs>, ctx: CLICon
 			console.error("✓ Decrypted and verified!");
 		} else {
 			console.error("✗ Decrypted but signature verification FAILED!");
+            Deno.exit(1);
 		}
 		console.log(result.message);
 	} else {

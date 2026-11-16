@@ -23,6 +23,7 @@ export async function handleSystemFilesRoutes(
 
     const path = query ? "/api/v1/identities/search" : "/api/v1/identities";
     const serverUrl = new URL(apiUrl(server, path));
+    serverUrl.searchParams.set("view", "summary");
     if (page) serverUrl.searchParams.set("page", page);
     if (query) serverUrl.searchParams.set("query", query);
 

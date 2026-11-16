@@ -50,8 +50,16 @@ node issue_tracker/review_checks.mjs
 
 The script loads and strips types from the actual TypeScript functions using
 Node's built-in tools. Native transport and tracing dependencies are stubbed;
-the SMTP check uses a scripted server reply sequence. These are reproductions
-of current flaws, so success means the reported behavior was confirmed, not
-that those flaws have been fixed. Update the expectations when fixing them.
+the SMTP check uses a scripted server reply sequence. These checks now assert corrected behavior for #1–#4: empty headers stay empty, failed IMAP commands reject, declared charsets decode correctly, and SMTP recipient replies 250/251/252 complete successfully.
 Efficiency and maintainability findings are based on code inspection; no
 benchmark speedup is claimed.
+
+
+## Holistic remediation
+
+[remediation_plan.md](remediation_plan.md) combines both holistic reviews into
+an ordered implementation plan and a per-issue execution ledger. The original
+reviews and issue descriptions remain historical evidence. The application CI
+runs the production GUI dispatcher, Deno suites, mobile regressions, and the
+desktop compiler; `npm run test:review-contracts` also covers the original
+reproductions, wallet outcome handling, and FTP preview behavior.

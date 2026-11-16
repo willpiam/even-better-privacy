@@ -1,3 +1,4 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
 import {
   buildIdentityStateFromExternal,
   computeStateHash,
@@ -7,7 +8,7 @@ import {
 import {loadIdentityForUse} from './storage';
 
 function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
+  const base = normalizeServerUrl(server);
   const suffix = path.startsWith('/') ? path : `/${path}`;
   return `${base}${suffix}`;
 }

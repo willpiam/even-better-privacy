@@ -10,11 +10,11 @@ test('fragmented lines, CRLF boundaries, Unicode literals and trailing responses
   const body = Buffer.from('héllo 😀');
   for (const byte of body) queue.push(Uint8Array.of(byte));
   queue.push(Buffer.from(')\r\na1 OK\r\n'));
-  expect(queue.takeBytes(body.length)).toBe('héllo 😀');
+  expect(queue.takeBytes(body.length)).toEqual(body);
   expect(queue.takeLine()).toBe(')');
   expect(queue.takeLine()).toBe('a1 OK');
   expect(queue.length).toBe(0);
-  expect(queue.takeBytes(0)).toBe('');
+  expect(queue.takeBytes(0)).toEqual(Buffer.alloc(0));
 });
 
 test('an 8 MiB fragmented literal uses linear copying instead of copying the accumulated buffer on arrival', () => {
@@ -30,7 +30,7 @@ test('an 8 MiB fragmented literal uses linear copying instead of copying the acc
     }
     const body = queue.takeBytes(size)!;
     expect(body.length).toBe(size);
-    expect(body[0]).toBe('A');
+    expect(body[0]).toBe(65);
     const allocated = allocation.mock.calls.reduce((sum, [n]) => sum + n, 0);
     const concatenated = concatenation.mock.calls.reduce(
       (sum, [chunks]) => sum + chunks.reduce((n, item) => n + item.length, 0),
@@ -54,7 +54,7 @@ test('line scans resume across arrivals and remain correct after chunk compactio
   queue.push(Buffer.from('\n'));
   expect(queue.takeLine()).toBe('x'.repeat(100));
   queue.push(Buffer.from('tail\n'));
-  expect(queue.takeBytes(2)).toBe('ta');
+  expect(queue.takeBytes(2)).toEqual(Buffer.from('ta'));
   expect(queue.takeLine()).toBe('il');
 });
 

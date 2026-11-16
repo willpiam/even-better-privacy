@@ -7,7 +7,10 @@ const testsArgs = [
   "--allow-env",
   "--allow-net",
   "--allow-ffi",
+  "--allow-sys=hostname",
   "./server/tests",
+  "./server/payments",
+  "./server/handlers",
 ];
 
 const resultsDir = `${Deno.cwd()}/test-results`;

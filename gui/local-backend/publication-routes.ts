@@ -1,3 +1,4 @@
+import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from "../../common/MailVerification.ts";
 import { type ExternalIdentity } from "../../core/Identity.ts";
 import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
@@ -132,12 +133,18 @@ export async function handlePublicationRoutes(
       throw new HttpError(STATUS.NotFound, "identity fingerprint not found");
     }
 
+    if (typeof detail !== "string") throw new HttpError(STATUS.BadRequest, "email detail is required");
+    const {result: authorization} = await mutateIdentityForRequest(ctx, undefined, identity => {
+      if (identity.toFingerprint() !== fingerprint) throw new HttpError(STATUS.Forbidden, "Only the identity owner can request verification");
+      return identity.createDetailProof(EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail(path ?? "email", detail));
+    });
     const res = await fetch(apiUrl(server, "/api/v1/verify-email/request"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         fingerprint,
         detail,
+        authorization,
         ...(path ? { path } : {}),
       }),
     });
@@ -376,6 +383,7 @@ export async function handlePublicationRoutes(
     }
 
     const external: ExternalIdentity = {
+      ...(b as ExternalIdentity),
       fingerprint: b?.fingerprint ?? fingerprint,
       signingKeyType,
       encryptionKeyType,
@@ -391,6 +399,7 @@ export async function handlePublicationRoutes(
       detailsMeta,
     };
 
+    if (external.fingerprint !== fingerprint) throw new HttpError(STATUS.BadGateway, "Server returned a different identity");
     const saved = await saveExternalContact(ctx, external, name);
     return json({
       ok: true,

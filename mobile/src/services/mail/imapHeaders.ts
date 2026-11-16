@@ -1,3 +1,5 @@
+import {Buffer} from 'buffer';
+import {splitHeadersAndBody} from '../../../../common/mail/Headers.ts';
 import type {FetchBodyClient} from './imapFetchBody';
 import {parseHeaderField} from './imapFetchBody';
 import type {MailMessageSummary} from './types';
@@ -41,7 +43,7 @@ export async function readHeaderRecords(
     const literal = line.match(/\{(\d+)\}\s*$/);
     if (literal) {
       const text = await client.readBytes(Number(literal[1]));
-      if (/BODY(?:\.PEEK)?\[HEADER\.FIELDS\b/i.test(line)) headers = text;
+      if (/BODY(?:\.PEEK)?\[HEADER\.FIELDS\b/i.test(line)) headers = Buffer.from(text).toString('utf8');
     }
   }
   // Servers may return ascending UID order, or omit a message deleted meanwhile.
@@ -57,12 +59,11 @@ export async function readMailboxHeaders(
   uids: number[],
 ): Promise<MailMessageSummary[]> {
   const records = await readHeaderRecords(client, tag, uids);
-  return records.map(({uid, headers, seen}) => ({
-    uid,
-    seen,
-    subject: parseHeaderField(headers, 'Subject') || '(no subject)',
-    from: parseHeaderField(headers, 'From'),
-    to: parseHeaderField(headers, 'To'),
-    date: parseHeaderField(headers, 'Date'),
-  }));
+  return records.map(({uid, headers, seen}) => {
+    const parsed = splitHeadersAndBody(headers).headers;
+    return {uid, seen,
+      subject: parseHeaderField(headers, 'Subject') || '(no subject)',
+      from: parsed.from ?? '', to: parsed.to ?? '', date: parsed.date ?? '',
+    };
+  });
 }

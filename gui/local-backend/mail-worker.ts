@@ -1,17 +1,20 @@
+import {Buffer} from "node:buffer";
 import { simpleParser } from "mailparser";
+
+type ParsedAttachment = {filename?: string; contentType?: string; size?: number; content?: string | Uint8Array};
 
 type ParseMode = "message" | "attachment";
 
 type ParseRequest = {
   mode: ParseMode;
-  source: string;
+  source: Uint8Array;
 };
 
 self.onmessage = async (event: MessageEvent<ParseRequest>) => {
   try {
-    const parsed = await simpleParser(event.data.source);
+    const parsed = await simpleParser(Buffer.from(event.data.source));
     if (event.data.mode === "attachment") {
-      const attachments = (parsed.attachments ?? []).map((att) => ({
+      const attachments = (parsed.attachments ?? []).map((att: ParsedAttachment) => ({
         filename: att.filename ?? "attachment",
         contentType: att.contentType ?? "application/octet-stream",
         size: att.size ?? 0,
@@ -25,7 +28,7 @@ self.onmessage = async (event: MessageEvent<ParseRequest>) => {
       self.postMessage({ ok: true, data: { attachments } });
       return;
     }
-    const attachments = (parsed.attachments ?? []).map((att) => ({
+    const attachments = (parsed.attachments ?? []).map((att: ParsedAttachment) => ({
       filename: att.filename ?? "attachment",
       contentType: att.contentType ?? "application/octet-stream",
       size: att.size ?? 0,

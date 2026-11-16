@@ -12,6 +12,7 @@ import { verifyDetailProof } from "../detail.ts";
 import type { DatabaseAdapter } from "../db/adapter.ts";
 import {
   ensureNewNonce,
+  consumeNonce,
   getDetailRecord,
   getIdentity,
   getMailboxByFingerprint,
@@ -33,6 +34,7 @@ import {
   getPaymentOrder,
   reservePaymentOrder,
   submitPaymentTransaction,
+  type StoredOrder,
 } from "../payments/orders.ts";
 import { quoteAtomicUnits } from "../payments/quote.ts";
 import { fetchUsdRate } from "../payments/rates.ts";
@@ -47,6 +49,7 @@ import {
   cardanoPayError,
   previewBlockfrost,
   utxoFromCip30,
+  selectWalletUtxos,
 } from "../payments/cardano_tx.ts";
 
 const QUOTE_MS = 30 * 60_000;
@@ -151,7 +154,9 @@ export async function handlePaymentCreate(
   const amountAtomic = quoteAtomicUnits(usdCents, rate, chosen.decimals)
     .toString();
   const orderId = crypto.randomUUID();
-  const reserved = await reservePaymentOrder(db, {
+  const reserved = await db.writeTransaction(async tx => {
+    if (!(await consumeNonce(tx, fingerprint, proofResult.record.nonce)).ok) return false;
+    return await reservePaymentOrder(tx, {
     orderId,
     username: check.username,
     domain: mail.domain,
@@ -174,6 +179,7 @@ export async function handlePaymentCreate(
     expiresAt: now + QUOTE_MS,
     graceUntil: now + QUOTE_MS + GRACE_MS,
   }, now);
+  }, `identity:${fingerprint}`);
   if (!reserved) {
     return json({
       error:
@@ -225,6 +231,8 @@ export async function handlePaymentRecover(
   ) {
     return json({ error: "invalid recovery authorization" }, 400);
   }
+  const consumed = await db.writeTransaction(tx => consumeNonce(tx, fingerprint, result.record.nonce), `identity:${fingerprint}`);
+  if (!consumed.ok) return json({error: consumed.error}, 400);
   await expirePaymentOrders(db, now);
   const rows = await db.query<[string]>(
     `SELECT order_id FROM mail_payment_orders
@@ -271,12 +279,44 @@ export async function handlePaymentOrder(
     }
     order = (await getPaymentOrder(db, orderId))!;
   }
+  try { order = await refreshPaymentOrder(db, order); }
+  catch (error) {
+    if (error instanceof PaymentRefreshError) return json({error: error.message}, 503);
+    throw error;
+  }
+  return json({
+    orderId: order.orderId,
+    email: `${order.username}@${order.domain}`,
+    fingerprint: order.fingerprint,
+    asset: order.asset,
+    network: order.network,
+    recipient: order.recipient,
+    assetUnit: order.assetUnit,
+    usdCents: order.usdCents,
+    amountAtomic: order.amountAtomic,
+    decimals: order.decimals,
+    confirmations: order.confirmations,
+    message: order.message,
+    expiresAt: order.expiresAt,
+    graceUntil: order.graceUntil,
+    status: order.status,
+    transactionId: order.transactionId,
+  });
+}
+
+export class PaymentRefreshError extends Error {
+  readonly retryable = true;
+  constructor(readonly stage: string, message: string) { super(message); }
+}
+/** Domain service shared by the request adapter and scheduled reconciliation. */
+export async function refreshPaymentOrder(db: DatabaseAdapter, order: StoredOrder): Promise<StoredOrder> {
+  const orderId = order.orderId;
   if (order.status === "pending") {
     const config = paymentConfigForDomain(order.domain);
     if (
       !config ||
       !config.assets.some((entry) => entry.network === order!.network)
-    ) return json({ error: "payment verification unavailable" }, 503);
+    ) throw new PaymentRefreshError("configuration", "payment verification unavailable");
     const expected = {
       recipient: order.recipient,
       amount: BigInt(order.amountAtomic),
@@ -337,33 +377,13 @@ export async function handlePaymentOrder(
         order = (await getPaymentOrder(db, orderId))!;
       }
     } catch {
-      return json(
-        { error: "payment verification temporarily unavailable" },
-        503,
-      );
+      throw new PaymentRefreshError("provider", "payment verification temporarily unavailable");
     }
   }
-  return json({
-    orderId: order.orderId,
-    email: `${order.username}@${order.domain}`,
-    fingerprint: order.fingerprint,
-    asset: order.asset,
-    network: order.network,
-    recipient: order.recipient,
-    assetUnit: order.assetUnit,
-    usdCents: order.usdCents,
-    amountAtomic: order.amountAtomic,
-    decimals: order.decimals,
-    confirmations: order.confirmations,
-    message: order.message,
-    expiresAt: order.expiresAt,
-    graceUntil: order.graceUntil,
-    status: order.status,
-    transactionId: order.transactionId,
-  });
+  return order;
 }
 
-const MAX_WALLET_UTXOS = 40;
+const MAX_WALLET_UTXOS = 256;
 
 function cardanoFailure(error: unknown): string {
   const message = error instanceof Error ? error.message : "Could not build the Cardano transaction.";
@@ -407,12 +427,12 @@ export async function handleCardanoUnsigned(
   try {
     const unsignedTx = await buildPreviewUnsigned(loaded.order, {
       changeAddress: bech32Address(changeAddress),
-      utxos: utxos.map((hex) => {
+      utxos: selectWalletUtxos(utxos.map((hex) => {
         if (typeof hex !== "string" || !/^[0-9a-f]+$/i.test(hex) || hex.length > 8000) {
           throw new Error("The wallet did not provide a usable testnet address or funds.");
         }
         return utxoFromCip30(hex);
-      }),
+      })),
     }, previewBlockfrost(config.blockfrostKey));
     return json({ unsignedTx });
   } catch (error) {
@@ -457,28 +477,17 @@ export async function reconcilePendingPayments(
   for (let index = 0; index < rows.length; index += 5) {
     await Promise.all(
       rows.slice(index, index + 5).map(async ([orderId]) => {
-        await db.query(
-          "UPDATE mail_payment_orders SET last_checked = ? WHERE order_id = ? AND status = 'pending'",
-          [Date.now(), orderId],
-        );
         try {
-          const response = await handlePaymentOrder(
-            new Request("http://localhost/internal/payment-status", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify({ orderId }),
-            }),
-            db,
-            false,
-          );
-          if (!response.ok) {
-            console.error(
-              `payment reconciliation returned HTTP ${response.status}`,
-            );
-          }
-          await response.body?.cancel();
+          await db.query("UPDATE mail_payment_orders SET last_checked = ? WHERE order_id = ? AND status = 'pending'", [Date.now(), orderId]);
+          const order = await getPaymentOrder(db, orderId);
+          if (order) await refreshPaymentOrder(db, order);
         } catch (error) {
-          console.error("payment reconciliation failed:", error);
+          console.error("payment reconciliation failed", {
+            orderId,
+            stage: error instanceof PaymentRefreshError ? error.stage : "database",
+            retryable: error instanceof PaymentRefreshError,
+            reason: error instanceof PaymentRefreshError ? error.message : "database operation failed",
+          });
         }
       }),
     );

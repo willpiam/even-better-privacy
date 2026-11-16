@@ -1,3 +1,4 @@
+import { parseEbpPayloadInput } from "../../core/PayloadInput.ts";
 import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
 import { readBoundedFile } from "../read-bounded-file.ts";
 import { parseArgs } from "@std/cli/parse-args";
@@ -78,7 +79,7 @@ export async function cmdDecryptFile(args: ReturnType<typeof parseArgs>, ctx: CL
 		Deno.exit(1);
 	}
 	const raw = await Deno.readTextFile(inputPath);
-	const data = JSON.parse(raw) as Record<string, unknown>;
+	const data = parseEbpPayloadInput(raw);
 	const type = String(data.type ?? "");
 	const ciphertext = String(data.ciphertext ?? "");
 	if (!ciphertext) {

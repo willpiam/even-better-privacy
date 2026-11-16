@@ -108,6 +108,11 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       )
     `);
 
+    this.db.exec(`CREATE TABLE IF NOT EXISTS authorization_nonces (
+      identity_fingerprint TEXT PRIMARY KEY, nonce INTEGER NOT NULL)`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS verification_recipient_budget (
+      recipient_hash TEXT PRIMARY KEY, window_start INTEGER NOT NULL, sent_count INTEGER NOT NULL)`);
+
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS details (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +165,8 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       this.db.exec("ROLLBACK");
       throw error;
     }
+
+    this.db.exec("CREATE INDEX IF NOT EXISTS verified_email_lookup ON details(LOWER(TRIM(detail))) WHERE path = 'email' AND verified_at IS NOT NULL AND revoked_at IS NULL");
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS revocations (

@@ -1,3 +1,5 @@
+import { readJsonOptional } from "../../cli/json-store.ts";
+import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import { HttpError, STATUS, bytesToBase64, base64ToBytes } from "./http.ts";
 import { toSafeString, clampPort, asBool } from "./identity.ts";
 
@@ -75,22 +77,11 @@ export function mailboxPath(identityDir: string, fileName: string): string {
 }
 
 export async function readJsonFile<T>(path: string): Promise<T | null> {
-	try {
-		const raw = await Deno.readTextFile(path);
-		return JSON.parse(raw) as T;
-	} catch (e) {
-		if (e instanceof Deno.errors.NotFound) return null;
-		return null;
-	}
+  return await readJsonOptional<T>(path);
 }
 
 export async function writePrivateJson(path: string, value: unknown): Promise<void> {
-	await Deno.writeTextFile(path, JSON.stringify(value, null, 2));
-	try {
-		await Deno.chmod(path, 0o600);
-	} catch {
-		// Best effort on platforms where chmod may not be supported.
-	}
+  await writePrivateFileAtomic(path, JSON.stringify(value, null, 2));
 }
 
 export function isMailAccountConfig(value: unknown): value is MailAccountConfig {
@@ -292,19 +283,27 @@ export function clearMailSecrets(identityDir: string): void {
 }
 
 export async function saveMailSecretsStore(identityDir: string, store: MailSecretsStore): Promise<void> {
-	mailSecretCache.set(identityDir, store);
-	if (Object.keys(store).length === 0) {
+  if (!mailSecretCache.has(identityDir) && !mailPinCache.has(identityDir)) {
+    const existing = await readJsonFile<unknown>(mailboxPath(identityDir, MAIL_SECRET_FILE));
+    if (existing !== null) throw new HttpError(STATUS.Unauthorized, "identity locked");
+  }
+  const accounts = await getMailStore(identityDir);
+  const persisted = Object.fromEntries(Object.entries(store).filter(([id]) =>
+    accounts.accounts.some(account => account.id === id && account.config.persistSecrets)));
+	if (Object.keys(persisted).length === 0) {
 		try {
 			await Deno.remove(mailboxPath(identityDir, MAIL_SECRET_FILE));
 		} catch (e) {
 			if (!(e instanceof Deno.errors.NotFound)) throw e;
 		}
+		mailSecretCache.set(identityDir, store);
 		return;
 	}
 	const pin = mailPinCache.get(identityDir);
 	if (!pin) throw new HttpError(STATUS.Unauthorized, "identity locked");
-	const encrypted = await encryptSecretsStore(store, pin);
+	const encrypted = await encryptSecretsStore(persisted, pin);
 	await writePrivateJson(mailboxPath(identityDir, MAIL_SECRET_FILE), encrypted);
+	mailSecretCache.set(identityDir, store);
 }
 
 export function buildSmtpAuth(config: MailAccountConfig, secrets: MailAuthSecrets): Record<string, unknown> {

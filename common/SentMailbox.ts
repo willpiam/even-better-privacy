@@ -61,6 +61,7 @@ export function parseImapListLine(
   } else {
     mailbox = mailbox.split(/\s+/)[0] ?? "";
   }
+  if (/^\{\d+\}$/.test(mailbox)) return null;
   if (!mailbox || mailbox.toUpperCase() === "NIL") return null;
   return { path: mailbox, flags };
 }

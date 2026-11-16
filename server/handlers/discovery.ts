@@ -41,6 +41,7 @@ type IdentitySummary = {
 async function hydrateIdentitySummaries(
   db: DatabaseAdapter,
   identityRows: IdentitySummaryRow[],
+  summary = false,
 ): Promise<IdentitySummary[]> {
   const rows = identityRows.map(
     (
@@ -75,7 +76,7 @@ async function hydrateIdentitySummaries(
   const details = await db.query<
     [string, string, string, string, DbNumber | null, DbNumber | null]
   >(
-    `SELECT identity_fingerprint, path, detail, proof, CAST(verified_at AS TEXT), CAST(revoked_at AS TEXT)
+    `SELECT identity_fingerprint, path, detail, ${summary ? "''" : "proof"}, CAST(verified_at AS TEXT), CAST(revoked_at AS TEXT)
      FROM details WHERE identity_fingerprint IN (${placeholders}) ORDER BY id ASC`,
     fingerprints,
   );
@@ -141,7 +142,7 @@ export async function handleListIdentities(
     offset,
   ]);
 
-  const rows = await hydrateIdentitySummaries(db, identityRows);
+  const rows = await hydrateIdentitySummaries(db, identityRows, url.searchParams.get("view") === "summary");
 
   const totalPages = Math.ceil(totalCount / limit);
 
@@ -228,7 +229,7 @@ export async function handleSearchIdentities(
     offset,
   ]);
 
-  const rows = await hydrateIdentitySummaries(db, identityRows);
+  const rows = await hydrateIdentitySummaries(db, identityRows, url.searchParams.get("view") === "summary");
 
   const totalPages = totalCount === 0 ? 0 : Math.ceil(totalCount / limit);
 
@@ -242,4 +243,16 @@ export async function handleSearchIdentities(
       hasMore: page < totalPages,
     },
   });
+}
+
+/** Return at most two active exact matches: enough to distinguish unique/ambiguous. */
+export async function handleVerifiedEmailLookup(url: URL, db: DatabaseAdapter): Promise<Response> {
+  const email = (url.searchParams.get("email") ?? "").trim().toLowerCase();
+  if (!email.includes("@") || email.length > LIMITS.searchQuery) return json({error: "invalid email"}, 400);
+  const rows = await db.query<IdentitySummaryRow>(`SELECT i.fingerprint, i.signing_key_type, i.encryption_key_type,
+    i.created_at, CAST(i.revoked_at AS TEXT), NULL FROM identities i JOIN details d ON d.identity_fingerprint = i.fingerprint
+    WHERE d.path = 'email' AND LOWER(TRIM(d.detail)) = ? AND d.verified_at IS NOT NULL AND d.revoked_at IS NULL
+      AND i.revoked_at IS NULL AND NOT EXISTS (SELECT 1 FROM revocations r WHERE r.identity_fingerprint = i.fingerprint AND r.type = 'identity')
+    ORDER BY i.fingerprint LIMIT 2`, [email]);
+  return json({identities: await hydrateIdentitySummaries(db, rows, true)});
 }

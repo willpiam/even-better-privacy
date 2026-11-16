@@ -1,4 +1,4 @@
-import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind } from "./checkout-wallet.js";
+import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind, cip30LovelaceAmount } from "./checkout-wallet.js";
 
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
 const localTest = location.origin === "http://127.0.0.1:8789";
@@ -123,34 +123,37 @@ async function switchSepolia(ethereum) {
 async function payEthereum(order) {
   const ethereum = window.ethereum;
   if (!ethereum?.request) throw new Error("No Ethereum wallet is available in this browser.");
+  order = await request("status");
+  if (walletPayKind(order) !== "ethereum") throw new Error("This quote has expired or is no longer payable. Refresh checkout.");
   await switchSepolia(ethereum);
   const accounts = await ethereum.request({ method: "eth_requestAccounts" });
+  order = await request("status");
   const tx = sepoliaPayment(order, accounts[0]);
   let hash;
   try {
     hash = await ethereum.request({ method: "eth_sendTransaction", params: [tx] });
   } catch (error) {
     if (error?.code === 4001) throw error;
-    const { input, ...rest } = tx;
-    hash = await ethereum.request({
-      method: "eth_sendTransaction",
-      params: [{ ...rest, data: input }],
-    });
+    throw new Error("The wallet send outcome is unknown. Check your wallet transaction history before sending again.");
   }
   if (typeof hash !== "string" || !/^0x[0-9a-f]{64}$/i.test(hash)) {
     throw new Error("The wallet did not return a transaction id.");
   }
+  $("transaction").value = hash;
   return await request("transaction", { transactionId: hash });
 }
 async function payCardano(order, name) {
+  order = await request("status");
+  if (walletPayKind(order) !== "cardano") throw new Error("This quote has expired or is no longer payable.");
   const api = await window.cardano[name].enable();
   if (await api.getNetworkId() !== 0) {
     throw new Error("Switch the Cardano wallet to the preview network. This page cannot tell preview from preprod.");
   }
   const changeAddress = await api.getChangeAddress();
-  const utxos = await api.getUtxos();
+  const utxos = await api.getUtxos(cip30LovelaceAmount(BigInt(order.amountAtomic) + 3000000n));
   if (!utxos?.length) throw new Error("The Cardano wallet has no funds.");
   const built = await request("cardano-tx", { changeAddress, utxos });
+  if (walletPayKind(await request("status")) !== "cardano") throw new Error("This quote expired before signing.");
   const witnessSet = await api.signTx(built.unsignedTx, false);
   const assembled = await request("cardano-assemble", {
     unsignedTx: built.unsignedTx,
@@ -160,6 +163,7 @@ async function payCardano(order, name) {
   if (typeof txHash !== "string" || !/^[0-9a-f]{64}$/i.test(txHash)) {
     throw new Error("The wallet did not return a transaction id.");
   }
+  $("transaction").value = txHash;
   return await request("transaction", { transactionId: txHash });
 }
 async function request(path, extra = {}) {

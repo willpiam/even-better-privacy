@@ -1,3 +1,4 @@
+import {lookupVerifiedEmail} from "../../common/VerifiedEmailLookup.ts";
 import type { ExternalIdentity } from "../../core/Identity.ts";
 import { apiUrl, type CLIContext } from "../../cli/utils.ts";
 import {
@@ -94,6 +95,7 @@ function toExternal(identity: IdentityPayload, fingerprint: string): ExternalIde
     delete detailsMeta?.[path];
   }
   return {
+    ...(identity as ExternalIdentity),
     fingerprint: identity.fingerprint || fingerprint,
     signingKeyType: identity.signingKeyType === "sphincs" ? "sphincs" : "dilithium",
     encryptionKeyType: "kyber",
@@ -116,7 +118,7 @@ async function fetchIdentity(server: string, fingerprint: string): Promise<Ident
     throw new HttpError(STATUS.BadGateway, `failed to fetch identity: ${reason}`);
   }
   const candidate = asCandidate(body);
-  if (!candidate?.fingerprint) {
+  if (!candidate?.fingerprint || candidate.fingerprint !== fingerprint) {
     throw new HttpError(STATUS.BadGateway, "invalid identity payload from server");
   }
   return { ...body, ...candidate };
@@ -141,10 +143,7 @@ export async function resolveVerifiedEmailContact(
   }));
 
   const serverMatch = localEmailMatches.length === 0
-    ? await searchVerifiedEmailIdentity(
-      trimmed,
-      (page, limit) => fetchSearchPage(resolveServer(ctx, serverOverride), trimmed, page, limit),
-    )
+    ? await lookupVerifiedEmail(resolveServer(ctx, serverOverride), trimmed)
     : { status: "none" as const };
 
   const decision = decideRecipientResolution({

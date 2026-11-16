@@ -6,6 +6,7 @@ use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
+use tauri::{path::BaseDirectory, Manager};
 
 #[derive(Clone)]
 struct SidecarState(Arc<Mutex<Option<Child>>>);
@@ -54,8 +55,8 @@ fn main() {
         })
         .on_window_event({
             let sidecar_state = sidecar_state.clone();
-            move |event| {
-                if let tauri::WindowEvent::CloseRequested { .. } = event.event() {
+            move |_window, event| {
+                if let tauri::WindowEvent::CloseRequested { .. } = event {
                     if let Ok(mut guard) = sidecar_state.0.lock() {
                         if let Some(mut child) = guard.take() {
                             let _ = child.kill();
@@ -70,10 +71,10 @@ fn main() {
 
 fn init_sidecar_log(app: &tauri::App) -> std::io::Result<std::fs::File> {
     let log_dir = app
-        .path_resolver()
+        .path()
         .app_log_dir()
-        .or_else(|| app.path_resolver().app_data_dir())
-        .unwrap_or_else(std::env::temp_dir);
+        .or_else(|_| app.path().app_data_dir())
+        .unwrap_or_else(|_| std::env::temp_dir());
     fs::create_dir_all(&log_dir)?;
     #[cfg(unix)]
     {
@@ -144,14 +145,14 @@ fn resolve_sidecar(app: &tauri::App) -> Result<PathBuf, tauri::Error> {
     };
 
     for candidate in &expanded_candidates {
-        if let Some(path) = app.path_resolver().resolve_resource(candidate) {
+        if let Ok(path) = app.path().resolve(candidate, BaseDirectory::Resource) {
             if let Some(found) = try_path(path) {
                 return Ok(found);
             }
         }
     }
 
-    if let Some(resource_dir) = app.path_resolver().resource_dir() {
+    if let Ok(resource_dir) = app.path().resource_dir() {
         for candidate in &expanded_candidates {
             if let Some(found) = try_path(resource_dir.join(candidate)) {
                 return Ok(found);

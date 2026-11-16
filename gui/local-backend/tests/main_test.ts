@@ -1,3 +1,4 @@
+import {handleRequest as handleRequestForTest} from "../routes.ts";
 import {
   assert,
   assertEquals,
@@ -10,6 +11,8 @@ import {
   FILE_FORMAT_VERSIONS,
   PROTOCOL_VERSION,
 } from "../../../core/version.ts";
+import { initSecurity, getCsrfToken } from "../security.ts";
+import { lockAll } from "../unlock-session.ts";
 import { sha256Hex } from "../../../core/MessageHash.ts";
 import { computeIdentityFingerprint } from "../../../core/Fingerprint.ts";
 import { createEmailAttachmentCleartextEnvelope } from "../../../core/EmailAttachmentPayload.ts";
@@ -24,6 +27,7 @@ const STATUS = {
   Unauthorized: 401,
   NotFound: 404,
   Conflict: 409,
+  BadGateway: 502,
 } as const;
 
 const isUnix = Deno.build.os !== "windows";
@@ -45,10 +49,15 @@ async function makeRequest(
   path: string,
   init?: RequestInit,
 ): Promise<{ status: number; body: unknown }> {
-  const url = `http://localhost${path}`;
+  const url = `http://localhost:8787${path}`;
+  if (path === "/api/v1/sign" && init?.body) {
+    const body = JSON.parse(init.body);
+    body.signConfirmation ??= { approved: true, approvedAt: Date.now(), messageHash: sha256Hex(body.message ?? "") };
+    init = { ...init, body: JSON.stringify(body) };
+  }
   const req = new Request(url, {
     method: init?.method ?? "GET",
-    headers: init?.headers ?? {},
+    headers: { host: "localhost:8787", "x-ebp-csrf": getCsrfToken(), ...init?.headers },
     body: init?.body,
   });
   const res = await handler(req);
@@ -83,12 +92,13 @@ async function withTestEnv(
   await ensureDir(contactsDir);
 
   // Dynamically import the module to get the handler
-  // We use a workaround: create a minimal handler that processes requests
-  const { handleRequestForTest } = await import("./test_handler.ts");
+  // Exercise the production dispatcher, including security middleware.
 
+  await initSecurity({ home, persist: false });
   try {
     await fn(home, handleRequestForTest);
   } finally {
+    lockAll();
     await Deno.remove(home, { recursive: true });
   }
 }
@@ -590,11 +600,11 @@ Deno.test({
         fingerprint: validFingerprint,
         signingKeyType: "dilithium",
         encryptionKeyType: "kyber",
-        signingKey: "pk-sign",
-        encryptionKey: "pk-enc",
+        signingKey: identity.summary.signingKey,
+        encryptionKey: identity.summary.encryptionKey,
         details: {},
-        signingKeyDetails: { variant: "test" },
-        encryptionKeyDetails: { variant: "test" },
+        signingKeyDetails: identity.summary.signingKeyDetails,
+        encryptionKeyDetails: identity.summary.encryptionKeyDetails,
       };
       await createTestContact(home, "friend", contact);
 
@@ -618,17 +628,17 @@ Deno.test({
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (home, handler) => {
-      const validFingerprint =
-        (await createTestIdentity(home, "seed", "password123")).toFingerprint();
+      const identity = await createTestIdentity(home, "seed", "password123");
+      const validFingerprint = identity.toFingerprint();
       const contact: ExternalIdentity = {
         fingerprint: validFingerprint,
         signingKeyType: "dilithium",
         encryptionKeyType: "kyber",
-        signingKey: "pk-sign",
-        encryptionKey: "pk-enc",
+        signingKey: identity.summary.signingKey,
+        encryptionKey: identity.summary.encryptionKey,
         details: {},
-        signingKeyDetails: { variant: "test" },
-        encryptionKeyDetails: { variant: "test" },
+        signingKeyDetails: identity.summary.signingKeyDetails,
+        encryptionKeyDetails: identity.summary.encryptionKeyDetails,
       };
 
       const { status, body } = await makeRequest(
@@ -670,17 +680,17 @@ Deno.test({
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (home, handler) => {
-      const validFingerprint =
-        (await createTestIdentity(home, "seed", "password123")).toFingerprint();
+      const identity = await createTestIdentity(home, "seed", "password123");
+      const validFingerprint = identity.toFingerprint();
       const contact: ExternalIdentity = {
         fingerprint: validFingerprint,
         signingKeyType: "dilithium",
         encryptionKeyType: "kyber",
-        signingKey: "pk-sign",
-        encryptionKey: "pk-enc",
+        signingKey: identity.summary.signingKey,
+        encryptionKey: identity.summary.encryptionKey,
         details: {},
-        signingKeyDetails: { variant: "test" },
-        encryptionKeyDetails: { variant: "test" },
+        signingKeyDetails: identity.summary.signingKeyDetails,
+        encryptionKeyDetails: identity.summary.encryptionKeyDetails,
       };
       await createTestContact(home, "delete-me", contact);
 
@@ -1555,7 +1565,7 @@ Deno.test({
     await withTestEnv(async (home, handler) => {
       await writeState(`${home}/.ebp`, {
         currentIdentity: "identity",
-        server: "http://example.com",
+        server: "https://example.com",
       });
 
       const { status, body } = await makeRequest(
@@ -1563,7 +1573,7 @@ Deno.test({
         `/api/v1/server?home=${encodeURIComponent(home)}`,
       );
       assertEquals(status, STATUS.OK);
-      assertEquals((body as { server: string }).server, "http://example.com");
+      assertEquals((body as { server: string }).server, "https://example.com");
     });
   },
 });
@@ -1576,12 +1586,12 @@ Deno.test({
       const { status, body } = await makeRequest(
         handler,
         "/api/v1/server",
-        jsonPost({ url: "http://new-server.com", home }),
+        jsonPost({ url: "https://new-server.com", home }),
       );
       assertEquals(status, STATUS.OK);
       assertEquals(
         (body as { ok: boolean; server: string }).server,
-        "http://new-server.com",
+        "https://new-server.com",
       );
     });
   },
@@ -1594,7 +1604,7 @@ Deno.test({
     await withTestEnv(async (home, handler) => {
       await writeState(`${home}/.ebp`, {
         currentIdentity: "identity",
-        server: "http://old-server.com",
+        server: "https://old-server.com",
       });
 
       const { status, body } = await makeRequest(
@@ -1643,12 +1653,13 @@ Deno.test({
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (_home, handler) => {
-      const req = new Request("http://localhost/api/v1/health", {
+      const req = new Request("http://localhost:8787/api/v1/health", {
         method: "OPTIONS",
+        headers: {host:"localhost:8787",origin:"http://localhost:8787"},
       });
       const res = await handler(req);
       assertEquals(res.status, 204);
-      assertEquals(res.headers.get("access-control-allow-origin"), "*");
+      assertEquals(res.headers.get("access-control-allow-origin"), "http://localhost:8787");
       assertEquals(
         res.headers.get("access-control-allow-methods"),
         "GET,POST,OPTIONS",
@@ -1801,7 +1812,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "POST /api/v1/revoke/identity rejects already revoked identity",
+  name: "POST /api/v1/revoke/identity reuses the existing certificate on retry",
   permissions: { read: true, write: true, env: true, net: true },
   fn: async () => {
     await withTestEnv(async (home, handler) => {
@@ -1809,7 +1820,7 @@ Deno.test({
       await writeState(`${home}/.ebp`, { currentIdentity: "test" });
 
       // Revoke once
-      await makeRequest(
+      const first = await makeRequest(
         handler,
         "/api/v1/revoke/identity",
         jsonPost({
@@ -1829,11 +1840,8 @@ Deno.test({
           home,
         }),
       );
-      assertEquals(status, STATUS.Conflict);
-      assertStringIncludes(
-        (body as { error: string }).error,
-        "already revoked",
-      );
+      assertEquals(status, STATUS.OK);
+      assertEquals((body as {certificate:string}).certificate, (first.body as {certificate:string}).certificate);
     });
   },
 });

@@ -1,3 +1,5 @@
+import {identityIsPublished} from "../../common/Discovery.ts";
+import {normalizeServerUrl} from "../../common/ServerPolicy.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity } from "../../core/Identity.ts";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
@@ -52,8 +54,8 @@ function numberArg(
     if (fallback === undefined) throw new Error(`Missing --${name}`);
     return fallback;
   }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isInteger(parsed) || parsed < 0) {
+  const parsed = Number(value);
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(parsed) || parsed < 0) {
     throw new Error(`--${name} must be a non-negative integer`);
   }
   return parsed;
@@ -235,9 +237,9 @@ async function discoverLocal(
     let serverFound = false;
     if (input.server) {
       const res = await fetch(
-        `${input.server.replace(/\/$/, "")}/api/v1/identity/${fingerprint}`,
+        `${normalizeServerUrl(input.server)}/api/v1/identity/${fingerprint}`,
       );
-      serverFound = res.ok;
+      serverFound = await identityIsPublished(res);
     }
     if (localName || serverFound) {
       gap = 0;
@@ -279,6 +281,7 @@ export async function cmdHd(
         const out = stringArg(args, "out") ?? stringArg(args, "output");
         if (!path || !out) usage();
         const parsed = parseHdPath(path);
+        if (!parsed.segments[1].hardened || parsed.segments[3].hardened || parsed.segments[4].hardened) throw new Error("Unsupported HD path hardening; use hardened purpose/profile/account and unhardened change/index");
         const mnemonic = await readMnemonic(args);
         const seed = mnemonicToSeed(
           mnemonic,

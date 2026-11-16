@@ -106,7 +106,7 @@ describe('mime decode for EBP armor', () => {
       subject: 'test',
       body,
     });
-    expect(source).toContain('charset=utf-8\r\n\r\nfirst line');
+    expect(source).toContain('Content-Transfer-Encoding: 7bit\r\n\r\nfirst line');
     expect(extractTextFromMimeSource(source).text).toBe(
       'first line\n\nlast line',
     );

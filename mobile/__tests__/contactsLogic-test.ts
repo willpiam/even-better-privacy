@@ -1,3 +1,4 @@
+import {Identity} from '../../core/Identity';
 import {sha256Hex} from '../../core/MessageHash.ts';
 import {
   apiUrl,
@@ -40,10 +41,7 @@ describe('contactsLogic', () => {
 
   test('normalizeExternalIdentity strips revoked details', () => {
     const identity = normalizeExternalIdentity({
-      fingerprint: 'fp1',
-      signingKey: 'sk',
-      encryptionKey: 'ek',
-      signingKeyType: 'sphincs',
+      ...new Identity('dilithium', 'kyber').summary,
       details: {email: ['a@b.c', 'p'], phone: ['1', 'p']},
       detailsMeta: {
         email: {verified: true, verifiedAt: 1},
@@ -52,7 +50,7 @@ describe('contactsLogic', () => {
       revokedDetails: ['email'],
       revoked: true,
     });
-    expect(identity.signingKeyType).toBe('sphincs');
+    expect(identity.signingKeyType).toBe('dilithium');
     expect(identity.details.email).toBeUndefined();
     expect(identity.details.phone).toEqual(['1', 'p']);
     expect(identity.detailsMeta?.email).toBeUndefined();
@@ -62,7 +60,7 @@ describe('contactsLogic', () => {
   test('normalizeExternalIdentity rejects incomplete payloads', () => {
     expect(() =>
       normalizeExternalIdentity({fingerprint: 'fp', signingKey: 'sk'}),
-    ).toThrow(/Invalid public identity/);
+    ).toThrow(/Invalid contact/);
   });
 
   test('normalizeServerIdentity keeps empty keys and strips revoked', () => {

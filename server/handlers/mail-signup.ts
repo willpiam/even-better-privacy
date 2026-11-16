@@ -17,6 +17,7 @@ import {
   deleteDetail,
   deleteMailbox,
   ensureNewNonce,
+  consumeNonce,
   getDetailRecord,
   getIdentity,
   getMailboxByFingerprint,
@@ -430,7 +431,7 @@ export async function handleMailSignup(
           "this identity already has an email detail",
         );
       }
-      const currentNonce = await ensureNewNonce(
+      const currentNonce = await consumeNonce(
         db,
         fingerprint,
         proofResult.record.nonce,

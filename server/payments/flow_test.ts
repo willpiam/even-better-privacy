@@ -90,7 +90,7 @@ Deno.test({
         createdAt: Date.now(),
       });
       const proof = createSignedProof(signingKey, {
-        nonce: 1,
+        nonce: 11,
         path: MAIL_PAYMENT_ORDER_PATH,
         detail: buildMailPaymentOrderDetail(
           "alice@test.pqpost.com",
@@ -172,7 +172,7 @@ Deno.test({
         }),
         db,
       );
-      assertEquals(replay.status, 409);
+      assertEquals(replay.status, 400);
       const view =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(view.email, "alice@test.pqpost.com");
@@ -243,7 +243,7 @@ Deno.test({
         "confirmed",
       );
       const recoveryProof = createSignedProof(signingKey, {
-        nonce: 2,
+        nonce: 12,
         path: MAIL_PAYMENT_RECOVER_PATH,
         detail: "alice@test.pqpost.com",
         timestamp: Date.now(),
@@ -281,7 +281,7 @@ Deno.test({
         }, stalwartFetch),
       );
       const emailProof = createSignedProof(signingKey, {
-        nonce: 2,
+        nonce: 13,
         path: "email",
         detail: "alice@test.pqpost.com",
         timestamp: Date.now(),

@@ -1,3 +1,4 @@
+import { MAX_ENCRYPTED_FILE_BYTES } from "../../common/FileLimits.ts";
 import { FILE_FORMAT_VERSIONS } from "../../core/version.ts";
 
 export type JsonValue = Record<string, unknown>;
@@ -147,14 +148,19 @@ export function json(body: unknown, status: StatusCode = STATUS.OK): Response {
 }
 
 export async function readJson<T extends JsonValue>(req: Request): Promise<T> {
+  const path = new URL(req.url).pathname;
+  // Encrypted envelopes encode inner Base64 again (hex ciphertext plus metadata).
+  // Budget 4x raw capacity for encrypted input; control endpoints stay at 512 KiB.
+  const fileRoutes = new Set(["/api/v1/encrypt-file", "/api/v1/decrypt-file", "/api/v1/mail/decrypt-attachment", "/api/v1/mail/send", "/api/v1/mail/send-ebp"]);
+  const maxBodySize = fileRoutes.has(path) ? MAX_ENCRYPTED_FILE_BYTES * 4 + 1024 * 1024 : MAX_BODY_SIZE;
   const contentLength = Number.parseInt(
     req.headers.get("content-length") ?? "0",
     10,
   );
-  if (Number.isFinite(contentLength) && contentLength > MAX_BODY_SIZE) {
+  if (Number.isFinite(contentLength) && contentLength > maxBodySize) {
     throw new HttpError(
       STATUS.PayloadTooLarge,
-      `payload too large (max ${MAX_BODY_SIZE} bytes)`,
+      `payload too large (max ${maxBodySize} bytes)`,
     );
   }
 
@@ -170,11 +176,11 @@ export async function readJson<T extends JsonValue>(req: Request): Promise<T> {
       const { done, value } = await reader.read();
       if (done) break;
       totalSize += value.byteLength;
-      if (totalSize > MAX_BODY_SIZE) {
+      if (totalSize > maxBodySize) {
         await reader.cancel();
         throw new HttpError(
           STATUS.PayloadTooLarge,
-          `payload too large (max ${MAX_BODY_SIZE} bytes)`,
+          `payload too large (max ${maxBodySize} bytes)`,
         );
       }
       chunks.push(value);
@@ -232,15 +238,4 @@ export function safeFileName(fileName: string): string {
   return withoutControl.replace(/\.\./g, "_");
 }
 
-export function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary);
-}
-
-export function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i += 1) out[i] = binary.charCodeAt(i);
-  return out;
-}
+export { bytesToBase64, base64ToBytes } from "../../core/Base64.ts";

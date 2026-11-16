@@ -1,3 +1,6 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
+import {sha256Hex} from "../../../core/MessageHash.ts";
+import {writeFileAtomic} from "./atomicFile";
 import RNFS from 'react-native-fs';
 import {
   createHierarchyCertificate,
@@ -32,7 +35,7 @@ import {
 export type {PendingHierarchyProposal};
 
 function apiUrl(server: string, path: string): string {
-  const base = server.replace(/\/+$/, '');
+  const base = normalizeServerUrl(server);
   return `${base}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
@@ -53,21 +56,13 @@ async function readPendingLocal(): Promise<PendingHierarchyProposal[]> {
 
 async function writePendingLocal(items: PendingHierarchyProposal[]): Promise<void> {
   await ensureAppDirs();
-  await RNFS.writeFile(
-    getPendingCertificatesFile(),
-    JSON.stringify(items, null, 2),
-    'utf8',
-  );
+  await writeFileAtomic(getPendingCertificatesFile(), JSON.stringify(items, null, 2));
 }
 
 async function storeActiveCertificate(certificate: string): Promise<void> {
   await ensureAppDirs();
-  const id = Date.now();
-  await RNFS.writeFile(
-    `${getCertificatesDir()}/${id}.certificate.json`,
-    JSON.stringify({certificate}, null, 2),
-    'utf8',
-  );
+  const id = sha256Hex(certificate);
+  await writeFileAtomic(`${getCertificatesDir()}/${id}.certificate.json`, JSON.stringify({certificate}, null, 2));
 }
 
 export async function listCertificates(): Promise<

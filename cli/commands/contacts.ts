@@ -1,3 +1,6 @@
+import { validateContact, validateContactName, mergeContactRefresh } from "../../common/Contacts.ts";
+import { readJsonOptional, withFileLock } from "../json-store.ts";
+import { writePrivateFileAtomic } from "../atomic-file.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import type { ExternalIdentity } from "../../core/Identity.ts";
 import { externalIdentityFromEmbeddedRecord } from "../../core/EmbeddedIdentity.ts";
@@ -25,8 +28,9 @@ export async function cmdImportContact(
   await ensurePrivateDir(ctx.contactsDir);
   const contactPath = `${ctx.contactsDir}/${contactName}.json`;
 
-  await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), {
-    mode: 0o600,
+  await withFileLock(contactPath, async () => {
+    const existing = await readJsonOptional<ExternalIdentity>(contactPath);
+    await writePrivateFileAtomic(contactPath, JSON.stringify(mergeContactRefresh(existing, external), null, 2));
   });
   console.log(`✓ Contact imported: ${contactName}`);
   console.log(`  Fingerprint: ${external.fingerprint}`);
@@ -43,7 +47,8 @@ export async function cmdListContacts(
     console.log("Contacts:");
     for await (const entry of entries) {
       if (entry.isFile && entry.name.endsWith(".json")) {
-        const contactPath = `${ctx.contactsDir}/${entry.name}`;
+        try {
+        const contactPath = `${ctx.contactsDir}/${validateContactName(entry.name)}`;
         const json = await Deno.readTextFile(contactPath);
         const contact = validateContact(parseStrictJson(json));
         const name = entry.name.replace(".json", "");
@@ -53,6 +58,7 @@ export async function cmdListContacts(
           `    Signing: ${contact.signingKeyType}, Encryption: ${contact.encryptionKeyType}`,
         );
         count++;
+        } catch (error) { console.warn(`Skipping damaged contact ${JSON.stringify(entry.name)}`, String(error)); }
       }
     }
 
@@ -69,35 +75,7 @@ export async function cmdListContacts(
   }
 }
 
-/** Contact aliases cannot introduce path separators or control characters. */
-export function validateContactName(name: string): string {
-  if (
-    typeof name !== "string" || !name.trim() || name === "." || name === ".." ||
-    /[/\\:\x00-\x1f\x7f]/.test(name)
-  ) {
-    throw new Error("Contact name must be a single safe file name");
-  }
-  return name;
-}
-
-/** Validate the stored claim against the actual public keys before trusting it. */
-export function validateContact(value: unknown): ExternalIdentity {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("Invalid contact identity");
-  }
-  const record = value as Record<string, unknown>;
-  if (typeof record.fingerprint !== "string" || !record.fingerprint) {
-    throw new Error("Invalid contact fingerprint");
-  }
-  const validated = externalIdentityFromEmbeddedRecord(
-    record,
-    record.fingerprint,
-  );
-  if (!validated) {
-    throw new Error("Invalid contact keys or fingerprint mismatch");
-  }
-  return { ...record, ...validated };
-}
+export { validateContact, validateContactName } from "../../common/Contacts.ts";
 
 export async function loadContact(
   ctx: CLIContext,
@@ -114,6 +92,7 @@ export async function loadContact(
   try {
     for await (const entry of Deno.readDir(ctx.contactsDir)) {
       if (!entry.isFile || !entry.name.endsWith(".json")) continue;
+      try {
       const value = parseStrictJson(
         await Deno.readTextFile(`${ctx.contactsDir}/${entry.name}`),
       );
@@ -123,6 +102,7 @@ export async function loadContact(
       ) {
         return validateContact(value);
       }
+      } catch (error) { console.warn(`Skipping damaged contact ${JSON.stringify(entry.name)}`, String(error)); }
     }
   } catch (e) {
     if (!(e instanceof Deno.errors.NotFound)) throw e;

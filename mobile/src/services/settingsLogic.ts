@@ -1,3 +1,4 @@
+import {normalizeServerUrl} from "../../../common/ServerPolicy.ts";
 /**
  * Pure settings parsers (Deno/Jest-testable; no AsyncStorage).
  */
@@ -24,7 +25,7 @@ export function resolveServerUrl(
   value: string | null,
   fallback: string,
 ): string {
-  return value && value.trim().length > 0 ? value.trim() : fallback;
+  return normalizeServerUrl(value && value.trim().length > 0 ? value.trim() : fallback);
 }
 
 export function requireNonEmptyServerUrl(next: string): string {
@@ -32,7 +33,7 @@ export function requireNonEmptyServerUrl(next: string): string {
   if (!clean) {
     throw new Error('Server URL cannot be empty');
   }
-  return clean;
+  return normalizeServerUrl(clean);
 }
 
 export function booleanPrefToStorage(value: boolean): string {

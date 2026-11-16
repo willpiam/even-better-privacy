@@ -1,172 +1,80 @@
 import type { ExternalIdentity } from "../../core/Identity.ts";
 import { computeExternalFingerprint } from "../../core/Fingerprint.ts";
-
-export { computeExternalFingerprint };
+import { validateContact, validateContactName, mergeContactRefresh } from "../../common/Contacts.ts";
 import { type CLIContext, ensurePrivateDir } from "../../cli/utils.ts";
+import { readJsonOptional, withFileLock } from "../../cli/json-store.ts";
+import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import { HttpError, STATUS } from "./http.ts";
+export { computeExternalFingerprint };
 
-export async function loadContact(
-  ctx: CLIContext,
-  nameOrFingerprint: string,
-): Promise<ExternalIdentity> {
-  const byName = `${ctx.contactsDir}/${nameOrFingerprint}.json`;
-  try {
-    const json = await Deno.readTextFile(byName);
-    return JSON.parse(json) as ExternalIdentity;
-  } catch {
-    // Try fingerprint prefix search
-    try {
-      for await (const entry of Deno.readDir(ctx.contactsDir)) {
-        if (entry.isFile && entry.name.endsWith(".json")) {
-          const contactPath = `${ctx.contactsDir}/${entry.name}`;
-          const json = await Deno.readTextFile(contactPath);
-          const contact = JSON.parse(json) as ExternalIdentity;
-          if (contact.fingerprint.startsWith(nameOrFingerprint)) {
-            return contact;
-          }
-        }
-      }
-    } catch (e) {
-      if (e instanceof Deno.errors.NotFound) {
-        throw new HttpError(STATUS.NotFound, "no contacts found");
-      }
-      throw e;
-    }
-  }
-
-  throw new HttpError(STATUS.NotFound, "contact not found");
+export function contactPath(ctx: CLIContext, name: string): string {
+  try { return `${ctx.contactsDir}/${validateContactName(name)}.json`; }
+  catch { throw new HttpError(STATUS.BadRequest, "Contact name must be a single safe file name"); }
 }
-
-export async function listContacts(
-  ctx: CLIContext,
-): Promise<Array<{ name: string; contact: ExternalIdentity }>> {
-  const contacts: Array<{ name: string; contact: ExternalIdentity }> = [];
+async function readContact(path: string): Promise<ExternalIdentity | null> {
+  try {
+    if ((await Deno.lstat(path)).isSymlink) throw new Error("Contact symlinks are unsupported");
+  } catch (error) { if (error instanceof Deno.errors.NotFound) return null; throw error; }
+  const value = await readJsonOptional(path);
+  return value === null ? null : validateContact(value);
+}
+export async function listContacts(ctx: CLIContext): Promise<Array<{name: string; contact: ExternalIdentity}>> {
+  const contacts: Array<{name: string; contact: ExternalIdentity}> = [];
   try {
     for await (const entry of Deno.readDir(ctx.contactsDir)) {
       if (!entry.isFile || !entry.name.endsWith(".json")) continue;
-      const name = entry.name.replace(".json", "");
-      const json = await Deno.readTextFile(`${ctx.contactsDir}/${entry.name}`);
-      contacts.push({ name, contact: JSON.parse(json) as ExternalIdentity });
+      try {
+        const name = entry.name.slice(0, -5);
+        const contact = await readContact(contactPath(ctx, name));
+        if (contact) contacts.push({name, contact});
+      } catch (error) { console.warn(`Skipping damaged contact ${JSON.stringify(entry.name)}`, String(error)); }
     }
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) return contacts;
-    throw e;
-  }
+  } catch (error) { if (!(error instanceof Deno.errors.NotFound)) throw error; }
   return contacts;
 }
-
-export async function findContactRecord(
-  ctx: CLIContext,
-  fingerprint: string,
-): Promise<{ name: string; path: string; contact: ExternalIdentity } | null> {
+export async function findContactRecord(ctx: CLIContext, fingerprint: string): Promise<{name: string; path: string; contact: ExternalIdentity} | null> {
   const query = fingerprint.trim();
   if (!query) return null;
-  try {
-    for await (const entry of Deno.readDir(ctx.contactsDir)) {
-      if (!entry.isFile || !entry.name.endsWith(".json")) continue;
-      const name = entry.name.replace(".json", "");
-      const contactPath = `${ctx.contactsDir}/${entry.name}`;
-      const json = await Deno.readTextFile(contactPath);
-      const contact = JSON.parse(json) as ExternalIdentity;
-      if (
-        typeof contact.fingerprint === "string" &&
-        (contact.fingerprint === query || contact.fingerprint.startsWith(query))
-      ) {
-        return { name, path: contactPath, contact };
-      }
-    }
-  } catch (e) {
-    if (e instanceof Deno.errors.NotFound) return null;
-    throw e;
-  }
-  return null;
+  const matches = (await listContacts(ctx)).filter(item => item.contact.fingerprint.startsWith(query));
+  if (matches.length > 1) throw new HttpError(STATUS.Conflict, "ambiguous contact fingerprint");
+  return matches[0] ? {...matches[0], path: contactPath(ctx, matches[0].name)} : null;
 }
-
-export async function deleteContact(
-  ctx: CLIContext,
-  name?: string,
-  fingerprint?: string,
-): Promise<string> {
-  const byName = typeof name === "string" ? name.trim() : "";
-  const byFingerprint = typeof fingerprint === "string"
-    ? fingerprint.trim()
-    : "";
-
-  if (!byName && !byFingerprint) {
-    throw new HttpError(STATUS.BadRequest, "name or fingerprint is required");
-  }
-
-  if (byName) {
-    const contactPath = `${ctx.contactsDir}/${byName}.json`;
-    try {
-      await Deno.remove(contactPath);
-      return byName;
-    } catch (e) {
-      if (!(e instanceof Deno.errors.NotFound)) throw e;
-    }
-  }
-
-  if (!byFingerprint) {
-    throw new HttpError(STATUS.NotFound, "contact not found");
-  }
-
-  try {
-    for await (const entry of Deno.readDir(ctx.contactsDir)) {
-      if (!entry.isFile || !entry.name.endsWith(".json")) continue;
-      const contactName = entry.name.replace(".json", "");
-      const contactPath = `${ctx.contactsDir}/${entry.name}`;
-      const json = await Deno.readTextFile(contactPath);
-      const contact = JSON.parse(json) as ExternalIdentity;
-      if (
-        typeof contact.fingerprint === "string" &&
-        (contact.fingerprint === byFingerprint ||
-          contact.fingerprint.startsWith(byFingerprint))
-      ) {
-        await Deno.remove(contactPath);
-        return contactName;
-      }
-    }
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) throw e;
-  }
-
-  throw new HttpError(STATUS.NotFound, "contact not found");
+export async function loadContact(ctx: CLIContext, nameOrFingerprint: string): Promise<ExternalIdentity> {
+  const path = contactPath(ctx, nameOrFingerprint);
+  const direct = await readContact(path);
+  if (direct) return direct;
+  const found = await findContactRecord(ctx, nameOrFingerprint);
+  if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
+  return found.contact;
 }
-
-export async function saveExternalContact(
-  ctx: CLIContext,
-  external: ExternalIdentity,
-  name?: string,
-): Promise<{ name: string; fingerprint: string }> {
-  if (!external.fingerprint || !external.signingKey || !external.encryptionKey) {
-    throw new HttpError(STATUS.BadGateway, "invalid identity payload from server");
-  }
-  await ensurePrivateDir(ctx.contactsDir);
-  const contactName = name?.trim() || external.fingerprint.substring(0, 16);
-  const contactPath = `${ctx.contactsDir}/${contactName}.json`;
-  try {
-    const existingRaw = await Deno.readTextFile(contactPath);
-    const existing = JSON.parse(existingRaw) as ExternalIdentity & Record<string, unknown>;
-    const preservedEntries = Object.entries(existing.resolvedOpaqueDetails ?? {})
-      .filter((entry): entry is [string, string] =>
-        typeof entry[1] === "string" && external.details[entry[0]] !== undefined
-      );
-    if (preservedEntries.length > 0) {
-      external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
-    }
-    for (const key of ["localAlias", "localDescription", "localEmail"] as const) {
-      if (typeof existing[key] === "string" && existing[key]) {
-        (external as Record<string, unknown>)[key] = existing[key];
-      }
-    }
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) {
-      console.warn("failed to preserve local data during fetch sync", e);
-    }
-  }
-  await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), {
-    mode: 0o600,
+export async function deleteContact(ctx: CLIContext, name?: string, fingerprint?: string): Promise<string> {
+  if (!name && !fingerprint) throw new HttpError(STATUS.BadRequest, "name or fingerprint is required");
+  const target = name ? {name, path: contactPath(ctx, name)} : await findContactRecord(ctx, fingerprint!);
+  if (!target) throw new HttpError(STATUS.NotFound, "contact not found");
+  await withFileLock(target.path, () => Deno.remove(target.path));
+  return target.name;
+}
+export async function updateContactRecord(ctx: CLIContext, fingerprint: string, mutate: (contact: ExternalIdentity) => void): Promise<void> {
+  const found = await findContactRecord(ctx, fingerprint);
+  if (!found) throw new HttpError(STATUS.NotFound, "contact not found");
+  await withFileLock(found.path, async () => {
+    const current = await readContact(found.path);
+    if (!current || current.fingerprint !== found.contact.fingerprint) throw new HttpError(STATUS.Conflict, "contact changed");
+    mutate(current);
+    await writePrivateFileAtomic(found.path, JSON.stringify(current, null, 2));
   });
-  return { name: contactName, fingerprint: external.fingerprint };
 }
-
+export async function saveExternalContact(ctx: CLIContext, external: ExternalIdentity, name?: string): Promise<{name: string; fingerprint: string}> {
+  let validated: ExternalIdentity;
+  try { validated = validateContact(external); }
+  catch { throw new HttpError(STATUS.BadRequest, "invalid identity keys or fingerprint"); }
+  const contactName = name?.trim() || validated.fingerprint.substring(0, 16);
+  const path = contactPath(ctx, contactName);
+  await ensurePrivateDir(ctx.contactsDir);
+  await withFileLock(path, async () => {
+    const existing = await readContact(path);
+    const merged = mergeContactRefresh(existing, validated);
+    await writePrivateFileAtomic(path, JSON.stringify(merged, null, 2));
+  });
+  return {name: contactName, fingerprint: validated.fingerprint};
+}

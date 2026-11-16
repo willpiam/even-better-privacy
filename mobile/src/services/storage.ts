@@ -10,6 +10,7 @@ import {sameBytes} from './unlockSessionLogic';
 import {KeyedQueue} from '../../../common/KeyedQueue';
 import {
   cacheUnlockedIdentity,
+  captureUnlockGeneration,
   getUnlockMaterial,
   lock as lockIdentitySession,
 } from './unlockSession';
@@ -204,6 +205,7 @@ export async function unlockIdentity(
     throw new Error('Password is required');
   }
   const normalized = normalizeName(name);
+  const isCurrent = captureUnlockGeneration(normalized);
   await ensureAppDirs();
   const path = identityPath(normalized);
   if (!(await RNFS.exists(path))) {
@@ -221,13 +223,18 @@ export async function unlockIdentity(
   }
   const {key, salt} = decrypted;
   try {
-    await cacheUnlockedIdentity(normalized, key, salt);
+    await cacheUnlockedIdentity(normalized, key, salt, isCurrent);
   } catch (error) {
     key.fill(0);
     throw error;
   }
   const {unlockMailWithIdentityPassword} = await import('./mail/accountStore');
   await unlockMailWithIdentityPassword(normalized, password);
+  if (!isCurrent()) {
+    const {clearMailSecretsMemory} = await import('./mail/accountStore');
+    clearMailSecretsMemory(normalized);
+    throw new Error('Identity unlock cancelled by lock');
+  }
   return normalized;
 }
 

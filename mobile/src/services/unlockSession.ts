@@ -19,6 +19,8 @@ const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 let configuredTimeoutMs = timeoutMsFromMinutes(undefined);
 let timeoutGeneration = 0;
+let lockGeneration = 0;
+const identityLockGenerations = new Map<string, number>();
 let backgroundedAt: number | null = null;
 let watcherInstalled = false;
 
@@ -75,6 +77,7 @@ function armTimer(name: string): void {
  */
 export function lock(name: string): boolean {
   const normalized = sessionName(name);
+  identityLockGenerations.set(normalized, (identityLockGenerations.get(normalized) ?? 0) + 1);
   clearTimer(normalized);
   const had = store.lock(normalized);
   notifyIdentityLocked(normalized);
@@ -82,6 +85,7 @@ export function lock(name: string): boolean {
 }
 
 export function lockAll(): number {
+  lockGeneration += 1;
   const names = store.lockAll();
   for (const name of names) {
     clearTimer(name);
@@ -135,17 +139,30 @@ function readLive(name: string): UnlockMaterial | null {
   return {key: view.key, salt: view.salt};
 }
 
+export function captureUnlockGeneration(name: string): () => boolean {
+  const normalized = sessionName(name);
+  const all = lockGeneration, identity = identityLockGenerations.get(normalized) ?? 0;
+  return () => all === lockGeneration && identity === (identityLockGenerations.get(normalized) ?? 0);
+}
+
 export async function cacheUnlockedIdentity(
   name: string,
   key: Uint8Array,
   salt: Uint8Array,
+  isCurrent = captureUnlockGeneration(name),
 ): Promise<void> {
+  const normalized = sessionName(name);
+  const lockEpoch = lockGeneration;
+  const identityEpoch = identityLockGenerations.get(normalized) ?? 0;
   const generation = ++timeoutGeneration;
   const minutes = await getAutoLockMinutes();
+  if (!isCurrent() || lockEpoch !== lockGeneration || identityEpoch !== (identityLockGenerations.get(normalized) ?? 0)) {
+    key.fill(0);
+    throw new Error('Identity unlock cancelled by lock');
+  }
   if (generation === timeoutGeneration) {
     configuredTimeoutMs = timeoutMsFromMinutes(minutes);
   }
-  const normalized = sessionName(name);
   store.unlock(normalized, {key, salt}, configuredTimeoutMs);
   armTimer(normalized);
   installIdentityUnlockWatcher();

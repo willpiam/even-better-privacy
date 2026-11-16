@@ -119,7 +119,12 @@ export async function verifyFileSignature(params: {
   const salt = String(payload.salt ?? '');
   const contextMessage = String(payload.contextMessage ?? '');
   const signature = String(payload.signature ?? '');
-  const identity = payload.identity as ExternalIdentity | undefined;
+  const identity = payload.identity && typeof payload.identity === 'object'
+    ? externalIdentityFromEmbeddedRecord(
+        payload.identity as Record<string, unknown>,
+        typeof payload.fingerprint === 'string' ? payload.fingerprint : undefined,
+      )
+    : null;
   if (!fileHash || !signature || !identity) {
     throw new Error('Invalid signed file payload');
   }

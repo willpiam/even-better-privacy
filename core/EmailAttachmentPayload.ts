@@ -96,7 +96,7 @@ export function parseEmailAttachmentCleartextEnvelope(
 	if (typeof raw.fileSize !== "number" || !Number.isInteger(raw.fileSize) || raw.fileSize < 0) {
 		throw new Error("Invalid email attachment envelope fileSize");
 	}
-	if (!isNonEmptyString(raw.fileDataBase64)) {
+	if (typeof raw.fileDataBase64 !== "string") {
 		throw new Error("Invalid email attachment envelope fileDataBase64");
 	}
 	if (raw.bodyPayloadHash !== undefined && !isNonEmptyString(raw.bodyPayloadHash)) {

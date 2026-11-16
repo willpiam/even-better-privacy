@@ -1,252 +1,6 @@
 import {Buffer} from 'buffer';
-import {armorPayload, extractArmoredPayload} from '../../../../core/Payloads';
-
-type HeaderMap = Record<string, string>;
-
-type DecodedTextPart = {
-  contentType: string;
-  body: string;
-};
-
-export const MAX_MIME_DEPTH = 30;
-export const MAX_MIME_ENTITIES = 1000;
-
-function parseHeadersAndBody(part: string): {headers: HeaderMap; body: string} {
-  const normalized = part.replace(/\r\n/g, '\n');
-  const split = normalized.indexOf('\n\n');
-  const headerBlock = split >= 0 ? normalized.slice(0, split) : normalized;
-  const body = split >= 0 ? normalized.slice(split + 2) : '';
-  const headers: HeaderMap = {};
-  let current = '';
-  for (const line of headerBlock.split('\n')) {
-    if (/^[ \t]/.test(line) && current) {
-      headers[current] = `${headers[current]} ${line.trim()}`;
-      continue;
-    }
-    const colon = line.indexOf(':');
-    if (colon <= 0) {
-      continue;
-    }
-    const name = line.slice(0, colon).trim().toLowerCase();
-    const value = line.slice(colon + 1).trim();
-    headers[name] = value;
-    current = name;
-  }
-  return {headers, body};
-}
-
-function getBoundary(contentType: string): string | null {
-  const match = contentType.match(/boundary\s*=\s*"?([^";\s]+)"?/i);
-  return match ? match[1] : null;
-}
-
-function headerValueParam(
-  header: string | undefined,
-  fallback: string,
-): string {
-  if (!header) {
-    return fallback;
-  }
-  const semi = header.indexOf(';');
-  return (semi >= 0 ? header.slice(0, semi) : header).trim().toLowerCase();
-}
-
-/** Decode Content-Transfer-Encoding for text parts (QP, base64, 7bit/8bit/binary). */
-export function decodeTransferEncoding(body: string, cte: string): string {
-  const encoding = cte.trim().toLowerCase();
-  if (encoding === 'quoted-printable') {
-    return decodeQuotedPrintable(body);
-  }
-  if (encoding === 'base64') {
-    const cleaned = body.replace(/\s+/g, '');
-    return Buffer.from(cleaned, 'base64').toString('utf8');
-  }
-  return body;
-}
-
-function decodeQuotedPrintable(input: string): string {
-  const withoutSoftBreaks = input.replace(/=\r?\n/g, '');
-  const bytes: number[] = [];
-  for (let i = 0; i < withoutSoftBreaks.length; i++) {
-    const ch = withoutSoftBreaks[i];
-    if (
-      ch === '=' &&
-      i + 2 < withoutSoftBreaks.length &&
-      /^[0-9A-Fa-f]{2}$/.test(withoutSoftBreaks.slice(i + 1, i + 3))
-    ) {
-      bytes.push(parseInt(withoutSoftBreaks.slice(i + 1, i + 3), 16));
-      i += 2;
-      continue;
-    }
-    bytes.push(withoutSoftBreaks.charCodeAt(i) & 0xff);
-  }
-  return Buffer.from(bytes).toString('utf8');
-}
-
-/** Split a multipart body into raw part strings (headers + body each). */
-function* splitMultipartParts(
-  body: string,
-  boundary: string,
-): Generator<string> {
-  const normalized = body.replace(/\r\n/g, '\n');
-  const sep = `--${boundary}`;
-  const escaped = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const delimiter = new RegExp(`^${escaped}(--)?[ \\t]*(?:\\n|$)`, 'gm');
-  let contentStart: number | null = null;
-  for (
-    let match = delimiter.exec(normalized);
-    match;
-    match = delimiter.exec(normalized)
-  ) {
-    if (contentStart !== null) {
-      const end =
-        match.index > contentStart && normalized[match.index - 1] === '\n'
-          ? match.index - 1
-          : match.index;
-      if (end > contentStart) yield normalized.slice(contentStart, end);
-    }
-    if (match[1]) return;
-    contentStart = delimiter.lastIndex;
-  }
-  if (contentStart !== null && contentStart < normalized.length)
-    yield normalized.slice(contentStart);
-}
-
-function collectFromEntity(
-  raw: string,
-  into: DecodedTextPart[],
-  budget: {entities: number},
-  depth = 0,
-): void {
-  if (depth > MAX_MIME_DEPTH) {
-    throw new Error('MIME nesting limit exceeded');
-  }
-  if (++budget.entities > MAX_MIME_ENTITIES) {
-    throw new Error('MIME part limit exceeded');
-  }
-  const {headers, body} = parseHeadersAndBody(raw);
-  const contentType = headers['content-type'] ?? 'text/plain';
-  const mediaType = headerValueParam(contentType, 'text/plain');
-  const cte = headers['content-transfer-encoding'] ?? '7bit';
-
-  if (mediaType.startsWith('multipart/')) {
-    const boundary = getBoundary(contentType);
-    if (!boundary) {
-      return;
-    }
-    for (const part of splitMultipartParts(body, boundary)) {
-      collectFromEntity(part, into, budget, depth + 1);
-    }
-    return;
-  }
-
-  if (mediaType === 'text/plain' || mediaType === 'text/html') {
-    into.push({
-      contentType: mediaType,
-      body: decodeTransferEncoding(body, cte),
-    });
-  }
-}
-
-/** Walk RFC822 / MIME and collect decoded text/plain and text/html parts. */
-export function collectDecodedTextParts(source: string): DecodedTextPart[] {
-  const parts: DecodedTextPart[] = [];
-  collectFromEntity(source, parts, {entities: 0});
-  return parts;
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-export function extractTextFromMimeSource(
-  source: string,
-  parts = collectDecodedTextParts(source),
-): {
-  text: string;
-  html: string;
-} {
-  const plains = parts
-    .filter(p => p.contentType === 'text/plain')
-    .map(p => p.body);
-  const htmls = parts
-    .filter(p => p.contentType === 'text/html')
-    .map(p => p.body);
-  if (plains.length > 0 || htmls.length > 0) {
-    const html = htmls.join('\n\n');
-    const text =
-      plains.length > 0 ? plains.join('\n\n') : html ? stripHtml(html) : '';
-    return {text, html};
-  }
-  // Fallback for non-MIME / missing Content-Type bodies
-  const {headers, body} = parseHeadersAndBody(source);
-  const mediaType = headerValueParam(headers['content-type'], 'text/plain');
-  const cte = headers['content-transfer-encoding'] ?? '7bit';
-  const decoded = decodeTransferEncoding(body, cte);
-  if (mediaType === 'text/html') {
-    return {text: stripHtml(decoded), html: decoded};
-  }
-  return {text: decoded, html: ''};
-}
-
-/**
- * Extract EBP armor only when JSON inside the block parses successfully
- * after MIME CTE decode. Returns a clean re-armored string, or null.
- */
-export function extractEbpPayloadFromMime(
-  source: string,
-  parts = collectDecodedTextParts(source),
-): string | null {
-  const candidates: string[] = [];
-  for (const part of parts) {
-    if (part.contentType === 'text/plain') {
-      candidates.push(part.body);
-    }
-  }
-  for (const part of parts) {
-    if (part.contentType === 'text/html') {
-      candidates.push(part.body);
-      candidates.push(stripHtml(part.body));
-    }
-  }
-  if (candidates.length === 0) {
-    const fallback = extractTextFromMimeSource(source, parts);
-    if (fallback.text) {
-      candidates.push(fallback.text);
-    }
-    if (fallback.html) {
-      candidates.push(fallback.html);
-      candidates.push(stripHtml(fallback.html));
-    }
-  }
-  // Also try full source after a best-effort decode of the top entity only
-  candidates.push(source);
-
-  for (const candidate of candidates) {
-    const parsed = extractArmoredPayload(candidate);
-    if (parsed) {
-      return armorPayload(parsed);
-    }
-  }
-  return null;
-}
-
-/** Decode the text entities once for both display and EBP extraction. */
-export function parseMimeMessage(source: string): {
-  text: string;
-  html: string;
-  ebpPayload: string | null;
-} {
-  const parts = collectDecodedTextParts(source);
-  return {
-    ...extractTextFromMimeSource(source, parts),
-    ebpPayload: extractEbpPayloadFromMime(source, parts),
-  };
-}
-
+import {splitMailboxList, formatMailbox} from '../../../../common/mail/Mailbox.ts';
+export {MAX_MIME_DEPTH, MAX_MIME_ENTITIES, decodeTransferEncoding, collectDecodedTextParts, extractTextFromMimeSource, extractEbpPayloadFromMime, parseMimeMessage} from '../../../../common/mail/Mime.ts';
 function headerValue(value: string, name: string): string {
   // Header metadata must never introduce a new line or other controls.
   // eslint-disable-next-line no-control-regex
@@ -254,6 +8,39 @@ function headerValue(value: string, name: string): string {
     throw new Error(`${name} contains invalid control characters`);
   }
   return value;
+}
+
+function encodedWord(value: string): string {
+  headerValue(value, 'Header');
+  if (!/[^\x00-\x7f]/.test(value)) return value;
+  const words: string[] = []; let chunk = '';
+  for (const character of value) {
+    if (Buffer.byteLength(chunk + character, 'utf8') > 42) {
+      words.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf8').toString('base64')}?=`); chunk = '';
+    }
+    chunk += character;
+  }
+  if (chunk) words.push(`=?UTF-8?B?${Buffer.from(chunk, 'utf8').toString('base64')}?=`);
+  return words.join('\r\n ');
+}
+function mailboxHeader(value: string): string {
+  headerValue(value, 'Mailbox');
+  return splitMailboxList(value).filter(part => part.trim()).map(part => {
+    const angle = /^(.*)<([^<>]+)>\s*$/.exec(part.trim());
+    if (!angle) {
+      if (/[^\x00-\x7f]/.test(part)) throw new Error('Non-ASCII email addresses require SMTPUTF8');
+      return part.trim();
+    }
+    const email = angle[2].trim();
+    if (/[^\x00-\x7f]/.test(email)) throw new Error('Non-ASCII email addresses require SMTPUTF8');
+    const name = angle[1].trim().replace(/^"(.*)"$/, '$1').replace(/\\(.)/g, '$1');
+    return /[^\x00-\x7f]/.test(name) ? `${encodedWord(name)} <${email}>` : formatMailbox(name, email);
+  }).join(', ');
+}
+function textPart(body: string): {encoding: string; body: string} {
+  return /[^\x00-\x7f]/.test(body)
+    ? {encoding: 'base64', body: Buffer.from(body, 'utf8').toString('base64').match(/.{1,76}/g)?.join('\r\n') ?? ''}
+    : {encoding: '7bit', body};
 }
 
 function formatMessageId(value: string | null | undefined): string {
@@ -306,16 +93,18 @@ export function buildSimpleMimeMessage(params: {
       attachments: params.attachments,
     });
   }
+  const text = textPart(params.body);
   const headers = [
-    `From: ${headerValue(params.from, 'From')}`,
-    `To: ${headerValue(params.to, 'To')}`,
-    `Subject: ${headerValue(params.subject, 'Subject')}`,
+    `From: ${mailboxHeader(params.from)}`,
+    `To: ${mailboxHeader(params.to)}`,
+    `Subject: ${encodedWord(params.subject)}`,
     ...threadingHeaders(params),
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
+    `Content-Transfer-Encoding: ${text.encoding}`,
     '',
   ];
-  return `${headers.join('\r\n')}\r\n${params.body}`;
+  return `${headers.join('\r\n')}\r\n${text.body}`;
 }
 
 export type MailAttachmentPart = {
@@ -336,33 +125,37 @@ export function buildMultipartMimeMessage(params: {
   references?: string;
   attachments?: MailAttachmentPart[];
 }): string {
-  const boundary = `ebp_${Date.now().toString(36)}`;
+  const boundary = `ebp_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+  const text = textPart(params.plainBody);
   const lines = [
-    `From: ${headerValue(params.from, 'From')}`,
-    `To: ${headerValue(params.to, 'To')}`,
-    `Subject: ${headerValue(params.subject, 'Subject')}`,
+    `From: ${mailboxHeader(params.from)}`,
+    `To: ${mailboxHeader(params.to)}`,
+    `Subject: ${encodedWord(params.subject)}`,
     ...threadingHeaders(params),
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',
     `--${boundary}`,
     'Content-Type: text/plain; charset=utf-8',
+    `Content-Transfer-Encoding: ${text.encoding}`,
     '',
-    params.plainBody,
+    text.body,
   ];
   if (params.ebpArmor) {
     lines.push(
       `--${boundary}`,
       'Content-Type: text/plain; charset=utf-8',
       'Content-Disposition: inline',
+      `Content-Transfer-Encoding: ${textPart(params.ebpArmor).encoding}`,
       '',
-      params.ebpArmor,
+      textPart(params.ebpArmor).body,
       '',
     );
   }
   for (const attachment of params.attachments ?? []) {
+    const rawFilename = headerValue(attachment.filename, 'Attachment filename');
     const filename = headerValue(
-      attachment.filename,
+      attachment.filename.replace(/[^\x20-\x7e]/g, '_'),
       'Attachment filename',
     ).replace(/[\\"]/g, '\\$&');
     const contentType =
@@ -376,7 +169,7 @@ export function buildMultipartMimeMessage(params: {
       `--${boundary}`,
       `Content-Type: ${contentType}; name="${filename}"`,
       'Content-Transfer-Encoding: base64',
-      `Content-Disposition: attachment; filename="${filename}"`,
+      `Content-Disposition: attachment; filename="${filename}"${/[^\x00-\x7f]/.test(rawFilename) ? "; filename*=utf-8\'\'" + encodeURIComponent(rawFilename) : ""}`,
       '',
       wrapped,
       '',

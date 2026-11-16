@@ -218,15 +218,15 @@ export async function requestEmailVerification(email, btn, path = "email") {
 
   if (btn) setButtonLoading(btn, true);
   try {
-    await api("/verify-email/request", {
+    const result = await withIdentity(() => api("/verify-email/request", {
       method: "POST",
       body: JSON.stringify({
         fingerprint: state.currentFingerprint,
         detail: cleartext,
         path,
       }),
-    });
-    setStatus(`Verification email sent to ${cleartext}`, "success");
+    }));
+    setStatus(result.status === "pending" ? result.message || "Your existing verification link remains valid." : `Verification email sent to ${cleartext}`, "success");
   } catch (err) {
     setStatus(err.message, "error");
   } finally {

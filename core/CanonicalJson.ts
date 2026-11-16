@@ -12,6 +12,28 @@ function validateString(value: string, key = false): void {
   }
 }
 
+/** Validate parsed JSON without allocating a canonical copy or sorting keys. */
+export function validateJsonValue(value: unknown): void {
+  if (value === null || typeof value === "boolean") return;
+  if (typeof value === "string") { validateString(value); return; }
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new TypeError("Non-finite JSON number");
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) validateJsonValue(item);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const key of Object.keys(value)) {
+      validateString(key, true);
+      validateJsonValue((value as Record<string, unknown>)[key]);
+    }
+    return;
+  }
+  throw new TypeError("Value is not JSON");
+}
+
 /** Return a validated deep copy; stableStringify supplies canonical byte ordering. */
 export function canonicalize(value: unknown): unknown {
   if (value === null || typeof value === "boolean") return value;

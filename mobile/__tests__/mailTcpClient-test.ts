@@ -40,9 +40,9 @@ test('queued TCP readers receive fragmented lines and literals without losing tr
     socket.emit('data', Buffer.from('\nBODY\r\nhello)\r\n'));
     expect(await greeting).toBe('* OK hello');
     expect(await client.readLine()).toBe('BODY');
-    expect(await client.readBytes(5)).toBe('hello');
+    expect(await client.readBytes(5)).toEqual(Buffer.from('hello'));
     expect(await client.readLine()).toBe(')');
-    expect(await client.readBytes(0)).toBe('');
+    expect(await client.readBytes(0)).toEqual(Buffer.alloc(0));
   } finally {
     client.close();
   }

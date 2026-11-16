@@ -37,7 +37,7 @@ Deno.test("matchFromToIdentity matches cleartext email", () => {
 Deno.test("matchFromToIdentity matches resolved opaque email", () => {
   const match = matchFromToIdentity(
     contact({
-      details: { "opaque::email": ["deadbeef", "proof"] },
+      details: { "opaque::email": [sha256Hex("alice@example.com"), "proof"] },
       resolvedOpaqueDetails: { "opaque::email": "alice@example.com" },
     }),
     "ALICE@example.com",
@@ -46,6 +46,17 @@ Deno.test("matchFromToIdentity matches resolved opaque email", () => {
   assertEquals(match.matchedPath, "opaque::email");
   assertEquals(match.signerEmail, "alice@example.com");
   assertEquals(match.opaqueEmailMatched, true);
+});
+
+Deno.test("matchFromToIdentity rejects stale and revoked opaque resolutions", () => {
+  const current = contact({
+    details: { "opaque::email": [sha256Hex("alice@example.com"), "proof"] },
+    resolvedOpaqueDetails: { "opaque::email": "mallory@example.com" },
+  });
+  assertEquals(matchFromToIdentity(current, "mallory@example.com").matches, false);
+  for (const revoked of [{ revoked: true }, { revokedDetails: ["opaque::email"] }]) {
+    assertEquals(matchFromToIdentity({ ...current, ...revoked }, "alice@example.com").matches, null);
+  }
 });
 
 Deno.test("matchFromToIdentity matches opaque email hash of From", () => {

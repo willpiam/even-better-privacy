@@ -1179,3 +1179,9 @@ Lint pass findings and fixes:
 - Initialized wiki framework structure (`wiki/`, `wiki/raw/`).
 - Added maintainer schema in `.cursorrules`.
 - Created initial `index.md`, `overview.md`, and seed pages.
+
+
+## [2026-11-16] update | holistic issue remediation
+
+- Corrected [[analysis-checkout-wallet-submission]]: checkout now connects to testnet wallets, refreshes quotes, avoids uncertain-send replay, retains reservations through grace, and verifies Cardano ledger outputs.
+- Linked implementation evidence to the checkout source, order lifecycle, and verifier. Historical source ingests remain unchanged.

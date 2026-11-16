@@ -53,6 +53,14 @@ export function utxoFromCip30(hex: string): UTxO {
   return coreToUtxo(CML.TransactionUnspentOutput.from_cbor_hex(hex));
 }
 
+/** Select a bounded funded subset; input order must not hide a large UTxO. */
+export function selectWalletUtxos(utxos: UTxO[]): UTxO[] {
+  return [...utxos].sort((a,b) => {
+    const first = a.assets.lovelace ?? 0n, second = b.assets.lovelace ?? 0n;
+    return first > second ? -1 : first < second ? 1 : 0;
+  }).slice(0,40);
+}
+
 export async function buildPreviewUnsigned(
   order: StoredOrder,
   input: { changeAddress: string; utxos: UTxO[] },

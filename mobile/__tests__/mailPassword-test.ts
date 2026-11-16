@@ -1,3 +1,4 @@
+jest.mock('../src/services/atomicFile', () => ({writeFileAtomic: (path: string, content: string) => require('react-native-fs').writeFile(path, content, 'utf8')}));
 jest.mock('react-native-fs', () => {
   const files = new Map<string, string>();
   return {
@@ -101,4 +102,15 @@ test('obsolete PIN and plaintext credential stores cannot be unlocked or rewritt
     expect(getMailSecretsInMemory('me', 'account')).toBeNull();
     clearMailSecretsMemory();
   }
+});
+
+test('concurrent account updates and selection preserve all acknowledged records', async () => {
+  const {upsertMailAccount,readMailStore,selectMailAccount,deleteMailAccount} = require('../src/services/mail/accountStore');
+  const saved=await Promise.all(Array.from({length:20},(_,index) => upsertMailAccount('alice',{id:`parallel-${index}`,name:`Parallel ${index}`,config:DEFAULT_MAIL_ACCOUNT})));
+  expect(saved).toHaveLength(20);
+  await Promise.all([selectMailAccount('alice','parallel-5'),deleteMailAccount('alice','parallel-0'),upsertMailAccount('alice',{id:'parallel-last',name:'Last',config:DEFAULT_MAIL_ACCOUNT})]);
+  const store=await readMailStore('alice');
+  for(let index=1;index<20;index++)expect(store.accounts.some((a:{id:string}) => a.id===`parallel-${index}`)).toBe(true);
+  expect(store.accounts.some((a:{id:string})=>a.id==='parallel-last')).toBe(true);
+  expect(store.accounts.some((a:{id:string})=>a.id==='parallel-0')).toBe(false);
 });

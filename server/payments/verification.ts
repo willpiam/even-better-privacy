@@ -141,12 +141,13 @@ export function checkEthereumPayment(input: {
 
 type CardanoOutput = {
   address?: string;
+  collateral?: boolean;
   amount?: Array<{ unit?: string; quantity?: string }>;
 };
 /** Verify transaction metadata, outputs and canonical block evidence from Blockfrost mainnet. */
 export function checkCardanoPayment(input: {
   txHash: string;
-  transaction: { hash?: string; block?: string; block_height?: number } | null;
+  transaction: { hash?: string; block?: string; block_height?: number; valid_contract?: boolean } | null;
   outputs: CardanoOutput[];
   metadata: Array<{ label?: string; json_metadata?: unknown }>;
   canonicalBlockHash: string | null;
@@ -163,6 +164,9 @@ export function checkCardanoPayment(input: {
     !Number.isSafeInteger(input.latestHeight) || input.latestHeight < 0
   ) return "invalid";
   if (!tx) return "pending";
+  // Failed phase-2 transactions do not create their ordinary outputs. Do not
+  // grant entitlements from either collateral or failed script execution.
+  if (tx.valid_contract !== true) return "invalid";
   if (
     tx.hash?.toLowerCase() !== input.txHash.toLowerCase() ||
     typeof tx.block !== "string" || !/^[0-9a-f]{64}$/i.test(tx.block) ||
@@ -178,6 +182,7 @@ export function checkCardanoPayment(input: {
   ) return "invalid";
   let total = 0n;
   for (const output of input.outputs) {
+    if (output.collateral === true) continue;
     if (output.address !== expected.recipient) continue;
     for (const item of output.amount ?? []) {
       if (item.unit !== input.assetUnit) continue;

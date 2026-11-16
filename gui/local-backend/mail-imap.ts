@@ -229,18 +229,12 @@ const MAX_MAIL_SOURCE_BYTES = Number(
   Deno.env.get("MAIL_PARSE_MAX_BYTES") ?? `${5 * 1024 * 1024}`,
 );
 
-function sourceToString(source: unknown): string {
-  if (typeof source === "string") return source;
-  if (source instanceof Uint8Array) {
-    return new TextDecoder().decode(source);
-  }
-  if (source instanceof ArrayBuffer) {
-    return new TextDecoder().decode(new Uint8Array(source));
-  }
-  if (ArrayBuffer.isView(source)) {
-    return new TextDecoder().decode(new Uint8Array(source.buffer));
-  }
-  return "";
+function sourceToBytes(source: unknown): Uint8Array {
+  if (typeof source === "string") return new TextEncoder().encode(source);
+  if (source instanceof Uint8Array) return source;
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  if (ArrayBuffer.isView(source)) return new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+  return new Uint8Array();
 }
 
 export async function parseMailSourceInWorker(
@@ -248,9 +242,9 @@ export async function parseMailSourceInWorker(
   mode: "message" | "attachment",
   timeoutMs = 10_000,
 ): Promise<Record<string, unknown>> {
-  const sourceText = sourceToString(source);
-  const sourceBytes = new TextEncoder().encode(sourceText).byteLength;
-  if (!sourceText || sourceBytes === 0) {
+  const sourceOctets = sourceToBytes(source);
+  const sourceBytes = sourceOctets.byteLength;
+  if (sourceBytes === 0) {
     throw new HttpError(STATUS.BadRequest, "mail source is empty");
   }
   if (sourceBytes > MAX_MAIL_SOURCE_BYTES) {
@@ -306,7 +300,7 @@ export async function parseMailSourceInWorker(
             ),
           );
         };
-        worker.postMessage({ mode, source: sourceText });
+        worker.postMessage({ mode, source: sourceOctets });
       }),
       timeoutMs,
       `mail-parse-${mode}`,

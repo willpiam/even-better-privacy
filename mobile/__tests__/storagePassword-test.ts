@@ -38,6 +38,7 @@ jest.mock('../src/services/argon2', () => ({
 jest.mock('../src/services/unlockSession', () => {
   const materials = new Map();
   return {
+    captureUnlockGeneration: () => () => true,
     cacheUnlockedIdentity: jest.fn(
       async (name: string, key: Uint8Array, salt: Uint8Array) =>
         materials.set(name, {key: key.slice(), salt: salt.slice()}),

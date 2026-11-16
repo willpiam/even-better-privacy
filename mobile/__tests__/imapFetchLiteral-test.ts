@@ -87,7 +87,7 @@ describe('IMAP BODY literal parsing', () => {
     const n = Number(line1!.line.match(/\{(\d+)\}/)![1]);
     const lit = takeBytesFromBuffer(line1!.rest, n);
     expect(lit).not.toBeNull();
-    expect(lit!.chunk).toBe(rfc822);
+    expect(Buffer.from(lit!.chunk).toString('utf8')).toBe(rfc822);
     const close = takeLineFromBuffer(lit!.rest);
     expect(close!.line).toBe(')');
   });
@@ -113,9 +113,9 @@ describe('IMAP BODY literal parsing', () => {
       'b3 OK FETCH completed\r\n',
     ]);
     const source = await readFetchRfc822Source(client, 'b3');
-    expect(source).toBe(rfc822);
+    expect(Buffer.from(source).toString('utf8')).toBe(rfc822);
     expect(parseHeaderField(source, 'Subject')).toBe('Secret note');
-    expect(source).toContain('-----BEGIN EBP MESSAGE-----');
+    expect(Buffer.from(source).toString('utf8')).toContain('-----BEGIN EBP MESSAGE-----');
     const detail = messageDetailFromRfc822(
       7,
       source,
@@ -135,7 +135,7 @@ describe('IMAP BODY literal parsing', () => {
       'b3 OK FETCH completed\r\n',
     ]);
     const source = await readFetchRfc822Source(client, 'b3');
-    expect(source).toBe(rfc822);
+    expect(Buffer.from(source).toString('utf8')).toBe(rfc822);
     expect(
       messageDetailFromRfc822(1, source, {text: '', html: ''}, null).subject,
     ).toBe('Tiny');

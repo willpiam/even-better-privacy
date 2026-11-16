@@ -41,7 +41,7 @@
     "test:core": "deno test --allow-read --allow-net ./test ./core ./common",
     "test:c-core": "make -C c-core test && deno test --allow-run=python3 --allow-read --allow-env c-core/tests/interop_test.ts",
     "test:server": "sh -c 'export DENO_SQLITE_PATH=\"${DENO_SQLITE_PATH:-/usr/lib/x86_64-linux-gnu/libsqlite3.so}\"; deno run --allow-read --allow-write --allow-env --allow-net --allow-run --allow-ffi ./server/tests/psql_test_runner.ts'",
-    "test:gui-backend": "deno test --allow-read --allow-write --allow-env --allow-net --allow-sys=hostname ./gui/local-backend/tests",
+    "test:gui-backend": "deno test --unstable-worker-options --allow-read --allow-write --allow-env --allow-net --allow-sys=hostname ./gui/local-backend/tests",
     "test:mobile": "bash -lc 'export NVM_DIR=\"$HOME/.nvm\"; . \"$NVM_DIR/nvm.sh\"; nvm use 22 >/dev/null; npm --prefix ./mobile test -- --watchAll=false'",
     "lint:website-csp": "deno run --allow-read ./scripts/lint_website_csp.ts",
     "lint:docker-base": "deno run --allow-read ./scripts/lint_docker_base.ts",

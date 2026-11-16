@@ -1,3 +1,5 @@
+import {parseAddressList} from "../../../../common/ComposeRecipients.ts";
+import {formatMailbox} from "../../../../common/mail/Mailbox.ts";
 /**
  * Pure EBP mail helpers (Deno/Jest-testable; no IMAP/SMTP).
  */
@@ -46,7 +48,7 @@ export function ebpMailPlainIntro(includePublicKeys: boolean): string {
 }
 
 export function formatFromHeader(fromName: string, fromEmail: string): string {
-  return `${fromName} <${fromEmail}>`;
+  return formatMailbox(fromName, fromEmail);
 }
 
 export function resolvePlainMailRecipients(params: {
@@ -56,10 +58,9 @@ export function resolvePlainMailRecipients(params: {
   if (params.recipients && params.recipients.length > 0) {
     return params.recipients;
   }
-  return params.to
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+  const parsed = parseAddressList(params.to);
+  if (parsed.some(row => !row.valid)) throw new Error('Invalid mail recipient');
+  return parsed.map(row => row.email);
 }
 
 export {elevateUnknownSignerVerifyStatus} from '../../../../common/MailAuthenticity.ts';

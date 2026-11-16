@@ -8,6 +8,7 @@ import {
   assembleSignedTransaction,
   buildPreviewUnsigned,
   cardanoPayError,
+  selectWalletUtxos,
 } from "./cardano_tx.ts";
 import type { StoredOrder } from "./orders.ts";
 
@@ -94,4 +95,14 @@ Deno.test("preview ADA builder refuses other orders before asking for protocol p
     .find((entry: [unknown]) => String(entry[0]) === "674")[1].map
     .find((field: { k?: { string?: string } }) => field.k?.string === "msg").v.list;
   assertEquals(signedLine, [{ string: quoted.message }]);
+});
+
+Deno.test("fragmented wallets select a funded bounded subset even when the large UTxO is last", async () => {
+  const buyer = generateEmulatorAccount({lovelace:100000000n});
+  const utxos = Array.from({length:41}, (_,index) => ({txHash:index.toString(16).padStart(64,"0"),outputIndex:0,address:buyer.address,assets:{lovelace:index===40 ? 20000000n : 1000000n}}));
+  const selected = selectWalletUtxos(utxos);
+  assertEquals(selected.length,40);
+  assertEquals(selected[0].assets.lovelace,20000000n);
+  const unsigned = await buildPreviewUnsigned(order({recipient:buyer.address}), {changeAddress:buyer.address,utxos:selected}, {getProtocolParameters:() => Promise.resolve(PROTOCOL_PARAMETERS_DEFAULT)});
+  assertEquals(CML.Transaction.from_cbor_hex(unsigned).body().outputs().len() > 0,true);
 });

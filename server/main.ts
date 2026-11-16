@@ -26,7 +26,7 @@ import {
   handleGetHierarchy,
   handleGetHierarchyCertificate,
 } from "./handlers/hierarchy.ts";
-import { handleListIdentities, handleSearchIdentities } from "./handlers/discovery.ts";
+import { handleListIdentities, handleSearchIdentities, handleVerifiedEmailLookup } from "./handlers/discovery.ts";
 import {
   handleMailDelete,
   handleMailE2eCleanup,
@@ -232,6 +232,10 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
 
     if (req.method === "GET" && url.pathname === "/api/v1/identities") {
       return respond(attachCors(await handleListIdentities(url, db), corsHeaders));
+    }
+
+    if (req.method === "GET" && url.pathname === "/api/v1/identities/by-verified-email") {
+      return respond(attachCors(await handleVerifiedEmailLookup(url, db), corsHeaders));
     }
 
     if (req.method === "GET" && url.pathname === "/api/v1/identities/search") {

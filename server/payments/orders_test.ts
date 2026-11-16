@@ -135,7 +135,7 @@ Deno.test({
           "order4",
           "two",
           "b".repeat(64),
-          400,
+          500,
         ),
         false,
       );
@@ -145,7 +145,7 @@ Deno.test({
           "order4",
           "two",
           "b".repeat(64),
-          399,
+          400,
         ),
         true,
       );

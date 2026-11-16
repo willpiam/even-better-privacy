@@ -1,3 +1,4 @@
+import {splitMailboxList} from "./mail/Mailbox.ts";
 // Compose "To" field parsing and send-intent rules shared by the GUI and
 // mobile composers. The GUI frontend cannot import core/, so
 // gui/js/compose-recipients-logic.js mirrors these two functions; both are
@@ -63,7 +64,7 @@ export function parseAddressList(
 ): ParsedAddress[] {
   const seen = new Set(existing.map((email) => email.toLowerCase()));
   const out: ParsedAddress[] = [];
-  for (const token of String(text ?? "").split(ADDRESS_SEPARATORS)) {
+  for (const token of splitMailboxList(String(text ?? ""))) {
     const email = normalizeAddress(token);
     if (!email) continue;
     const key = email.toLowerCase();

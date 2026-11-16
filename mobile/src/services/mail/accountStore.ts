@@ -1,3 +1,6 @@
+import {KeyedQueue} from "../../../../common/KeyedQueue.ts";
+import {writeFileAtomic} from "../atomicFile";
+const accountUpdates = new KeyedQueue();
 import {clearMailDataCache} from './mailCache';
 import RNFS from 'react-native-fs';
 import {gcm} from '@noble/ciphers/aes';
@@ -201,6 +204,7 @@ export async function saveMailAccountWithSecrets(
     smtpPassword?: string;
   },
 ): Promise<MailAccountRecord> {
+  return accountUpdates.run(identityName, async () => {
   const {record, imapPassword, smtpPassword} = params;
   const accountId = record.id;
   const existingSecrets = getMailSecretsInMemory(identityName, accountId);
@@ -221,7 +225,7 @@ export async function saveMailAccountWithSecrets(
   if (record.config.persistSecrets && !effectivePin) {
     throw new Error('Unlock your identity to save encrypted mail credentials');
   }
-  const saved = await upsertMailAccount(identityName, record);
+  const saved = await upsertMailAccountUnlocked(identityName, record);
   setMailSecretsInMemory(identityName, accountId, nextSecrets);
   if (record.config.persistSecrets) {
     if (!effectivePin) {
@@ -235,6 +239,7 @@ export async function saveMailAccountWithSecrets(
     await persistMailSecretsStore(identityName);
   }
   return saved;
+  });
 }
 
 export async function readMailStore(
@@ -255,14 +260,20 @@ export async function writeMailStore(
 ): Promise<void> {
   clearMailDataCache();
   await ensureIdentityMailDir(identityName);
-  await RNFS.writeFile(
-    mailAccountPath(identityName),
-    JSON.stringify(store, null, 2),
-    'utf8',
-  );
+  await writeFileAtomic(mailAccountPath(identityName), JSON.stringify(store, null, 2));
 }
 
 export async function upsertMailAccount(
+  identityName: string,
+  record: Omit<MailAccountRecord, 'createdAt' | 'updatedAt'> & {
+    createdAt?: number;
+    updatedAt?: number;
+  },
+): Promise<MailAccountRecord> {
+  return accountUpdates.run(identityName, () => upsertMailAccountUnlocked(identityName, record));
+}
+
+async function upsertMailAccountUnlocked(
   identityName: string,
   record: Omit<MailAccountRecord, 'createdAt' | 'updatedAt'> & {
     createdAt?: number;
@@ -280,24 +291,28 @@ export async function deleteMailAccount(
   identityName: string,
   accountId: string,
 ): Promise<void> {
+  return accountUpdates.run(identityName, async () => {
   const store = await readMailStore(identityName);
   await writeMailStore(identityName, deleteAccountFromStore(store, accountId));
   secretsMemory.delete(mailSecretsStoreKey(identityName, accountId));
   if (pinMemory.has(identityName)) {
     await persistMailSecretsStore(identityName);
   }
+  });
 }
 
 export async function selectMailAccount(
   identityName: string,
   accountId: string,
 ): Promise<void> {
+  return accountUpdates.run(identityName, async () => {
   const store = await readMailStore(identityName);
   if (!store.accounts.some(a => a.id === accountId)) {
     throw new Error('Mail account not found');
   }
   store.selectedAccountId = accountId;
   await writeMailStore(identityName, store);
+  });
 }
 
 export function setMailSecretsInMemory(
@@ -373,7 +388,7 @@ export async function saveEncryptedSecrets(
 ): Promise<void> {
   await ensureIdentityMailDir(identityName);
   const blob = await encryptSecretsStore(pin, secrets);
-  await RNFS.writeFile(mailSecretsPath(identityName), blob, 'utf8');
+  await writeFileAtomic(mailSecretsPath(identityName), blob);
 }
 
 export async function resolveSelectedAccount(

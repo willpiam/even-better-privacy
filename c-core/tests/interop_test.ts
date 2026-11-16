@@ -780,6 +780,13 @@ Deno.test("email attachment formats interoperate and validate fields", async () 
   }
 });
 
+Deno.test("empty email attachments round-trip between TypeScript and Python/native readers", async () => {
+  const ts = createEmailAttachmentCleartextEnvelope({fileBytes:new Uint8Array(),fileName:"empty.txt",attachmentId:"empty"});
+  const c = (await python({operation:"email_attachment_create",file:"",name:"empty.txt",id:"empty",mime:"application/octet-stream"})).result;
+  assertEquals(c,JSON.parse(JSON.stringify(ts)));
+  assertEquals((await python({operation:"email_attachment_parse",text:JSON.stringify(ts)})).result, JSON.parse(JSON.stringify({...parseEmailAttachmentCleartextEnvelope(JSON.stringify(ts)),fileBytes:""})));
+});
+
 Deno.test("multi-recipient signature envelopes match Unicode sorting and JSON", async () => {
   const cases = [
     {message: "", recipients: [], manifest: [], salt: ""},

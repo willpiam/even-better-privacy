@@ -1,3 +1,7 @@
+import {terminalText} from "../terminal.ts";
+import { mergeContactRefresh } from "../../common/Contacts.ts";
+import { readJsonOptional, withFileLock } from "../json-store.ts";
+import { writePrivateFileAtomic } from "../atomic-file.ts";
 import { parseArgs } from "@std/cli/parse-args";
 import { ExternalIdentity } from "../../core/Identity.ts";
 import { validateContact, validateContactName } from "./contacts.ts";
@@ -57,7 +61,7 @@ export async function cmdPublishIdentity(
         (res.status === 400 && body?.error === "unknown subject");
       if (!unknown) {
         const reason = body?.error ?? `HTTP ${res.status}`;
-        console.error(`✗ Failed to query server identity: ${reason}`);
+        console.error(`✗ Failed to query server identity: ${terminalText(reason)}`);
         Deno.exit(1);
       }
     }
@@ -133,7 +137,7 @@ export async function cmdPublishIdentity(
   if (!res.ok) {
     const reason = (body as { error?: string } | undefined)?.error ??
       `HTTP ${res.status}`;
-    console.error(`✗ Failed to publish identity: ${reason}`);
+    console.error(`✗ Failed to publish identity: ${terminalText(reason)}`);
     Deno.exit(1);
   }
 
@@ -155,7 +159,7 @@ export async function cmdFetchIdentity(
   }
   const name = args["name"] as string | undefined;
 
-  const res = await fetch(apiUrl(server, `/api/v1/identity/${fingerprint}`));
+  const res = await fetch(apiUrl(server, `/api/v1/identity/${encodeURIComponent(fingerprint)}`));
   let body: unknown = {};
   try {
     body = await res.json();
@@ -166,7 +170,7 @@ export async function cmdFetchIdentity(
   if (!res.ok) {
     const reason = (body as { error?: string } | undefined)?.error ??
       `HTTP ${res.status}`;
-    console.error(`✗ Failed to fetch identity: ${reason}`);
+    console.error(`✗ Failed to fetch identity: ${terminalText(reason)}`);
     Deno.exit(1);
   }
 
@@ -197,7 +201,8 @@ export async function cmdFetchIdentity(
     Deno.exit(1);
   }
 
-  const external: ExternalIdentity = {
+  let external: ExternalIdentity = {
+    ...(b as ExternalIdentity),
     fingerprint: b?.fingerprint ?? fingerprint,
     signingKeyType: b?.signingKeyType ?? "dilithium",
     encryptionKeyType: b?.encryptionKeyType ?? "kyber",
@@ -221,28 +226,9 @@ export async function cmdFetchIdentity(
   const contactName = validateContactName(name ?? external.fingerprint.substring(0, 16));
   await ensurePrivateDir(ctx.contactsDir);
   const contactPath = `${ctx.contactsDir}/${contactName}.json`;
-  try {
-    const existingRaw = await Deno.readTextFile(contactPath);
-    const existing = JSON.parse(existingRaw) as ExternalIdentity;
-    const preservedEntries = Object.entries(
-      existing.resolvedOpaqueDetails ?? {},
-    ).filter(
-      ([path, value]) =>
-        typeof value === "string" && external.details[path] !== undefined,
-    );
-    if (preservedEntries.length > 0) {
-      external.resolvedOpaqueDetails = Object.fromEntries(preservedEntries);
-    }
-  } catch (e) {
-    if (!(e instanceof Deno.errors.NotFound)) {
-      console.warn(
-        "failed to preserve resolved opaque details during fetch",
-        e,
-      );
-    }
-  }
-  await Deno.writeTextFile(contactPath, JSON.stringify(external, null, 2), {
-    mode: 0o600,
+  await withFileLock(contactPath, async () => {
+    external = mergeContactRefresh(await readJsonOptional<ExternalIdentity>(contactPath), external);
+    await writePrivateFileAtomic(contactPath, JSON.stringify(external, null, 2));
   });
 
   console.log(`✓ Contact fetched from server ${server}`);
@@ -305,6 +291,7 @@ export async function cmdListServerIdentities(
   const url = new URL(
     apiUrl(server, search ? "/api/v1/identities/search" : "/api/v1/identities"),
   );
+  url.searchParams.set("view", "summary");
   url.searchParams.set("page", String(page));
   if (search) {
     url.searchParams.set("query", search);
@@ -321,7 +308,7 @@ export async function cmdListServerIdentities(
   if (!res.ok) {
     const reason = (body as { error?: string } | undefined)?.error ??
       `HTTP ${res.status}`;
-    console.error(`✗ Failed to list server identities: ${reason}`);
+    console.error(`✗ Failed to list server identities: ${terminalText(reason)}`);
     Deno.exit(1);
   }
 
@@ -367,8 +354,8 @@ export async function cmdListServerIdentities(
       ? new Date(createdAt).toISOString()
       : "unknown";
 
-    console.log(`Fingerprint: ${fingerprint}`);
-    console.log(`Signing/Encryption: ${signing}/${encryption}`);
+    console.log(`Fingerprint: ${terminalText(fingerprint)}`);
+    console.log(`Signing/Encryption: ${terminalText(signing)}/${terminalText(encryption)}`);
     console.log(`Created: ${created}`);
 
     const details = entry.details ?? {};
@@ -389,7 +376,7 @@ export async function cmdListServerIdentities(
         const paddedPath = path.length > 24
           ? `${path.slice(0, 21)}...`
           : path.padEnd(24, " ");
-        console.log(`  ${paddedPath} | ${safeValue}`);
+        console.log(`  ${terminalText(paddedPath)} | ${terminalText(safeValue)}`);
       }
     }
   });

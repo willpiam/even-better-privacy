@@ -80,12 +80,10 @@ int ebp_hex_decode(const uint8_t *text, size_t len, uint8_t **out, size_t *out_l
     }
     *out=result; *out_len=len/2; return 1;
 }
-int ebp_file_envelope_create(const uint8_t *file, size_t file_len, const uint8_t *name, size_t name_len,
-                             const uint8_t *mime, size_t mime_len, uint8_t **out, size_t *out_len) {
+static json_t *file_envelope_object_create(const uint8_t *file, size_t file_len, const uint8_t *name, size_t name_len,
+                             const uint8_t *mime, size_t mime_len) {
     static const char default_name[]="encrypted.bin", default_mime[]="application/octet-stream";
-    json_t *obj=NULL; char *encoded=NULL,*text=NULL; size_t encoded_len; int ok=0;
-    if (!out || !out_len) return 0;
-    *out=NULL; *out_len=0;
+    json_t *obj=NULL; char *encoded=NULL; size_t encoded_len; int ok=0;
     if ((!file && file_len) || (!name && name_len) || (!mime && mime_len) || file_len>(size_t)(INT_MAX/4)*3) return 0;
     if (!name_len) { name=(const uint8_t *)default_name; name_len=sizeof(default_name)-1; }
     if (!mime_len) { mime=(const uint8_t *)default_mime; mime_len=sizeof(default_mime)-1; }
@@ -97,27 +95,36 @@ int ebp_file_envelope_create(const uint8_t *file, size_t file_len, const uint8_t
         json_object_set_new(obj,"fileName",json_stringn((const char *)name,name_len))!=0 ||
         json_object_set_new(obj,"mimeType",json_stringn((const char *)mime,mime_len))!=0 ||
         json_object_set_new(obj,"fileSize",json_integer((json_int_t)file_len))!=0 ||
-        json_object_set_new(obj,"fileDataBase64",json_string(encoded))!=0 ||
-        !(text=json_dumps(obj,JSON_COMPACT))) goto done;
-    *out=(uint8_t *)text; *out_len=strlen(text); text=NULL; ok=1;
+        json_object_set_new(obj,"fileDataBase64",json_string(encoded))!=0) goto done;
+    ok=1;
 done:
     if (encoded) ebp_secure_free(encoded,encoded_len);
-    free(text); json_decref(obj); return ok;
+    if (!ok) { json_decref(obj); return NULL; }
+    return obj;
 }
-int ebp_file_envelope_parse(const uint8_t *input, size_t len, uint8_t **file, size_t *file_len,
+int ebp_file_envelope_create(const uint8_t *file, size_t file_len, const uint8_t *name, size_t name_len,
+                             const uint8_t *mime, size_t mime_len, uint8_t **out, size_t *out_len) {
+    json_t *obj; char *text;
+    if (!out || !out_len) return 0;
+    *out=NULL; *out_len=0;
+    obj=file_envelope_object_create(file,file_len,name,name_len,mime,mime_len);
+    if (!obj) return 0;
+    text=json_dumps(obj,JSON_COMPACT); json_decref(obj);
+    if (!text) return 0;
+    *out=(uint8_t *)text; *out_len=strlen(text); return 1;
+}
+static int file_envelope_object_parse(json_t *obj, const char *expected_type, uint8_t **file, size_t *file_len,
                             uint8_t **name, size_t *name_len, uint8_t **mime, size_t *mime_len) {
-    json_t *obj=NULL,*type,*version,*fname,*ftype,*fsize,*fdata; json_error_t error;
+    json_t *type,*version,*fname,*ftype,*fsize,*fdata;
     uint8_t *data=NULL,*name_data=NULL,*mime_data=NULL; size_t data_len=0,name_n=0,mime_n=0; int ok=0;
     if (!file || !file_len || !name || !name_len || !mime || !mime_len) return 0;
     *file=NULL; *file_len=0; *name=NULL; *name_len=0; *mime=NULL; *mime_len=0;
-    if (!input || !len) return 0;
-    obj=json_loadb((const char *)input,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
     if (!json_is_object(obj)) goto done;
     type=json_object_get(obj,"type"); version=json_object_get(obj,"version");
     fname=json_object_get(obj,"fileName"); ftype=json_object_get(obj,"mimeType");
     fsize=json_object_get(obj,"fileSize"); fdata=json_object_get(obj,"fileDataBase64");
-    if (!json_is_string(type) || json_string_length(type)!=strlen("ebp-file-cleartext-envelope") ||
-        memcmp(json_string_value(type),"ebp-file-cleartext-envelope",strlen("ebp-file-cleartext-envelope"))!=0 ||
+    if (!json_is_string(type) || json_string_length(type)!=strlen(expected_type) ||
+        memcmp(json_string_value(type),expected_type,strlen(expected_type))!=0 ||
         !json_is_number(version) || json_number_value(version)!=1 || !json_is_number(fsize) ||
         !isfinite(json_number_value(fsize)) || json_number_value(fsize)<0 || floor(json_number_value(fsize))!=json_number_value(fsize) ||
         !json_is_string(fdata) ||
@@ -126,7 +133,15 @@ int ebp_file_envelope_parse(const uint8_t *input, size_t len, uint8_t **file, si
     *file=data; *file_len=data_len; data=NULL; *name=name_data; *name_len=name_n; name_data=NULL;
     *mime=mime_data; *mime_len=mime_n; mime_data=NULL; ok=1;
 done:
-    ebp_secure_free(data,data_len); free(name_data); free(mime_data); json_decref(obj); return ok;
+    ebp_secure_free(data,data_len); free(name_data); free(mime_data); return ok;
+}
+
+int ebp_file_envelope_parse(const uint8_t *input, size_t len, uint8_t **file, size_t *file_len,
+                            uint8_t **name, size_t *name_len, uint8_t **mime, size_t *mime_len) {
+    json_error_t error; json_t *obj; int ok;
+    obj=input && len ? json_loadb((const char *)input,len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error) : NULL;
+    ok=file_envelope_object_parse(obj,"ebp-file-cleartext-envelope",file,file_len,name,name_len,mime,mime_len);
+    json_decref(obj); return ok;
 }
 
 /* TypeScript String.trim whitespace, shared with attachment validation. */
@@ -147,23 +162,22 @@ static int attachment_nonblank(const json_t *value) {
 int ebp_email_attachment_create(const uint8_t *file, size_t file_len, const uint8_t *name, size_t name_len,
                                 const uint8_t *mime, size_t mime_len, const uint8_t *id, size_t id_len,
                                 const uint8_t *body_hash, size_t body_hash_len, uint8_t **out, size_t *out_len) {
-    uint8_t *file_json=NULL; size_t file_json_len=0; json_t *obj=NULL; json_error_t error; char *text=NULL; int ok=0;
+    json_t *obj=NULL; char *text=NULL; int ok=0;
     if (!out || !out_len) return 0;
     *out=NULL; *out_len=0;
     if ((!id && id_len) || (!body_hash && body_hash_len) ||
-        !ebp_file_envelope_create(file,file_len,name,name_len,mime,mime_len,&file_json,&file_json_len)) return 0;
-    obj=json_loadb((const char *)file_json,file_json_len,JSON_REJECT_DUPLICATES|JSON_ALLOW_NUL,&error);
+        !(obj=file_envelope_object_create(file,file_len,name,name_len,mime,mime_len))) return 0;
     if (!obj || json_object_set_new(obj,"type",json_string("ebp-email-attachment-cleartext-envelope"))!=0 ||
         json_object_set_new(obj,"attachmentId",json_stringn((const char *)(id?id:(const uint8_t *)""),id_len))!=0 ||
         (body_hash && json_object_set_new(obj,"bodyPayloadHash",json_stringn((const char *)body_hash,body_hash_len))!=0) ||
         !(text=json_dumps(obj,JSON_COMPACT))) goto done;
     *out=(uint8_t *)text; *out_len=strlen(text); text=NULL; ok=1;
 done:
-    free(text); free(file_json); json_decref(obj); return ok;
+    free(text); json_decref(obj); return ok;
 }
 int ebp_email_attachment_parse(const uint8_t *input, size_t len, uint8_t **file, size_t *file_len,
                                uint8_t **metadata, size_t *metadata_len) {
-    json_t *obj=NULL,*type,*version,*body,*meta=NULL; json_error_t error; char *file_json=NULL,*meta_json=NULL;
+    json_t *obj=NULL,*type,*version,*body,*meta=NULL; json_error_t error; char *meta_json=NULL;
     uint8_t *data=NULL,*name=NULL,*mime=NULL; size_t data_len=0,name_len=0,mime_len=0; int ok=0;
     if (!file || !file_len || !metadata || !metadata_len) return 0;
     *file=NULL; *file_len=0; *metadata=NULL; *metadata_len=0;
@@ -173,18 +187,17 @@ int ebp_email_attachment_parse(const uint8_t *input, size_t len, uint8_t **file,
         memcmp(json_string_value(type),"ebp-email-attachment-cleartext-envelope",json_string_length(type))!=0 ||
         !json_is_number(version) || json_number_value(version)!=1 ||
         !attachment_nonblank(json_object_get(obj,"attachmentId")) || !attachment_nonblank(json_object_get(obj,"fileName")) ||
-        !attachment_nonblank(json_object_get(obj,"mimeType")) || !attachment_nonblank(json_object_get(obj,"fileDataBase64")) ||
+        !attachment_nonblank(json_object_get(obj,"mimeType")) || !json_is_string(json_object_get(obj,"fileDataBase64")) ||
         (body && !attachment_nonblank(body))) goto done;
     meta=json_object();
     if (!meta || json_object_set(meta,"attachmentId",json_object_get(obj,"attachmentId"))!=0 ||
         json_object_set(meta,"fileName",json_object_get(obj,"fileName"))!=0 || json_object_set(meta,"mimeType",json_object_get(obj,"mimeType"))!=0 ||
         json_object_set(meta,"fileSize",json_object_get(obj,"fileSize"))!=0 || (body && json_object_set(meta,"bodyPayloadHash",body)!=0) ||
-        json_object_set_new(obj,"type",json_string("ebp-file-cleartext-envelope"))!=0 || !(file_json=json_dumps(obj,JSON_COMPACT)) ||
-        !ebp_file_envelope_parse((const uint8_t *)file_json,strlen(file_json),&data,&data_len,&name,&name_len,&mime,&mime_len) ||
+        !file_envelope_object_parse(obj,"ebp-email-attachment-cleartext-envelope",&data,&data_len,&name,&name_len,&mime,&mime_len) ||
         !(meta_json=json_dumps(meta,JSON_COMPACT))) goto done;
     *file=data; *file_len=data_len; data=NULL; *metadata=(uint8_t *)meta_json; *metadata_len=strlen(meta_json); meta_json=NULL; ok=1;
 done:
-    ebp_secure_free(data,data_len); free(name); free(mime); free(file_json); free(meta_json); json_decref(meta); json_decref(obj); return ok;
+    ebp_secure_free(data,data_len); free(name); free(mime); free(meta_json); json_decref(meta); json_decref(obj); return ok;
 }
 int ebp_encrypted_email_attachment_parse(const uint8_t *input, size_t len, uint8_t **out, size_t *out_len) {
     json_t *obj=NULL,*type,*version,*result=NULL; json_error_t error; const char *name; char *text=NULL;

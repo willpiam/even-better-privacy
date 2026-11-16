@@ -1,37 +1,28 @@
+import {splitMailboxList} from "../../../../common/mail/Mailbox.ts";
 import {Buffer} from 'buffer';
 import type {MailAccountConfig, MailAuthSecrets} from './types';
 import {connectMailLineClient, type TcpLineClient} from './tcpClient';
 import {mailStub} from './mailTrace';
 
 export async function expectSmtpReady(client: TcpLineClient): Promise<void> {
-  await mailStub('smtp.greeting.wait');
-  const line = await client.readLine();
-  if (!line.startsWith('220')) {
-    await mailStub('smtp.greeting.ok', `fail=${line.slice(0, 80)}`);
-    throw new Error(`SMTP greeting failed: ${line}`);
-  }
-  await mailStub('smtp.greeting.ok');
+  await readSmtpUntil(client, '220');
 }
 
-async function readSmtpUntil(client: TcpLineClient, code: string): Promise<void> {
-  await mailStub('tcp.readLine.wait', `smtp=${code}`);
-  while (true) {
+/** Read exactly one SMTP reply, including all of its continuation lines. */
+async function readSmtpUntil(client: TcpLineClient, expected: string | string[]): Promise<void> {
+  const allowed = Array.isArray(expected) ? expected : [expected];
+  let replyCode: string | null = null;
+  for (let count = 0; count < 100; count++) {
     const line = await client.readLine();
-    if (/^[45]\d{2}(?:[ -]|$)/.test(line)) {
-      await mailStub('tcp.readLine.ok', `smtp=${code} fail=${line.slice(0, 80)}`);
-      throw new Error(line);
-    }
-    if (!line.startsWith(code)) {
-      continue;
-    }
-    if (line.length > 3 && line[3] === '-') {
-      continue;
-    }
-    if (line.length >= 3 && (line.length === 3 || line[3] === ' ')) {
-      await mailStub('tcp.readLine.ok', `smtp=${code}`);
-      return;
-    }
+    const reply = /^(\d{3})([ -]|$)/.exec(line);
+    if (!reply || (replyCode && reply[1] !== replyCode)) throw new Error(`Invalid SMTP reply: ${line}`);
+    replyCode = reply[1];
+    if (/^[45]/.test(replyCode)) throw new Error(line);
+    if (reply[2] === '-') continue;
+    if (!allowed.includes(replyCode)) throw new Error(`Unexpected SMTP reply: ${line}`);
+    return;
   }
+  throw new Error('SMTP reply exceeds line limit');
 }
 
 async function smtpEhlo(client: TcpLineClient): Promise<void> {
@@ -79,7 +70,7 @@ export async function smtpAuth(
 
 /** Extract RCPT addresses from a To: header (comma-separated). */
 export function parseRecipientAddresses(toHeader: string): string[] {
-  const parts = toHeader.split(',');
+  const parts = splitMailboxList(toHeader);
   const out: string[] = [];
   for (const part of parts) {
     const angle = part.match(/<([^>]+)>/);
@@ -97,6 +88,7 @@ export async function sendMimeMessage(
   mime: string,
   recipients?: string[],
 ): Promise<void> {
+  if (/[^\x00-\x7f]/.test(mime)) throw new Error('MIME must use encoded headers and transfer encoding before SMTP delivery');
   await mailStub(
     'smtp.send.start',
     `${config.smtpHost}:${config.smtpPort}`,
@@ -119,11 +111,14 @@ export async function sendMimeMessage(
     if (rcpts.length === 0) {
       throw new Error('No SMTP recipients found in To header');
     }
+    for (const address of [from, ...rcpts]) {
+      if (!address || /[<>\s\x00-\x1f\x7f-\uffff]/.test(address)) throw new Error('Invalid or non-ASCII SMTP envelope address');
+    }
     client.writeLine(`MAIL FROM:<${from}>`);
     await readSmtpUntil(client, '250');
     for (const rcpt of rcpts) {
       client.writeLine(`RCPT TO:<${rcpt}>`);
-      await readSmtpUntil(client, '250');
+      await readSmtpUntil(client, ['250', '251', '252']);
     }
     client.writeLine('DATA');
     await readSmtpUntil(client, '354');

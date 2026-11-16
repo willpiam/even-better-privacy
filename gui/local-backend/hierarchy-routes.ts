@@ -23,6 +23,7 @@ import {
   readPendingHierarchyLocal,
   storeHierarchyCertificateLocal,
   writePendingHierarchyLocal,
+  removePendingHierarchyLocal,
 } from "./hierarchy-local.ts";
 
 export async function handleHierarchyRoutes(
@@ -418,10 +419,7 @@ export async function handleHierarchyRoutes(
         }`,
       );
     }
-    await writePendingHierarchyLocal(
-      ctx,
-      local.filter((p) => p.id !== proposalId),
-    );
+    await removePendingHierarchyLocal(ctx, proposalId);
     await storeHierarchyCertificateLocal(ctx, signed);
     return json({ ok: true, certificate: signed });
   }
@@ -476,10 +474,7 @@ export async function handleHierarchyRoutes(
     const rejectSigner = (serverOverride || ctx.server)
       ? await loadIdentityForRequest(ctx, password)
       : null;
-    await writePendingHierarchyLocal(
-      ctx,
-      local.filter((p) => p.id !== proposalId),
-    );
+    await removePendingHierarchyLocal(ctx, proposalId);
     if (rejectSigner) {
       try {
         const server = resolveServer(ctx, serverOverride);

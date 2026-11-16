@@ -1,0 +1,35 @@
+jest.mock('react-native-fs', () => ({}));
+jest.mock('../src/services/encryptDecrypt', () => ({decryptMessage:jest.fn()}));
+jest.mock('../src/services/storage', () => ({loadIdentityForUse:jest.fn()}));
+jest.mock('../src/services/contacts', () => ({loadContact:jest.fn(),listContacts:jest.fn()}));
+jest.mock('../src/services/settings', () => ({getMailIncludePublicKeys:jest.fn(),getServerUrl:jest.fn()}));
+jest.mock('../src/services/mail/accountStore', () => ({resolveSelectedAccount:jest.fn()}));
+jest.mock('../src/services/mail/imap', () => ({appendSentCopy:jest.fn(async()=>true)}));
+jest.mock('../src/services/mail/mailData', () => ({loadMailMessage:jest.fn()}));
+jest.mock('../src/services/mail/smtp', () => ({sendMimeMessage:jest.fn(async()=>{})}));
+import {Identity} from '../../core/Identity';
+import {parseEbpPayloadInput} from '../../core/PayloadInput';
+import {loadIdentityForUse} from '../src/services/storage';
+import {loadContact} from '../src/services/contacts';
+import {getMailIncludePublicKeys} from '../src/services/settings';
+import {resolveSelectedAccount} from '../src/services/mail/accountStore';
+import {DEFAULT_MAIL_ACCOUNT} from '../src/services/mail/types';
+import {sendEbpMail} from '../src/services/mail/ebpMail';
+import {sendMimeMessage} from '../src/services/mail/smtp';
+import {parseMimeMessage} from '../src/services/mail/mime';
+
+test.each([[false,false],[false,true],[true,false],[true,true]])('include keys=%s controls serialized EBP keys for same recipient=%s', async (include,sameRecipient) => {
+  const sender=new Identity('dilithium','kyber');const recipient=sameRecipient?sender:new Identity('dilithium','kyber');
+  jest.mocked(loadIdentityForUse).mockResolvedValue(sender);
+  jest.mocked(loadContact).mockResolvedValue(recipient.summary);
+  jest.mocked(getMailIncludePublicKeys).mockResolvedValue(include);
+  jest.mocked(resolveSelectedAccount).mockResolvedValue({account:{id:'account',name:'Account',createdAt:1,updatedAt:1,config:{...DEFAULT_MAIL_ACCOUNT,username:'sender@example.test',fromEmail:'sender@example.test'}},secrets:{imapPassword:'imap',smtpPassword:'smtp'}});
+  jest.mocked(sendMimeMessage).mockClear();
+  await sendEbpMail({identityName:'sender',to:'recipient@example.test',recipientContact:'recipient',subject:'test',message:'payload test'});
+  const mime=jest.mocked(sendMimeMessage).mock.calls[0][2];
+  const armor=parseMimeMessage(mime).ebpPayload;
+  expect(armor).not.toBeNull();
+  const payload=parseEbpPayloadInput(armor!);
+  if(include)expect((payload.senderIdentity as {fingerprint:string}).fingerprint).toBe(sender.toFingerprint());
+  else expect(payload.senderIdentity).toBeUndefined();
+});

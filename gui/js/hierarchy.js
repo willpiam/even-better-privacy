@@ -75,10 +75,10 @@ function _buildEdgeTooltipHtml(rel, nodeMap) {
 function _layoutTree(nodes, relationships, roots) {
   const childrenOf = new Map();
   const allFingerprints = new Set(nodes.map((n) => n.fingerprint));
-  for (const fp of allFingerprints) childrenOf.set(fp, []);
+  for (const fp of allFingerprints) childrenOf.set(fp, new Set());
   for (const rel of relationships) {
-    const arr = childrenOf.get(rel.masterFingerprint) || [];
-    if (!arr.includes(rel.childFingerprint)) arr.push(rel.childFingerprint);
+    const arr = childrenOf.get(rel.masterFingerprint) || new Set();
+    arr.add(rel.childFingerprint);
     childrenOf.set(rel.masterFingerprint, arr);
   }
 
@@ -94,22 +94,21 @@ function _layoutTree(nodes, relationships, roots) {
     }
   }
 
+  let head = 0;
+  const runBfs = () => {
+    while (head < queue.length) {
+      const {fp, level} = queue[head++];
+      for (const child of childrenOf.get(fp) || []) {
+        if (levels.has(child)) continue;
+        levels.set(child, level + 1); visited.add(child);
+        queue.push({fp: child, level: level + 1});
+      }
+    }
+  };
+  runBfs();
   for (const fp of allFingerprints) {
     if (!visited.has(fp)) {
-      queue.push({ fp, level: 0 });
-      visited.add(fp);
-      levels.set(fp, 0);
-    }
-  }
-
-  while (queue.length > 0) {
-    const { fp, level } = queue.shift();
-    const children = childrenOf.get(fp) || [];
-    for (const child of children) {
-      if (!levels.has(child)) {
-        levels.set(child, level + 1);
-        queue.push({ fp: child, level: level + 1 });
-      }
+      queue.push({fp, level: 0}); levels.set(fp, 0); visited.add(fp); runBfs();
     }
   }
 

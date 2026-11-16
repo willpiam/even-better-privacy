@@ -86,6 +86,11 @@ async function queryHierarchyCertificates(
   return rows;
 }
 
+async function hierarchyEdges(db: DatabaseAdapter) {
+  const rows = await db.query<[string, string]>("SELECT master_fingerprint, child_fingerprint FROM hierarchy_certificates");
+  return rows.map(([masterFingerprint, childFingerprint]) => ({masterFingerprint, childFingerprint}));
+}
+
 export async function listHierarchyCertificates(
   db: DatabaseAdapter,
 ): Promise<HierarchyCertificateRow[]> {
@@ -265,11 +270,7 @@ export async function verifyAndInsertHierarchyCertificate(
   }
 
   return await db.writeTransaction(async (db) => {
-    const existing = await listHierarchyCertificates(db);
-    const edges = existing.map((row) => ({
-      masterFingerprint: row.master_fingerprint,
-      childFingerprint: row.child_fingerprint,
-    }));
+    const edges = await hierarchyEdges(db);
     const hierarchyOk = validateHierarchy(edges, {
       masterFingerprint: decoded.masterFingerprint,
       childFingerprint: decoded.childFingerprint,
@@ -474,12 +475,8 @@ export async function verifyAndStorePendingHierarchyProposal(
     return { ok: false, error: "invalid proposer signature" };
   }
 
-  const existing = await listHierarchyCertificates(db);
   const hierarchyOk = validateHierarchy(
-    existing.map((row) => ({
-      masterFingerprint: row.master_fingerprint,
-      childFingerprint: row.child_fingerprint,
-    })),
+    await hierarchyEdges(db),
     {
       masterFingerprint: decoded.masterFingerprint,
       childFingerprint: decoded.childFingerprint,

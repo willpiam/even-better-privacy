@@ -1,3 +1,4 @@
+import {identityIsPublished} from "../../common/Discovery.ts";
 import { writePrivateFileAtomic } from "../../cli/atomic-file.ts";
 import { Identity } from "../../core/Identity.ts";
 import { validatePassword } from "../../common/PasswordPolicy.ts";
@@ -257,10 +258,8 @@ export async function handleIdentityRoutes(
           const res = await fetch(
             apiUrl(server, `/api/v1/identity/${fingerprint}`),
           );
-          publishedToServer = res.ok;
-        } catch {
-          // Server unreachable, keep local discovery result.
-        }
+          publishedToServer = await identityIsPublished(res);
+        } catch (error) { throw new HttpError(STATUS.ServiceUnavailable, `Discovery incomplete: ${String(error)}`); }
       }
       if (localName || publishedToServer) {
         gap = 0;
