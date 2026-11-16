@@ -83,7 +83,7 @@ def render(issues, sort="id"):
         f'<td><span class="badge">{escape(issue["criticality"])}</span></td>'
         f'<td>{escape(issue["category"])}</td></tr>'
         for issue in ordered
-    ) or '<tr><td colspan="4">No issues recorded yet.</td></tr>'
+    ) or '<tr><td colspan="4">No open issues.</td></tr>'
     def options(values, selected=None):
         return "".join(
             f'<option value="{escape(v, quote=True)}"'

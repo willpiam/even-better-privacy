@@ -1,6 +1,6 @@
 # Holistic remediation plan and execution ledger
 
-Baseline: `736ffbb` (2026-11-16). Sources: [Codex review](codex_holistic_issue_review.md), [Claude review](cursor_w_claude_holistic_issue_review.md), and all 66 [issue records](issues.json).
+Baseline: `736ffbb` (2026-11-16). Sources: [Codex review](codex_holistic_issue_review.md), [Claude review](cursor_w_claude_holistic_issue_review.md), and all 66 [historical issue records](https://github.com/willpiam/even-better-privacy/blob/8a2c25c/issue_tracker/issues.json). Resolved entries were subsequently removed from the active tracker while preserving `next_id: 67`.
 
 ## Implementation decisions
 
