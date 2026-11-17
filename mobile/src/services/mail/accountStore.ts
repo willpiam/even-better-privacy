@@ -393,9 +393,10 @@ export async function saveEncryptedSecrets(
 
 export async function resolveSelectedAccount(
   identityName: string,
+  accountId?: string,
 ): Promise<{account: MailAccountRecord; secrets: MailAuthSecrets} | null> {
   const store = await readMailStore(identityName);
-  const id = resolveSelectedAccountId(store);
+  const id = accountId ?? resolveSelectedAccountId(store);
   if (!id) {
     return null;
   }

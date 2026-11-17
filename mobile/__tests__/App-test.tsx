@@ -13,6 +13,15 @@ jest.mock('../src/navigation/AppNavigator', () => {
   };
 });
 
+jest.mock('../src/components/MailCryptoHost', () => () => null);
+jest.mock('../src/services/mail/ebpMail', () => ({
+  sendEbpMail: jest.fn(),
+  sendPlainMail: jest.fn(),
+}));
+jest.mock('../src/services/storage', () => ({
+  readUnlockedIdentityStorage: jest.fn(),
+}));
+
 import App from '../App';
 
 it('renders correctly', async () => {

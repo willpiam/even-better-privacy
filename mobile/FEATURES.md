@@ -120,6 +120,21 @@ Removing these screens would not remove the core cryptography needed for mail.
 
 Sources: `src/screens/mail/{MailAccountsScreen,MailAccountSetupScreen,MailInboxScreen,MailComposeScreen,MailMessageScreen,MailSenderAuthenticityScreen}.tsx`.
 
+Sending now runs in an app-level queue. After validation and unlock, compose
+returns to the previous screen while a snackbar shows encryption, SMTP delivery,
+and saving to Sent. Delivery failures preserve recipients, text, attachments and
+reply headers for **Edit message**. **Retry save** only retries the IMAP copy;
+it never submits the email again. The queue pins the original mail account.
+Jobs and recoverable drafts are memory-only and do not survive app termination.
+
+Mail signing/encryption runs in a fresh local WebView runtime outside Hermes,
+with network access blocked by CSP and no persistent storage. The runtime is
+removed after each job. Rebuild its checked-in bundle with
+`npm run build:mail-crypto` after changing the crypto core; normal start, Android,
+iOS and Android release scripts do this automatically. Verify it with
+`npm run check:mail-crypto` and `npm run test:mail-crypto` (desktop Chromium;
+set `CHROMIUM_PATH` when needed).
+
 ## Managed mailbox onboarding
 
 | ID  | Feature                            | Controls or behavior                                                                                                                                                |

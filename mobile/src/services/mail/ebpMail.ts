@@ -1,17 +1,11 @@
-import {armorPayload, parseEbpPayloadInput} from '../../ebpCore';
-import {includeSenderAmongRecipients} from '../../../../common/SentMailbox';
-import {
-  buildEncryptedSignedMessageMultiPayload,
-  buildEncryptedSignedMessagePayload,
-  buildEncryptedMessagePayload,
-  Identity,
-} from '../../ebpCore';
+import {encryptMailBody} from './mailCrypto';
+import type {MailCryptoRequest, MailCryptoResult} from './mailCryptoTypes';
+import {parseEbpPayloadInput} from '../../ebpCore';
 import {decryptMessage} from '../encryptDecrypt';
-import {publicIdentityBlock} from '../encryptDecryptLogic';
 import {listContacts, getDetailValue, loadContact} from '../contacts';
 import {loadIdentityForUse} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
-import {resolveSelectedAccount} from './accountStore';
+import {resolveSelectedAccount, getMailSecretsInMemory} from './accountStore';
 import {appendSentCopy} from './imap';
 import {loadMailMessage} from './mailData';
 import {
@@ -47,27 +41,42 @@ export {
   sourceLooksLikeEbpArmor,
 } from './ebpMailLogic';
 
-export async function sendEbpMail(params: {
-  identityName: string;
-  password?: string;
-  to?: string;
-  subject: string;
-  message: string;
-  recipientContact?: string;
-  /** Multi-recipient: each row needs email + contact name. */
-  recipients?: EbpMailRecipient[];
-  sign?: boolean;
-  messageId?: string;
-  inReplyTo?: string;
-  references?: string;
-  attachments?: MailAttachmentPart[];
-}): Promise<{savedToSent: boolean}> {
+export type SendProgress = 'preparing' | 'encrypting' | 'sending' | 'saving';
+export type SendResult = {
+  savedToSent: boolean;
+  retrySentCopy?: () => Promise<void>;
+};
+type SendOptions = {
+  accountId?: string;
+  onProgress?: (stage: SendProgress) => void;
+  encrypt?: (request: MailCryptoRequest) => Promise<MailCryptoResult>;
+};
+
+export async function sendEbpMail(
+  params: {
+    identityName: string;
+    password?: string;
+    to?: string;
+    subject: string;
+    message: string;
+    recipientContact?: string;
+    /** Multi-recipient: each row needs email + contact name. */
+    recipients?: EbpMailRecipient[];
+    sign?: boolean;
+    messageId?: string;
+    inReplyTo?: string;
+    references?: string;
+    attachments?: MailAttachmentPart[];
+  } & SendOptions,
+): Promise<SendResult> {
   rejectEncryptedMailAttachments(params.attachments);
-  const resolved = await resolveSelectedAccount(params.identityName);
+  const resolved = await resolveSelectedAccount(
+    params.identityName,
+    params.accountId,
+  );
   if (!resolved) {
     throw new Error('No mail account configured');
   }
-  const identity = await loadIdentityForUse(params.identityName, params.password);
   const includePublicKeys = await getMailIncludePublicKeys();
   const recipientRows = resolveEbpMailRecipients(params);
   if (recipientRows.length === 0) {
@@ -78,45 +87,24 @@ export async function sendEbpMail(params: {
   for (const row of recipientRows) {
     loaded.push(await loadContact(row.contact));
   }
-  const encryptFor = (params.sign ?? true)
-    ? includeSenderAmongRecipients(loaded, identity.summary)
-    : loaded;
-
-  let armor: string;
-  if (encryptFor.length === 1 && (params.sign ?? true)) {
-    const contact = encryptFor[0];
-    const ciphertext = identity.signAndEncryptFor(params.message, contact);
-    const payload = buildEncryptedSignedMessagePayload({
-      recipientFingerprint: contact.fingerprint,
-      senderFingerprint: identity.toFingerprint(),
-      ciphertext,
-      senderIdentity: includePublicKeys ? publicIdentityBlock(identity) : undefined,
-    });
-    armor = armorPayload(payload);
-  } else if (encryptFor.length === 1) {
-    const contact = encryptFor[0];
-    const ciphertext = Identity.EncryptFor(contact, params.message);
-    const payload = buildEncryptedMessagePayload({
-      recipientFingerprint: contact.fingerprint,
-      ciphertext,
-    });
-    armor = armorPayload(payload);
-  } else {
-    if (!(params.sign ?? true)) {
-      throw new Error('Multi-recipient EBP mail requires signing');
-    }
-    const encrypted = identity.signAndEncryptForMany(params.message, encryptFor);
-    const payload = buildEncryptedSignedMessageMultiPayload({
-      senderFingerprint: identity.toFingerprint(),
-      recipients: encrypted.recipients,
-      contentNonce: encrypted.contentNonce,
-      ciphertext: encrypted.ciphertext,
-      senderIdentity: includePublicKeys ? publicIdentityBlock(identity) : undefined,
-    });
-    armor = armorPayload(payload);
-  }
-
-  const fromName = resolved.account.config.fromName || identity.toShortFingerprint();
+  params.onProgress?.('encrypting');
+  const encrypted = params.encrypt
+    ? await params.encrypt({
+        identityName: params.identityName,
+        contacts: loaded,
+        message: params.message,
+        sign: params.sign ?? true,
+        includePublicKeys,
+      })
+    : encryptMailBody(
+        await loadIdentityForUse(params.identityName, params.password),
+        loaded,
+        params.message,
+        params.sign ?? true,
+        includePublicKeys,
+      );
+  const fromName =
+    resolved.account.config.fromName || encrypted.shortFingerprint;
   const fromEmail =
     resolved.account.config.fromEmail || resolved.account.config.username;
   const toHeader = recipientRows.map(r => r.email.trim()).join(', ');
@@ -125,46 +113,81 @@ export async function sendEbpMail(params: {
     to: toHeader,
     subject: params.subject,
     plainBody: ebpMailPlainIntro(includePublicKeys),
-    ebpArmor: armor,
+    ebpArmor: encrypted.armor,
     messageId: params.messageId,
     inReplyTo: params.inReplyTo,
     references: params.references,
     attachments: params.attachments,
   });
+  params.onProgress?.('sending');
   await sendMimeMessage(
     resolved.account.config,
     resolved.secrets,
     mime,
     recipientRows.map(r => r.email.trim()),
   );
-  return {savedToSent: await saveSentCopy(resolved.account.config, resolved.secrets, mime)};
+  params.onProgress?.('saving');
+  return saveSentCopy(
+    resolved.account.config,
+    resolved.secrets,
+    mime,
+    params.identityName,
+    resolved.account.id,
+  );
 }
 
 async function saveSentCopy(
   config: Parameters<typeof appendSentCopy>[0],
   secrets: Parameters<typeof appendSentCopy>[1],
   mime: string,
-): Promise<boolean> {
+  identityName: string,
+  accountId: string,
+): Promise<SendResult> {
   try {
     await appendSentCopy(config, secrets, mime);
-    return true;
+    return {savedToSent: true};
   } catch {
-    return false;
+    return {
+      savedToSent: false,
+      retrySentCopy: makeSentRetry(config, mime, identityName, accountId),
+    };
   }
 }
 
+// Keep passwords out of the retained retry closure and pin the original account.
+function makeSentRetry(
+  config: Parameters<typeof appendSentCopy>[0],
+  mime: string,
+  identityName: string,
+  accountId: string,
+) {
+  return async () => {
+    const secrets = getMailSecretsInMemory(identityName, accountId);
+    if (!secrets)
+      throw new Error(
+        'Unlock the sending identity before retrying the Sent save.',
+      );
+    await appendSentCopy(config, secrets, mime);
+  };
+}
+
 /** Send a plaintext (non-EBP) MIME message via the selected mail account. */
-export async function sendPlainMail(params: {
-  identityName: string;
-  to: string;
-  subject: string;
-  message: string;
-  inReplyTo?: string;
-  references?: string;
-  attachments?: MailAttachmentPart[];
-  recipients?: string[];
-}): Promise<{savedToSent: boolean}> {
-  const resolved = await resolveSelectedAccount(params.identityName);
+export async function sendPlainMail(
+  params: {
+    identityName: string;
+    to: string;
+    subject: string;
+    message: string;
+    inReplyTo?: string;
+    references?: string;
+    attachments?: MailAttachmentPart[];
+    recipients?: string[];
+  } & SendOptions,
+): Promise<SendResult> {
+  const resolved = await resolveSelectedAccount(
+    params.identityName,
+    params.accountId,
+  );
   if (!resolved) {
     throw new Error('No mail account configured');
   }
@@ -181,13 +204,16 @@ export async function sendPlainMail(params: {
     references: params.references,
     attachments: params.attachments,
   });
-  await sendMimeMessage(
+  params.onProgress?.('sending');
+  await sendMimeMessage(resolved.account.config, resolved.secrets, mime, rcpts);
+  params.onProgress?.('saving');
+  return saveSentCopy(
     resolved.account.config,
     resolved.secrets,
     mime,
-    rcpts,
+    params.identityName,
+    resolved.account.id,
   );
-  return {savedToSent: await saveSentCopy(resolved.account.config, resolved.secrets, mime)};
 }
 
 export async function decryptMailBody(params: {
@@ -274,11 +300,7 @@ export async function decryptMailBody(params: {
       contactName = named?.name ?? null;
     }
 
-    if (
-      result.verified &&
-      !result.isKnownContact &&
-      result.signerFingerprint
-    ) {
+    if (result.verified && !result.isKnownContact && result.signerFingerprint) {
       try {
         const server = await getServerUrl();
         const res = await fetch(

@@ -9,7 +9,13 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "test": "jest"
+    "test": "jest",
+    "build:mail-crypto": "node build-mail-crypto.mjs",
+    "check:mail-crypto": "node build-mail-crypto.mjs --check",
+    "preandroid": "npm run build:mail-crypto",
+    "preios": "npm run build:mail-crypto",
+    "prestart": "npm run build:mail-crypto",
+    "test:mail-crypto": "node test-mail-crypto.mjs"
   },
   "dependencies": {
     "@noble/ciphers": "^2.1.1",
@@ -51,6 +57,7 @@
     "@types/jest": "^29.5.13",
     "@types/react": "^19.2.0",
     "@types/react-test-renderer": "^19.1.0",
+    "esbuild": "0.28.2",
     "eslint": "^8.19.0",
     "jest": "^29.6.3",
     "prettier": "2.8.8",

@@ -128,7 +128,9 @@ else
   [[ -d node_modules ]] || die "node_modules missing; run without --skip-npm"
 fi
 
+npm run build:mail-crypto
 cd "${ANDROID_DIR}"
+
 echo "Building assembleRelease (embeds JS bundle; no Metro required at runtime)…"
 if [[ -n "${NODE_BINARY}" ]]; then
   echo "  node: ${NODE_BINARY} ($("${NODE_BINARY}" -v))"

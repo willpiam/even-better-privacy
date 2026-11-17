@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import {keepLocalCopy, pick} from '@react-native-documents/picker';
 import RNFS from 'react-native-fs';
@@ -10,7 +10,9 @@ import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
 import AppButton from '../../components/AppButton';
 import {getCurrentIdentityRequired} from '../../services/storage';
-import {sendEbpMail, sendPlainMail} from '../../services/mail/ebpMail';
+import {resolveSelectedAccount} from '../../services/mail/accountStore';
+import {useMailSendQueue} from '../../components/MailSendProvider';
+import {rejectEncryptedMailAttachments} from '../../services/mail/ebpMailLogic';
 import {ENCRYPTED_MAIL_ATTACHMENT_ERROR} from '../../services/mail/ebpMailLogic';
 import {
   chipsFromInitial,
@@ -44,16 +46,28 @@ export default function MailComposeScreen({
   route,
 }: Props): JSX.Element {
   const params = route.params;
+  const queue = useMailSendQueue();
+  const recovered = params?.draftId
+    ? queue.getDraft(params.draftId)
+    : undefined;
+  const sending = useRef(false);
+  const [starting, setStarting] = useState(false);
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [chips, setChips] = useState<RecipientChip[]>(() =>
-    initialChips(params),
+  const [chips, setChips] = useState<RecipientChip[]>(
+    () => recovered?.chips ?? initialChips(params),
   );
-  const [subject, setSubject] = useState(params?.subject ?? '');
-  const [message, setMessage] = useState(params?.message ?? '');
+  const [subject, setSubject] = useState(
+    recovered?.subject ?? params?.subject ?? '',
+  );
+  const [message, setMessage] = useState(
+    recovered?.message ?? params?.message ?? '',
+  );
   const [status, setStatus] = useState('');
-  const [attachments, setAttachments] = useState<MailAttachmentPart[]>([]);
-  const inReplyTo = params?.inReplyTo;
-  const references = params?.references;
+  const [attachments, setAttachments] = useState<MailAttachmentPart[]>(
+    recovered?.attachments ?? [],
+  );
+  const inReplyTo = recovered?.inReplyTo ?? params?.inReplyTo;
+  const references = recovered?.references ?? params?.references;
 
   const pickAttachment = async () => {
     try {
@@ -85,61 +99,56 @@ export default function MailComposeScreen({
   const intent = deriveComposeIntent(chips);
 
   const onSend = async () => {
+    if (sending.current) return;
+    sending.current = true;
+    setStarting(true);
+    let queued = false;
     try {
       if (intent.kind === 'empty' || intent.kind === 'blocked') {
-        setStatus(
+        throw new Error(
           intent.kind === 'blocked'
             ? intent.message
             : 'Add at least one recipient.',
         );
-        return;
       }
+      if (intent.kind === 'encrypted')
+        rejectEncryptedMailAttachments(attachments);
       const identityName = await getCurrentIdentityRequired();
-      const emails = chips.map(chip => chip.email);
-      if (intent.kind === 'plaintext') {
-        const sent = await sendPlainMail({
-          identityName,
-          to: emails.join(', '),
-          recipients: emails,
+      if (recovered && recovered.identityName !== identityName) {
+        throw new Error(
+          `Switch to ${recovered.identityName} to recover this message.`,
+        );
+      }
+      const unlocked = await ensureUnlocked(identityName);
+      if (!unlocked) return;
+      const account = await resolveSelectedAccount(
+        unlocked,
+        recovered?.accountId,
+      );
+      if (!account) throw new Error('No mail account configured');
+      queue.enqueue(
+        {
+          identityName: unlocked,
+          accountId: account.account.id,
+          chips,
           subject,
           message,
           inReplyTo,
           references,
           attachments,
-        });
-        setStatus(
-          sent.savedToSent
-            ? 'Message sent. Open Sent to view it.'
-            : 'Message sent, but a copy could not be saved to Sent',
-        );
-        navigation.goBack();
-        return;
-      }
-      const unlocked = await ensureUnlocked(identityName);
-      if (!unlocked) {
-        return;
-      }
-      const sent = await sendEbpMail({
-        identityName: unlocked,
-        subject,
-        message,
-        recipients: chips.map(chip => ({
-          email: chip.email,
-          contact: chip.contact ?? '',
-        })),
-        sign: true,
-        inReplyTo,
-        references,
-        attachments,
-      });
-      setStatus(
-        sent.savedToSent
-          ? 'Message sent. Open Sent to view it.'
-          : 'Message sent, but a copy could not be saved to Sent',
+          encrypted: intent.kind === 'encrypted',
+        },
+        params?.draftId,
       );
+      queued = true;
       navigation.goBack();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (!queued) {
+        sending.current = false;
+        setStarting(false);
+      }
     }
   };
 
@@ -223,7 +232,7 @@ export default function MailComposeScreen({
         <AppButton
           title="Add attachment"
           variant="secondary"
-          onPress={() => void pickAttachment()}
+          onPress={pickAttachment}
         />
         {intent.kind === 'encrypted' && attachments.length > 0 ? (
           <Text style={styles.hint}>
@@ -243,6 +252,7 @@ export default function MailComposeScreen({
               ? styles.primary
               : undefined
           }
+          loading={starting}
           onPress={onSend}
           disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
         />

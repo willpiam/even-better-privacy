@@ -2,6 +2,7 @@ import React from 'react';
 import {StatusBar, StyleSheet, View} from 'react-native';
 import {
   NavigationContainer,
+  createNavigationContainerRef,
   DefaultTheme,
   type NavigatorScreenParams,
 } from '@react-navigation/native';
@@ -80,6 +81,7 @@ export type MailStackParamList = {
   MailSenderAuthenticity: {summary: MailAuthenticitySummary};
   MailCompose:
     | {
+        draftId?: string;
         to?: string;
         subject?: string;
         message?: string;
@@ -106,6 +108,8 @@ export type RootTabParamList = {
   MailTab: NavigatorScreenParams<MailStackParamList> | undefined;
   MoreTab: NavigatorScreenParams<MoreStackParamList> | undefined;
 };
+
+export const navigationRef = createNavigationContainerRef<RootTabParamList>();
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
 const IdentitiesStack = createNativeStackNavigator<IdentitiesStackParamList>();
@@ -351,6 +355,7 @@ function MailNavigator(): JSX.Element {
         />
         <MailStack.Screen
           name="MailCompose"
+          getId={({params}) => params?.draftId}
           component={MailComposeScreen}
           options={{title: 'New message'}}
         />
@@ -401,7 +406,7 @@ function MoreNavigator(): JSX.Element {
 
 export default function AppNavigator(): JSX.Element {
   return (
-    <NavigationContainer theme={LightTheme}>
+    <NavigationContainer ref={navigationRef} theme={LightTheme}>
       <StatusBar barStyle="dark-content" />
       <Tab.Navigator
         screenOptions={{

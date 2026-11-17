@@ -244,7 +244,9 @@ export async function unlockIdentity(
  * {@link IdentitySessionStaleError}. A missing session throws
  * {@link IdentityLockedError}.
  */
-export async function loadIdentityUnlocked(name: string): Promise<Identity> {
+export async function readUnlockedIdentityStorage(
+  name: string,
+): Promise<{raw: string; key: Uint8Array}> {
   const normalized = normalizeName(name);
   const material = getUnlockMaterial(normalized);
   if (!material) {
@@ -268,8 +270,14 @@ export async function loadIdentityUnlocked(name: string): Promise<Identity> {
     lockIdentitySession(normalized);
     throw new IdentitySessionStaleError();
   }
+  return {raw, key: material.key};
+}
+
+export async function loadIdentityUnlocked(name: string): Promise<Identity> {
+  const normalized = normalizeName(name);
+  const {raw, key} = await readUnlockedIdentityStorage(name);
   try {
-    return Identity.fromStorageFormatWithKey(raw, material.key);
+    return Identity.fromStorageFormatWithKey(raw, key);
   } catch {
     lockIdentitySession(normalized);
     throw new IdentitySessionStaleError();

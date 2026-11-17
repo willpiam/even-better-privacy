@@ -1,11 +1,21 @@
 import React from 'react';
 import {SafeAreaProvider} from 'react-native-safe-area-context';
-import AppNavigator from './src/navigation/AppNavigator';
+import AppNavigator, {navigationRef} from './src/navigation/AppNavigator';
+import MailSendProvider from './src/components/MailSendProvider';
 
 const App = () => {
   return (
     <SafeAreaProvider>
-      <AppNavigator />
+      <MailSendProvider
+        recover={draftId => {
+          if (navigationRef.isReady())
+            navigationRef.navigate('MailTab', {
+              screen: 'MailCompose',
+              params: {draftId},
+            });
+        }}>
+        <AppNavigator />
+      </MailSendProvider>
     </SafeAreaProvider>
   );
 };
