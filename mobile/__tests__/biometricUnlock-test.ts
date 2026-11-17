@@ -58,6 +58,26 @@ it('does not return another identity credential', async () => {
     .mockResolvedValue({username: 'Work', password: 'wrong identity'} as never);
   await expect(readBiometricPassword('Personal')).resolves.toBeNull();
 });
+it.each([
+  {code: '-128', message: 'User canceled the operation.'},
+  {code: -128, message: 'User canceled the operation.'},
+  {code: 'E_CRYPTO_FAILED', message: 'code: 5, msg: Canceled'},
+  {code: 'E_CRYPTO_FAILED', message: 'code: 10, msg: User canceled'},
+  {code: 'E_CRYPTO_FAILED', message: 'code: 13, msg: Use password'},
+])('returns quietly on native cancellation: $code $message', async error => {
+  jest.mocked(Keychain.getGenericPassword).mockRejectedValue(error);
+  await expect(readBiometricPassword('Personal')).resolves.toBeNull();
+  expect(Keychain.resetGenericPassword).not.toHaveBeenCalled();
+});
+it.each([
+  {code: '-25293', message: 'Authentication failed'},
+  {code: 'E_CRYPTO_FAILED', message: 'code: 7, msg: Lockout'},
+  {code: 'E_CRYPTO_FAILED', message: 'code: 9, msg: Permanent lockout'},
+  {code: 'E_CRYPTO_FAILED', message: 'Could not decrypt data'},
+])('preserves real biometric errors: $message', async error => {
+  jest.mocked(Keychain.getGenericPassword).mockRejectedValue(error);
+  await expect(readBiometricPassword('Personal')).rejects.toBe(error);
+});
 it('deletes credentials only for the requested identity', async () => {
   await disableBiometricUnlock(' Personal ');
   expect(Keychain.resetGenericPassword).toHaveBeenCalledWith({

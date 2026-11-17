@@ -1,5 +1,13 @@
-import React, {useEffect, useState} from 'react';
-import {Modal, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  AppState,
+  Modal,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import AppButton from './AppButton';
 import {colors, radius, spacing, typography} from '../theme/tokens';
 import {usePlaceTheme} from '../theme/PlaceTheme';
@@ -7,6 +15,7 @@ import AppIcon from './AppIcon';
 
 export default function PasswordModal({
   visible,
+  requestId,
   title = 'Enter Password',
   placeholder = 'Password',
   submitLabel = 'Submit',
@@ -17,6 +26,8 @@ export default function PasswordModal({
   onBiometricEnrollmentChange,
 }: {
   visible: boolean;
+  // Distinguishes new requests that replace an already visible dialog.
+  requestId?: number;
   title?: string;
   placeholder?: string;
   submitLabel?: string;
@@ -31,20 +42,74 @@ export default function PasswordModal({
   const [enrollBiometrics, setEnrollBiometrics] = useState(false);
   const [biometricBusy, setBiometricBusy] = useState(false);
   const [biometricError, setBiometricError] = useState('');
+  const [shown, setShown] = useState(false);
+  const [appState, setAppState] = useState(AppState.currentState);
+  const requestRef = useRef<object | null>(null);
+  const autoAttempted = useRef(false);
+  const biometricInFlight = useRef(false);
 
   useEffect(() => {
+    requestRef.current = {};
+    autoAttempted.current = false;
     setPassword('');
     setEnrollBiometrics(false);
     setBiometricError('');
+    if (!visible) setShown(false);
+    return () => {
+      requestRef.current = null;
+    };
+  }, [visible, requestId]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setAppState(AppState.currentState);
+    const subscription = AppState.addEventListener('change', setAppState);
+    return () => subscription.remove();
   }, [visible]);
 
+  const runBiometricUnlock = useCallback(async () => {
+    if (
+      !visible ||
+      !shown ||
+      AppState.currentState !== 'active' ||
+      requestRef.current === null ||
+      !biometricUnlock ||
+      biometricInFlight.current
+    )
+      return;
+    // Mark manual attempts too, so returning from the native prompt never retries.
+    autoAttempted.current = true;
+    biometricInFlight.current = true;
+    const request = requestRef.current;
+    setBiometricBusy(true);
+    setBiometricError('');
+    try {
+      await biometricUnlock();
+    } catch {
+      if (request !== null && requestRef.current === request)
+        setBiometricError(
+          'Biometric unlock failed. Use your password or try again.',
+        );
+    } finally {
+      biometricInFlight.current = false;
+      if (requestRef.current !== null) setBiometricBusy(false);
+    }
+  }, [visible, shown, biometricUnlock]);
+
+  useEffect(() => {
+    // onShow avoids presenting native authentication during the modal animation.
+    if (visible && shown && appState === 'active' && !autoAttempted.current)
+      runBiometricUnlock();
+  }, [visible, requestId, shown, appState, biometricBusy, runBiometricUnlock]);
+
   const submit = () => {
-    if (biometricBusy) return;
+    if (biometricInFlight.current) return;
     onSubmit(password);
     setPassword('');
   };
 
   const cancel = () => {
+    if (biometricInFlight.current) return;
     setPassword('');
     onCancel();
   };
@@ -54,6 +119,9 @@ export default function PasswordModal({
       visible={visible}
       transparent
       animationType="fade"
+      onShow={() => {
+        if (visible) setShown(true);
+      }}
       onRequestClose={biometricBusy ? () => {} : cancel}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
@@ -83,17 +151,7 @@ export default function PasswordModal({
               variant="secondary"
               testID="identity-biometric-unlock"
               disabled={biometricBusy}
-              onPress={() => {
-                setBiometricBusy(true);
-                setBiometricError('');
-                void biometricUnlock()
-                  .catch(() =>
-                    setBiometricError(
-                      'Biometric unlock failed. Use your password or try again.',
-                    ),
-                  )
-                  .finally(() => setBiometricBusy(false));
-              }}
+              onPress={runBiometricUnlock}
             />
           ) : null}
           {onBiometricEnrollmentChange ? (

@@ -11,6 +11,7 @@ export type SecretPromptOptions = {
 };
 
 type Pending = {
+  id: number;
   options: SecretPromptOptions;
   resolve: (value: string | null) => void;
 };
@@ -25,6 +26,7 @@ export function useSecretPrompt(): {
 } {
   const [pending, setPending] = useState<Pending | null>(null);
   const pendingRef = useRef<Pending | null>(null);
+  const nextId = useRef(0);
 
   useEffect(
     () => () => {
@@ -39,7 +41,7 @@ export function useSecretPrompt(): {
       if (pendingRef.current) {
         pendingRef.current.resolve(null);
       }
-      const next: Pending = {options, resolve};
+      const next: Pending = {id: ++nextId.current, options, resolve};
       pendingRef.current = next;
       setPending(next);
     });
@@ -56,6 +58,7 @@ export function useSecretPrompt(): {
     () => (
       <PasswordModal
         visible={pending !== null}
+        requestId={pending?.id}
         title={pending?.options.title ?? 'Enter password'}
         placeholder={pending?.options.placeholder}
         submitLabel={pending?.options.submitLabel}
