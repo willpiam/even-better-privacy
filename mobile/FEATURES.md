@@ -70,7 +70,7 @@ choice.
 | 29  | Server identity directory | Browse/search identities on the configured server.                                                                                  |
 | 30  | Local contact annotations | Alias, description, and local email address separate from published identity details.                                               |
 | 31  | Contact synchronization   | Refresh published details and revocation status from the server.                                                                    |
-| 32  | Opaque-detail resolution  | Enter an opaque path and candidate plaintext value to check a hash-only detail.                                                     |
+| 32  | Opaque-detail resolution  | Tap Resolve on an opaque detail, then enter candidate plaintext in a popup with the path already selected.                           |
 
 Sources: `src/screens/{ContactsScreen,ContactDetailScreen}.tsx`.
 

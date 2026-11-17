@@ -18,6 +18,7 @@ import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import BusyOverlay from '../components/BusyOverlay';
+import ResolveOpaqueDetailModal from '../components/ResolveOpaqueDetailModal';
 import {colors, typography} from '../theme/tokens';
 import {statusKind} from '../theme/statusKind';
 
@@ -75,8 +76,7 @@ export default function ContactDetailScreen({
     revoked?: boolean;
     revokedDetails?: string[];
   } | null>(null);
-  const [opaquePath, setOpaquePath] = useState('');
-  const [opaqueValue, setOpaqueValue] = useState('');
+  const [opaquePath, setOpaquePath] = useState<string | null>(null);
   const [localAlias, setLocalAlias] = useState('');
   const [localDescription, setLocalDescription] = useState('');
   const [localEmail, setLocalEmail] = useState('');
@@ -96,10 +96,14 @@ export default function ContactDetailScreen({
       encryptionKeyType: found.contact.encryptionKeyType,
       details: found.contact.details ?? {},
       resolvedOpaqueDetails: found.contact.resolvedOpaqueDetails,
-      localAlias: typeof raw.localAlias === 'string' ? raw.localAlias : undefined,
+      localAlias:
+        typeof raw.localAlias === 'string' ? raw.localAlias : undefined,
       localDescription:
-        typeof raw.localDescription === 'string' ? raw.localDescription : undefined,
-      localEmail: typeof raw.localEmail === 'string' ? raw.localEmail : undefined,
+        typeof raw.localDescription === 'string'
+          ? raw.localDescription
+          : undefined,
+      localEmail:
+        typeof raw.localEmail === 'string' ? raw.localEmail : undefined,
       revoked: found.contact.revoked,
       revokedDetails: found.contact.revokedDetails ?? [],
     });
@@ -150,21 +154,18 @@ export default function ContactDetailScreen({
     }
   };
 
-  const onResolveOpaque = async () => {
-    try {
-      if (!contact) {
-        throw new Error('Contact not found');
-      }
-      await resolveOpaqueDetail({
-        fingerprint: contact.fingerprint,
-        path: opaquePath,
-        value: opaqueValue,
-      });
-      setStatus('Opaque detail resolved');
-      await refresh();
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
+  const onResolveOpaque = async (path: string, value: string) => {
+    if (!contact) {
+      throw new Error('Contact not found');
     }
+    await resolveOpaqueDetail({
+      fingerprint: contact.fingerprint,
+      path,
+      value,
+    });
+    await refresh();
+    setStatus('Opaque detail resolved');
+    setOpaquePath(null);
   };
 
   const onSaveNotes = async () => {
@@ -239,7 +240,9 @@ export default function ContactDetailScreen({
                   <Text style={styles.detailValue} selectable>
                     {displayValue}
                   </Text>
-                  {badge ? <Text style={styles.detailBadge}>{badge}</Text> : null}
+                  {badge ? (
+                    <Text style={styles.detailBadge}>{badge}</Text>
+                  ) : null}
                 </View>
                 <Pressable
                   accessibilityRole="button"
@@ -255,25 +258,29 @@ export default function ContactDetailScreen({
                   <Text style={styles.infoBtnLabel}>i</Text>
                 </Pressable>
               </View>
+              {opaque ? (
+                <AppButton
+                  title={resolved ? 'Update resolution' : 'Resolve'}
+                  testID={`contact-resolve-${path}`}
+                  variant="secondary"
+                  onPress={() => setOpaquePath(path)}
+                  disabled={syncing}
+                  style={styles.resolveButton}
+                />
+              ) : null}
             </Card>
           );
         })
       )}
 
-      <SectionTitle>Resolve opaque detail</SectionTitle>
-      <TextField
-        label="opaque:: path"
-        value={opaquePath}
-        onChangeText={setOpaquePath}
-        autoCapitalize="none"
-        autoCorrect={false}
-      />
-      <TextField
-        label="Plaintext value"
-        value={opaqueValue}
-        onChangeText={setOpaqueValue}
-        autoCapitalize="none"
-      />
+      {opaquePath !== null ? (
+        <ResolveOpaqueDetailModal
+          key={opaquePath}
+          path={opaquePath}
+          onCancel={() => setOpaquePath(null)}
+          onResolve={onResolveOpaque}
+        />
+      ) : null}
 
       <SectionTitle>Local notes</SectionTitle>
       <TextField
@@ -304,21 +311,7 @@ export default function ContactDetailScreen({
       <Text style={styles.meta}>
         {`${serverUrl}/api/v1/identity/${contact.fingerprint}`}
       </Text>
-      <View style={styles.row}>
-        <AppButton
-          title="Sync"
-          onPress={onSync}
-          disabled={syncing}
-          style={styles.flex}
-        />
-        <AppButton
-          title="Opaque resolve"
-          variant="secondary"
-          onPress={onResolveOpaque}
-          disabled={syncing}
-          style={styles.flex}
-        />
-      </View>
+      <AppButton title="Sync" onPress={onSync} disabled={syncing} />
       <AppButton
         title="Delete"
         testID="contact-delete"
@@ -364,6 +357,7 @@ const styles = StyleSheet.create({
     color: colors.muted,
   },
   detailCard: {marginBottom: 0},
+  resolveButton: {marginTop: 12},
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -411,6 +405,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontStyle: 'italic',
   },
-  row: {flexDirection: 'row', gap: 8},
-  flex: {flex: 1},
 });
