@@ -125,6 +125,8 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       <TextField
         label="Server URL"
         testID="settings-server-url"
+        keyboardType="url"
+        spellCheck={false}
         autoCapitalize="none"
         autoCorrect={false}
         selectTextOnFocus

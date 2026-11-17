@@ -301,6 +301,8 @@ export default function ContactDetailScreen({
         onChangeText={setLocalEmail}
         autoCapitalize="none"
         keyboardType="email-address"
+        autoCorrect={false}
+        spellCheck={false}
       />
       <AppButton
         title="Save notes"

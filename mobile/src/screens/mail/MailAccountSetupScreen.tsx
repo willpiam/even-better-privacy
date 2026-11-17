@@ -337,6 +337,8 @@ export default function MailAccountSetupScreen({
         autoCapitalize="none"
         autoCorrect={false}
         value={imapHost}
+        keyboardType="url"
+        spellCheck={false}
         onChangeText={setImapHost}
         placeholder="imap.example.com"
       />
@@ -357,6 +359,8 @@ export default function MailAccountSetupScreen({
         autoCapitalize="none"
         autoCorrect={false}
         value={smtpHost}
+        keyboardType="url"
+        spellCheck={false}
         onChangeText={setSmtpHost}
         placeholder="smtp.example.com"
       />
@@ -377,6 +381,8 @@ export default function MailAccountSetupScreen({
         autoCapitalize="none"
         autoCorrect={false}
         value={username}
+        keyboardType="email-address"
+        spellCheck={false}
         onChangeText={setUsername}
         placeholder="you@example.com"
       />
@@ -405,6 +411,8 @@ export default function MailAccountSetupScreen({
         autoCapitalize="none"
         autoCorrect={false}
         value={fromEmail}
+        keyboardType="email-address"
+        spellCheck={false}
         onChangeText={setFromEmail}
         placeholder="you@example.com"
       />
@@ -450,6 +458,8 @@ export default function MailAccountSetupScreen({
           <TextField
             label={`Type ${fromEmail} to delete the mailbox on the server`}
             testID="mail-delete-confirm"
+            keyboardType="email-address"
+            spellCheck={false}
             autoCapitalize="none"
             autoCorrect={false}
             value={deleteConfirm}

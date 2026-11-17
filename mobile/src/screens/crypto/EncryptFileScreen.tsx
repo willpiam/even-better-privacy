@@ -97,6 +97,9 @@ export default function EncryptFileScreen(): JSX.Element {
         <>
           <TextField
             label="File URI (advanced)"
+            keyboardType="url"
+            autoCorrect={false}
+            spellCheck={false}
             value={fileUri}
             onChangeText={setFileUri}
             placeholder="file:///..."
@@ -110,6 +113,8 @@ export default function EncryptFileScreen(): JSX.Element {
           />
           <TextField
             label="MIME type"
+            autoCorrect={false}
+            spellCheck={false}
             value={fileMime}
             onChangeText={setFileMime}
             placeholder="MIME type"

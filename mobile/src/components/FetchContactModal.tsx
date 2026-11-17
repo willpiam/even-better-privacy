@@ -74,6 +74,8 @@ export default function FetchContactModal({
           <TextField
             label="Server override (optional)"
             testID="contacts-fetch-server"
+            keyboardType="url"
+            spellCheck={false}
             value={server}
             onChangeText={setServer}
             placeholder="Uses Settings URL when empty"

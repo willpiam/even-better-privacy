@@ -203,6 +203,8 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       <TextField
         label="Mnemonic"
         testID="hd-mnemonic"
+        autoCorrect={false}
+        spellCheck={false}
         value={mnemonic}
         onChangeText={setMnemonic}
         multiline
@@ -211,6 +213,8 @@ export default function HdCreateScreen({navigation}: Props): JSX.Element {
       <TextField
         label="Confirm mnemonic"
         testID="hd-confirm-mnemonic"
+        autoCorrect={false}
+        spellCheck={false}
         value={confirmMnemonic}
         onChangeText={setConfirmMnemonic}
         multiline

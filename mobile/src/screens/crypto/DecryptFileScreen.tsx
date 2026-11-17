@@ -101,6 +101,9 @@ export default function DecryptFileScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Encrypted file payload"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         value={decryptFilePayload}
         onChangeText={setDecryptFilePayload}
         placeholder="Encrypted file payload JSON"

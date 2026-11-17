@@ -92,6 +92,9 @@ export default function SignFileScreen(): JSX.Element {
       {showAdvanced ? (
         <TextField
           label="File URI (advanced)"
+          keyboardType="url"
+          autoCorrect={false}
+          spellCheck={false}
           value={fileUri}
           onChangeText={setFileUri}
           placeholder="file:///..."

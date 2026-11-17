@@ -82,6 +82,9 @@ export default function VerifyFileScreen(): JSX.Element {
       {showAdvanced ? (
         <TextField
           label="File URI (advanced)"
+          keyboardType="url"
+          autoCorrect={false}
+          spellCheck={false}
           value={verifyFileUri}
           onChangeText={setVerifyFileUri}
           placeholder="file:///..."
@@ -90,6 +93,9 @@ export default function VerifyFileScreen(): JSX.Element {
       ) : null}
       <TextField
         label="Signed file payload"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         value={verifyFilePayload}
         onChangeText={setVerifyFilePayload}
         placeholder="Signed file payload JSON"

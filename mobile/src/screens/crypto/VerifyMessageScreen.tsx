@@ -103,6 +103,9 @@ export default function VerifyMessageScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Signed payload"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         testID="verify-payload-input"
         value={verifyPayload}
         onChangeText={setVerifyPayload}
@@ -146,6 +149,7 @@ export default function VerifyMessageScreen(): JSX.Element {
           <TextField
             label="Public keys JSON"
             testID="verify-public-keys"
+            spellCheck={false}
             value={publicKeysJson}
             onChangeText={setPublicKeysJson}
             placeholder='{"fingerprint":"...","signingKey":"...","signingKeyType":"..."}'

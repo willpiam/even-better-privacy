@@ -31,6 +31,9 @@ export default function FingerprintToolScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Public identity JSON"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         value={publicIdentityJson}
         onChangeText={setPublicIdentityJson}
         placeholder="Public identity JSON"

@@ -51,6 +51,9 @@ export default function DecryptMessageScreen(): JSX.Element {
       <StatusBanner message={status} kind={statusKind(status)} />
       <TextField
         label="Encrypted payload"
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         value={decryptPayload}
         onChangeText={setDecryptPayload}
         placeholder="Encrypted payload JSON"

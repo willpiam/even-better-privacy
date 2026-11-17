@@ -64,6 +64,8 @@ export default function ResolveOpaqueDetailModal({
             <TextField
               label="Plaintext value"
               testID="contact-resolve-value"
+              keyboardType={path === 'opaque::email' ? 'email-address' : 'default'}
+              spellCheck={false}
               value={value}
               onChangeText={setValue}
               autoCapitalize="none"

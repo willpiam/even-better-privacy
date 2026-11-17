@@ -476,6 +476,8 @@ export default function IdentityActionsScreen({
               <TextField
                 label="Server override (optional)"
                 testID="identity-publish-server"
+                keyboardType="url"
+                spellCheck={false}
                 value={publishServer}
                 onChangeText={setPublishServer}
                 placeholder={serverUrl || 'Uses Settings URL when empty'}

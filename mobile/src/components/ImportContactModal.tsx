@@ -51,6 +51,8 @@ export default function ImportContactModal({
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <TextField
             label="Contact JSON"
+            autoCorrect={false}
+            spellCheck={false}
             value={contactJson}
             onChangeText={setContactJson}
             placeholder="Paste contact JSON"

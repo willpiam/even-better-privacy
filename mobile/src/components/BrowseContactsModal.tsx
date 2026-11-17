@@ -161,6 +161,8 @@ export default function BrowseContactsModal({
             <TextField
               label="Server override (optional)"
               testID="contacts-browse-server"
+              keyboardType="url"
+              spellCheck={false}
               value={browseServer}
               onChangeText={setBrowseServer}
               placeholder="Uses Settings URL when empty"

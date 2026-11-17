@@ -577,6 +577,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
           <TextField
             label={`Username (@${domain})`}
             testID="onboarding-username"
+            keyboardType="email-address"
+            spellCheck={false}
             value={username}
             onChangeText={onUsernameChange}
             autoCapitalize="none"
@@ -708,6 +710,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
               key={index}
               label={`Word #${index + 1}`}
               testID={`onboarding-quiz-${index + 1}`}
+              spellCheck={false}
               value={answers[index] ?? ''}
               onChangeText={value => setAnswers(prev => ({...prev, [index]: value}))}
               autoCapitalize="none"
