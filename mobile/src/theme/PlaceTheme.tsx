@@ -8,7 +8,6 @@ export const places = {
     pale: '#e5eddd',
     accent: '#466039',
     border: '#e1e6da',
-    label: 'The identity grove',
   },
   contacts: {
     page: '#fcf5f2',
@@ -16,7 +15,6 @@ export const places = {
     pale: '#f2e5df',
     accent: '#7e554c',
     border: '#ecdfd8',
-    label: 'The contact garden',
   },
   tools: {
     page: '#f0f6f6',
@@ -24,7 +22,6 @@ export const places = {
     pale: '#ddebea',
     accent: '#326461',
     border: '#dce7e5',
-    label: 'The crypto woodland',
   },
   mail: {
     page: '#faf7f0',
@@ -32,7 +29,6 @@ export const places = {
     pale: '#efeadb',
     accent: '#536647',
     border: '#e8e2d5',
-    label: 'The mail meadow',
   },
   settings: {
     page: '#f7f4fa',
@@ -40,7 +36,6 @@ export const places = {
     pale: '#eae3f1',
     accent: '#6b557e',
     border: '#e6dfec',
-    label: 'The quiet den',
   },
   compose: {
     page: '#f3f7fa',
@@ -48,7 +43,6 @@ export const places = {
     pale: '#e2ebf1',
     accent: '#426779',
     border: '#dfe7ed',
-    label: 'The letter path',
   },
 };
 export type Place = keyof typeof places;

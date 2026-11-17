@@ -1,11 +1,5 @@
 import React from 'react';
-import {
-  Platform,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import {StyleSheet, Text, useWindowDimensions, View} from 'react-native';
 import {places, type Place, usePlaceTheme} from '../theme/PlaceTheme';
 import {colors} from '../theme/tokens';
 import FoxArt from './FoxArt';
@@ -34,9 +28,6 @@ export default function PlaceHeader({
           {title}
         </Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
-        <Text style={[styles.place, {color: palette.accent}]}>
-          {palette.label}
-        </Text>
       </View>
       {showArt ? <FoxArt place={place} size={width < 390 ? 92 : 116} /> : null}
     </View>
@@ -59,10 +50,4 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   subtitle: {fontSize: 13, lineHeight: 19, color: colors.muted},
-  place: {
-    fontSize: 11,
-    marginTop: 3,
-    fontStyle: 'italic',
-    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
-  },
 });
