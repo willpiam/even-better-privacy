@@ -329,6 +329,21 @@ while its test-mail setting is on, then sends the buyer to
 `https://test.pqpost.com/checkout.html` to pay from a computer or a wallet
 browser.
 
+Deploy the hosted test checkout from the repository root:
+
+```sh
+python3 scripts/with_cloudflare_env.py npx wrangler deploy --config wrangler.test.jsonc
+```
+
+Set `CLOUDFLARE_API_TOKEN` (and `CLOUDFLARE_ACCOUNT_ID` if needed) in the
+environment or the ignored root `.env` file. `wrangler.test.jsonc` declares
+`test.pqpost.com` as a custom domain of the `pqpost-test-checkout` Worker, so
+deployment provisions the web DNS record and HTTPS certificate as well as the
+static files. The email domain's MX record alone does not make checkout
+reachable. Keep that MX record for mail delivery. In the Cloudflare dashboard,
+the equivalent setup is Workers & Pages → `pqpost-test-checkout` → Settings →
+Domains & Routes → Add → Custom domain → `test.pqpost.com`.
+
 The test refuses non-loopback key servers, non-test mail domains and mainnet
 assets. It creates a disposable eight-character `e2e` test name and prints a
 local checkout link. Use a testnet wallet to send the displayed
