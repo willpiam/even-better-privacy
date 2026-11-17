@@ -80,13 +80,11 @@ export async function getMailIncludePublicKeys(): Promise<boolean> {
 }
 
 export async function getMailTestMode(): Promise<boolean> {
-  return __DEV__ ? getBooleanPref(MAIL_TEST_MODE_KEY, false) : false;
+  return getBooleanPref(MAIL_TEST_MODE_KEY, false);
 }
 
 export async function setMailTestMode(value: boolean): Promise<void> {
-  if (__DEV__) {
-    await setBooleanPref(MAIL_TEST_MODE_KEY, value);
-  }
+  await setBooleanPref(MAIL_TEST_MODE_KEY, value);
 }
 
 export async function setMailIncludePublicKeys(value: boolean): Promise<void> {

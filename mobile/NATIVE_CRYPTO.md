@@ -30,7 +30,7 @@ npm run ios
 
 Also import an identity created by the previous libsodium build, unlock it, sign/verify, and persist/reopen it. Run **Verify mail PBKDF2 parity** and unlock a saved mail account. Repeat on Android and iOS after native rebuilds. JS tests compare the wrapper with the existing Argon2 vector and storage format; device checks exercise the actual Nitro/OpenSSL binary.
 
-Release builds omit the developer screens, parity vectors, self-test, and test-mail toggle. Release Android builds enable R8 code optimization and resource shrinking; validate a release APK's navigation, file picker, sharing, SVG hierarchy, WebView mail, TCP/TLS, and both KDFs before distribution.
+Release builds omit the developer screens, parity vectors, and self-test. Test emails and payments are available in Settings after accepting the test-funds warning. Release Android builds enable R8 code optimization and resource shrinking; validate a release APK's navigation, file picker, sharing, SVG hierarchy, WebView mail, TCP/TLS, and both KDFs before distribution.
 
 ## Implementation map
 

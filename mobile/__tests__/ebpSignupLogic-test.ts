@@ -149,6 +149,13 @@ describe('ebpSignupLogic', () => {
     expect(wizardSteps(true)).not.toEqual(expect.arrayContaining(['password', 'phrase', 'confirm']));
   });
 
+  test.each([false, true])('domain choice is opt-in for useExisting=%s', useExisting => {
+    expect(wizardSteps(useExisting)).not.toContain('domain');
+    expect(wizardSteps(useExisting, true)).toEqual([
+      'welcome', 'domain', ...wizardSteps(useExisting).slice(1),
+    ]);
+  });
+
   test('isManagedMailAddress matches the signup domain exactly', () => {
     expect(isManagedMailAddress(' Alice@PQPost.test ', 'pqpost.test')).toBe(true);
     expect(isManagedMailAddress('alice@mail.pqpost.test', 'pqpost.test')).toBe(false);

@@ -12,20 +12,21 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-it('ignores a saved test-mail preference in release builds', async () => {
-  Object.assign(globalThis, {__DEV__: false});
-  expect(await getMailTestMode()).toBe(false);
-  await setMailTestMode(true);
-  expect(AsyncStorage.getItem).not.toHaveBeenCalled();
-  expect(AsyncStorage.setItem).not.toHaveBeenCalled();
-});
+it.each([false, true])(
+  'persists the test-mail preference with __DEV__=%s',
+  async dev => {
+    Object.assign(globalThis, {__DEV__: dev});
+    expect(await getMailTestMode()).toBe(true);
+    expect(AsyncStorage.getItem).toHaveBeenCalledWith('ebp.mail.testMode');
+    await setMailTestMode(false);
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith(
+      'ebp.mail.testMode',
+      'false',
+    );
+  },
+);
 
-it('still lets development builds use test addresses', async () => {
-  Object.assign(globalThis, {__DEV__: true});
-  expect(await getMailTestMode()).toBe(true);
-  await setMailTestMode(false);
-  expect(AsyncStorage.setItem).toHaveBeenCalledWith(
-    'ebp.mail.testMode',
-    'false',
-  );
+it('defaults test mail to off', async () => {
+  jest.mocked(AsyncStorage.getItem).mockResolvedValueOnce(null);
+  expect(await getMailTestMode()).toBe(false);
 });

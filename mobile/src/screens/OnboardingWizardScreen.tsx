@@ -39,6 +39,7 @@ import {
   TEST_MAIL_DOMAIN,
   testCheckoutUrl,
   validateMailUsername,
+  wizardSteps,
   type EbpSignupConfig,
   type OnboardingWizardStep,
   type PaymentAsset,
@@ -71,7 +72,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const [username, setUsername] = useState('');
   const [usernameHint, setUsernameHint] = useState('');
   const [usernameOk, setUsernameOk] = useState(false);
+  const [testMailEnabled, setTestMailEnabled] = useState(false);
   const [testMode, setTestMode] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
   const [paid, setPaid] = useState(false);
   const [assets, setAssets] = useState<PaymentAsset[]>([]);
   const [assetIndex, setAssetIndex] = useState(0);
@@ -119,15 +122,14 @@ export default function OnboardingWizardScreen(): JSX.Element {
     (async () => {
       try {
         const url = await getServerUrl();
-        const testing = await getMailTestMode();
-        const cfg = await fetchEbpSignupConfig(url, testing);
+        const testingEnabled = await getMailTestMode();
         if (cancelled) return;
         setServer(url);
-        setTestMode(testing);
+        setTestMailEnabled(testingEnabled);
+        const cfg = await fetchEbpSignupConfig(url);
+        if (cancelled) return;
         setConfig(cfg);
-        if (testing && cfg.enabled && cfg.domain !== TEST_MAIL_DOMAIN) {
-          setConfigError('This key server did not offer test.pqpost.com addresses.');
-        } else if (!cfg.enabled) {
+        if (!cfg.enabled) {
           setConfigError(
             "This key server doesn't offer EBP email addresses yet. You can still create keys and add an existing mailbox manually.",
           );
@@ -138,6 +140,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
             `Couldn't reach the key server (${error instanceof Error ? error.message : String(error)}).`,
           );
         }
+      } finally {
+        if (!cancelled) setConfigLoading(false);
       }
     })();
     return () => {
@@ -147,12 +151,48 @@ export default function OnboardingWizardScreen(): JSX.Element {
 
   const domain = config?.enabled ? config.domain : '';
 
+  const chooseDomain = async (testing: boolean) => {
+    // Invalidate checks and checkout state before changing the signup domain.
+    ++checkSeq.current;
+    setUsername('');
+    setUsernameOk(false);
+    setUsernameHint('');
+    setPaid(false);
+    setAssets([]);
+    setOrderId('');
+    setCheckoutUrl('');
+    setAwaitingPayment(false);
+    setConfig(null);
+    setConfigError('');
+    setConfigLoading(true);
+    setTestMode(testing);
+    try {
+      const cfg = await fetchEbpSignupConfig(server, testing);
+      if (!cfg.enabled) {
+        throw new Error('This key server does not offer email addresses for this domain.');
+      }
+      if (testing && cfg.domain !== TEST_MAIL_DOMAIN) {
+        throw new Error('This key server did not offer test.pqpost.com addresses.');
+      }
+      setConfig(cfg);
+      setStep('address');
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
   const onUsernameChange = useCallback(
     (value: string) => {
+      const seq = ++checkSeq.current;
       setUsername(value);
       setUsernameOk(false);
       setPaid(false);
       setAssets([]);
+      setOrderId('');
+      setCheckoutUrl('');
+      setAwaitingPayment(false);
       const local = validateMailUsername(value);
       if (!value.trim()) {
         setUsernameHint('');
@@ -163,13 +203,12 @@ export default function OnboardingWizardScreen(): JSX.Element {
         return;
       }
       setUsernameHint('Checking…');
-      const seq = ++checkSeq.current;
       setTimeout(async () => {
         if (seq !== checkSeq.current) return;
         try {
           const res = await checkEbpUsername(server, local.username, testMode);
           if (seq !== checkSeq.current) return;
-          const paymentAssets = res.purchasable && testMode
+          const paymentAssets = !res.available && res.purchasable && testMode
             ? await fetchTestPaymentAssets(server)
             : [];
           if (seq !== checkSeq.current) return;
@@ -239,6 +278,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const runCreate = async () => {
     if (!config?.enabled) return;
     if (testMode && config.domain !== TEST_MAIL_DOMAIN) return;
+    if (paid && (!testMode || domain !== TEST_MAIL_DOMAIN)) return;
     setStep('create');
     setCreateError('');
     setCreateStatus(undefined);
@@ -392,7 +432,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setPublished(false);
     setPassword('');
     setPasswordHint('');
-    setStep('address');
+    setStep(wizardSteps(true, testMailEnabled)[1]);
   };
 
   const onUnlockNext = () => {
@@ -430,7 +470,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
   };
 
   const words = mnemonic.trim() ? mnemonic.trim().split(/\s+/) : [];
-  const testDomainReady = !testMode || (config?.enabled === true && config.domain === TEST_MAIL_DOMAIN);
+  const canStart = !configLoading && !!server && (testMailEnabled || config?.enabled === true);
   const addressTaken = isAddressTakenError(createError);
   const mailboxExists = isAlreadyHasMailboxError(createError, createStatus);
   const taskKeys: TaskKey[] = useExisting
@@ -454,10 +494,14 @@ export default function OnboardingWizardScreen(): JSX.Element {
           <AppButton
             title="Get started"
             testID="onboarding-start"
-            disabled={!config?.enabled || !testDomainReady}
+            disabled={!canStart}
             onPress={() => {
               setUseExisting(false);
-              setStep('address');
+              setIdentityName('');
+              setPublished(false);
+              setPassword('');
+              setConfirmPassword('');
+              setStep(wizardSteps(false, testMailEnabled)[1]);
             }}
           />
           {currentIdentity ? (
@@ -465,7 +509,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
               title="Use this identity"
               testID="onboarding-use-current"
               variant="secondary"
-              disabled={!config?.enabled || !testDomainReady}
+              disabled={!canStart}
               onPress={startUseCurrent}
             />
           ) : null}
@@ -474,6 +518,41 @@ export default function OnboardingWizardScreen(): JSX.Element {
             testID="onboarding-skip"
             variant="secondary"
             onPress={() => navigation.goBack()}
+          />
+        </Card>
+      ) : null}
+
+      {step === 'domain' && testMailEnabled ? (
+        <Card padded>
+          <Text style={styles.title}>Choose your email domain</Text>
+          <Text style={styles.hint}>
+            Use pqpost.com for a real email address, or test.pqpost.com to try
+            test emails and payments.
+          </Text>
+          <Text style={styles.hint}>
+            Short test names (3–8 characters) require a one-time test payment.
+            Names with 9 or more characters are free. Never send real crypto
+            to testnet payment addresses.
+          </Text>
+          <StatusBanner message={configError} kind="error" />
+          <AppButton
+            title="pqpost.com"
+            testID="onboarding-domain-production"
+            disabled={configLoading}
+            onPress={() => void chooseDomain(false)}
+          />
+          <AppButton
+            title="test.pqpost.com"
+            testID="onboarding-domain-test"
+            variant="secondary"
+            disabled={configLoading}
+            onPress={() => void chooseDomain(true)}
+          />
+          <AppButton
+            title="Back"
+            variant="secondary"
+            disabled={configLoading}
+            onPress={() => setStep('welcome')}
           />
         </Card>
       ) : null}
@@ -491,7 +570,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
           </Text>
           {testMode ? (
             <Text style={styles.hint}>
-              Test mode is on. This creates a @{domain || TEST_MAIL_DOMAIN} address and can only be paid on a test network.
+              This creates a @{domain || TEST_MAIL_DOMAIN} test address. Short
+              names require test funds only; names with 9 or more characters are free.
             </Text>
           ) : null}
           <TextField
@@ -527,6 +607,17 @@ export default function OnboardingWizardScreen(): JSX.Element {
             disabled={!usernameOk}
             onPress={onAddressNext}
           />
+          {testMailEnabled ? (
+            <AppButton
+              title="Back"
+              testID="onboarding-address-back"
+              variant="secondary"
+              onPress={() => {
+                ++checkSeq.current;
+                setStep('domain');
+              }}
+            />
+          ) : null}
         </Card>
       ) : null}
 

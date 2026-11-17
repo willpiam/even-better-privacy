@@ -17,7 +17,6 @@ Developer section, and the crypto self-test/parity vectors.
 | 2   | Crypto parity diagnostics                | Argon2id and mail PBKDF2 checks against known vectors.                                                                                                                                 |
 | 3   | System diagnostics                       | On-device identity storage directory.                                                                                                                                                  |
 | 4   | Mail trace                               | Opt-in recording, refresh, and clear; newest 200 events, memory-only for this app process. No protocol logging or trace storage writes in release.                                     |
-| 5   | Test addresses and test-network checkout | Settings toggle for `@test.pqpost.com`, Ethereum Sepolia/Cardano preview payment assets, checkout/recovery flows. A saved development preference cannot activate this mode in release. |
 
 Sources: `src/components/DeveloperTools.tsx`, `src/screens/DiagnosticsScreen.tsx`,
 `src/screens/mail/MailTraceScreen.tsx`, `src/screens/SettingsScreen.tsx`,
@@ -27,6 +26,7 @@ Sources: `src/components/DeveloperTools.tsx`, `src/screens/DiagnosticsScreen.tsx
 
 | ID  | Feature                      | Controls or content                                                                                                 |
 | --- | ---------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| 5   | Test addresses and payments  | Opt-in in all builds after a test-funds warning. Adds a `pqpost.com` / `test.pqpost.com` choice to onboarding. Only short test names (3–8 characters) use Sepolia/Cardano preview checkout; names of 9+ characters are free. |
 | 6   | About EBP                    | Large illustration, project description, How It Works, security note, GitHub and project-site links.                |
 | 8   | Mail help                    | Provider-specific Gmail/Proton Bridge instructions and generic IMAP/SMTP guidance.                                  |
 | 9   | Custom key server            | Global server URL and a separate per-publish override on an identity.                                               |
@@ -159,8 +159,8 @@ Source: `src/screens/OnboardingWizardScreen.tsx`.
 - Android releases enable R8 optimization and resource shrinking.
 - Message verification calls the shared verifier exercised by parity tests.
 - Mail tracing is opt-in, bounded, memory-only, and disabled in release.
-- Developer screens/checks are excluded from release; test-mail settings ignore
-  persisted development preferences in release.
+- Developer screens/checks are excluded from release. Test-mail settings are
+  available in all builds and require consent before enabling.
 - Removed the stale Bun lockfile. Mobile builds use npm and `package-lock.json`.
 
 ## Validation and footprint
@@ -176,11 +176,11 @@ Source: `src/screens/OnboardingWizardScreen.tsx`.
 These are bundle/build-input measurements, not APK or App Store download sizes.
 Native library and R8 savings require a native release build.
 
-All 197 Jest tests pass, including storage/vector interoperability, exact Unicode
+The cleanup baseline passed all 197 Jest tests, including storage/vector interoperability, exact Unicode
 and whitespace password handling, native-error propagation, message verification,
-trace limits/opt-in, and release test-mail gating. Android and iOS production JS
-bundles build, and both exclude the developer screens, checks, vectors, test-mail
-toggle, removed dependencies, and original large PNG. Hermes compilation and
+trace limits/opt-in, and the former release test-mail gating. Android and iOS production JS
+bundles built, and both excluded the developer screens, checks, vectors, removed
+dependencies, and original large PNG. Test mail is now opt-in in release as described above. Hermes compilation and
 lint of changed TypeScript/JavaScript pass (lint retains existing `no-void`
 warnings). The project-wide TypeScript check has existing errors; comparison
 with the original checkout found no new diagnostics.

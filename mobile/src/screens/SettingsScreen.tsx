@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {StyleSheet, Switch, Text, View} from 'react-native';
+import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
@@ -42,6 +42,7 @@ export default function SettingsScreen(_props: Props): JSX.Element {
   const [mailRenderHtml, setMailRenderHtmlValue] = useState(false);
   const [mailIncludePublicKeys, setMailIncludePublicKeysValue] = useState(true);
   const [mailTestMode, setMailTestModeValue] = useState(false);
+  const [savingTestMode, setSavingTestMode] = useState(false);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -79,6 +80,37 @@ export default function SettingsScreen(_props: Props): JSX.Element {
     } finally {
       setLoading(false);
     }
+  };
+
+  const saveTestMode = async (value: boolean) => {
+    setSavingTestMode(true);
+    try {
+      await setMailTestMode(value);
+      setMailTestModeValue(value);
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSavingTestMode(false);
+    }
+  };
+
+  const onTestModeChange = (value: boolean) => {
+    if (!value) {
+      void saveTestMode(false);
+      return;
+    }
+    Alert.alert(
+      'Enable test emails and payments?',
+      'test.pqpost.com is for testing only. Short test addresses use Ethereum Sepolia or Cardano preview test funds. Never send real cryptocurrency or mainnet funds to a testnet payment address: you could lose them. Test payments do not buy a pqpost.com address.',
+      [
+        {text: 'Cancel', style: 'cancel'},
+        {
+          text: 'I understand, enable',
+          onPress: () => void saveTestMode(true),
+        },
+      ],
+      {cancelable: true},
+    );
   };
 
   return (
@@ -144,27 +176,20 @@ export default function SettingsScreen(_props: Props): JSX.Element {
         }}
       />
 
-      {__DEV__ && (
-        <>
-          <SectionTitle>Test mail</SectionTitle>
-          <View style={styles.switchRow}>
-            <Text style={styles.switchLabel}>Show test addresses</Text>
-            <Switch
-              testID="settings-mail-test-mode"
-              value={mailTestMode}
-              onValueChange={async value => {
-                setMailTestModeValue(value);
-                await setMailTestMode(value);
-              }}
-            />
-          </View>
-          <Text style={styles.advancedNote}>
-            When this is on, Get started offers @test.pqpost.com addresses paid
-            with Ethereum Sepolia or Cardano preview. Real addresses stay
-            hidden.
-          </Text>
-        </>
-      )}
+      <SectionTitle>Test mail</SectionTitle>
+      <View style={styles.switchRow}>
+        <Text style={styles.switchLabel}>Enable test emails and payments</Text>
+        <Switch
+          testID="settings-mail-test-mode"
+          value={mailTestMode}
+          disabled={savingTestMode}
+          onValueChange={onTestModeChange}
+        />
+      </View>
+      <Text style={styles.advancedNote}>
+        Adds a choice of test.pqpost.com or pqpost.com when creating an EBP
+        email. Only short test names require payment, using test funds only.
+      </Text>
 
       <SectionTitle>Mail preferences</SectionTitle>
       <View style={styles.switchRow}>

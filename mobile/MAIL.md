@@ -5,6 +5,20 @@ trust model: password credentials stay on the device and connect directly to
 the mail provider. Create an `@pqpost.com` account through onboarding or add
 IMAP/SMTP credentials manually.
 
+## Test emails and payments
+
+In **Settings → Test mail**, enable **Test emails and payments** and accept the
+warning. Cancelling or dismissing the warning leaves the setting off. This
+option is available in development and release builds and defaults to off.
+
+When enabled, **Create EBP email** asks you to choose **pqpost.com** or
+**test.pqpost.com** before choosing a username, for both new and existing
+identities. Short test names (3–8 characters) follow the test checkout flow;
+names with 9 or more characters skip payment. Payment confirmation is required
+before creating a paid mailbox. Only Ethereum Sepolia and Cardano preview test
+funds are supported. Never send real cryptocurrency to testnet payment addresses.
+Test payments do not purchase a production address.
+
 ## Libraries
 
 | Concern | Choice | Notes |

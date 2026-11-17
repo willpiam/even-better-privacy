@@ -166,6 +166,7 @@ export function isAlreadyHasMailboxError(message: string, status?: number): bool
 
 export type OnboardingWizardStep =
   | 'welcome'
+  | 'domain'
   | 'address'
   | 'password'
   | 'unlock'
@@ -179,11 +180,18 @@ export type OnboardingWizardStep =
  * An existing identity keeps the username step, unlocks with its password,
  * and skips the new-password, phrase, and confirm steps.
  */
-export function wizardSteps(useExisting: boolean): OnboardingWizardStep[] {
-  if (useExisting) {
-    return ['welcome', 'address', 'unlock', 'create', 'done'];
-  }
-  return ['welcome', 'address', 'password', 'phrase', 'confirm', 'create', 'done'];
+export function wizardSteps(
+  useExisting: boolean,
+  testMailEnabled = false,
+): OnboardingWizardStep[] {
+  return [
+    'welcome',
+    ...(testMailEnabled ? ['domain' as const] : []),
+    'address',
+    ...(useExisting ? ['unlock' as const] : ['password' as const, 'phrase' as const, 'confirm' as const]),
+    'create',
+    'done',
+  ];
 }
 
 /** True when `email` is exactly `local@domain` (domain match is exact, case-insensitive). */
