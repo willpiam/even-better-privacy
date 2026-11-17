@@ -7,6 +7,7 @@ import {
   getMailSecretsInMemory,
   getMailSecretsStatus,
 } from '../src/services/mail/accountStore';
+import {useIdentityUnlock} from '../src/hooks/useIdentityUnlock';
 import {lookupVerifiedManagedEmail} from '../src/services/mail/ebpSignup';
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
@@ -31,10 +32,10 @@ jest.mock('../src/services/settings', () => ({
   getServerUrl: async () => 'https://example.com',
 }));
 jest.mock('../src/hooks/useIdentityUnlock', () => ({
-  useIdentityUnlock: () => ({
+  useIdentityUnlock: jest.fn(() => ({
     ensureUnlocked: async () => false,
     unlockPrompt: null,
-  }),
+  })),
 }));
 jest.mock('../src/hooks/useSecretPrompt', () => ({
   useSecretPrompt: () => ({promptSecret: jest.fn(), secretPrompt: null}),
@@ -63,14 +64,12 @@ it.each([
       .mocked(lookupVerifiedManagedEmail)
       .mockResolvedValue(verified ? 'me@example.com' : null);
     if (local) {
-      jest
-        .mocked(readMailStore)
-        .mockResolvedValue({
-          accounts: [
-            {id: 'mail', name: 'Mail', config: {fromEmail: 'me@example.com'}},
-          ],
-          selectedAccountId: 'mail',
-        } as never);
+      jest.mocked(readMailStore).mockResolvedValue({
+        accounts: [
+          {id: 'mail', name: 'Mail', config: {fromEmail: 'me@example.com'}},
+        ],
+        selectedAccountId: 'mail',
+      } as never);
       jest
         .mocked(getMailSecretsInMemory)
         .mockReturnValue({imapPassword: 'secret', smtpPassword: 'secret'});
@@ -92,3 +91,28 @@ it.each([
     await act(async () => tree.unmount());
   },
 );
+
+it('prompts before server lookup completes', async () => {
+  const ensureUnlocked = jest.fn(async () => null);
+  jest
+    .mocked(useIdentityUnlock)
+    .mockReturnValue({ensureUnlocked, unlockPrompt: null as never});
+  jest
+    .mocked(getMailSecretsStatus)
+    .mockResolvedValue({locked: true, inMemory: false});
+  jest
+    .mocked(lookupVerifiedManagedEmail)
+    .mockReturnValue(new Promise(() => {}));
+  let tree!: renderer.ReactTestRenderer;
+  await act(async () => {
+    tree = renderer.create(
+      <MailAccountsScreen
+        navigation={{navigate: jest.fn()} as never}
+        route={{key: 'accounts', name: 'MailAccounts'}}
+      />,
+    );
+  });
+  expect(ensureUnlocked).toHaveBeenCalledTimes(1);
+  expect(ensureUnlocked).toHaveBeenCalledWith('Personal');
+  await act(async () => tree.unmount());
+});

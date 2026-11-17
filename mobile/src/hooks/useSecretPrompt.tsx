@@ -1,4 +1,4 @@
-import React, {useCallback, useMemo, useRef, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PasswordModal from '../components/PasswordModal';
 
 export type SecretPromptOptions = {
@@ -6,6 +6,8 @@ export type SecretPromptOptions = {
   placeholder?: string;
   submitLabel?: string;
   secureTextEntry?: boolean;
+  biometricUnlock?: () => Promise<string | null>;
+  onBiometricEnrollmentChange?: (enabled: boolean) => void;
 };
 
 type Pending = {
@@ -23,6 +25,14 @@ export function useSecretPrompt(): {
 } {
   const [pending, setPending] = useState<Pending | null>(null);
   const pendingRef = useRef<Pending | null>(null);
+
+  useEffect(
+    () => () => {
+      pendingRef.current?.resolve(null);
+      pendingRef.current = null;
+    },
+    [],
+  );
 
   const promptSecret = useCallback((options: SecretPromptOptions) => {
     return new Promise<string | null>(resolve => {
@@ -50,6 +60,19 @@ export function useSecretPrompt(): {
         placeholder={pending?.options.placeholder}
         submitLabel={pending?.options.submitLabel}
         secureTextEntry={pending?.options.secureTextEntry ?? true}
+        biometricUnlock={
+          pending?.options.biometricUnlock
+            ? async () => {
+                const current = pending;
+                const value = await current.options.biometricUnlock!();
+                if (value !== null && pendingRef.current === current)
+                  close(value);
+              }
+            : undefined
+        }
+        onBiometricEnrollmentChange={
+          pending?.options.onBiometricEnrollmentChange
+        }
         onCancel={() => close(null)}
         onSubmit={value => close(value)}
       />

@@ -51,7 +51,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
   const promptedThisFocus = useRef(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (onLocked?: () => void) => {
     const name = await getCurrentIdentityRequired();
     setIdentityName(name);
     const store = await readMailStore(name);
@@ -64,7 +64,10 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       })),
     );
     const secretStatus = await getMailSecretsStatus(name);
-    setSecretsLocked(secretStatus.locked && !secretStatus.inMemory);
+    const locked = secretStatus.locked && !secretStatus.inMemory;
+    setSecretsLocked(locked);
+    // Unlock is a local decision; server discovery must not delay the prompt.
+    if (locked) onLocked?.();
     try {
       setNeedsRestore(false);
       const server = await getServerUrl();
@@ -125,12 +128,17 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       let cancelled = false;
       promptedThisFocus.current = false;
       void (async () => {
-        const locked = await refreshRef.current();
-        if (cancelled || !locked || promptedThisFocus.current) {
-          return;
+        try {
+          await refreshRef.current(() => {
+            if (cancelled || promptedThisFocus.current) return;
+            promptedThisFocus.current = true;
+            void requestIdentityUnlockRef.current();
+          });
+        } catch (error) {
+          if (!cancelled) {
+            setStatus(error instanceof Error ? error.message : String(error));
+          }
         }
-        promptedThisFocus.current = true;
-        await requestIdentityUnlockRef.current();
       })();
       return () => {
         cancelled = true;

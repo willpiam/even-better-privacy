@@ -11,6 +11,10 @@ import {
 } from '../src/services/storage';
 import {unlockMailWithIdentityPassword} from '../src/services/mail/accountStore';
 
+jest.mock('../src/services/biometricUnlock', () => ({
+  disableBiometricUnlock: jest.fn(async () => {}),
+}));
+
 const mockFiles = new Map<string, string>();
 jest.mock('react-native', () => ({
   NativeModules: {

@@ -1,4 +1,11 @@
 import {useCallback, useEffect} from 'react';
+import {Alert} from 'react-native';
+import {
+  enableBiometricUnlock,
+  getBiometricUnlockStatus,
+  readBiometricPassword,
+  disableBiometricUnlock,
+} from '../services/biometricUnlock';
 import {useSecretPrompt} from './useSecretPrompt';
 import {
   getMailSecretsStatus,
@@ -33,13 +40,51 @@ export function useIdentityUnlock(): {
         !isUnlocked(identityName) ||
         (!mailStatus.locked && !getMailPinInMemory(identityName))
       ) {
+        const biometrics = await getBiometricUnlockStatus(identityName);
+        let enrollBiometrics = false;
+        let unlockedWithBiometrics = false;
         const password = await promptSecret({
           title: 'Unlock identity',
           placeholder: 'Identity password',
           submitLabel: 'Unlock',
+          biometricUnlock: biometrics.enabled
+            ? async () => {
+                const secret = await readBiometricPassword(identityName);
+                if (secret === null) return null;
+                try {
+                  await unlockIdentity(identityName, secret);
+                } catch (error) {
+                  if (
+                    error instanceof Error &&
+                    error.message === 'Wrong password'
+                  ) {
+                    await disableBiometricUnlock(identityName).catch(() => {});
+                  }
+                  throw error;
+                }
+                unlockedWithBiometrics = true;
+                return secret;
+              }
+            : undefined,
+          onBiometricEnrollmentChange: biometrics.available
+            ? enabled => {
+                enrollBiometrics = enabled;
+              }
+            : undefined,
         });
         if (password === null) return null;
-        await unlockIdentity(identityName, password);
+        if (!unlockedWithBiometrics)
+          await unlockIdentity(identityName, password);
+        if (enrollBiometrics) {
+          try {
+            await enableBiometricUnlock(identityName, password);
+          } catch {
+            Alert.alert(
+              'Biometrics unavailable',
+              'Identity unlocked. Biometric setup failed; you can try again next time.',
+            );
+          }
+        }
       }
       if ((await getMailSecretsStatus(identityName)).locked) {
         throw new Error(

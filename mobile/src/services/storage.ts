@@ -1,3 +1,4 @@
+import {disableBiometricUnlock} from './biometricUnlock';
 import {clearMailDataCache} from './mail/mailCache';
 import RNFS from 'react-native-fs';
 import {writeFileAtomic} from './atomicFile';
@@ -51,12 +52,14 @@ async function writeIdentityStorage(
   path: string,
   identity: Identity,
   password: string,
+  name: string,
 ): Promise<string> {
   if (!password) throw new Error('Password is required');
   const salt = randomBytes(16);
   const key = await deriveIdentityKey(passwordBytes(password), salt);
   try {
     const storageData = identity.toStorageFormatWithKey(key, salt);
+    await disableBiometricUnlock(name);
     await writeFileAtomic(path, storageData);
     return storageData;
   } finally {
@@ -153,6 +156,7 @@ export async function persistIdentity(params: {
     path,
     params.identity,
     params.password,
+    name,
   );
   const publicData = Identity.readPublicData(storageData);
   if (!publicData) {
@@ -363,6 +367,8 @@ export async function importIdentity(params: {
   if (exists && !params.overwrite) {
     throw new Error('Identity already exists; enable overwrite to replace');
   }
+  await disableBiometricUnlock(name);
+  lockIdentitySession(name);
   await writeFileAtomic(path, params.storageJson);
   return publicDataToMeta(name, publicData);
 }
@@ -374,6 +380,7 @@ export async function deleteIdentity(name: string): Promise<void> {
   if (!(await RNFS.exists(path))) {
     throw new Error('Identity not found');
   }
+  await disableBiometricUnlock(normalized);
   await RNFS.unlink(path);
   lockIdentitySession(normalized);
   const current = await getCurrentIdentity();
@@ -399,7 +406,7 @@ export async function saveIdentity(
 ): Promise<void> {
   await ensureAppDirs();
   const path = identityPath(normalizeName(name));
-  await writeIdentityStorage(path, identity, password);
+  await writeIdentityStorage(path, identity, password, normalizeName(name));
 }
 
 export async function getCurrentIdentityRequired(): Promise<string> {

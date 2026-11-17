@@ -1,5 +1,5 @@
 import React, {useEffect, useState} from 'react';
-import {Modal, StyleSheet, Text, TextInput, View} from 'react-native';
+import {Modal, StyleSheet, Switch, Text, TextInput, View} from 'react-native';
 import AppButton from './AppButton';
 import {colors, radius, spacing, typography} from '../theme/tokens';
 import {usePlaceTheme} from '../theme/PlaceTheme';
@@ -13,25 +13,33 @@ export default function PasswordModal({
   secureTextEntry = true,
   onCancel,
   onSubmit,
+  biometricUnlock,
+  onBiometricEnrollmentChange,
 }: {
   visible: boolean;
   title?: string;
   placeholder?: string;
   submitLabel?: string;
   secureTextEntry?: boolean;
+  biometricUnlock?: () => Promise<void>;
+  onBiometricEnrollmentChange?: (enabled: boolean) => void;
   onCancel: () => void;
   onSubmit: (password: string) => void;
 }): JSX.Element {
   const theme = usePlaceTheme();
   const [password, setPassword] = useState('');
+  const [enrollBiometrics, setEnrollBiometrics] = useState(false);
+  const [biometricBusy, setBiometricBusy] = useState(false);
+  const [biometricError, setBiometricError] = useState('');
 
   useEffect(() => {
-    if (visible) {
-      setPassword('');
-    }
+    setPassword('');
+    setEnrollBiometrics(false);
+    setBiometricError('');
   }, [visible]);
 
   const submit = () => {
+    if (biometricBusy) return;
     onSubmit(password);
     setPassword('');
   };
@@ -46,7 +54,7 @@ export default function PasswordModal({
       visible={visible}
       transparent
       animationType="fade"
-      onRequestClose={cancel}>
+      onRequestClose={biometricBusy ? () => {} : cancel}>
       <View style={styles.overlay}>
         <View style={styles.modal}>
           <View style={[styles.mark, {backgroundColor: theme.pale}]}>
@@ -57,6 +65,7 @@ export default function PasswordModal({
             testID="password-modal-input"
             accessibilityLabel={placeholder}
             style={[styles.input, {borderColor: theme.border}]}
+            editable={!biometricBusy}
             value={password}
             onChangeText={setPassword}
             secureTextEntry={secureTextEntry}
@@ -64,13 +73,52 @@ export default function PasswordModal({
             placeholderTextColor={colors.muted}
             autoCapitalize="none"
             autoCorrect={false}
-            autoFocus
+            autoFocus={!biometricUnlock}
             keyboardType={secureTextEntry ? 'default' : 'email-address'}
             onSubmitEditing={submit}
           />
+          {biometricUnlock ? (
+            <AppButton
+              title="Use biometrics"
+              variant="secondary"
+              testID="identity-biometric-unlock"
+              disabled={biometricBusy}
+              onPress={() => {
+                setBiometricBusy(true);
+                setBiometricError('');
+                void biometricUnlock()
+                  .catch(() =>
+                    setBiometricError(
+                      'Biometric unlock failed. Use your password or try again.',
+                    ),
+                  )
+                  .finally(() => setBiometricBusy(false));
+              }}
+            />
+          ) : null}
+          {onBiometricEnrollmentChange ? (
+            <View style={styles.row}>
+              <Text style={styles.enrollmentLabel}>
+                Set up biometric unlock
+              </Text>
+              <Switch
+                accessibilityLabel="Set up biometric unlock"
+                disabled={biometricBusy}
+                value={enrollBiometrics}
+                onValueChange={enabled => {
+                  setEnrollBiometrics(enabled);
+                  onBiometricEnrollmentChange(enabled);
+                }}
+              />
+            </View>
+          ) : null}
+          {biometricError ? (
+            <Text accessibilityRole="alert">{biometricError}</Text>
+          ) : null}
           <View style={styles.row}>
             <AppButton
               title="Cancel"
+              disabled={biometricBusy}
               variant="secondary"
               onPress={cancel}
               style={styles.flex}
@@ -78,6 +126,7 @@ export default function PasswordModal({
             />
             <AppButton
               title={submitLabel}
+              disabled={biometricBusy}
               onPress={submit}
               style={styles.flex}
               testID="password-modal-submit"
@@ -130,4 +179,5 @@ const styles = StyleSheet.create({
   },
   row: {flexDirection: 'row', gap: 8},
   flex: {flex: 1},
+  enrollmentLabel: {flex: 1, color: colors.text, alignSelf: 'center'},
 });
