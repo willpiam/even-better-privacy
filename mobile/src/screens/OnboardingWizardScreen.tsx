@@ -44,7 +44,7 @@ import {
   type OnboardingWizardStep,
   type PaymentAsset,
 } from '../services/mail/ebpSignupLogic';
-import {colors} from '../theme/tokens';
+import {colors, spacing} from '../theme/tokens';
 import FoxArt, {FoxMotion} from '../components/FoxArt';
 
 type Step = OnboardingWizardStep;
@@ -481,7 +481,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
     <Screen scroll>
       {secretPrompt}
       {step === 'welcome' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <View style={styles.welcomeArt}>
             <FoxArt place="compose" size={180} />
           </View>
@@ -523,7 +523,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'domain' && testMailEnabled ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Choose your email domain</Text>
           <Text style={styles.hint}>
             Use pqpost.com for a real email address, or test.pqpost.com to try
@@ -558,7 +558,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'address' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Choose your address</Text>
           {useExisting ? (
             <Text style={styles.hint}>
@@ -588,7 +588,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
             {usernameHint}
           </Text>
           {paid && assets.length ? (
-            <View testID="onboarding-payment-assets">
+            <View style={styles.stack} testID="onboarding-payment-assets">
               <Text style={styles.hint}>Payment asset</Text>
               {assets.map((asset, index) => (
                 <AppButton
@@ -622,7 +622,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'unlock' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Unlock this identity</Text>
           <Text style={styles.hint}>
             Enter the password for {identityName}. It stays on this device and
@@ -646,7 +646,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'password' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Set a password</Text>
           <Text style={styles.hint}>
             This password unlocks your keys and mail on this device. It never
@@ -677,7 +677,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'phrase' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Save your recovery phrase</Text>
           <Text style={styles.hint}>
             Write these 24 words down in order and keep them somewhere safe.
@@ -701,7 +701,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'confirm' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Confirm your recovery phrase</Text>
           {quiz.map(index => (
             <TextField
@@ -725,7 +725,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'create' ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>Setting things up</Text>
           {taskKeys.some(key => tasks[key] === 'running') ? (
             <View style={styles.welcomeArt}>
@@ -750,7 +750,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
             kind="error"
           />
           {awaitingPayment && checkoutUrl ? (
-            <View testID="onboarding-checkout">
+            <View style={styles.stack} testID="onboarding-checkout">
               <Text style={styles.hint}>{checkoutMessage}</Text>
               <Text style={styles.fingerprint} selectable testID="onboarding-checkout-url">
                 {checkoutUrl}
@@ -817,7 +817,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       ) : null}
 
       {step === 'done' && result ? (
-        <Card padded>
+        <Card padded style={styles.stack}>
           <Text style={styles.title}>
             {restored ? 'Mailbox access restored' : "You're all set"}
           </Text>
@@ -854,6 +854,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
 }
 
 const styles = StyleSheet.create({
+  stack: {gap: spacing.md},
   welcomeArt: {alignItems: 'center'},
   title: {fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8},
   body: {fontSize: 14, color: colors.text, lineHeight: 20, marginBottom: 12},
