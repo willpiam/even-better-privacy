@@ -101,6 +101,48 @@ On Ubuntu 22.04, start Metro with **Node 22+** (`nvm use 22`) if system Node
 is too old for React Native 0.84, then:
 `MOBILE_E2E_SKIP_METRO=1 deno task test:e2e:mobile`.
 
+## Background process-death regression (Android)
+
+Run this check on an installed standalone release APK. It reproduces Android
+reclaiming an idle app while retaining its task, without waiting for memory
+pressure. Ordinary `launchApp` / force-stop tests do not exercise this path.
+
+1. Open EBP and navigate to **More → Settings** so native navigation fragments
+   exist. Note an existing identity or setting to check afterward.
+2. Press Home and wait for EBP to finish moving to the background. Keep its task
+   in Recents; do not swipe it away.
+3. Kill only its background process, then check that it is gone:
+
+   ```bash
+   adb shell am kill com.mobile
+   adb shell pidof com.mobile
+   ```
+
+   `pidof` must print nothing (a nonzero exit is expected). If it still prints a
+   PID, ensure EBP is in the background, wait briefly, and repeat this step.
+4. Open EBP **once** from its launcher icon, or use the equivalent intent:
+
+   ```bash
+   adb shell am start -W -a android.intent.action.MAIN \
+     -c android.intent.category.LAUNCHER -n com.mobile/.MainActivity
+   ```
+
+5. Verify that EBP stays open on the first attempt, its tabs work, and the saved
+   identity/settings remain. Repeat from another tab and from a nested screen.
+   A new process starts a new unlock session and may return to the initial tab.
+
+Before the fix, this can crash with `Screen fragments should never be restored`
+or `ScreenStack fragments should never be restored`. Inspect the crash buffer
+with `adb logcat -b crash -d` and check its timestamp and `com.mobile` process;
+old crash records can remain after a successful retest.
+
+`MainActivity.onCreate` must install `RNScreensFragmentFactory` **before**
+`super.onCreate(savedInstanceState)`; see the Android installation instructions
+for [react-native-screens 4.24.0](https://github.com/software-mansion/react-native-screens/blob/4.24.0/README.md#android).
+The factory lets React Navigation rebuild its screens instead of restoring
+stale native fragments. This is a native change: rebuild and replace the APK
+with `./build_mobile_android.sh --skip-npm --install` after installing dependencies.
+
 ## Development tools
 
 Release builds omit Developer, Diagnostics, Mail trace, and the test-address toggle.
