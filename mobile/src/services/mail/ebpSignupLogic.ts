@@ -274,7 +274,7 @@ export function managedMailboxRestoreHint(email: string): string {
 }
 
 export const TEST_MAIL_DOMAIN = 'test.pqpost.com';
-export const PRODUCTION_KEY_SERVER = 'https://ebp-cqyo.onrender.com';
+export const PRODUCTION_KEY_SERVER = 'https://keys.pqpost.com';
 export const TEST_CHECKOUT_ORIGIN = 'https://test.pqpost.com';
 export const MAIL_TEST_MODE_HEADER = 'x-ebp-mail-mode';
 const TEST_PAYMENT_NETWORKS = new Set(['ethereum-sepolia', 'cardano-preview']);

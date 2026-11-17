@@ -4,7 +4,7 @@ import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind, cip30LovelaceAmount } 
 const localTest = location.origin === "http://127.0.0.1:8789";
 const apiOrigin = localTest ? location.origin
   : location.hostname === "pqpost.com" || location.hostname === "test.pqpost.com"
-    ? "https://ebp-cqyo.onrender.com"
+    ? "https://keys.pqpost.com"
     : "";
 let id = "";
 try { id = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid link */ }

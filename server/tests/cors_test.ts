@@ -2,19 +2,19 @@ import { assertEquals } from "jsr:@std/assert@^1.0.6";
 
 Deno.test("isOriginAllowed permits same-origin Host match used by verify-email page", async () => {
   Deno.env.set("ALLOWED_ORIGINS", "http://127.0.0.1:8787");
-  Deno.env.set("PUBLIC_BASE_URL", "https://ebp-cqyo.onrender.com");
+  Deno.env.set("PUBLIC_BASE_URL", "https://keys.pqpost.com");
 
   const { isOriginAllowed } = await import(`../cors.ts?cache=${crypto.randomUUID()}`);
 
   const req = new Request("http://0.0.0.0:10000/api/v1/verify-email", {
     method: "POST",
     headers: {
-      host: "ebp-cqyo.onrender.com",
-      origin: "https://ebp-cqyo.onrender.com",
+      host: "keys.pqpost.com",
+      origin: "https://keys.pqpost.com",
     },
   });
 
-  assertEquals(isOriginAllowed("https://ebp-cqyo.onrender.com", req), true);
+  assertEquals(isOriginAllowed("https://keys.pqpost.com", req), true);
   assertEquals(isOriginAllowed("https://evil.example", req), false);
   assertEquals(isOriginAllowed("http://127.0.0.1:8787", req), true);
 });

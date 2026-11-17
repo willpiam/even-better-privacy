@@ -1,4 +1,4 @@
-export const DEFAULT_SERVER_URL = "https://ebp-cqyo.onrender.com";
+export const DEFAULT_SERVER_URL = "https://keys.pqpost.com";
 export const LOCAL_BACKEND_ORIGIN = "http://127.0.0.1:8787";
 export const MAIL_RENDER_HTML_PREF_KEY = "ebp.mail.renderHtml";
 export const MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY = "ebp.mail.includePublicKeys";

@@ -2,7 +2,7 @@
 title: "EBP Website"
 type: component
 status: active
-last_updated: 2026-11-14
+last_updated: 2026-11-17
 source_count: 8
 tags:
   - component
@@ -36,7 +36,7 @@ Presents EBP as a "practical successor to PGP, built for the next era of cryptog
 
 ## Signature Verifier (`verify.html`)
 
-A client-side tool that verifies EBP signatures **locally** in the browser using `@noble/post-quantum` and `@noble/hashes` ESM bundles loaded from `esm.sh`. The configured EBP server is consulted only to resolve a published public identity by fingerprint (`GET /api/v1/identity/{fingerprint}`) and, optionally, to provide an advisory cross-check (`POST /api/v1/verify-signature`); the authoritative verified/invalid result always comes from the local cryptographic check. Default server URL: `https://ebp-cqyo.onrender.com`.
+A client-side tool that verifies EBP signatures **locally** in the browser using `@noble/post-quantum` and `@noble/hashes` ESM bundles loaded from `esm.sh`. The configured EBP server is consulted only to resolve a published public identity by fingerprint (`GET /api/v1/identity/{fingerprint}`) and, optionally, to provide an advisory cross-check (`POST /api/v1/verify-signature`); the authoritative verified/invalid result always comes from the local cryptographic check. Default server URL: `https://keys.pqpost.com`.
 
 This client-side posture is the fix for finding F-WEB-01 in the [[security-audit-2026-04/findings|April 2026 security audit]] — see [[security-audit-2026-04/phase-05-cli-website-tauri]].
 

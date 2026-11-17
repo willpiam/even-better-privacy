@@ -65,16 +65,16 @@ Deno.test("test mode on the production server serves only the test domain", () =
     assertEquals(readTestPaymentConfig()?.assets[0].network, "ethereum-mainnet");
     assertEquals(paymentConfigForSettings(mailSettingsForMode("test")), null);
 
-    const request = new Request("https://ebp-cqyo.onrender.com/api/v1/mail/signup/config", {
+    const request = new Request("https://keys.pqpost.com/api/v1/mail/signup/config", {
       headers: { "x-ebp-mail-mode": "test" },
     });
     assertEquals(mailModeFromRequest(request), "test");
     assertEquals(
-      mailModeFromRequest(new Request("https://ebp-cqyo.onrender.com/api/v1/mail/signup/config?mode=test")),
+      mailModeFromRequest(new Request("https://keys.pqpost.com/api/v1/mail/signup/config?mode=test")),
       "test",
     );
     assertEquals(
-      mailModeFromRequest(new Request("https://ebp-cqyo.onrender.com/api/v1/mail/signup/config")),
+      mailModeFromRequest(new Request("https://keys.pqpost.com/api/v1/mail/signup/config")),
       "production",
     );
   } finally {

@@ -43,7 +43,7 @@ Deno.test("short production names stay blocked and mainnet payment orders are re
     }));
 
     const availability = await handleMailUsernameAvailable(
-      new URL("https://ebp-cqyo.onrender.com/api/v1/mail/username-available?u=abc"),
+      new URL("https://keys.pqpost.com/api/v1/mail/username-available?u=abc"),
       db,
     );
     const body = await availability.json();
@@ -51,7 +51,7 @@ Deno.test("short production names stay blocked and mainnet payment orders are re
     assertEquals(body.purchasable, undefined);
     assertEquals(body.reason.includes("not available"), true);
 
-    const created = await handlePaymentCreate(new Request("https://ebp-cqyo.onrender.com/api/v1/mail/payment/order", {
+    const created = await handlePaymentCreate(new Request("https://keys.pqpost.com/api/v1/mail/payment/order", {
       method: "POST",
       body: "{}",
     }), db);
@@ -65,7 +65,7 @@ Deno.test("short production names stay blocked and mainnet payment orders are re
       unit: "native",
       decimals: 18,
     }]));
-    const mainnet = await handlePaymentCreate(new Request("https://ebp-cqyo.onrender.com/api/v1/mail/payment/order", {
+    const mainnet = await handlePaymentCreate(new Request("https://keys.pqpost.com/api/v1/mail/payment/order", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

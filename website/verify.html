@@ -7,10 +7,10 @@
     F-WEB-01 / F-WEB-03: strict Content-Security-Policy. The verifier
     uses a local, pinned bundle for browser-side signature verification;
     `connect-src` allows the configured server (default:
-    ebp-cqyo.onrender.com). Inline scripts and styles are forbidden.
+    keys.pqpost.com). Inline scripts and styles are forbidden.
   -->
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://ebp-cqyo.onrender.com; form-action 'self'; base-uri 'none'">
+    content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' https://raw.githubusercontent.com; connect-src 'self' https://keys.pqpost.com; form-action 'self'; base-uri 'none'">
   <meta http-equiv="X-Content-Type-Options" content="nosniff">
   <meta http-equiv="Referrer-Policy" content="no-referrer">
   <title>EBP Signature Verifier</title>
@@ -48,7 +48,7 @@
       <div class="form-grid">
         <label>
           Server URL
-          <input id="server-url" type="text" value="https://ebp-cqyo.onrender.com" />
+          <input id="server-url" type="text" value="https://keys.pqpost.com" />
           <small class="input-help">First request may take a moment if the server is waking up.</small>
         </label>
         <label>

@@ -2,7 +2,7 @@
 title: "Querying the live key-server database"
 type: analysis
 status: active
-last_updated: 2026-07-28
+last_updated: 2026-11-17
 source_count: 3
 tags:
   - analysis
@@ -19,7 +19,7 @@ From a developer workstation, query the live key-server Postgres (Render) with t
 
 ## What the live DB is
 
-[[component-server]] stores publish/discovery state in SQLite (local default) or PostgreSQL (`DB_TYPE=psql`). Production is Postgres on Render (`ebp-cqyo.onrender.com` is the public API host referenced in project docs).
+[[component-server]] stores publish/discovery state in SQLite (local default) or PostgreSQL (`DB_TYPE=psql`). Production is Postgres on Render (`keys.pqpost.com` is the public API host referenced in project docs).
 
 ## Already set up
 

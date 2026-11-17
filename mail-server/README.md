@@ -294,8 +294,11 @@ keys on the key server. Use only a receiving wallet and wallet infrastructure
 capable of handling the required on-chain message and token transactions.
 
 The production checkout expects its key server at
-`https://ebp-cqyo.onrender.com`. `https://pqpost.com` and
-`https://test.pqpost.com` may call that server. For payment testing, use
+`https://keys.pqpost.com`. `https://pqpost.com` and
+`https://test.pqpost.com` may call that server. Set the Render service's
+`PUBLIC_BASE_URL=https://keys.pqpost.com` so verification emails use the
+custom domain. If `EXPECTED_HOSTS` is configured, include `keys.pqpost.com`.
+For payment testing, use
 the local test server described above, which serves checkout at
 `http://127.0.0.1:8789/checkout.html` and uses the existing Stalwart service
 for `test.pqpost.com`. Configure test assets with `ethereum-sepolia` and/or

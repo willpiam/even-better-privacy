@@ -14,7 +14,7 @@ Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
 ## Installation
 
 All released application files will come with an EBP signature from
-[ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99](https://ebp-cqyo.onrender.com/api/v1/identity/ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99)
+[ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99](https://keys.pqpost.com/api/v1/identity/ebpdk1m6l96sg6xpwcspl5yn9zph8j82x7ujsuuwl5gwqhctgmndjtvvjq5vwp99)
 
 ### For Linux
 
@@ -61,7 +61,7 @@ to get EBP up and running on your system.
 2. navigate to [http://localhost:8787](http://localhost:8787) (or wherever the
    terminal points you to) in your browser
 3. click on settings
-4. Set _server url_ to https://ebp-cqyo.onrender.com
+4. Set _server url_ to https://keys.pqpost.com
 
 ### Build locally
 

@@ -144,7 +144,7 @@ Deno.test("payment live test exercises a short test mailbox and cleans it up", a
   const before = calls.length;
   await assertRejects(() =>
     runPaymentE2e(
-      { ...config, keyServer: "https://ebp-cqyo.onrender.com" },
+      { ...config, keyServer: "https://keys.pqpost.com" },
       "cardano-preview",
       "ADA",
       { api, identityFactory },
