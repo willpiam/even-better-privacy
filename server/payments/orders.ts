@@ -228,6 +228,19 @@ export async function getConfirmedPaymentOrder(
   return rows[0] ? fromRow(rows[0]) : null;
 }
 
+export async function getActivePaymentOrderId(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  now: number,
+): Promise<string | undefined> {
+  const rows = await db.query<[string]>(
+    `SELECT order_id FROM mail_payment_orders WHERE identity_fingerprint = ? AND active = 1
+      AND (status = 'confirmed' OR (status IN ('quoted', 'pending') AND grace_until > ?))`,
+    [fingerprint, now],
+  );
+  return rows[0]?.[0];
+}
+
 /** The conditional update competes atomically with transaction submission. */
 export async function cancelUnpaidPaymentOrder(
   db: DatabaseAdapter,
@@ -261,32 +274,32 @@ export async function submitPaymentTransaction(
 ): Promise<boolean> {
   const hash = transactionId.toLowerCase().replace(/^0x/, "");
   if (!/^[0-9a-f]{64}$/.test(hash)) return false;
-  try {
-    return await db.writeTransaction(async (tx) => {
-      const order = await getPaymentOrder(tx, orderId);
-      if (!order || order.fingerprint !== fingerprint) return false;
-      const hashes = await paymentTransactionIds(tx, order);
-      if (hashes.includes(hash)) return true;
-      if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;
+  return await db.writeTransaction(async (tx) => {
+    const order = await getPaymentOrder(tx, orderId);
+    if (!order || order.fingerprint !== fingerprint) return false;
+    const hashes = await paymentTransactionIds(tx, order);
+    if (hashes.includes(hash)) return true;
+    if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;
 
-      const rows = await tx.query<[string]>(
-        `UPDATE mail_payment_orders SET transaction_id = ?, status = 'pending'
-        WHERE order_id = ? AND active = 1 AND status IN ('quoted', 'pending') AND grace_until > ?
-        RETURNING order_id`,
-        [hash, orderId, now],
-      );
-      if (!rows.length) return false;
-      await tx.query(
-        `INSERT INTO mail_payment_transactions (order_id, network, transaction_id, submitted_at)
-        VALUES (?, ?, ?, ?)`,
-        [orderId, order.network, hash, now],
-      );
-      return true;
-    }, `identity:${fingerprint}`);
-  } catch (err) {
-    if (/unique|duplicate/i.test(String(err))) return false;
-    throw err;
-  }
+    const rows = await tx.query<[string]>(
+      `UPDATE mail_payment_orders SET transaction_id = ?, status = 'pending'
+      WHERE order_id = ? AND active = 1 AND status IN ('quoted', 'pending') AND grace_until > ?
+        AND NOT EXISTS (
+          SELECT 1 FROM mail_payment_orders AS credited
+          WHERE credited.network = ? AND credited.transaction_id = ?
+            AND credited.transaction_id IS NOT NULL AND credited.status IN ('confirmed', 'fulfilled')
+        )
+      RETURNING order_id`,
+      [hash, orderId, now, order.network, hash],
+    );
+    if (!rows.length) return false;
+    await tx.query(
+      `INSERT INTO mail_payment_candidates (order_id, transaction_id, submitted_at)
+      VALUES (?, ?, ?)`,
+      [orderId, hash, now],
+    );
+    return true;
+  }, `identity:${fingerprint}`);
 }
 
 export async function paymentTransactionIds(
@@ -294,7 +307,7 @@ export async function paymentTransactionIds(
   order: StoredOrder,
 ): Promise<string[]> {
   const rows = await db.query<[string]>(
-    `SELECT transaction_id FROM mail_payment_transactions
+    `SELECT transaction_id FROM mail_payment_candidates
     WHERE order_id = ? ORDER BY submitted_at DESC, transaction_id`,
     [order.orderId],
   );
@@ -318,8 +331,13 @@ export async function confirmPaymentOrder(
     `UPDATE mail_payment_orders SET status = ?, active = ?, transaction_id = ?
     WHERE order_id = ? AND status = 'pending' AND active = 1 AND grace_until > ?
       AND (transaction_id = ? OR EXISTS (
-        SELECT 1 FROM mail_payment_transactions WHERE order_id = ? AND transaction_id = ?
+        SELECT 1 FROM mail_payment_candidates WHERE order_id = ? AND transaction_id = ?
       ))
+      AND NOT EXISTS (
+        SELECT 1 FROM mail_payment_orders AS credited
+        WHERE credited.network = mail_payment_orders.network AND credited.transaction_id = ?
+          AND credited.transaction_id IS NOT NULL AND credited.status IN ('confirmed', 'fulfilled')
+      )
     RETURNING order_id`,
     [
       status,
@@ -329,6 +347,7 @@ export async function confirmPaymentOrder(
       now,
       hash,
       orderId,
+      hash,
       hash,
     ],
   );

@@ -1,6 +1,9 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
-import { PAYMENT_ORDER_SCHEMA_UPDATES } from "../db/payment-schema.ts";
+import {
+  MIGRATE_PAYMENT_CANDIDATES,
+  PAYMENT_ORDER_SCHEMA_UPDATES,
+} from "../db/payment-schema.ts";
 import { handlePaymentCancel } from "../handlers/mail-payment.ts";
 import {
   cancelUnpaidPaymentOrder,
@@ -115,14 +118,17 @@ Deno.test({
         fingerprint: "two",
       };
       assertEquals(await reservePaymentOrder(db, another, 100), true);
+      // Filing the same unverified receipt on a different order must not block payment.
       assertEquals(
-        await submitPaymentTransaction(
-          db,
-          "order2",
-          "two",
-          "a".repeat(64),
-          150,
-        ),
+        await submitPaymentTransaction(db, "order2", "two", firstHash, 250),
+        true,
+      );
+      assertEquals(
+        await confirmPaymentOrder(db, "order1", firstHash, 250),
+        true,
+      );
+      assertEquals(
+        await confirmPaymentOrder(db, "order2", firstHash, 251),
         false,
       );
       assertEquals(
@@ -131,11 +137,7 @@ Deno.test({
           (await getPaymentOrder(db, "order2"))!,
           300,
         )).status,
-        "expired",
-      );
-      assertEquals(
-        await confirmPaymentOrder(db, "order1", "a".repeat(64), 250),
-        true,
+        "manual_review",
       );
       await expirePaymentOrders(db, 300);
       assertEquals((await getPaymentOrder(db, "order1"))?.status, "confirmed");
@@ -153,7 +155,10 @@ Deno.test({
         ),
         true,
       );
-      assertEquals((await getPaymentOrder(db, "order2"))?.status, "expired");
+      assertEquals(
+        (await getPaymentOrder(db, "order2"))?.status,
+        "manual_review",
+      );
       assertEquals(
         await reservePaymentOrder(db, {
           ...base,
@@ -287,17 +292,22 @@ Deno.test({
         VALUES (?, ?, ?, 'account', 250)`,
         [base.username, base.domain, base.fingerprint],
       );
-      await db.query("DELETE FROM mail_payment_transactions");
+      await db.query("DELETE FROM mail_payment_candidates");
+      await db.execute(`CREATE TABLE mail_payment_transactions (
+        order_id TEXT NOT NULL, network TEXT NOT NULL, transaction_id TEXT NOT NULL, submitted_at BIGINT NOT NULL
+      )`);
+      await db.query(
+        "INSERT INTO mail_payment_transactions VALUES (?, ?, ?, ?)",
+        [base.orderId, base.network, replacementHash, 201],
+      );
       for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await db.execute(sql);
+      for (const sql of MIGRATE_PAYMENT_CANDIDATES) await db.execute(sql);
       const migrated = (await getPaymentOrder(db, base.orderId))!;
       assertEquals([migrated.status, migrated.active], ["fulfilled", false]);
-      assertEquals(
-        await db.query(
-          "SELECT order_id FROM mail_payment_transactions WHERE transaction_id = ?",
-          [firstHash],
-        ),
-        [[base.orderId]],
-      );
+      assertEquals(await paymentTransactionIds(db, migrated), [
+        firstHash,
+        replacementHash,
+      ]);
     } finally {
       await db.close();
     }

@@ -25,7 +25,23 @@ function element() {
   };
 }
 
-function page({ current = () => order, ethereum, cardano, submit, storage = new Map(), build }) {
+function walletLocks() {
+  const held = new Set();
+  return {
+    async request(name, { ifAvailable }, callback) {
+      assert.equal(ifAvailable, true);
+      if (held.has(name)) return await callback(null);
+      held.add(name);
+      try {
+        return await callback({ name });
+      } finally {
+        held.delete(name);
+      }
+    },
+  };
+}
+
+function page({ current = () => order, ethereum, cardano, submit, storage = new Map(), build, locks = walletLocks() }) {
   const elements = new Map();
   const getElementById = id => {
     if (!elements.has(id)) elements.set(id, element());
@@ -35,6 +51,7 @@ function page({ current = () => order, ethereum, cardano, submit, storage = new 
     ...walletHelpers, TextEncoder, URL, Date,
     location: { origin: "http://127.0.0.1:8789", hash: "#fixture", hostname: "127.0.0.1" },
     window: { ethereum, cardano },
+    navigator: { locks },
     document: { getElementById, createElement: element, querySelectorAll: () => [] },
     localStorage: {
       getItem: key => storage.get(key),
@@ -126,17 +143,47 @@ assert.equal(sends, 1);
 assert.deepEqual(submissions, [hash, hash, hash]);
 assert.equal(storage.size, 0);
 
+const approved = Promise.withResolvers();
+let approvalRequests = 0;
+const sharedWallet = {
+  request: async ({ method }) => {
+    if (method === "eth_requestAccounts") return [account];
+    if (method === "eth_chainId") return SEPOLIA_CHAIN_ID;
+    if (method === "eth_sendTransaction") {
+      approvalRequests++;
+      return await approved.promise;
+    }
+  },
+};
+const shared = { storage: new Map(), locks: walletLocks(), ethereum: sharedWallet, submit: async () => { throw new Error("offline"); } };
+const firstTab = page(shared), secondTab = page(shared);
+for (const tab of [firstTab, secondTab]) {
+  tab.render(order);
+  tab.getElementById("wallet-pay").children.at(-1).click();
+  await settleClick();
+}
+assert.equal(approvalRequests, 1);
+assert.match(secondTab.getElementById("error").textContent, /already open in another tab/);
+approved.resolve(hash);
+await settleClick();
+secondTab.getElementById("wallet-pay").children.at(-1).click();
+await settleClick();
+assert.equal(approvalRequests, 1);
+assert.equal(secondTab.getElementById("transaction").value, hash);
+
 const tokenOrder = {
   ...order, asset: "tUSDM", network: "cardano-preview",
   assetUnit: "ab".repeat(28) + "636f696e",
 };
+const fundingRequests = [];
 const cardano = { preview: { enable: async () => ({
   getNetworkId: async () => 0,
   getChangeAddress: async () => "address",
   getUtxos: async amount => {
-    assert.equal(amount, `821a002dc6c0a1581c${"ab".repeat(28)}a144636f696e0a`);
-    return ["input covering the token and ADA"];
+    fundingRequests.push(amount);
+    return fundingRequests.length === 1 ? null : ["input covering the token and ADA"];
   },
+  getBalance: async () => `821a002625a0a1581c${"ab".repeat(28)}a144636f696e0a`,
   signTx: async () => "witness",
   submitTx: async () => "b".repeat(64),
 }) }};
@@ -148,5 +195,9 @@ await page({
   },
   submit: async () => ({ ...tokenOrder, status: "pending" }),
 }).payCardano("preview");
+assert.deepEqual(fundingRequests, [
+  `821a002dc6c0a1581c${"ab".repeat(28)}a144636f696e0a`,
+  `821a002625a0a1581c${"ab".repeat(28)}a144636f696e0a`,
+]);
 
-console.log("Checkout contracts passed for quote expiry, Sepolia selection, saved-hash recovery and Cardano funding.");
+console.log("Checkout contracts passed for quote expiry, Sepolia selection, cross-tab payment, saved-hash recovery and Cardano funding.");

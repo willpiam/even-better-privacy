@@ -107,7 +107,7 @@ Deno.test("fragmented wallets select a funded bounded subset even when the large
   assertEquals(CML.Transaction.from_cbor_hex(unsigned).body().outputs().len() > 0,true);
 });
 
-Deno.test("Preview token checkout verifies the quoted unit and atomic amount", async () => {
+Deno.test("Preview token checkout builds with less than three ADA and verifies the quote", async () => {
   const unit = "ab".repeat(28) + "745553444d";
   const buyer = generateEmulatorAccount({ lovelace: 20_000_000n });
   const merchant = generateEmulatorAccount({ lovelace: 20_000_000n });
@@ -122,7 +122,7 @@ Deno.test("Preview token checkout verifies the quoted unit and atomic amount", a
       txHash: "11".repeat(32),
       outputIndex: 0,
       address: buyer.address,
-      assets: { lovelace: 20_000_000n, [unit]: 3_000_000n },
+      assets: { lovelace: 2_500_000n, [unit]: 2_000_000n },
     }],
   }, { getProtocolParameters: () => Promise.resolve(PROTOCOL_PARAMETERS_DEFAULT) });
   const witness = CML.TransactionWitnessSet.new().to_cbor_hex();

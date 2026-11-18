@@ -871,14 +871,17 @@ export async function insertMailbox(db: DatabaseAdapter, record: {
 
 export async function setMailboxStalwartId(
   db: DatabaseAdapter,
-  username: string,
-  domain: string,
+  fingerprint: string,
+  leaseUntil: number,
   stalwartId: string,
-): Promise<void> {
-  await db.query(
-    "UPDATE mailboxes SET stalwart_id = ? WHERE username = ? AND domain = ?",
-    [stalwartId, username, domain],
+): Promise<boolean> {
+  const rows = await db.query(
+    `UPDATE mailboxes SET stalwart_id = ?, provisioning_until = 0
+      WHERE identity_fingerprint = ? AND provisioning_until = ? AND stalwart_id IS NULL
+      RETURNING id`,
+    [stalwartId, fingerprint, leaseUntil],
   );
+  return rows.length === 1;
 }
 
 export async function deleteMailbox(

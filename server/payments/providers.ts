@@ -9,16 +9,17 @@ type Fetch = typeof fetch;
 type EthereumEvidence = Parameters<typeof checkEthereumPayment>[0];
 type CardanoEvidence = Parameters<typeof checkCardanoPayment>[0];
 
-/** Fail closed on provider, protocol, or parsing errors. A missing transaction is pending. */
-export async function verifyEthereumPayment(args: {
+type EthereumVerifierOptions = {
   rpcUrl: string;
   network: "mainnet" | "sepolia";
-  txHash: string;
   tokenContract?: string;
   expected: PaymentExpectation;
   fetchImpl?: Fetch;
-}): Promise<PaymentCheck> {
-  if (!/^0x[0-9a-f]{64}$/i.test(args.txHash)) return "invalid";
+  signal?: AbortSignal;
+};
+
+/** Share network and head evidence across the candidate hashes of one refresh. */
+export function createEthereumPaymentVerifier(args: EthereumVerifierOptions) {
   const fetchImpl = args.fetchImpl ?? fetch;
   let nextId = 0;
   async function rpc(method: string, params: unknown[]): Promise<unknown> {
@@ -27,7 +28,7 @@ export async function verifyEthereumPayment(args: {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      signal: AbortSignal.timeout(15_000),
+      signal: providerTimeout(args.signal),
     });
     if (!res.ok) throw new Error("Ethereum provider unavailable");
     const body = await res.json();
@@ -39,61 +40,81 @@ export async function verifyEthereumPayment(args: {
     }
     return body.result;
   }
-  const chainId = await rpc("eth_chainId", []);
-  if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)) {
-    throw new Error("invalid Ethereum provider response");
+  async function readChainId(): Promise<string> {
+    const chainId = await rpc("eth_chainId", []);
+    if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)) {
+      throw new Error("invalid Ethereum provider response");
+    }
+    if (BigInt(chainId) !== (args.network === "sepolia" ? 11155111n : 1n)) {
+      throw new Error("Ethereum provider is connected to the wrong network");
+    }
+    return chainId;
   }
-  if (BigInt(chainId) !== (args.network === "sepolia" ? 11155111n : 1n)) {
-    throw new Error("Ethereum provider is connected to the wrong network");
-  }
-  const [tx, receipt, latest] = await Promise.all([
-    rpc("eth_getTransactionByHash", [args.txHash]),
-    rpc("eth_getTransactionReceipt", [args.txHash]),
-    rpc("eth_blockNumber", []),
-  ]);
-  if (typeof latest !== "string") {
-    throw new Error("invalid Ethereum provider response");
-  }
-  if (tx === null || receipt === null) {
+  let chainIdResult: Promise<string> | undefined;
+  let latestBlock: Promise<unknown> | undefined;
+  return async (txHash: string): Promise<PaymentCheck> => {
+    if (!/^0x[0-9a-f]{64}$/i.test(txHash)) return "invalid";
+    const chainId = await (chainIdResult ??= readChainId());
+    const [tx, receipt, latest] = await Promise.all([
+      rpc("eth_getTransactionByHash", [txHash]),
+      rpc("eth_getTransactionReceipt", [txHash]),
+      latestBlock ??= rpc("eth_blockNumber", []),
+    ]);
+    if (typeof latest !== "string") {
+      throw new Error("invalid Ethereum provider response");
+    }
+    if (tx === null || receipt === null) {
+      return checkEthereumPayment({
+        txHash,
+        chainId,
+        network: args.network,
+        transaction: null,
+        receipt: null,
+        canonicalBlockHash: null,
+        latestBlock: latest,
+        tokenContract: args.tokenContract,
+        expected: args.expected,
+      });
+    }
+    if (
+      typeof tx !== "object" || typeof receipt !== "object" || !receipt ||
+      typeof (receipt as { blockNumber?: unknown }).blockNumber !== "string"
+    ) {
+      throw new Error("invalid Ethereum provider response");
+    }
+    const block = await rpc("eth_getBlockByNumber", [
+      (receipt as { blockNumber: string }).blockNumber,
+      false,
+    ]);
+    if (
+      !block || typeof block !== "object" ||
+      typeof (block as { hash?: unknown }).hash !== "string"
+    ) {
+      throw new Error("Ethereum canonical block unavailable");
+    }
     return checkEthereumPayment({
-      txHash: args.txHash,
+      txHash,
       chainId,
       network: args.network,
-      transaction: null,
-      receipt: null,
-      canonicalBlockHash: null,
+      transaction: tx as EthereumEvidence["transaction"],
+      receipt: receipt as EthereumEvidence["receipt"],
+      canonicalBlockHash: (block as { hash: string }).hash,
       latestBlock: latest,
       tokenContract: args.tokenContract,
       expected: args.expected,
     });
-  }
-  if (
-    typeof tx !== "object" || typeof receipt !== "object" || !receipt ||
-    typeof (receipt as { blockNumber?: unknown }).blockNumber !== "string"
-  ) {
-    throw new Error("invalid Ethereum provider response");
-  }
-  const block = await rpc("eth_getBlockByNumber", [
-    (receipt as { blockNumber: string }).blockNumber,
-    false,
-  ]);
-  if (
-    !block || typeof block !== "object" ||
-    typeof (block as { hash?: unknown }).hash !== "string"
-  ) {
-    throw new Error("Ethereum canonical block unavailable");
-  }
-  return checkEthereumPayment({
-    txHash: args.txHash,
-    chainId,
-    network: args.network,
-    transaction: tx as EthereumEvidence["transaction"],
-    receipt: receipt as EthereumEvidence["receipt"],
-    canonicalBlockHash: (block as { hash: string }).hash,
-    latestBlock: latest,
-    tokenContract: args.tokenContract,
-    expected: args.expected,
-  });
+  };
+}
+
+export function verifyEthereumPayment(
+  args: EthereumVerifierOptions & { txHash: string },
+): Promise<PaymentCheck> {
+  return createEthereumPaymentVerifier(args)(args.txHash);
+}
+
+function providerTimeout(signal?: AbortSignal): AbortSignal {
+  const timeout = AbortSignal.timeout(15_000);
+  return signal ? AbortSignal.any([signal, timeout]) : timeout;
 }
 
 /** Blockfrost access; the API key must never be returned to clients. */
@@ -104,6 +125,7 @@ export async function verifyCardanoPayment(args: {
   assetUnit: string;
   expected: PaymentExpectation;
   fetchImpl?: Fetch;
+  signal?: AbortSignal;
 }): Promise<PaymentCheck> {
   if (!/^[0-9a-f]{64}$/i.test(args.txHash)) return "invalid";
   const fetchImpl = args.fetchImpl ?? fetch;
@@ -114,7 +136,7 @@ export async function verifyCardanoPayment(args: {
       }.blockfrost.io/api/v0${path}`,
       {
         headers: { project_id: args.apiKey },
-        signal: AbortSignal.timeout(15_000),
+        signal: providerTimeout(args.signal),
       },
     );
     if (allowMissing && res.status === 404) return null;

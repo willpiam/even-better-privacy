@@ -25,6 +25,17 @@ export class StalwartError extends Error {
   }
 }
 
+/** Stalwart explicitly refused the creation. Transport failures have an unknown outcome. */
+export class StalwartCreateRejected extends StalwartError {}
+
+type MailboxProvisioning = {
+  name: string;
+  domain: string;
+  password: string;
+  quotaBytes: number;
+  description: string;
+};
+
 const USING = ["urn:ietf:params:jmap:core", "urn:stalwart:jmap"];
 
 export function readStalwartConfig(): StalwartConfig | null {
@@ -60,7 +71,10 @@ export class StalwartClient {
           "Authorization": `Bearer ${this.config.token}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ using: USING, methodCalls: [[method, args, "c1"]] }),
+        body: JSON.stringify({
+          using: USING,
+          methodCalls: [[method, args, "c1"]],
+        }),
         signal: AbortSignal.timeout(15_000),
       });
     } catch (err) {
@@ -70,7 +84,10 @@ export class StalwartClient {
       );
     }
     if (!res.ok) {
-      throw new StalwartError(`mail server returned HTTP ${res.status}`, "http");
+      throw new StalwartError(
+        `mail server returned HTTP ${res.status}`,
+        "http",
+      );
     }
     const body = await res.json() as { methodResponses?: MethodResponse[] };
     const first = body.methodResponses?.[0];
@@ -91,21 +108,20 @@ export class StalwartClient {
     if (cached) return cached;
     const result = await this.call("x:Domain/get", { ids: null });
     const list = (result.list ?? []) as Array<{ id?: string; name?: string }>;
-    const match = list.find((d) => d.name?.toLowerCase() === domain.toLowerCase());
+    const match = list.find((d) =>
+      d.name?.toLowerCase() === domain.toLowerCase()
+    );
     if (!match?.id) {
-      throw new StalwartError(`domain ${domain} not configured in Stalwart`, "no_domain");
+      throw new StalwartError(
+        `domain ${domain} not configured in Stalwart`,
+        "no_domain",
+      );
     }
     this.domainIdCache.set(domain, match.id);
     return match.id;
   }
 
-  async createUser(input: {
-    name: string;
-    domain: string;
-    password: string;
-    quotaBytes: number;
-    description?: string;
-  }): Promise<string> {
+  async createUser(input: MailboxProvisioning): Promise<string> {
     const domainId = await this.resolveDomainId(input.domain);
     const result = await this.call("x:Account/set", {
       create: {
@@ -113,7 +129,7 @@ export class StalwartClient {
           "@type": "User",
           name: input.name,
           domainId,
-          description: input.description ?? null,
+          description: input.description,
           credentials: { "0": { "@type": "Password", secret: input.password } },
           aliases: {},
           memberGroupIds: {},
@@ -132,14 +148,75 @@ export class StalwartClient {
       { type?: string; description?: string }
     >;
     const err = notCreated.new1;
+    if (!err) {
+      throw new StalwartError(
+        "mail server did not report the creation outcome",
+      );
+    }
     const type = err?.type ?? "not_created";
     if (type === "alreadyExists" || /exist/i.test(err?.description ?? "")) {
-      throw new StalwartError("mailbox already exists", "already_exists");
+      throw new StalwartCreateRejected(
+        "mailbox already exists",
+        "already_exists",
+      );
     }
-    throw new StalwartError(
+    throw new StalwartCreateRejected(
       `mailbox not created: ${err?.description ?? type}`,
       type,
     );
+  }
+
+  async createOrRecoverUser(input: MailboxProvisioning): Promise<string> {
+    try {
+      return await this.createUser(input);
+    } catch (error) {
+      if (
+        error instanceof StalwartCreateRejected &&
+        error.code !== "already_exists"
+      ) throw error;
+      const accountId = await this.findOwnedUser(input);
+      if (!accountId) throw error;
+      // A retry may have generated a different password on the client.
+      await this.setPassword(accountId, input.password);
+      return accountId;
+    }
+  }
+
+  private async findOwnedUser(
+    input: MailboxProvisioning,
+  ): Promise<string | null> {
+    const domainId = await this.resolveDomainId(input.domain);
+    const query = await this.call("x:Account/query", {
+      filter: {
+        operator: "AND",
+        conditions: [{ name: input.name }, { domainId }],
+      },
+      limit: 2,
+    });
+    if (
+      !Array.isArray(query.ids) ||
+      query.ids.some((id) => typeof id !== "string")
+    ) {
+      throw new StalwartError("invalid account lookup response");
+    }
+    if (!query.ids.length) return null;
+    if (query.ids.length !== 1) {
+      throw new StalwartError("ambiguous account lookup");
+    }
+    const result = await this.call("x:Account/get", {
+      ids: query.ids,
+      properties: ["id", "@type", "name", "domainId", "description"],
+    });
+    if (!Array.isArray(result.list) || result.list.length !== 1) {
+      throw new StalwartError("account disappeared during lookup");
+    }
+    const [account] = result.list;
+    return account && account.id === query.ids[0] &&
+        account["@type"] === "User" &&
+        account.name === input.name && account.domainId === domainId &&
+        account.description === input.description
+      ? account.id
+      : null;
   }
 
   async setPassword(accountId: string, password: string): Promise<void> {
@@ -150,21 +227,38 @@ export class StalwartClient {
         },
       },
     });
-    const notUpdated = (result.notUpdated ?? {}) as Record<string, { type?: string }>;
+    const notUpdated = (result.notUpdated ?? {}) as Record<
+      string,
+      { type?: string }
+    >;
     if (notUpdated[accountId]) {
       throw new StalwartError(
         `password not updated: ${notUpdated[accountId].type ?? "unknown"}`,
+      );
+    }
+    if (
+      !result.updated || typeof result.updated !== "object" ||
+      !Object.hasOwn(result.updated, accountId)
+    ) {
+      throw new StalwartError(
+        "mail server did not confirm the password update",
       );
     }
   }
 
   async destroyUser(accountId: string): Promise<void> {
     const result = await this.call("x:Account/set", { destroy: [accountId] });
-    const notDestroyed = (result.notDestroyed ?? {}) as Record<string, { type?: string }>;
+    const notDestroyed = (result.notDestroyed ?? {}) as Record<
+      string,
+      { type?: string }
+    >;
     const err = notDestroyed[accountId];
     if (!err) return;
     const type = err.type ?? "";
     if (type === "notFound" || type === "not_found") return;
-    throw new StalwartError(`mailbox not destroyed: ${type || "unknown"}`, type || "not_destroyed");
+    throw new StalwartError(
+      `mailbox not destroyed: ${type || "unknown"}`,
+      type || "not_destroyed",
+    );
   }
 }

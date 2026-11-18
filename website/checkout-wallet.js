@@ -2,6 +2,7 @@
 
 export const SEPOLIA_CHAIN_ID = "0xaa36a7";
 export const TEST_MAIL_DOMAIN = "test.pqpost.com";
+export const CARDANO_FUNDING_BUFFER = 3_000_000n;
 
 export function messageInput(message) {
   const hex = Array.from(new TextEncoder().encode(message), (byte) =>
@@ -69,10 +70,9 @@ export function cip30LovelaceAmount(amount) {
   }
 }
 
-/** CIP-30 Value for the quoted asset and the ADA needed for fees and outputs. */
-export function cip30PaymentAmount(order) {
+/** CIP-30 Value for the quoted asset and an ADA budget for fees and outputs. */
+export function cip30PaymentAmount(order, feeBuffer = CARDANO_FUNDING_BUFFER) {
   const amount = BigInt(order.amountAtomic);
-  const feeBuffer = 3_000_000n;
   if (order.assetUnit === "lovelace") return cip30LovelaceAmount(amount + feeBuffer);
 
   const [unit, policy, name] = /^([0-9a-f]{56})((?:[0-9a-f]{2}){0,32})$/.exec(order.assetUnit) ?? [];
@@ -83,4 +83,20 @@ export function cip30PaymentAmount(order) {
     : `58${nameLength.toString(16)}`;
   // [lovelace, { policy ID: { asset name: quantity } }]
   return `82${cip30LovelaceAmount(feeBuffer)}a1581c${policy}a1${nameHeader}${name}${cip30LovelaceAmount(amount)}`;
+}
+
+/** CIP-30 balances encode ADA as a CBOR unsigned integer, or as the first item in a multiasset value. */
+export function cip30WalletLovelace(value) {
+  if (typeof value !== "string") throw new Error("The Cardano wallet returned an invalid balance.");
+  const balance = value.toLowerCase();
+  // The multiasset Value is a two-item array, which may use an indefinite-length header.
+  const coin = balance.replace(/^(?:82|9f|9802)/, "");
+  const header = Number.parseInt(coin.slice(0, 2), 16);
+  if (/^[0-9a-f]{2}/.test(coin) && header < 24) return BigInt(header);
+  const length = [2, 4, 8, 16][header - 24];
+  const encoded = length ? coin.slice(2, 2 + length) : "";
+  if (encoded.length !== length || !/^[0-9a-f]+$/.test(encoded)) {
+    throw new Error("The Cardano wallet returned an invalid balance.");
+  }
+  return BigInt(`0x${encoded}`);
 }

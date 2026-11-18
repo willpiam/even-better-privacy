@@ -217,9 +217,24 @@ Deno.test({
         }],
       };
       let canonicalBlock = `0x${"6".repeat(64)}`;
-      globalThis.fetch = ((_url: unknown, init?: { body?: unknown }) => {
+      let holdReplacedHash = false;
+      let abortedLookup = false;
+      const calls = new Map<string, number>();
+      const olderLookup = Promise.withResolvers<Response>();
+      globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
         const request = JSON.parse(String(init?.body));
+        calls.set(request.method, (calls.get(request.method) ?? 0) + 1);
         const found = request.params.includes(hash);
+        if (
+          holdReplacedHash && !found &&
+          request.method === "eth_getTransactionByHash"
+        ) {
+          init?.signal?.addEventListener("abort", () => {
+            abortedLookup = true;
+            olderLookup.reject(init.signal?.reason);
+          }, { once: true });
+          return olderLookup.promise;
+        }
         const results: Record<string, unknown> = {
           eth_chainId: "0xaa36a7",
           eth_getTransactionByHash: found ? transaction : null,
@@ -255,7 +270,30 @@ Deno.test({
       assertEquals(replacement.status, 200);
       assertEquals((await replacement.json()).status, "pending");
       canonicalBlock = blockHash;
-      await reconcilePendingPayments(db);
+      holdReplacedHash = true;
+      calls.clear();
+      const reconciliation = reconcilePendingPayments(db);
+      let timer: number | undefined;
+      try {
+        const completed = await Promise.race([
+          reconciliation.then(() => true),
+          new Promise<boolean>((resolve) => {
+            timer = setTimeout(() => resolve(false), 1000);
+          }),
+        ]);
+        assertEquals(
+          completed,
+          true,
+          "the verified hash must not wait for the old lookup",
+        );
+        assertEquals(abortedLookup, true);
+        assertEquals(calls.get("eth_chainId"), 1);
+        assertEquals(calls.get("eth_blockNumber"), 1);
+      } finally {
+        clearTimeout(timer);
+        olderLookup.reject(new Error("fixture cleanup"));
+        await reconciliation;
+      }
       const finalPayment =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(finalPayment.status, "confirmed");
@@ -277,16 +315,44 @@ Deno.test({
       );
       assertEquals(wrongRecovery.status, 400);
       let failCreate = true;
-      const stalwartFetch = ((_url: unknown, init?: { body?: unknown }) => {
+      let dropCreationReply = false;
+      let failLookup = false;
+      let remoteAccount: Record<string, unknown> | undefined;
+      const passwordUpdates: string[] = [];
+      const stalwartFetch = ((_url: unknown, init?: RequestInit) => {
         const body = JSON.parse(String(init?.body));
         const [method, args] = body.methodCalls[0];
-        const result = method === "x:Domain/get"
-          ? { list: [{ id: "d1", name: "test.pqpost.com" }] }
-          : args.create
-          ? failCreate
-            ? { notCreated: { new1: { type: "serverFail" } } }
-            : { created: { new1: { id: "account" } } }
-          : {};
+        let result: Record<string, unknown> = {};
+        if (method === "x:Domain/get") {
+          result = { list: [{ id: "d1", name: "test.pqpost.com" }] };
+        } else if (method === "x:Account/query") {
+          assertEquals(args.filter.conditions, [{ name: "alice" }, {
+            domainId: "d1",
+          }]);
+          if (failLookup) {
+            return Promise.resolve(new Response(null, { status: 503 }));
+          }
+          result = { ids: remoteAccount ? ["account"] : [] };
+        } else if (method === "x:Account/get") {
+          result = { list: remoteAccount ? [remoteAccount] : [] };
+        } else if (args.create) {
+          if (failCreate || remoteAccount) {
+            result = {
+              notCreated: {
+                new1: { type: failCreate ? "serverFail" : "alreadyExists" },
+              },
+            };
+          } else {
+            remoteAccount = { ...args.create.new1, id: "account" };
+            if (dropCreationReply) {
+              return Promise.reject(new Error("creation response lost"));
+            }
+            result = { created: { new1: { id: "account" } } };
+          }
+        } else if (args.update) {
+          passwordUpdates.push(args.update.account.credentials["0"].secret);
+          result = { updated: { account: null } };
+        }
         return Promise.resolve(
           Response.json({ methodResponses: [[method, result, "c1"]] }),
         );
@@ -340,6 +406,34 @@ Deno.test({
         "confirmed",
       );
       failCreate = false;
+      const signupRequest = (mailPassword = "x".repeat(32)) =>
+        post({
+          fingerprint,
+          username: "alice",
+          mailPassword,
+          detailProof: emailProof,
+        });
+
+      remoteAccount = {
+        id: "account",
+        "@type": "User",
+        name: "alice",
+        domainId: "d1",
+        description: "different owner",
+      };
+      assertEquals((await handleMailSignup(signupRequest(), db)).status, 409);
+      assertEquals(passwordUpdates, []);
+      assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
+
+      remoteAccount = undefined;
+      dropCreationReply = true;
+      failLookup = true;
+      assertEquals((await handleMailSignup(signupRequest(), db)).status, 502);
+      assertEquals(
+        (await getMailboxByFingerprint(db, fingerprint))?.stalwartId,
+        null,
+      );
+      failLookup = false;
       await db.execute(`CREATE TRIGGER fail_payment_fulfillment
         BEFORE UPDATE OF status ON mail_payment_orders WHEN NEW.status = 'fulfilled'
         BEGIN SELECT RAISE(ABORT, 'simulated payment write failure'); END`);
@@ -353,18 +447,15 @@ Deno.test({
         db,
       );
       assertEquals(failedFulfillment.status, 500);
-      assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
+      assertEquals(
+        (await getMailboxByFingerprint(db, fingerprint))?.stalwartId,
+        null,
+      );
       assertEquals(await getDetailRecord(db, fingerprint, "email"), null);
       await db.execute("DROP TRIGGER fail_payment_fulfillment");
-      const signup = await handleMailSignup(
-        post({
-          fingerprint,
-          username: "alice",
-          mailPassword: "x".repeat(32),
-          detailProof: emailProof,
-        }),
-        db,
-      );
+      const retryPassword = "r".repeat(32);
+      const signup = await handleMailSignup(signupRequest(retryPassword), db);
+      assertEquals(passwordUpdates, ["x".repeat(32), retryPassword]);
       const body = await signup.json();
       assertEquals(signup.status, 200, JSON.stringify(body));
       assertEquals(body.email, "alice@test.pqpost.com");
@@ -549,4 +640,125 @@ Deno.test({
       await db.close();
     }
   },
+});
+
+Deno.test("free signup rechecks paid reservations under the identity lock", async () => {
+  const env = { MAIL_SIGNUP_ENABLED: "true", MAIL_DOMAIN: "test.pqpost.com" };
+  const previous = Object.fromEntries(
+    Object.keys(env).map((key) => [key, Deno.env.get(key)]),
+  );
+  const db = new SqliteDatabaseAdapter(":memory:");
+  const afterPreflight = Promise.withResolvers<void>();
+  const continueSignup = Promise.withResolvers<void>();
+  const pausingDb = {
+    query: async <T extends unknown[]>(
+      sql: string,
+      params?: import("../db/adapter.ts").DatabaseQueryParams,
+    ) => {
+      const rows = await db.query<T>(sql, params);
+      if (
+        sql.startsWith(
+          "SELECT order_id FROM mail_payment_orders WHERE identity_fingerprint",
+        )
+      ) {
+        assertEquals(rows.length, 0);
+        afterPreflight.resolve();
+        await continueSignup.promise;
+      }
+      return rows;
+    },
+    execute: db.execute.bind(db),
+    close: db.close.bind(db),
+    writeTransaction: db.writeTransaction.bind(db),
+  };
+  try {
+    for (const [key, value] of Object.entries(env)) Deno.env.set(key, value);
+    setStalwartClientForTests(
+      new StalwartClient({
+        baseUrl: "https://stalwart.test",
+        token: "fixture",
+        domainId: "test",
+      }, () =>
+        Promise.reject(
+          new Error("A conflicting signup must never provision a mailbox."),
+        )),
+    );
+    const signingKey = new DilithiumSigningKey();
+    const keys = {
+      signingKeyType: "dilithium",
+      encryptionKeyType: "kyber",
+      signingKey: signingKey.publicKey,
+      encryptionKey: "00",
+    } as const;
+    const fingerprint = computeIdentityFingerprint(keys);
+    const now = Date.now();
+    await insertIdentity(db, {
+      ...keys,
+      fingerprint,
+      signingKeyDetails: { variant: signingKey.variant },
+      encryptionKeyDetails: null,
+      createdAt: now,
+    });
+    const detailProof = createSignedProof(signingKey, {
+      nonce: 1,
+      path: "email",
+      detail: "longfreename@test.pqpost.com",
+      timestamp: now,
+    }).proof;
+    const signup = handleMailSignup(
+      new Request("http://localhost/", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          fingerprint,
+          username: "longfreename",
+          mailPassword: "x".repeat(32),
+          detailProof,
+        }),
+      }),
+      pausingDb,
+    );
+    await afterPreflight.promise;
+    const { reservePaymentOrder } = await import("./orders.ts");
+    assertEquals(
+      await db.writeTransaction((tx) =>
+        reservePaymentOrder(tx, {
+          orderId: crypto.randomUUID(),
+          username: "alice",
+          domain: "test.pqpost.com",
+          fingerprint,
+          proofNonce: 0,
+          asset: "USDC",
+          network: "ethereum-sepolia",
+          recipient: `0x${"1".repeat(40)}`,
+          assetUnit: `0x${"2".repeat(40)}`,
+          usdCents: 100,
+          decimals: 6,
+          usdPerToken: "1",
+          amountAtomic: "1000000",
+          confirmations: 5,
+          message: "fixture",
+          createdAt: now,
+          expiresAt: now + 60_000,
+          graceUntil: now + 120_000,
+        }, now), `identity:${fingerprint}`),
+      true,
+    );
+    continueSignup.resolve();
+    const response = await signup;
+    assertEquals(response.status, 409);
+    assertEquals(
+      (await response.json()).error,
+      "this identity has an active address purchase",
+    );
+    assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
+  } finally {
+    continueSignup.resolve();
+    setStalwartClientForTests(null);
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) Deno.env.delete(key);
+      else Deno.env.set(key, value);
+    }
+    await db.close();
+  }
 });

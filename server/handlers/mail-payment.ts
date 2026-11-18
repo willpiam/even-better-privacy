@@ -44,7 +44,7 @@ import { quoteAtomicUnits } from "../payments/quote.ts";
 import { fetchUsdRate } from "../payments/rates.ts";
 import {
   verifyCardanoPayment,
-  verifyEthereumPayment,
+  createEthereumPaymentVerifier,
 } from "../payments/providers.ts";
 import {
   assembleSignedTransaction,
@@ -360,32 +360,42 @@ export async function refreshPaymentOrder(
     confirmations: order.confirmations,
   };
   const hashes = await paymentTransactionIds(db, order);
-  const outcomes = await Promise.allSettled(hashes.map((hash) =>
-    provider.chain === "ethereum"
-      ? verifyEthereumPayment({
-        rpcUrl: provider.rpcUrl,
-        network: provider.network,
-        txHash: `0x${hash}`,
-        tokenContract: order.assetUnit === "native" ? undefined : order.assetUnit,
-        expected,
-      })
-      : verifyCardanoPayment({
-        apiKey: provider.apiKey,
-        network: provider.network,
-        txHash: hash,
-        assetUnit: order.assetUnit,
-        expected,
-      })
-  ));
-  const winner = outcomes.findIndex((outcome) =>
-    outcome.status === "fulfilled" && outcome.value === "confirmed"
-  );
-  if (winner < 0) {
-    if (outcomes.some((outcome) => outcome.status === "rejected")) {
+  if (!hashes.length) return order;
+  const controller = new AbortController();
+  const ethereum = provider.chain === "ethereum"
+    ? createEthereumPaymentVerifier({
+      rpcUrl: provider.rpcUrl,
+      network: provider.network,
+      tokenContract: order.assetUnit === "native" ? undefined : order.assetUnit,
+      expected,
+      signal: controller.signal,
+    })
+    : null;
+  const unconfirmed = Symbol("unconfirmed");
+  let verified: { hash: string; at: number };
+  try {
+    verified = await Promise.any(hashes.map(async (hash) => {
+      const result = provider.chain === "cardano"
+        ? await verifyCardanoPayment({
+          apiKey: provider.apiKey,
+          network: provider.network,
+          txHash: hash,
+          assetUnit: order.assetUnit,
+          expected,
+          signal: controller.signal,
+        })
+        : await ethereum!(`0x${hash}`);
+      if (result !== "confirmed") throw unconfirmed;
+      return { hash, at: Date.now() };
+    }));
+  } catch (error) {
+    if (!(error instanceof AggregateError) || error.errors.some((reason) => reason !== unconfirmed)) {
       throw new PaymentRefreshError("provider", "payment verification temporarily unavailable");
     }
     // Keep the reservation open through grace for reorgs and replacement hashes.
     return order;
+  } finally {
+    controller.abort();
   }
 
   await db.writeTransaction(async (tx) => {
@@ -397,8 +407,8 @@ export async function refreshPaymentOrder(
     await confirmPaymentOrder(
       tx,
       order.orderId,
-      hashes[winner],
-      Date.now(),
+      verified.hash,
+      verified.at,
       unavailable ? "manual_review" : "confirmed",
     );
   }, `identity:${order.fingerprint}`);

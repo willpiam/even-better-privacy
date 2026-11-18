@@ -26,6 +26,7 @@ import {
   insertMailbox,
   isIdentityRevoked,
   isMailboxUsernameTaken,
+  isMailUsernameRetired,
   listOldE2eMailboxes,
   markDetailVerified,
   retireMailUsername,
@@ -35,8 +36,8 @@ import {
 } from "../db/index.ts";
 import { timingSafeEqual } from "node:crypto";
 import {
-  expirePaymentOrders,
   fulfillPaymentOrder,
+  getActivePaymentOrderId,
   getConfirmedPaymentOrder,
 } from "../payments/orders.ts";
 import {
@@ -51,7 +52,7 @@ import { verifyDetailProof } from "../detail.ts";
 import {
   readStalwartConfig,
   StalwartClient,
-  StalwartError,
+  StalwartCreateRejected,
 } from "../stalwart.ts";
 
 // Proofs for password resets and deletes are not stored, so freshness bounds replay.
@@ -280,6 +281,22 @@ function validateMailPassword(value: unknown): string | null {
 
 class MailSignupConflict extends Error {}
 
+const MAILBOX_PROVISIONING_LEASE_MS = 2 * 60_000;
+
+async function releaseMailboxProvisioning(
+  db: DatabaseAdapter,
+  fingerprint: string,
+  leaseUntil: number,
+  discard: boolean,
+): Promise<void> {
+  // An older request must never clear another request's lease or a completed mailbox.
+  const target = "WHERE identity_fingerprint = ? AND provisioning_until = ? AND stalwart_id IS NULL";
+  await db.query(
+    discard ? `DELETE FROM mailboxes ${target}` : `UPDATE mailboxes SET provisioning_until = 0 ${target}`,
+    [fingerprint, leaseUntil],
+  );
+}
+
 export async function handleMailSignup(
   req: Request,
   db: DatabaseAdapter,
@@ -324,12 +341,8 @@ export async function handleMailSignup(
   const paidOrder = isShortPqpostUsername(username, settings.domain)
     ? await getConfirmedPaymentOrder(db, username, settings.domain, fingerprint)
     : null;
-  await expirePaymentOrders(db, Date.now());
-  const activeOrders = await db.query<[string]>(
-    "SELECT order_id FROM mail_payment_orders WHERE identity_fingerprint = ? AND active = 1 AND status IN ('quoted', 'pending', 'confirmed')",
-    [fingerprint],
-  );
-  if (activeOrders.length && activeOrders[0][0] !== paidOrder?.orderId) {
+  const activeOrder = await getActivePaymentOrderId(db, fingerprint, Date.now());
+  if (activeOrder && activeOrder !== paidOrder?.orderId) {
     return json({ error: "this identity has an active address purchase" }, 409);
   }
   if (isShortPqpostUsername(username, settings.domain) && !paidOrder) {
@@ -363,10 +376,11 @@ export async function handleMailSignup(
   if (await isIdentityRevoked(db, fingerprint)) {
     return json({ error: "identity is revoked" }, 400);
   }
-  if (await getMailboxByFingerprint(db, fingerprint)) {
+  const mailbox = await getMailboxByFingerprint(db, fingerprint);
+  if (mailbox && (mailbox.stalwartId || mailbox.username !== username || mailbox.domain !== settings.domain)) {
     return json({ error: "this identity already has a mailbox" }, 409);
   }
-  if (await isMailboxUsernameTaken(db, username, settings.domain)) {
+  if (!mailbox && await isMailboxUsernameTaken(db, username, settings.domain)) {
     return json({ error: "That address is taken." }, 409);
   }
   const existingEmail = await getDetailRecord(db, fingerprint, "email");
@@ -386,18 +400,42 @@ export async function handleMailSignup(
   if (!nonceCheck.ok) return json({ error: nonceCheck.error }, 400);
 
   const now = Date.now();
+  let leaseUntil: number;
   try {
-    await db.writeTransaction(async tx => {
+    leaseUntil = await db.writeTransaction(async (tx) => {
+      const acquiredAt = Date.now();
+      const activeOrder = await getActivePaymentOrderId(tx, fingerprint, acquiredAt);
+      if (activeOrder && activeOrder !== paidOrder?.orderId) {
+        throw new MailSignupConflict("this identity has an active address purchase");
+      }
       if (paidOrder && (await getConfirmedPaymentOrder(tx, username, settings.domain, fingerprint))?.orderId !== paidOrder.orderId) {
         throw new MailSignupConflict("payment is no longer available for this address");
       }
-      await insertMailbox(tx, {
-        username,
-        domain: settings.domain,
-        fingerprint,
-        stalwartId: null,
-        createdAt: now,
-      });
+      const currentMailbox = await getMailboxByFingerprint(tx, fingerprint);
+      if (currentMailbox && (currentMailbox.stalwartId || currentMailbox.username !== username || currentMailbox.domain !== settings.domain)) {
+        throw new MailSignupConflict("this identity already has a mailbox");
+      }
+      if (await isMailUsernameRetired(tx, username, settings.domain)) {
+        throw new MailSignupConflict("That address is taken.");
+      }
+      if (!currentMailbox) {
+        await insertMailbox(tx, {
+          username,
+          domain: settings.domain,
+          fingerprint,
+          stalwartId: null,
+          createdAt: now,
+        });
+      }
+      const lease = acquiredAt + MAILBOX_PROVISIONING_LEASE_MS;
+      const rows = await tx.query(
+        `UPDATE mailboxes SET provisioning_until = ?
+          WHERE identity_fingerprint = ? AND stalwart_id IS NULL AND provisioning_until <= ?
+          RETURNING id`,
+        [lease, fingerprint, acquiredAt],
+      );
+      if (!rows.length) throw new MailSignupConflict("mailbox setup is already in progress");
+      return lease;
     }, `identity:${fingerprint}`);
   } catch (e) {
     if (e instanceof MailSignupConflict) return json({ error: e.message }, 409);
@@ -409,7 +447,7 @@ export async function handleMailSignup(
 
   let stalwartId: string;
   try {
-    stalwartId = await stalwart.createUser({
+    stalwartId = await stalwart.createOrRecoverUser({
       name: username,
       domain: settings.domain,
       password: mailPassword,
@@ -417,8 +455,9 @@ export async function handleMailSignup(
       description: fingerprint,
     });
   } catch (err) {
-    await deleteMailbox(db, username, settings.domain);
-    if (err instanceof StalwartError && err.code === "already_exists") {
+    const rejected = err instanceof StalwartCreateRejected;
+    await releaseMailboxProvisioning(db, fingerprint, leaseUntil, rejected);
+    if (rejected && err.code === "already_exists") {
       return json({ error: "That address is taken." }, 409);
     }
     console.error("stalwart createUser failed:", err);
@@ -426,7 +465,9 @@ export async function handleMailSignup(
   }
 
   try {
-    await db.writeTransaction(async (db) => {
+    const completed = await db.writeTransaction(async (db) => {
+      if (!await setMailboxStalwartId(db, fingerprint, leaseUntil, stalwartId)) return false;
+
       // Provisioning happens outside the transaction. Recheck the signed
       // identity state before committing anything after that external call.
       if (await isIdentityRevoked(db, fingerprint)) {
@@ -444,7 +485,6 @@ export async function handleMailSignup(
         proofResult.record.nonce,
       );
       if (!currentNonce.ok) throw new MailSignupConflict(currentNonce.error);
-      await setMailboxStalwartId(db, username, settings.domain, stalwartId);
       const createdAt = proofResult.record.timestamp;
       if (currentEmail) {
         await updateDetail(db, {
@@ -467,15 +507,28 @@ export async function handleMailSignup(
       if (paidOrder && !await fulfillPaymentOrder(db, paidOrder.orderId)) {
         throw new MailSignupConflict("payment order is no longer available");
       }
+      return true;
     }, `identity:${fingerprint}`);
+    if (!completed) return json({ error: "mailbox setup was superseded; try again" }, 409);
   } catch (err) {
-    if (!(err instanceof MailSignupConflict)) {
-      console.error("mailbox signup rollback:", err);
+    let discard = false;
+    if (err instanceof MailSignupConflict) {
+      if (leaseUntil > Date.now()) {
+        try {
+          await stalwart.destroyUser(stalwartId);
+          discard = true;
+        } catch (error) {
+          console.error("stalwart rollback failed:", error);
+        }
+      }
+    } else {
+      console.error("mailbox signup could not finalize:", err);
     }
-    await stalwart.destroyUser(stalwartId).catch((e) =>
-      console.error("stalwart rollback failed:", e)
+    // Preserve confirmed remote work after an uncertain database write. A retry
+    // can adopt the same account and commit the still-unconsumed proof.
+    await releaseMailboxProvisioning(db, fingerprint, leaseUntil, discard).catch((error) =>
+      console.error("mailbox provisioning lease could not be released:", error)
     );
-    await deleteMailbox(db, username, settings.domain);
     if (err instanceof MailSignupConflict) {
       return json({ error: err.message }, 409);
     }
@@ -605,13 +658,12 @@ export async function handleMailDelete(
     return json({ error: "proof expired; try again" }, 400);
   }
 
-  if (mailbox.stalwartId) {
-    try {
-      await stalwart.destroyUser(mailbox.stalwartId);
-    } catch (err) {
-      console.error("stalwart destroyUser failed:", err);
-      return json({ error: "mail server could not delete the mailbox" }, 502);
-    }
+  if (!mailbox.stalwartId) return json({ error: "mailbox setup is incomplete" }, 409);
+  try {
+    await stalwart.destroyUser(mailbox.stalwartId);
+  } catch (err) {
+    console.error("stalwart destroyUser failed:", err);
+    return json({ error: "mail server could not delete the mailbox" }, 502);
   }
 
   const now = Date.now();

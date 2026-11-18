@@ -5,7 +5,8 @@ const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
   (existsSync("/usr/bin/chromium") ? "/usr/bin/chromium" : undefined);
 const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}) });
 try {
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
   let order = {
     orderId: "123e4567-e89b-42d3-a456-426614174000", email: "alice@test.pqpost.com",
     fingerprint: "test-fingerprint", asset: "USDC", network: "ethereum-sepolia",
@@ -13,7 +14,7 @@ try {
     usdCents: 400, amountAtomic: "4000000", decimals: 6, confirmations: 5, message: "pqpost:public-ref",
     expiresAt: Date.now() + 100_000, status: "quoted",
   };
-  await page.route(/^(http:\/\/127\.0\.0\.1:8789|https:\/\/(pqpost\.com|keys\.pqpost\.com))\//, async (route) => {
+  await context.route(/^(http:\/\/127\.0\.0\.1:8789|https:\/\/(pqpost\.com|keys\.pqpost\.com))\//, async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.startsWith("/api/v1/mail/payment/")) {
       if (path.endsWith("/transaction")) {
@@ -73,7 +74,33 @@ try {
   for (const selector of ["#transaction-form", "#wallet-pay", "#recipient"]) {
     if (await page.locator(selector).isVisible()) throw new Error(`cancelled checkout still shows ${selector}`);
   }
-  console.log("Checkout links to submitted transactions and hides payment controls for cancelled orders.");
+  await context.addInitScript(() => {
+    window.walletSendRequests = 0;
+    window.ethereum = {
+      async request({ method }) {
+        if (method === "eth_chainId") return "0xaa36a7";
+        if (method === "eth_requestAccounts") return [`0x${"1".repeat(40)}`];
+        if (method === "eth_sendTransaction") {
+          window.walletSendRequests++;
+          return await new Promise((resolve) => { window.approvePayment = resolve; });
+        }
+      },
+    };
+  });
+  order = { ...ethereumOrder, expiresAt: Date.now() + 60_000 };
+  const otherTab = await context.newPage();
+  const checkoutUrl = `http://127.0.0.1:8789/checkout.html?wallet-lock=1#${order.orderId}`;
+  await Promise.all([page.goto(checkoutUrl), otherTab.goto(checkoutUrl)]);
+  await page.getByRole("button", { name: "Pay with Ethereum wallet" }).click();
+  await page.waitForFunction(() => window.walletSendRequests === 1);
+  await otherTab.getByRole("button", { name: "Pay with Ethereum wallet" }).click();
+  await otherTab.waitForFunction(() => document.querySelector("#error").textContent.includes("already open in another tab"));
+  if (await otherTab.evaluate(() => window.walletSendRequests) !== 0) {
+    throw new Error("the second tab asked the wallet to pay again");
+  }
+  await page.evaluate(hash => window.approvePayment(`0x${hash}`), hash);
+  await page.waitForFunction(() => document.querySelector("#status").textContent === "pending");
+  console.log("Checkout links to transactions, handles cancelled orders, and limits wallet payment to one tab.");
 } finally {
   await browser.close();
 }

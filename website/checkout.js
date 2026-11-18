@@ -1,4 +1,4 @@
-import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind, cip30PaymentAmount, tokenPaymentData } from "./checkout-wallet.js";
+import { CARDANO_FUNDING_BUFFER, SEPOLIA_CHAIN_ID, cip30PaymentAmount, cip30WalletLovelace, sepoliaPayment, tokenPaymentData, walletPayKind } from "./checkout-wallet.js";
 
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
 const localTest = location.origin === "http://127.0.0.1:8789";
@@ -21,11 +21,14 @@ function normalizeHash(hash) {
   return typeof hash === "string" ? hash.toLowerCase().replace(/^0x/, "") : "";
 }
 const hashStorageKey = `pqpost:checkout:transaction:${id}`;
-let savedHash = "";
-try {
-  const stored = localStorage.getItem(hashStorageKey);
-  if (typeof stored === "string" && /^(?:0x)?[0-9a-f]{64}$/i.test(stored)) savedHash = stored;
-} catch { /* Storage may be unavailable. Keep the hash in memory in that case. */ }
+function readSavedHash() {
+  try {
+    const stored = localStorage.getItem(hashStorageKey);
+    if (typeof stored === "string" && /^(?:0x)?[0-9a-f]{64}$/i.test(stored)) return stored;
+  } catch { /* Storage may be unavailable. Keep the hash in memory in that case. */ }
+  return "";
+}
+let savedHash = readSavedHash();
 
 function saveHash(hash) {
   savedHash = hash;
@@ -105,6 +108,15 @@ function renderQuoteInstructions(order) {
     addInstruction("Transaction input data:", tokenPaymentData(order));
   }
 }
+async function runWalletCheckout(pay) {
+  if (savedHash) return submitTransaction(savedHash);
+  return navigator.locks.request(hashStorageKey, { ifAvailable: true }, (lock) => {
+    if (!lock) throw new Error("Payment is already open in another tab.");
+    savedHash = readSavedHash();
+    return savedHash ? submitTransaction(savedHash) : pay();
+  });
+}
+
 function walletButton(order, title, onClick) {
   const button = document.createElement("button");
   button.type = "button";
@@ -113,8 +125,7 @@ function walletButton(order, title, onClick) {
     if (busy) return;
     busy = true;
     showError("");
-    const action = savedHash ? submitTransaction(savedHash) : onClick();
-    action.then(render).catch((error) => {
+    runWalletCheckout(onClick).then(render).catch((error) => {
       showError(error instanceof Error ? error.message : String(error));
       if (savedHash) render(order);
     }).finally(() => {
@@ -146,6 +157,11 @@ function renderWallet(order) {
   box.hidden = false;
   const note = document.createElement("p");
   note.className = "muted";
+  if (!globalThis.navigator?.locks) {
+    note.textContent = "Open checkout in a browser that supports wallet payments across tabs, or submit a transaction ID below.";
+    box.append(note);
+    return;
+  }
   note.textContent = kind === "ethereum"
     ? "Pay from an Ethereum wallet on Sepolia. Test funds only."
     : "Pay from a Cardano wallet on the preview network. Test funds only. A preprod wallet cannot be detected here.";
@@ -223,8 +239,17 @@ async function payCardano(name) {
     throw new Error("Switch the Cardano wallet to the preview network. This page cannot tell preview from preprod.");
   }
   const changeAddress = await api.getChangeAddress();
-  const utxos = await api.getUtxos(cip30PaymentAmount(order));
-  if (!utxos?.length) throw new Error("The Cardano wallet has no funds.");
+  let utxos = await api.getUtxos(cip30PaymentAmount(order));
+  if (!utxos?.length) {
+    const balance = cip30WalletLovelace(await api.getBalance());
+    const paymentAda = order.assetUnit === "lovelace" ? BigInt(order.amountAtomic) : 0n;
+    const available = balance - paymentAda;
+    // Let the builder calculate the fee from the selected inputs and current protocol parameters.
+    if (available > 0n && available < CARDANO_FUNDING_BUFFER) {
+      utxos = await api.getUtxos(cip30PaymentAmount(order, available));
+    }
+  }
+  if (!utxos?.length) throw new Error("The Cardano wallet has insufficient funds for this payment.");
   const built = await request("cardano-tx", { changeAddress, utxos });
   if (walletPayKind(await request("status")) !== "cardano") throw new Error("This quote expired before signing.");
   const witnessSet = await api.signTx(built.unsignedTx, false);

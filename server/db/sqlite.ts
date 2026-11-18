@@ -2,7 +2,7 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { Database } from "sqlite";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
 import { KeyedQueue } from "../../common/KeyedQueue.ts";
-import { PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
+import { MIGRATE_PAYMENT_CANDIDATES, PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
 
 export class SqliteDatabaseAdapter extends DatabaseAdapter {
   private db: Database;
@@ -225,6 +225,7 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         domain TEXT NOT NULL,
         identity_fingerprint TEXT NOT NULL UNIQUE,
         stalwart_id TEXT,
+        provisioning_until INTEGER NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1,
         created_at INTEGER NOT NULL,
         FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
@@ -265,6 +266,15 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       if (!columns.some(([, name]) => name === "cancelled_at")) {
         this.db.exec("ALTER TABLE mail_payment_orders ADD COLUMN cancelled_at INTEGER");
       }
+      const mailboxColumns = this.db.prepare("PRAGMA table_info(mailboxes)").values<[number, string]>();
+      if (!mailboxColumns.some(([, name]) => name === "provisioning_until")) {
+        this.db.exec("ALTER TABLE mailboxes ADD COLUMN provisioning_until INTEGER NOT NULL DEFAULT 0");
+      }
+      for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) this.db.exec(sql);
+      const legacy = this.db.prepare(
+        "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'mail_payment_transactions'",
+      ).values();
+      if (legacy.length) for (const sql of MIGRATE_PAYMENT_CANDIDATES) this.db.exec(sql);
       this.db.exec("COMMIT");
     } catch (error) {
       this.db.exec("ROLLBACK");
@@ -276,9 +286,6 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       ON mail_payment_orders (identity_fingerprint, proof_nonce)`);
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
       ON mail_payment_orders (identity_fingerprint) WHERE active = 1`);
-    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
-      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`);
-    for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) this.db.exec(sql);
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (

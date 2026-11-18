@@ -134,8 +134,10 @@ unexpected transport settings. The default key-server URL is
    `v=spf1 mx -all`, and both DKIM TXT records shown by Stalwart for the test
    domain. An optional `_dmarc.test` TXT record can use
    `v=DMARC1; p=none; rua=mailto:postmaster@pqpost.com` while verifying setup.
-3. Use a Stalwart management token with account create/destroy and domain
-   lookup permissions. Keep it in the ignored configuration file below.
+3. Use a Stalwart management token with account create, query, read, update,
+   and destroy permissions, plus domain lookup. Account lookup and update let
+   signup recover if the mailbox was created but the response was lost.
+   Keep the token in the ignored configuration file below.
    A token restricted to the test domain is preferable when supported.
 
 ### Local key server
@@ -213,8 +215,10 @@ unexpected transport settings. The default key-server URL is
    `v=spf1 mx -all`, and both DKIM TXT records shown by Stalwart for the test
    domain. An optional `_dmarc.test` TXT record can use
    `v=DMARC1; p=none; rua=mailto:postmaster@pqpost.com` while verifying setup.
-3. Use a Stalwart management token with account create/destroy and domain
-   lookup permissions. Keep it in the ignored configuration file below.
+3. Use a Stalwart management token with account create, query, read, update,
+   and destroy permissions, plus domain lookup. Account lookup and update let
+   signup recover if the mailbox was created but the response was lost.
+   Keep the token in the ignored configuration file below.
    A token restricted to the test domain is preferable when supported.
 
 ### Local key server

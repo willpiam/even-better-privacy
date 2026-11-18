@@ -2,7 +2,7 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { loadSync } from "std/dotenv";
 import { Pool, type PoolClient } from "postgres";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
-import { PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
+import { MIGRATE_PAYMENT_CANDIDATES, PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
 
 /** Dead or reset connections should open a new pool instead of failing every request. */
 export function isTransientDbError(err: unknown): boolean {
@@ -302,6 +302,7 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         domain TEXT NOT NULL,
         identity_fingerprint TEXT NOT NULL UNIQUE,
         stalwart_id TEXT,
+        provisioning_until BIGINT NOT NULL DEFAULT 0,
         active BOOLEAN NOT NULL DEFAULT TRUE,
         created_at BIGINT NOT NULL,
         FOREIGN KEY(identity_fingerprint) REFERENCES identities(fingerprint),
@@ -336,7 +337,6 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         active INTEGER NOT NULL DEFAULT 1
       )
     `);
-    await this.execute("ALTER TABLE mail_payment_orders ADD COLUMN IF NOT EXISTS cancelled_at BIGINT");
     await this.execute(
       `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
       ON mail_payment_orders (username, domain) WHERE active = 1`,
@@ -349,11 +349,13 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
       `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_identity
       ON mail_payment_orders (identity_fingerprint) WHERE active = 1`,
     );
-    await this.execute(
-      `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
-      ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`,
-    );
-    for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await this.execute(sql);
+    await this.writeTransaction(async (tx) => {
+      await tx.execute("ALTER TABLE mail_payment_orders ADD COLUMN IF NOT EXISTS cancelled_at BIGINT");
+      await tx.execute("ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS provisioning_until BIGINT NOT NULL DEFAULT 0");
+      for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await tx.execute(sql);
+      const [[legacy]] = await tx.query<[string | null]>("SELECT to_regclass('mail_payment_transactions')::text");
+      if (legacy) for (const sql of MIGRATE_PAYMENT_CANDIDATES) await tx.execute(sql);
+    }, "schema:payment-orders");
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (
