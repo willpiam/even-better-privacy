@@ -4,6 +4,7 @@ import {
   CML,
   Lucid,
   type UTxO,
+  valueToAssets,
 } from "@lucid-evolution/lucid";
 
 const coreToUtxo = (LucidNs as unknown as {
@@ -22,8 +23,11 @@ export function cardanoPayError(order: StoredOrder, now: number): string | null 
   if (order.domain !== "test.pqpost.com") {
     return "Names shorter than 9 characters are not available for registration yet.";
   }
-  if (order.network !== "cardano-preview" || order.asset !== "ADA" || order.assetUnit !== "lovelace") {
-    return "Wallet payment is only available for preview ADA.";
+  const validUnit = order.asset === "ADA"
+    ? order.assetUnit === "lovelace"
+    : /^[0-9a-f]{56}([0-9a-f]{2}){0,32}$/.test(order.assetUnit);
+  if (order.network !== "cardano-preview" || !validUnit) {
+    return "Wallet payment requires a Cardano Preview asset.";
   }
   if (order.status !== "quoted") return "This order is no longer waiting for payment.";
   if (order.expiresAt <= now) return "The quote expired.";
@@ -54,11 +58,19 @@ export function utxoFromCip30(hex: string): UTxO {
 }
 
 /** Select a bounded funded subset; input order must not hide a large UTxO. */
-export function selectWalletUtxos(utxos: UTxO[]): UTxO[] {
-  return [...utxos].sort((a,b) => {
-    const first = a.assets.lovelace ?? 0n, second = b.assets.lovelace ?? 0n;
-    return first > second ? -1 : first < second ? 1 : 0;
-  }).slice(0,40);
+export function selectWalletUtxos(utxos: UTxO[], unit = "lovelace"): UTxO[] {
+  const byCoin = [...utxos].sort((a, b) => compareAsset(a, b, "lovelace"));
+  if (unit === "lovelace") return byCoin.slice(0, 40);
+  // Keep a high-ADA input for fees and prioritize UTxOs holding the quoted asset.
+  const [feeInput, ...rest] = byCoin;
+  if (!feeInput) return [];
+  return [feeInput, ...rest.sort((a, b) => compareAsset(a, b, unit)).slice(0, 39)];
+}
+
+function compareAsset(a: UTxO, b: UTxO, unit: string): number {
+  const first = a.assets[unit] ?? 0n;
+  const second = b.assets[unit] ?? 0n;
+  return first > second ? -1 : first < second ? 1 : 0;
 }
 
 export async function buildPreviewUnsigned(
@@ -77,7 +89,7 @@ export async function buildPreviewUnsigned(
   lucid.selectWallet.fromAddress(input.changeAddress, input.utxos);
   const tx = await lucid
     .newTx()
-    .pay.ToAddress(order.recipient, { lovelace: BigInt(order.amountAtomic) })
+    .pay.ToAddress(order.recipient, { [order.assetUnit]: BigInt(order.amountAtomic) })
     .attachMetadata(674, cardanoMetadata(order.message)["674"])
     .complete();
   const unsigned = tx.toCBOR();
@@ -117,8 +129,8 @@ type MetadataField = {
 };
 
 function assertMatchesOrder(txHex: string, order: StoredOrder): void {
-  const body = JSON.parse(CML.Transaction.from_cbor_hex(txHex).to_json()) as {
-    body?: { outputs?: Array<Record<string, unknown>> };
+  const tx = CML.Transaction.from_cbor_hex(txHex);
+  const body = JSON.parse(tx.to_json()) as {
     auxiliary_data?: {
       Shelley?: {
         entries?: Array<[unknown, { map?: MetadataField[] }]>;
@@ -134,13 +146,12 @@ function assertMatchesOrder(txHex: string, order: StoredOrder): void {
     throw new Error("The transaction payment message does not match the order.");
   }
   let paid = 0n;
-  for (const output of body.body?.outputs ?? []) {
-    const formatted = (output.AlonzoFormatTxOut ?? output.ConwayFormatTxOut ?? output) as {
-      address?: string;
-      amount?: { coin?: number | string };
-    };
-    if (formatted.address !== order.recipient || formatted.amount?.coin === undefined) continue;
-    paid += BigInt(formatted.amount.coin);
+  const outputs = tx.body().outputs();
+  for (let index = 0; index < outputs.len(); index++) {
+    const output = outputs.get(index);
+    if (output.address().to_bech32() === order.recipient) {
+      paid += valueToAssets(output.amount())[order.assetUnit] ?? 0n;
+    }
   }
   if (paid < BigInt(order.amountAtomic)) {
     throw new Error("The transaction does not pay the quoted amount.");

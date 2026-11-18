@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   CML,
   PROTOCOL_PARAMETERS_DEFAULT,
@@ -105,4 +105,32 @@ Deno.test("fragmented wallets select a funded bounded subset even when the large
   assertEquals(selected[0].assets.lovelace,20000000n);
   const unsigned = await buildPreviewUnsigned(order({recipient:buyer.address}), {changeAddress:buyer.address,utxos:selected}, {getProtocolParameters:() => Promise.resolve(PROTOCOL_PARAMETERS_DEFAULT)});
   assertEquals(CML.Transaction.from_cbor_hex(unsigned).body().outputs().len() > 0,true);
+});
+
+Deno.test("Preview token checkout verifies the quoted unit and atomic amount", async () => {
+  const unit = "ab".repeat(28) + "745553444d";
+  const buyer = generateEmulatorAccount({ lovelace: 20_000_000n });
+  const merchant = generateEmulatorAccount({ lovelace: 20_000_000n });
+  const quote = order({
+    asset: "tUSDM",
+    assetUnit: unit,
+    recipient: merchant.address,
+  });
+  const unsigned = await buildPreviewUnsigned(quote, {
+    changeAddress: buyer.address,
+    utxos: [{
+      txHash: "11".repeat(32),
+      outputIndex: 0,
+      address: buyer.address,
+      assets: { lovelace: 20_000_000n, [unit]: 3_000_000n },
+    }],
+  }, { getProtocolParameters: () => Promise.resolve(PROTOCOL_PARAMETERS_DEFAULT) });
+  const witness = CML.TransactionWitnessSet.new().to_cbor_hex();
+  assembleSignedTransaction(unsigned, witness, quote);
+  assertThrows(() =>
+    assembleSignedTransaction(unsigned, witness, { ...quote, assetUnit: "cd".repeat(28) })
+  );
+  assertThrows(() =>
+    assembleSignedTransaction(unsigned, witness, { ...quote, amountAtomic: "2000001" })
+  );
 });

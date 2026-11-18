@@ -1,0 +1,36 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #121716;
+  color: #edf3ee;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { width: min(1050px, calc(100% - 2rem)); margin: 3.5rem auto; }
+header { border-bottom: 1px solid #364640; margin-bottom: 1.5rem; }
+.eyebrow { color: #a4dbbd; font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; }
+h1 { font-size: clamp(2.1rem, 6vw, 4rem); letter-spacing: -.06em; line-height: 1; margin: .5rem 0 1rem; }
+h2 { margin: 0 0 .5rem; font-size: 1.3rem; }
+p { color: #bdccc4; line-height: 1.5; margin: 0 0 1rem; }
+a { color: #a4dbbd; }
+.networks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+section { padding: 1.25rem; background: #1b2420; border: 1px solid #364640; border-radius: .8rem; }
+label { display: block; font-weight: 600; }
+.amount { display: block; max-width: 16rem; margin-bottom: 1rem; }
+input, select, textarea, button { font: inherit; border-radius: .4rem; }
+input:not([type="checkbox"]), select, textarea { display: block; width: 100%; padding: .6rem; margin: .35rem 0 .75rem; background: #111a16; color: inherit; border: 1px solid #596d62; }
+textarea { font-family: ui-monospace, monospace; resize: vertical; }
+button { color: #102016; background: #a4dbbd; border: 1px solid transparent; padding: .5rem .75rem; font-weight: 650; cursor: pointer; }
+button:disabled { opacity: .55; cursor: default; }
+:focus-visible { outline: 2px solid #fbd698; outline-offset: 3px; }
+.check { font-weight: 400; margin-bottom: .8rem; }
+.asset-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid #364640; }
+.asset-row small { display: block; margin-top: .15rem; color: #bdccc4; }
+.actions { display: flex; gap: .4rem; flex-wrap: wrap; }
+#activity { min-height: 3rem; padding: .65rem 0; color: #a4dbbd; overflow-wrap: anywhere; }
+#activity[data-error="true"] { color: #ffbcab; }
+@media (max-width: 680px) {
+  main { margin: 2rem auto; }
+  .networks { grid-template-columns: 1fr; }
+}

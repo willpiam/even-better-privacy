@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PQPost testnet mint</title>
+  <link rel="stylesheet" href="/mint.css">
+  <script type="module" src="/mint.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">PQPost · Local wallet tool</p>
+      <h1>Mint test stablecoins</h1>
+      <p>Mint to your connected wallet on Sepolia or Cardano Preview. Your wallet signs each transaction and pays the network fee.</p>
+    </header>
+
+    <label class="amount">Whole tokens per asset
+      <input id="amount" inputmode="numeric" value="1000" maxlength="12" autocomplete="off">
+    </label>
+
+    <div class="networks">
+      <section>
+        <h2>Ethereum Sepolia</h2>
+        <p>Fund your wallet with <a href="https://ethereum.org/en/developers/docs/networks/#sepolia" target="_blank" rel="noreferrer">Sepolia ETH</a> for gas.</p>
+        <div id="sepolia-assets"></div>
+      </section>
+      <section>
+        <h2>Cardano Preview</h2>
+        <p>Switch your wallet to Preview and fund it with <a href="https://docs.cardano.org/cardano-testnets/tools/faucet/" target="_blank" rel="noreferrer">test ADA</a>.</p>
+        <label>Cardano wallet
+          <select id="cardano-wallet"></select>
+        </label>
+        <div id="preview-assets"></div>
+      </section>
+    </div>
+    <div id="activity" role="status" aria-live="polite"></div>
+
+    <section class="export">
+      <h2>Checkout config</h2>
+      <p>Enter the addresses that will receive checkout payments. The JSON includes confirmed mints and any native coins you select.</p>
+      <div class="networks">
+        <div>
+          <label for="sepolia-recipient">Sepolia receiving address</label>
+          <input id="sepolia-recipient" spellcheck="false" placeholder="0x…" autocomplete="off">
+          <label class="check"><input id="native-eth" type="checkbox"> Include Sepolia ETH</label>
+        </div>
+        <div>
+          <label for="preview-recipient">Preview receiving address</label>
+          <input id="preview-recipient" spellcheck="false" placeholder="addr_test1…" autocomplete="off">
+          <label class="check"><input id="native-ada" type="checkbox"> Include Preview ADA</label>
+        </div>
+      </div>
+      <label for="output">Payment asset JSON</label>
+      <textarea id="output" readonly rows="8" spellcheck="false"></textarea>
+      <button id="download" type="button" disabled>Download asset JSON</button>
+    </section>
+  </main>
+</body>
+</html>

@@ -28,11 +28,6 @@ export function paymentConfigMatchesDomain(
     domain === "test.pqpost.com" &&
       config.assets.every((asset) => !asset.network.endsWith("-mainnet"));
 }
-const SYMBOLS: Record<string, string[]> = {
-  ethereum: ["ETH", "USDC", "USDT"],
-  cardano: ["ADA", "USDM", "USDA", "USDCx", "DJED", "iUSD"],
-};
-
 type PaymentPrefix = "MAIL_PAYMENT" | "MAIL_TEST_PAYMENT";
 
 function paymentEnv(prefix: PaymentPrefix, name: string, fallback = false): string | undefined {
@@ -85,7 +80,7 @@ function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null 
       ) return null;
       const [chain, environment, extra] = asset.network.split("-");
       if (
-        extra || !SYMBOLS[chain]?.includes(asset.symbol) ||
+        extra || !/^[A-Za-z0-9]{1,32}$/.test(asset.symbol) ||
         !(chain === "ethereum" &&
             ["mainnet", "sepolia"].includes(environment) ||
           chain === "cardano" && ["mainnet", "preview"].includes(environment))
@@ -94,6 +89,7 @@ function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null 
       if (seen.has(key)) return null;
       seen.add(key);
       if (chain === "ethereum") {
+        if (asset.symbol === "ADA") return null;
         if (
           !/^0x[0-9a-f]{40}$/i.test(asset.recipient) ||
           (asset.symbol === "ETH"
@@ -101,6 +97,7 @@ function readPrefixedPaymentConfig(prefix: PaymentPrefix): PaymentConfig | null 
             : !/^0x[0-9a-f]{40}$/i.test(asset.unit))
         ) return null;
       } else {
+        if (asset.symbol === "ETH") return null;
         if (
           !(environment === "mainnet"
             ? asset.recipient.startsWith("addr1")

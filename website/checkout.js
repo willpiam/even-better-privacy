@@ -1,4 +1,4 @@
-import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind, cip30LovelaceAmount } from "./checkout-wallet.js";
+import { SEPOLIA_CHAIN_ID, sepoliaPayment, walletPayKind, cip30LovelaceAmount, tokenPaymentData } from "./checkout-wallet.js";
 
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
 const localTest = location.origin === "http://127.0.0.1:8789";
@@ -61,9 +61,8 @@ function render(order) {
     if (order.assetUnit === "native") {
       addInstruction("Send the ETH amount to the receiving address using a wallet that allows custom transaction input data. Set input data to:", `0x${messageHex}`);
     } else {
-      const calldata = `0xa9059cbb${order.recipient.slice(2).toLowerCase().padStart(64, "0")}${BigInt(order.amountAtomic).toString(16).padStart(64, "0")}${messageHex}`;
       addInstruction(`Send a zero-ETH transaction to the ${order.asset} token contract below using a wallet that supports custom input data. Do not use a normal token-send screen that discards the message. Confirm the wallet shows the expected token transfer before signing.`, order.assetUnit);
-      addInstruction("Transaction input data:", calldata);
+      addInstruction("Transaction input data:", tokenPaymentData(order));
     }
   }
   $("transaction-form").hidden = order.status !== "quoted";
@@ -171,7 +170,9 @@ async function payCardano(order, name) {
     throw new Error("Switch the Cardano wallet to the preview network. This page cannot tell preview from preprod.");
   }
   const changeAddress = await api.getChangeAddress();
-  const utxos = await api.getUtxos(cip30LovelaceAmount(BigInt(order.amountAtomic) + 3000000n));
+  const utxos = order.assetUnit === "lovelace"
+    ? await api.getUtxos(cip30LovelaceAmount(BigInt(order.amountAtomic) + 3000000n))
+    : await api.getUtxos();
   if (!utxos?.length) throw new Error("The Cardano wallet has no funds.");
   const built = await request("cardano-tx", { changeAddress, utxos });
   if (walletPayKind(await request("status")) !== "cardano") throw new Error("This quote expired before signing.");

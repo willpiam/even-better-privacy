@@ -17,32 +17,34 @@ export function quantityHex(atomic) {
   return `0x${value.toString(16)}`;
 }
 
-/**
- * A quoted test-address order can be paid from a wallet only for native
- * Sepolia ETH or preview ADA. Production names and every other asset stay manual.
- */
+/** Wallet payment is available for live test-address quotes. */
 export function walletPayKind(order) {
   if (!order || order.status !== "quoted" || !Number.isFinite(order.expiresAt) || order.expiresAt <= Date.now()) return null;
   if (typeof order.email !== "string" || !order.email.endsWith(`@${TEST_MAIL_DOMAIN}`)) {
     return null;
   }
   if (
-    order.network === "ethereum-sepolia" && order.asset === "ETH" &&
-    order.assetUnit === "native"
+    order.network === "ethereum-sepolia" && (order.asset === "ETH"
+      ? order.assetUnit === "native"
+      : /^0x[0-9a-f]{40}$/i.test(order.assetUnit))
   ) return "ethereum";
   if (
-    order.network === "cardano-preview" && order.asset === "ADA" &&
-    order.assetUnit === "lovelace"
+    order.network === "cardano-preview" && (order.asset === "ADA"
+      ? order.assetUnit === "lovelace"
+      : /^[0-9a-f]{56}([0-9a-f]{2}){0,32}$/.test(order.assetUnit))
   ) return "cardano";
   return null;
 }
 
 export function sepoliaPayment(order, from) {
   if (walletPayKind(order) !== "ethereum") {
-    throw new Error("This order cannot be paid with Sepolia ETH.");
+    throw new Error("This order cannot be paid on Sepolia.");
   }
   if (typeof from !== "string" || !/^0x[0-9a-f]{40}$/i.test(from)) {
     throw new Error("Connect an Ethereum account first.");
+  }
+  if (order.assetUnit !== "native") {
+    return { from, to: order.assetUnit, value: "0x0", data: tokenPaymentData(order) };
   }
   return {
     from,
@@ -50,6 +52,12 @@ export function sepoliaPayment(order, from) {
     value: quantityHex(order.amountAtomic),
     data: messageInput(order.message),
   };
+}
+
+export function tokenPaymentData(order) {
+  const recipient = order.recipient.slice(2).toLowerCase().padStart(64, "0");
+  const amount = quantityHex(order.amountAtomic).slice(2).padStart(64, "0");
+  return `0xa9059cbb${recipient}${amount}${messageInput(order.message).slice(2)}`;
 }
 
 /** CIP-30 amount is a CBOR Value, here a positive lovelace integer. */

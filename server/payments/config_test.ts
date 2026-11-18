@@ -57,6 +57,24 @@ Deno.test("payment configuration is opt-in, complete and isolates testnets", () 
       }]),
     );
     assertEquals(readPaymentConfig()?.assets[0].network, "cardano-preview");
+    const stablecoins = [
+      ...["tUSDC", "tUSDT"].map((symbol, index) => ({
+        network: "ethereum-sepolia",
+        symbol,
+        unit: `0x${String(index + 1).repeat(40)}`,
+        recipient: `0x${"3".repeat(40)}`,
+        decimals: 6,
+      })),
+      ...["tUSDM", "tUSDA"].map((symbol) => ({
+        network: "cardano-preview",
+        symbol,
+        unit: "ab".repeat(28) + new TextEncoder().encode(symbol).toHex(),
+        recipient: "addr_test1example",
+        decimals: 6,
+      })),
+    ];
+    Deno.env.set("MAIL_PAYMENT_ASSETS", JSON.stringify(stablecoins));
+    assertEquals(readPaymentConfig()?.assets, stablecoins);
     Deno.env.set(
       "MAIL_PAYMENT_ASSETS",
       JSON.stringify([{

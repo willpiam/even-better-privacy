@@ -63,6 +63,7 @@
     "query:prod:all": "deno run -A scripts/postgres/list-all.ts --truncate-long-values",
     "test:pqpost-mail:unit": "deno test --allow-read --allow-write --allow-env --allow-sys=hostname ./scripts/pqpost_mail_e2e_test.ts",
     "server:pqpost-mail-test": "deno run --allow-net --allow-read --allow-write --allow-env --allow-ffi --allow-sys ./scripts/pqpost_mail_e2e.ts --server",
+    "mint:testnet": "deno run --allow-read --allow-env --allow-net=127.0.0.1:8790,cardano-preview.blockfrost.io scripts/testnet-mint/server.ts",
     "test:pqpost-payment": "deno run --allow-net --allow-read --allow-env --allow-sys=hostname ./scripts/pqpost_payment_e2e.ts",
     "test:pqpost-payment:unit": "deno test --allow-read --allow-env --allow-sys=hostname ./scripts/pqpost_payment_e2e_test.ts"
   }

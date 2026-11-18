@@ -37,7 +37,8 @@
     "npm:mailparser@3.9.3": "3.9.3",
     "npm:nodemailer@*": "8.0.1",
     "npm:nodemailer@^6.10.1": "6.10.1",
-    "npm:playwright@1.57.0": "1.57.0"
+    "npm:playwright@1.57.0": "1.57.0",
+    "npm:solc@0.8.24": "0.8.24"
   },
   "jsr": {
     "@db/postgres@0.19.5": {
@@ -574,7 +575,7 @@
         "promise-all-reject-late",
         "promise-call-limit",
         "read-package-json-fast",
-        "semver",
+        "semver@7.7.2",
         "ssri@10.0.6",
         "treeverse",
         "walk-up-path"
@@ -590,7 +591,7 @@
         "nopt@7.2.1",
         "proc-log",
         "read-package-json-fast",
-        "semver",
+        "semver@7.7.2",
         "walk-up-path"
       ]
     },
@@ -605,13 +606,13 @@
       "integrity": "sha512-yOJKRvohFOaLqipNtwYB9WugyZKhC/DZC4VYPmpaCzDBrA8YpK3qHZ8/HGscMnE4GqbkLNuVcCnxkeQEdGt6LQ==",
       "dependencies": [
         "@gar/promisify",
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "@npmcli/fs@3.1.1": {
       "integrity": "sha512-q9CRWjpHCMIh5sVyefoD1cA7PkvILqCZsnSOEUUivORLjxCO/Irmue2DprETiNgEqktDBZaM1Bi+jrarx1XdCg==",
       "dependencies": [
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "@npmcli/git@4.1.0": {
@@ -623,7 +624,7 @@
         "proc-log",
         "promise-inflight",
         "promise-retry",
-        "semver",
+        "semver@7.7.2",
         "which@3.0.1"
       ]
     },
@@ -650,7 +651,7 @@
         "cacache@17.1.4",
         "json-parse-even-better-errors",
         "pacote",
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "@npmcli/move-file@2.0.1": {
@@ -676,7 +677,7 @@
         "json-parse-even-better-errors",
         "normalize-package-data",
         "proc-log",
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "@npmcli/promise-spawn@6.0.2": {
@@ -1079,6 +1080,12 @@
         "wcwidth"
       ]
     },
+    "command-exists@1.2.9": {
+      "integrity": "sha512-LTQ/SGc+s0Xc0Fu5WaKnR0YiygZkm9eKFvyS+fRsU7/ZWFF8ykFM6Pc9aCVf1+xasOOZpO3BAVgVrKvsqKHV7w=="
+    },
+    "commander@8.3.0": {
+      "integrity": "sha512-OkTL9umf+He2DZkUq8f8J9of7yL6RJKI24dVITBmNfZBmri9zYZQrKkuXiKhyfPSu8tUhnVBB1iKXevvnlR4Ww=="
+    },
     "common-ancestor-path@1.0.1": {
       "integrity": "sha512-L3sHRo1pXXEqX8VU28kfgUY+YGsk09hPqZiZmLacNib6XNTCM8ubYeT7ryXQw8asB1sKgcU5lkB7ONug08aB8w=="
     },
@@ -1267,6 +1274,9 @@
     },
     "find-my-way-ts@0.1.5": {
       "integrity": "sha512-4GOTMrpGQVzsCH2ruUn2vmwzV/02zF4q+ybhCIrw/Rkt3L8KWcycdC6aJMctJzwN4fXD4SD5F/4B9Sksh5rE0A=="
+    },
+    "follow-redirects@1.16.3": {
+      "integrity": "sha512-toOSoqN6d51Wjf1aOFJYcoVv1aND9rj/CwjLU0Vz40oDuSpWDayCeKe4JpL5NL0WdFvoOOCI3BRo69HahjbR1A=="
     },
     "for-each@0.3.5": {
       "integrity": "sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==",
@@ -1554,7 +1564,7 @@
         "promzard",
         "read@2.1.0",
         "read-package-json",
-        "semver",
+        "semver@7.7.2",
         "validate-npm-package-license",
         "validate-npm-package-name"
       ]
@@ -1645,6 +1655,9 @@
         "@pkgjs/parseargs"
       ]
     },
+    "js-sha3@0.8.0": {
+      "integrity": "sha512-gF1cRrHhIzNfToc802P800N8PpXS+evLLXfsVpowqmAFR9uwbi89WvXg2QspOmXL8QL86J4T1EpFu+yUkwJY3Q=="
+    },
     "jsbn@1.1.0": {
       "integrity": "sha512-4bYVV3aAMtDTTu4+xsDYa6sy9GyJ69/amsu9sYF2zqjiEoZA5xJi3BrfX3uY+/IekIu7MwdObdbDWpoZdBv3/A=="
     },
@@ -1711,7 +1724,7 @@
         "proc-log",
         "read@2.1.0",
         "read-package-json-fast",
-        "semver",
+        "semver@7.7.2",
         "walk-up-path"
       ]
     },
@@ -1752,7 +1765,7 @@
         "npm-package-arg",
         "npm-registry-fetch",
         "proc-log",
-        "semver",
+        "semver@7.7.2",
         "sigstore",
         "ssri@10.0.6"
       ]
@@ -1777,7 +1790,7 @@
         "@npmcli/run-script",
         "json-parse-even-better-errors",
         "proc-log",
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "libqp@2.1.1": {
@@ -1873,6 +1886,9 @@
         "inherits",
         "safe-buffer"
       ]
+    },
+    "memorystream@0.3.1": {
+      "integrity": "sha512-S3UwM3yj5mtUSEfP41UZmt/0SCoVYUcU1rkXv+BQ5Ig8ndL4sPoJNBUJERafdPb5jjHJGuMgytgKvKIf58XNBw=="
     },
     "minimatch@3.1.2": {
       "integrity": "sha512-J7p63hRiAjw1NDEww1W7i37+ByIrOWO5XQQAzZ3VOcL0PNybwpfmV/N05zFAzwQ9USyEcX6t3UO+K5aqBQOIHw==",
@@ -2014,7 +2030,7 @@
         "nopt@6.0.0",
         "npmlog@6.0.2",
         "rimraf",
-        "semver",
+        "semver@7.7.2",
         "tar",
         "which@2.0.2"
       ],
@@ -2048,7 +2064,7 @@
       "dependencies": [
         "hosted-git-info",
         "is-core-module",
-        "semver",
+        "semver@7.7.2",
         "validate-npm-package-license"
       ]
     },
@@ -2064,7 +2080,7 @@
     "npm-install-checks@6.3.0": {
       "integrity": "sha512-W29RiK/xtpCGqn6f3ixfRYGk+zRyr+Ew9F2E20BfXxT5/euLdA/Nm7fO7OeTGuAmTs30cpgInyJ0cYe708YTZw==",
       "dependencies": [
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "npm-normalize-package-bin@3.0.1": {
@@ -2075,7 +2091,7 @@
       "dependencies": [
         "hosted-git-info",
         "proc-log",
-        "semver",
+        "semver@7.7.2",
         "validate-npm-package-name"
       ]
     },
@@ -2091,7 +2107,7 @@
         "npm-install-checks",
         "npm-normalize-package-bin",
         "npm-package-arg",
-        "semver"
+        "semver@7.7.2"
       ]
     },
     "npm-profile@7.0.1": {
@@ -2177,7 +2193,7 @@
         "proc-log",
         "qrcode-terminal",
         "read@2.1.0",
-        "semver",
+        "semver@7.7.2",
         "sigstore",
         "spdx-expression-parse",
         "ssri@10.0.6",
@@ -2220,6 +2236,9 @@
       "dependencies": [
         "wrappy"
       ]
+    },
+    "os-tmpdir@1.0.2": {
+      "integrity": "sha512-D2FR03Vir7FIu45XBY20mTb+/ZSWB00sjU9jdQXt83gDrI4Ztz5Fs7/yy74g2N5SVQY4xY1qDr4rNddwYRVX0g=="
     },
     "p-map@4.0.0": {
       "integrity": "sha512-/bjOqmgETBYB5BoEeGVea8dmvHb2m9GLy1E9W43yeyfP6QQCZGFNa+XRceJEuDB6zqr+gKpIAmlLebMpykw/MQ==",
@@ -2500,6 +2519,10 @@
         "parseley"
       ]
     },
+    "semver@5.7.3": {
+      "integrity": "sha512-kM18BPOqTi0+TB68703/GJRpAML5Me+IDQsR1J26YB3EFKKNEyHIVZuWDX7+WKQB3tHwDwgk24BfhdpWUbytvQ==",
+      "bin": true
+    },
     "semver@7.7.2": {
       "integrity": "sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==",
       "bin": true
@@ -2575,6 +2598,19 @@
         "ip-address@10.1.0",
         "smart-buffer"
       ]
+    },
+    "solc@0.8.24": {
+      "integrity": "sha512-G5yUqjTUPc8Np74sCFwfsevhBPlUifUOfhYrgyu6CmYlC6feSw0YS6eZW47XDT23k3JYdKx5nJ+Q7whCEmNcoA==",
+      "dependencies": [
+        "command-exists",
+        "commander",
+        "follow-redirects",
+        "js-sha3",
+        "memorystream",
+        "semver@5.7.3",
+        "tmp"
+      ],
+      "bin": true
     },
     "sonic-boom@4.2.1": {
       "integrity": "sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==",
@@ -2683,6 +2719,12 @@
     "tlds@1.261.0": {
       "integrity": "sha512-QXqwfEl9ddlGBaRFXIvNKK6OhipSiLXuRuLJX5DErz0o0Q0rYxulWLdFryTkV5PkdZct5iMInwYEGe/eR++1AA==",
       "bin": true
+    },
+    "tmp@0.0.33": {
+      "integrity": "sha512-jRCJlojKnZ3addtTOjdIqoRuPEKBvNXcGYqzO6zWZX8KfKEpnGY5jfggJQ3EjKuu8D4bJRr0y+cYJFmYbImXGw==",
+      "dependencies": [
+        "os-tmpdir"
+      ]
     },
     "tr46@0.0.3": {
       "integrity": "sha512-N3WMsuqV66lT30CrXNbEjx4GEwlow3v6rr4mCcv6prnfwhS01rkgyFdjPNBYd9br7LpXV1+Emh01fHnq2Gdgrw=="

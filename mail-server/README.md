@@ -329,6 +329,79 @@ while its test-mail setting is on, then sends the buyer to
 `https://test.pqpost.com/checkout.html` to pay from a computer or a wallet
 browser.
 
+### Mint placeholder stablecoins
+
+#### Browser wallets
+
+Run the local mint page on the computer that has your browser wallets.
+Install Deno, and export `MAIL_TEST_PAYMENT_BLOCKFROST_KEY` with a
+Preview project ID. From the repository root:
+
+```sh
+deno task mint:testnet
+```
+
+Open [the local mint page](http://127.0.0.1:8790/) in the browser profile with
+your wallets. Switch the Cardano wallet to Preview. Fund the wallets with
+Sepolia ETH and Preview ADA for fees. Mint `tUSDC` and `tUSDT` individually
+on Sepolia and mint `tUSDM`, `tUSDA`, `tUSDCx`, `tDJED`, and `tiUSD` in one
+Preview transaction. Your extensions hold the signing keys. The local server
+compiles the Ethereum contract and builds the unsigned Cardano transaction.
+It listens only on `127.0.0.1` and is outside the deployed website.
+
+Click **Check** for each submitted mint to load its confirmed asset IDs.
+Enter your checkout receiving addresses and download the payment asset JSON.
+Include native ETH and ADA in the export if you accept them for checkout.
+Use faucet funds for those two native coins. Set the resulting array once in
+`MAIL_TEST_PAYMENT_ASSETS` for hosted test mode, or `MAIL_PAYMENT_ASSETS` for a
+server dedicated to `test.pqpost.com`.
+
+#### Command line
+
+From the repository root, use an Ethereum wallet funded with Sepolia ETH and a
+Cardano wallet funded with Preview ADA. The script mints Sepolia ERC-20 tokens
+`tUSDC` and `tUSDT` and Cardano Preview native assets `tUSDM`, `tUSDA`, `tUSDCx`,
+`tDJED`, and `tiUSD`. Each uses six decimal places in checkout and is quoted
+at one test dollar per token.
+
+Set the following variables in your shell before running the script:
+
+| Variable | Value |
+| --- | --- |
+| `MAIL_TEST_PAYMENT_ETH_RPC_URL` | Sepolia RPC URL |
+| `SEPOLIA_MINT_ACCOUNT` | Funded Sepolia keystore account imported with Foundry's `cast wallet import` |
+| `SEPOLIA_MINT_TO` | Sepolia address for the tester receiving the tokens |
+| `SEPOLIA_PAYMENT_RECIPIENT` | Sepolia address that will receive checkout payments |
+| `MAIL_TEST_PAYMENT_BLOCKFROST_KEY` | Blockfrost project ID for Cardano Preview |
+| `PREVIEW_MINT_KEY_FILE` | Path to a file containing the funded Lucid wallet's bech32 payment signing key (`ed25519_sk…`) |
+| `PREVIEW_MINT_TO` | Preview payment address for the tester receiving the tokens |
+| `PREVIEW_PAYMENT_RECIPIENT` | Preview payment address that will receive checkout payments |
+
+With Foundry and Deno installed:
+
+```sh
+deno run --allow-env --allow-net --allow-write --allow-run=forge \
+  scripts/mint_test_stablecoins.ts ethereum-sepolia tUSDC 1000 > sepolia-tusdc.json
+deno run --allow-env --allow-net --allow-write --allow-run=forge \
+  scripts/mint_test_stablecoins.ts ethereum-sepolia tUSDT 1000 > sepolia-tusdt.json
+deno run --allow-env --allow-net --allow-read \
+  scripts/mint_test_stablecoins.ts cardano-preview 1000 > preview-assets.json
+jq -cs 'add' sepolia-tusdc.json sepolia-tusdt.json preview-assets.json
+```
+
+Set `MAIL_TEST_PAYMENT_ASSETS` to the resulting JSON array for the hosted test
+mode, or set `MAIL_PAYMENT_ASSETS` for a server dedicated to
+`test.pqpost.com`. To keep ETH or ADA selectable, include their existing
+entries in that same array. The server uses this list to populate both desktop
+and mobile coin selectors and validate new orders. Import the Sepolia tokens
+by contract address if your wallet requires it. The tester needs Sepolia ETH
+or Preview ADA to cover transaction fees.
+
+Wait for mint transactions to confirm before starting checkout. Another
+Sepolia deployment creates a new contract address. To fund more testers with
+the same tokens, transfer from the existing supply. A new Preview mint with
+the same signing key reuses the same policy and asset IDs.
+
 Deploy the hosted test checkout from the repository root:
 
 ```sh

@@ -432,7 +432,7 @@ export async function handleCardanoUnsigned(
           throw new Error("The wallet did not provide a usable testnet address or funds.");
         }
         return utxoFromCip30(hex);
-      })),
+      }), loaded.order.assetUnit),
     }, previewBlockfrost(config.blockfrostKey));
     return json({ unsignedTx });
   } catch (error) {
