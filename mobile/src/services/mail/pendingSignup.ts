@@ -57,15 +57,19 @@ export async function pendingSignups(server: string, domain: string | undefined,
   }
   const active: PendingSignup[] = [];
   for (const signup of found.values()) {
-    if (await AsyncStorage.getItem(completedKey(signup)) !== '1') active.push(signup);
+    const marker = await AsyncStorage.getItem(completedKey(signup));
+    if (marker !== '1' && marker !== 'cancelled' && marker !== 'dismissed') active.push(signup);
   }
   return active;
 }
 
-export async function removePendingSignup(signup: PendingSignup): Promise<void> {
+export async function removePendingSignup(
+  signup: PendingSignup,
+  reason: 'completed' | 'cancelled' | 'dismissed' = 'completed',
+): Promise<void> {
   // Record completion first so a failed delete cannot resurrect a completed
   // signup through either the new record or the legacy order fallback.
-  await AsyncStorage.setItem(completedKey(signup), '1');
+  await AsyncStorage.setItem(completedKey(signup), reason === 'completed' ? '1' : reason);
   await AsyncStorage.multiRemove([
     storageKey(signup),
     `ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`,

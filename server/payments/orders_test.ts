@@ -1,6 +1,8 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
+import { handlePaymentCancel } from "../handlers/mail-payment.ts";
 import {
+  cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
   expirePaymentOrders,
   getPaymentOrder,
@@ -158,6 +160,38 @@ Deno.test({
         await confirmPaymentOrder(db, "order4", "b".repeat(64), 500),
         false,
       );
+
+      const cancellable = {
+        ...base,
+        orderId: crypto.randomUUID(),
+        username: "available",
+        fingerprint: "two",
+        proofNonce: 3,
+        createdAt: 600,
+        expiresAt: 700,
+        graceUntil: 800,
+      };
+      assertEquals(await reservePaymentOrder(db, cancellable, 600), true);
+      const cancel = (orderId: string, confirmUnpaid: boolean) => handlePaymentCancel(new Request("http://localhost/cancel", {
+        method: "POST",
+        body: JSON.stringify({orderId, confirmUnpaid}),
+      }), db);
+      assertEquals((await cancel(cancellable.orderId, false)).status, 400);
+      assertEquals((await cancel(cancellable.orderId, true)).status, 200);
+      assertEquals((await cancel(cancellable.orderId, true)).status, 200);
+      const cancelled = await getPaymentOrder(db, cancellable.orderId);
+      assertEquals([cancelled?.status, cancelled?.active], ["cancelled", false]);
+      assertEquals((await db.query<[number]>("SELECT cancelled_at FROM mail_payment_orders WHERE order_id = ?", [cancellable.orderId]))[0][0] > 0, true);
+      assertEquals(await submitPaymentTransaction(db, cancellable.orderId, "two", "c".repeat(64), 650), false);
+      assertEquals(await reservePaymentOrder(db, {...cancellable, orderId: "replacement", fingerprint: "three"}, 600), true);
+
+      const [, submitted] = await Promise.all([
+        cancelUnpaidPaymentOrder(db, "replacement", 650),
+        submitPaymentTransaction(db, "replacement", "three", "d".repeat(64), 650),
+      ]);
+      assertEquals((await getPaymentOrder(db, "replacement"))?.status, submitted ? "pending" : "cancelled");
+      assertEquals((await cancelUnpaidPaymentOrder(db, "order1", 650))?.status, "confirmed");
+      assertEquals((await cancelUnpaidPaymentOrder(db, "order4", 650))?.status, "manual_review");
     } finally {
       await db.close();
     }

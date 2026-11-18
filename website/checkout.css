@@ -7,6 +7,7 @@
 .break { overflow-wrap: anywhere; }
 .notice { padding: .9rem; border: 1px solid var(--brand); border-radius: .5rem; }
 .checkout form { display: grid; gap: .7rem; margin: 1.5rem 0; }
+.checkout [hidden] { display: none; }
 .checkout input { padding: .7rem; width: 100%; font: inherit; }
 .checkout button { cursor: pointer; padding: .7rem 1rem; font: inherit; }
 .checkout pre { overflow-wrap: anywhere; white-space: pre-wrap; background: var(--bg); padding: .75rem; }

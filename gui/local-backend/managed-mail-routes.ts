@@ -11,7 +11,7 @@ import {
 } from "../../common/MailUsername.ts";
 import { apiUrl, getContext } from "../../cli/utils.ts";
 import { HttpError, json, randomHex, readJson, STATUS } from "./http.ts";
-import { resolveServer, toSafeString } from "./identity.ts";
+import { loadIdentityPublic, resolveServer, toSafeString } from "./identity.ts";
 import {
   loadIdentityForRequest,
   mutateIdentityForRequest,
@@ -37,6 +37,69 @@ export async function handleManagedMailRoutes(
   req: Request,
   url: URL,
 ): Promise<Response | null> {
+  if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-payment/cancel") {
+    const body = await readJson<{home?: string; server?: string; orderId?: string; confirmUnpaid?: boolean}>(req);
+    const server = resolveServer(await getContext(toSafeString(body.home) || undefined), toSafeString(body.server) || undefined);
+    const res = await fetch(apiUrl(server, "/api/v1/mail/payment/cancel"), {
+      method: "POST",
+      headers: {"content-type": "application/json"},
+      body: JSON.stringify({orderId: body.orderId, confirmUnpaid: body.confirmUnpaid}),
+      signal: AbortSignal.timeout(15_000),
+    }).catch(() => {
+      throw new HttpError(STATUS.BadGateway, "Cancellation could not be confirmed. Your setup is still saved. Try again.");
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok || result.status !== "cancelled") {
+      throw new HttpError(STATUS.BadGateway, res.status === 404
+        ? "This key server could not cancel the purchase. Your setup is still saved."
+        : result.error ?? "Cancellation could not be confirmed. Try again.");
+    }
+    return json({status: "cancelled"});
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-signup/resume-state") {
+    const body = await readJson<{home?: string; identity?: string; server?: string; email?: string; orderId?: string}>(req);
+    const name = toSafeString(body.identity, 128);
+    const email = toSafeString(body.email, 320).toLowerCase();
+    if (!name || /[/\\\u0000]/.test(name) || !email) {
+      throw new HttpError(STATUS.BadRequest, "identity and email are required");
+    }
+    const ctx = await getContext(toSafeString(body.home) || undefined, name);
+    const identity = await loadIdentityPublic(ctx);
+    const server = resolveServer(ctx, toSafeString(body.server) || undefined);
+    const store = identity && !identity.revocationCertificate ? await getMailStore(ctx.identityDir).catch(() => null) : null;
+    const saved = store?.accounts.some(({config}) => (config.fromEmail || config.username).trim().toLowerCase() === email);
+    if (saved && identity?.details?.email?.[0]?.toLowerCase() === email) return json({action: "completed"});
+
+    const read = async (path: string, init?: RequestInit) => {
+      const res = await fetch(apiUrl(server, path), {...init, signal: AbortSignal.timeout(4000)});
+      return res.ok ? await res.json() : null;
+    };
+    const [remote, order] = await Promise.all([
+      identity && !identity.revocationCertificate
+        ? read(`/api/v1/identity/${encodeURIComponent(identity.fingerprint)}`).catch(() => null)
+        : null,
+      body.orderId ? read("/api/v1/mail/payment/status", {
+        method: "POST",
+        headers: {"content-type": "application/json"},
+        body: JSON.stringify({orderId: body.orderId, checkPayment: false}),
+      }).catch(() => null) : null,
+    ]);
+    if (order?.status === "cancelled") return json({action: "cancelled"});
+    if (!identity || identity.revocationCertificate) {
+      return json({action: "unavailable", reason: identity ? "Identity revoked" : "Identity removed from this device"});
+    }
+    if ((remote?.fingerprint === identity.fingerprint && remote.revoked === true) ||
+      (order?.fingerprint && order.fingerprint !== identity.fingerprint)) {
+      return json({action: "unavailable", reason: remote?.revoked === true ? "Identity revoked" : "Original identity is missing"});
+    }
+    const verified = remote?.fingerprint === identity.fingerprint && remote.detailsMeta?.email?.verified === true &&
+      !remote.revokedDetails?.includes("email") && remote.details?.email?.[0]?.toLowerCase() === email;
+    const fulfilled = order?.status === "fulfilled" && order.fingerprint === identity.fingerprint && order.email?.toLowerCase() === email;
+    if (verified || fulfilled) return json({action: saved ? "completed" : "restore"});
+    return json({action: "resume"});
+  }
+
   if (
     req.method === "GET" && url.pathname === "/api/v1/mail/ebp-signup/config"
   ) {
@@ -119,6 +182,8 @@ export async function handleManagedMailRoutes(
         password?: unknown;
         username?: unknown;
         server?: unknown;
+        forCancellation?: unknown;
+        domain?: unknown;
       }
     >(req);
     if (typeof body.password !== "string" || !body.password) {
@@ -136,11 +201,12 @@ export async function handleManagedMailRoutes(
       ctx,
       typeof body.server === "string" ? body.server : undefined,
     );
-    const config = await fetchEbpMailConfig(server);
+    const mode = body.domain === "test.pqpost.com" ? "test" : undefined;
+    const config = await fetchEbpMailConfig(server, mode);
     if (!config.enabled || !config.domain) {
       throw new HttpError(STATUS.ServiceUnavailable, "mail signup unavailable");
     }
-    if (!checkoutOriginForServer(config.domain, server)) {
+    if (body.forCancellation !== true && !checkoutOriginForServer(config.domain, server)) {
       throw new HttpError(
         STATUS.ServiceUnavailable,
         "checkout is not configured for this key server",
@@ -161,11 +227,12 @@ export async function handleManagedMailRoutes(
     );
     const res = await fetch(apiUrl(server, "/api/v1/mail/payment/recover"), {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...(mode ? {"x-ebp-mail-mode": mode} : {}) },
       body: JSON.stringify({
         fingerprint: identity.toFingerprint(),
         username: check.username,
         proof,
+        forCancellation: body.forCancellation === true,
       }),
     });
     const result = await res.json().catch(() => ({}));
@@ -428,6 +495,7 @@ export async function handleManagedMailRoutes(
       server?: unknown;
       accountId?: unknown;
       fromName?: unknown;
+      expectedEmail?: unknown;
     }>(req);
     const password = typeof body.password === "string" && body.password
       ? body.password
@@ -442,14 +510,19 @@ export async function handleManagedMailRoutes(
     );
     // The reset proof is never saved, so the loaded identity is not persisted.
     const identity = await loadIdentityForRequest(ctx, password);
-    const config = await fetchEbpMailConfig(server);
+    const expectedEmail = toSafeString(body.expectedEmail, 320).toLowerCase();
+    const mode = expectedEmail.endsWith("@test.pqpost.com") ? "test" : undefined;
+    const config = await fetchEbpMailConfig(server, mode);
     if (!config.enabled || !config.domain) {
       throw new HttpError(
         STATUS.ServiceUnavailable,
         "this key server does not offer EBP email",
       );
     }
-    const email = await resolveManagedEmail(identity, server, config.domain);
+    if (expectedEmail && !expectedEmail.endsWith(`@${config.domain}`)) {
+      throw new HttpError(STATUS.Conflict, "The mailbox does not match this setup domain.");
+    }
+    const email = expectedEmail || await resolveManagedEmail(identity, server, config.domain);
     const mailPassword = randomHex(16);
     identity.attachDetail(
       MAIL_PASSWORD_RESET_PATH,

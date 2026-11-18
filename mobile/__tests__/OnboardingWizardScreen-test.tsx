@@ -52,6 +52,7 @@ jest.mock('../src/services/publish', () => ({
 jest.mock('../src/services/storage', () => ({
   getCurrentIdentity: async () => 'Personal',
 }));
+jest.mock('../src/services/mail/accountStore', () => ({readMailStore: jest.fn()}));
 jest.mock('../src/services/settings', () => ({
   getServerUrl: async () => require('../src/config/constants').DEFAULT_SERVER_URL,
   getMailTestMode: jest.fn(async () => false),

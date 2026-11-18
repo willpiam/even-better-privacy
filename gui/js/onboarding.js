@@ -1,8 +1,8 @@
 import { DEFAULT_SERVER_URL, state } from "./state.js";
 import { api, setStatus } from "./ui.js";
-import { requestPassword } from "./modals.js";
+import { requestPassword, showConfirmModal } from "./modals.js";
 import { loadAll } from "./render.js";
-import { pendingSignups, savePendingSignup, completeMailboxSignup } from "./mail-signup-resume.js";
+import { pendingSignups, savePendingSignup, completeMailboxSignup, removePendingSignup } from "./mail-signup-resume.js";
 
 const FIRST_RUN_DISMISSED_KEY = "ebp.onboarding.dismissed";
 const STEPS = ["welcome", "address", "password", "phrase", "confirm", "create", "done"];
@@ -11,6 +11,7 @@ const USERNAME_PATTERN = /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/;
 
 const modal = document.getElementById("onboarding-modal");
 const $ = (id) => document.getElementById(id);
+let pendingGeneration = 0;
 
 const wizard = {
   server: "",
@@ -102,6 +103,7 @@ function resetWizard() {
   $("onboarding-unavailable").textContent = "";
   $("onboarding-create-error").textContent = "";
   $("onboarding-checkout").hidden = true;
+  $("onboarding-manage").hidden = true;
   $("onboarding-payment-wrap").hidden = true;
   $("onboarding-pending").hidden = true;
   $("onboarding-pending").replaceChildren();
@@ -116,6 +118,7 @@ export async function openOnboarding() {
   if (wizard.running) return;
   resetWizard();
   wizard.server = serverUrl();
+  wizard.domain = "";
   showStep("welcome");
   syncUseCurrentButton(false);
   modal.classList.add("active");
@@ -126,6 +129,7 @@ export async function openOnboarding() {
       `/mail/ebp-signup/config?server=${encodeURIComponent(wizard.server)}`,
     );
     if (!config?.enabled || !config.domain) {
+      void renderPendingSignups();
       $("onboarding-unavailable").textContent =
         "This key server doesn't offer EBP email addresses yet. You can still create keys and connect an existing mailbox manually.";
       return;
@@ -134,8 +138,9 @@ export async function openOnboarding() {
     $("onboarding-domain").textContent = `@${config.domain}`;
     startBtn.disabled = false;
     syncUseCurrentButton(true);
-    renderPendingSignups();
+    void renderPendingSignups();
   } catch (err) {
+    void renderPendingSignups();
     $("onboarding-unavailable").textContent =
       `Couldn't reach the key server (${err.message}).`;
   }
@@ -146,34 +151,119 @@ function signupCheckpoint() {
   return {server, domain, identityName, username, orderId};
 }
 
-function renderPendingSignups() {
+async function renderPendingSignups() {
+  const generation = ++pendingGeneration;
   const container = $("onboarding-pending");
-  container.replaceChildren();
   try {
-    for (const signup of pendingSignups(localStorage, wizard.server, wizard.domain)) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "secondary";
-      button.textContent = `Resume email setup: ${signup.username}@${signup.domain} (${signup.identityName})`;
-      button.addEventListener("click", () => {
-        if (wizard.running) return;
-        Object.assign(wizard, signup, {
-          usernameOk: true, identityCreated: true, useExistingIdentity: true,
-          published: false, paid: true, password: "", mnemonic: "",
-          resuming: true,
+    const saved = pendingSignups(localStorage, serverUrl());
+    const results = await Promise.all(saved.map(async signup => {
+      const email = `${signup.username}@${signup.domain}`;
+      const result = await api("/mail/ebp-signup/resume-state", {
+        method: "POST", body: JSON.stringify({identity: signup.identityName, server: signup.server, email, orderId: signup.orderId}),
+      }).catch(() => ({
+        action: "unavailable", reason: "Could not check the saved identity", unknown: true,
+      }));
+      return {signup, email, ...result};
+    }));
+    if (generation !== pendingGeneration) return [];
+    const entries = [];
+    container.replaceChildren();
+    for (const {signup, email, action, reason, unknown} of results) {
+      if (action === "completed" || action === "cancelled") {
+        try {
+          removePendingSignup(localStorage, signup, action === "cancelled" ? "cancelled" : "1", false);
+        } catch { /* A matching mailbox or a cancelled order still hides the entry. */ }
+        continue;
+      }
+      entries.push(action);
+      const row = document.createElement("div");
+      row.className = "stack";
+      const label = document.createElement("p");
+      label.textContent = `${email} (${signup.identityName})`;
+      row.append(label);
+      if (reason) {
+        const hint = document.createElement("p");
+        hint.className = "small muted";
+        hint.textContent = reason;
+        row.append(hint);
+      }
+      const addButton = (label, run) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "secondary";
+        button.textContent = label;
+        button.addEventListener("click", () => { if (!wizard.running) void run(); });
+        row.append(button);
+      };
+      if (action === "resume" || action === "restore") {
+        addButton(`${action === "resume" ? "Resume email setup" : "Restore mailbox access"}: ${email} (${signup.identityName})`, async () => {
+          Object.assign(wizard, signup, {
+            usernameOk: true, identityCreated: true, useExistingIdentity: true,
+            published: false, paid: true, password: "", mnemonic: "", resuming: true,
+          });
+          if (action === "restore") await restoreAccess();
+          else await runCreate();
         });
-        void runCreate();
-      });
-      container.append(button);
+      }
+      if (action !== "restore" && (!unknown || signup.orderId)) {
+        const missingOrder = !signup.orderId && action === "unavailable";
+        addButton(missingOrder ? "Remove reminder" : "Cancel email purchase", () => cancelSignup(signup, missingOrder));
+      }
+      container.append(row);
     }
     container.hidden = !container.childElementCount;
-    if (container.hidden) {
-      document.querySelectorAll("[data-open-onboarding]").forEach(btn => {
-        if (btn.dataset.onboardingLabel) btn.textContent = btn.dataset.onboardingLabel;
-      });
-    }
+    document.querySelectorAll("[data-open-onboarding]").forEach(btn => {
+      btn.dataset.onboardingLabel ??= btn.textContent.trim();
+      btn.textContent = entries.includes("resume") ? "Resume email setup"
+        : entries.includes("restore") ? "Restore mailbox access"
+          : entries.length ? "Manage unfinished email purchases" : btn.dataset.onboardingLabel;
+    });
+    return entries;
   } catch (err) {
     $("onboarding-unavailable").textContent = `Couldn't read saved email setup: ${err.message}`;
+    return [];
+  }
+}
+
+async function cancelSignup(signup, localOnly) {
+  wizard.running = true;
+  $("onboarding-unavailable").textContent = "";
+  try {
+    const approved = await showConfirmModal(
+      localOnly ? "Remove setup reminder?" : `Cancel ${signup.username}@${signup.domain}?`,
+      localOnly ? "This device cannot find the purchase. Unpaid server reservations expire on their own."
+        : "Confirm that you have not sent payment. Cancelling releases this address reservation and keeps your identity.",
+      localOnly ? "Remove reminder" : "Cancel unpaid purchase",
+    );
+    if (!approved) return;
+    let orderId = signup.orderId;
+    if (!orderId && !localOnly) {
+      const password = await requestPassword(`Unlock ${signup.identityName} to find the order`);
+      if (!password) return;
+      const order = await api("/mail/ebp-payment/recover", {
+        method: "POST", body: JSON.stringify({
+          identity: signup.identityName, password, username: signup.username, server: signup.server,
+          domain: signup.domain, forCancellation: true,
+        }),
+      });
+      orderId = order.orderId;
+      if (!orderId && order.cancellationLookup !== true) {
+        throw new Error("This key server could not check whether the purchase can be cancelled. Your setup is still saved.");
+      }
+      if (orderId) savePendingSignup(localStorage, {...signup, orderId});
+    }
+    if (orderId) {
+      const result = await api("/mail/ebp-payment/cancel", {
+        method: "POST", body: JSON.stringify({server: signup.server, orderId, confirmUnpaid: true}),
+      });
+      if (result.status !== "cancelled") throw new Error("Cancellation could not be confirmed. Try again.");
+    }
+    removePendingSignup(localStorage, signup, orderId ? "cancelled" : "dismissed");
+  } catch (err) {
+    $("onboarding-unavailable").textContent = err.message;
+    void renderPendingSignups();
+  } finally {
+    wizard.running = false;
   }
 }
 
@@ -457,6 +547,7 @@ async function runCreateSteps() {
       // Save before requesting an order so a lost response can be recovered
       // with this same identity and address after a restart.
       savePendingSignup(localStorage, signupCheckpoint());
+      $("onboarding-manage").hidden = false;
       const storageKey = `ebp.mail.order:${wizard.server}:${wizard.identityName}:${wizard.username}`;
       if (!wizard.orderId) {
         try { wizard.orderId = localStorage.getItem(storageKey) || ""; } catch { /* storage may be unavailable */ }
@@ -480,6 +571,12 @@ async function runCreateSteps() {
       const status = await api("/mail/ebp-payment/status", { method: "POST", body: JSON.stringify({
         identity: wizard.identityName, server: wizard.server, orderId: wizard.orderId,
       }) });
+      if (status.status === "cancelled") {
+        removePendingSignup(localStorage, signupCheckpoint(), "cancelled");
+        wizard.password = "";
+        showStep("welcome");
+        return;
+      }
       if (status.status === "expired") {
         $("onboarding-checkout").hidden = true;
         $("onboarding-create-error").textContent = "The quote expired. Your order is saved. If you sent a payment, contact support before paying again.";
@@ -528,20 +625,39 @@ async function resetMailboxAccess() {
       identity: wizard.identityName,
       password: wizard.password,
       server: wizard.server,
+      expectedEmail: wizard.resuming ? `${wizard.username}@${wizard.domain}` : undefined,
     }),
   });
 }
 
 async function restoreAccess() {
-  $("onboarding-create-error").textContent = "";
-  $("onboarding-retry").style.display = "none";
+  if (wizard.running) return;
+  wizard.running = true;
   try {
+    if (!wizard.password) {
+      const password = await requestPassword(`Enter the password for ${wizard.identityName}`);
+      if (!password) return;
+      wizard.password = password;
+    }
+    showStep("create");
+    setKeysTaskVisible(false);
+    $("onboarding-create-error").textContent = "";
+    $("onboarding-retry").style.display = "none";
     const result = await runTask("mailbox", () => resetMailboxAccess());
+    if (result.savedLocally === false) {
+      $("onboarding-create-error").textContent = "Unlock your mail settings and try restoring access again.";
+      $("onboarding-retry").style.display = "";
+      $("onboarding-retry").textContent = "Restore access";
+      return;
+    }
     renderDone(result, "Restored");
   } catch (err) {
+    if (isUnlockError(err.message)) wizard.password = "";
     $("onboarding-create-error").textContent = err.message;
     $("onboarding-retry").style.display = "";
     $("onboarding-retry").textContent = "Restore access";
+  } finally {
+    wizard.running = false;
   }
 }
 
@@ -549,7 +665,6 @@ function renderDone(result, verb = "Created") {
   if (wizard.identityName && result.email) {
     try {
       completeMailboxSignup(localStorage, wizard.server, wizard.identityName, result.email);
-      renderPendingSignups();
     } catch { /* The ready mailbox is saved; stale setup can be retried safely. */ }
   }
   wizard.password = "";
@@ -581,8 +696,10 @@ export function initOnboarding({ navigateTo }) {
   if (!modal) return;
   wizard.navigateTo = navigateTo;
   window.addEventListener('ebp-mail-signup-completed', renderPendingSignups);
+  window.addEventListener('ebp-identities-refreshed', renderPendingSignups);
+  window.addEventListener('focus', renderPendingSignups);
   window.addEventListener('storage', event => {
-    if (event.key?.startsWith('ebp.mail.')) renderPendingSignups();
+    if (event.key?.startsWith('ebp.mail.signup')) void renderPendingSignups();
   });
 
   document.querySelectorAll("[data-open-onboarding]").forEach((btn) => {
@@ -658,21 +775,19 @@ export function initOnboarding({ navigateTo }) {
     closeOnboarding();
     wizard.navigateTo?.("mail");
   });
+  $("onboarding-manage").addEventListener("click", () => void openOnboarding());
 }
 
 export async function maybeOpenOnboardingOnFirstRun() {
   if (!modal || modal.classList.contains("active")) return;
+  const entries = await renderPendingSignups();
+  if (entries.length) {
+    if (entries.includes("resume")) void openOnboarding();
+    return;
+  }
   try {
     const config = await api(`/mail/ebp-signup/config?server=${encodeURIComponent(serverUrl())}`);
     if (!config?.enabled) return;
-    if (pendingSignups(localStorage, serverUrl(), config.domain).length) {
-      document.querySelectorAll("[data-open-onboarding]").forEach(btn => {
-        btn.dataset.onboardingLabel ??= btn.textContent;
-        btn.textContent = "Resume email setup";
-      });
-      void openOnboarding();
-      return;
-    }
   } catch { return; }
   if ((state.identities ?? []).length > 0) return;
   try {

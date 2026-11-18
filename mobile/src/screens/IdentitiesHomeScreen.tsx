@@ -1,6 +1,7 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   BackHandler,
+  AppState,
   FlatList,
   Pressable,
   ScrollView,
@@ -26,7 +27,7 @@ import {
 } from '../services/storage';
 import type {StoredIdentityMeta} from '../types';
 import {getMailTestMode, getServerUrl} from '../services/settings';
-import {pendingSignups} from '../services/mail/pendingSignup';
+import {reconcilePendingSignups} from '../services/mail/reconcileSignup';
 import {PROTOCOL_VERSION} from '../../../core/version';
 import Screen from '../components/Screen';
 import Chip from '../components/Chip';
@@ -51,29 +52,39 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   const [serverUrl, setServerUrl] = useState<string>('');
   const [status, setStatus] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hasPendingSignup, setHasPendingSignup] = useState(false);
+  const [signupAction, setSignupAction] = useState<'resume' | 'restore' | 'manage' | null>(null);
+  const refreshGeneration = useRef(0);
 
   const refresh = useCallback(async () => {
+    const generation = ++refreshGeneration.current;
     const [list, current, server] = await Promise.all([
       listIdentities(),
       getCurrentIdentity(),
       getServerUrl(),
     ]);
+    if (generation !== refreshGeneration.current) return;
     setIdentities(list);
     setCurrentIdentityValue(current);
     setServerUrl(server);
     const testingEnabled = await getMailTestMode();
-    const saved = [
-      ...await pendingSignups(server, undefined, false),
-      ...(testingEnabled ? await pendingSignups(server, undefined, true) : []),
-    ];
-    setHasPendingSignup(saved.length > 0);
+    const saved = await reconcilePendingSignups(server, testingEnabled, list);
+    if (generation !== refreshGeneration.current) return;
+    setSignupAction(saved.some(item => item.action === 'resume') ? 'resume'
+      : saved.some(item => item.action === 'restore') ? 'restore' : saved.length ? 'manage' : null);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
-      return () => setMenuOpen(false);
+      const reload = () => {refresh().catch(() => {});};
+      reload();
+      const subscription = AppState.addEventListener('change', value => {
+        if (value === 'active') reload();
+      });
+      return () => {
+        ++refreshGeneration.current;
+        subscription.remove();
+        setMenuOpen(false);
+      };
     }, [refresh]),
   );
 
@@ -158,10 +169,12 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           <Chip label={`Current: ${currentIdentity}`} />
         ) : null}
         <StatusBanner message={status} kind={statusKind(status)} />
-        {hasPendingSignup ? (
+        {signupAction ? (
           <AppButton
-            title="Resume email setup"
+            title={signupAction === 'resume' ? 'Resume email setup'
+              : signupAction === 'restore' ? 'Restore mailbox access' : 'Manage unfinished email purchases'}
             testID="identities-resume-onboarding"
+            variant={signupAction === 'manage' ? 'secondary' : undefined}
             onPress={() => navigation.navigate('OnboardingWizard')}
           />
         ) : null}
