@@ -10,6 +10,12 @@ let id = "";
 try { id = decodeURIComponent(location.hash.slice(1)); } catch { /* invalid link */ }
 const $ = (id) => document.getElementById(id);
 const validId = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const transactionExplorers = new Map([
+  ["ethereum-mainnet", { name: "Etherscan", url: "https://etherscan.io/tx/0x" }],
+  ["ethereum-sepolia", { name: "Sepolia Etherscan", url: "https://sepolia.etherscan.io/tx/0x" }],
+  ["cardano-mainnet", { name: "Cardanoscan", url: "https://cardanoscan.io/transaction/" }],
+  ["cardano-preview", { name: "Cardanoscan Preview", url: "https://preview.cardanoscan.io/transaction/" }],
+]);
 let busy = false;
 function showError(message) { $("error").textContent = message; $("error").hidden = !message; }
 function decimalAmount(raw, decimals) {
@@ -22,6 +28,20 @@ function decimalAmount(raw, decimals) {
 function addInstruction(text, code) {
   const p = document.createElement("p"); p.textContent = text; $("instructions").append(p);
   if (code) { const pre = document.createElement("pre"); pre.textContent = code; $("instructions").append(pre); }
+}
+function renderTransactionLink(order) {
+  const explorer = transactionExplorers.get(order.network);
+  const hash = typeof order.transactionId === "string" ? order.transactionId.replace(/^0x/i, "") : "";
+  const link = $("transaction-link");
+  if (explorer && /^[0-9a-f]{64}$/i.test(hash)) {
+    link.href = explorer.url + hash;
+    link.textContent = `View transaction on ${explorer.name}`;
+    $("transaction-explorer").hidden = false;
+  } else {
+    $("transaction-explorer").hidden = true;
+    link.removeAttribute("href");
+    link.textContent = "";
+  }
 }
 function render(order) {
   for (const key of ["email", "fingerprint", "network", "recipient", "message", "status"]) $(key).textContent = order[key];
@@ -47,6 +67,7 @@ function render(order) {
     }
   }
   $("transaction-form").hidden = order.status !== "quoted";
+  renderTransactionLink(order);
   renderWallet(order);
   $("loading").hidden = true; $("order").hidden = false;
 }
