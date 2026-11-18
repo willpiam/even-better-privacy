@@ -1,4 +1,23 @@
 {
-  "next_id": 83,
-  "issues": []
+  "next_id": 86,
+  "issues": [
+    {
+      "id": 83,
+      "description": "Verification messages can be sent to the wrong recipient. The automatic issuance path in server/handlers/identity.ts and the explicit request path in server/verify-email.ts accept a claim without checking that it identifies one mailbox. The mailer passes the raw value to Nodemailer, which accepts recipient lists. The server also pins Nodemailer 6.10.1 in deno.json and deno.lock, which is affected by recipient misrouting (CVE-2025-13033). Validate a single mailbox before issuing a token. Use that mailbox for delivery and the recipient budget, and check that it corresponds to the signed claim. Upgrade Nodemailer to a supported release.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 84,
+      "description": "Missing SMTP configuration exposes email verification links in logs. In server/verify-email.ts, sendVerificationEmail logs the complete link when SMTP_HOST or SMTP_FROM is missing and returns successfully. The link contains a usable verification token, and the explicit request handler can report that the message was sent. Check mail configuration before issuing a token, surface a delivery error on both issuance paths, and keep verification links and tokens out of logs.",
+      "criticality": "medium",
+      "category": "correctness"
+    },
+    {
+      "id": 85,
+      "description": "A fixed Stalwart domain ID can verify the wrong managed address. In server/stalwart.ts, resolveDomainId returns STALWART_DOMAIN_ID for every requested domain when the setting is present. Both creation and recovery use that resolution. The signup handler in server/handlers/mail-signup.ts then marks the requested address verified based on the returned account ID. On a server offering both pqpost.com and test.pqpost.com, a fixed ID can cause the provisioned mailbox and verified address to differ. Resolve or validate the ID for each requested domain and check that the created or recovered account matches the exact address before marking it verified.",
+      "criticality": "medium",
+      "category": "correctness"
+    }
+  ]
 }
