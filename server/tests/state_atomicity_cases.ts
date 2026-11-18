@@ -23,6 +23,7 @@ import {
   setStalwartClientForTests,
 } from "../handlers/mail-signup.ts";
 import { StalwartClient } from "../stalwart.ts";
+import { installVerificationSmtp } from "./verification_smtp_fixture.ts";
 
 const request = (data: unknown) =>
   new Request("https://key.example/api/v1/test", {
@@ -95,7 +96,7 @@ export function registerStateAtomicityTests(
         token: "test",
         domainId: "test-domain",
       });
-      stalwart.createUser = async () => {
+      stalwart.createOrRecoverUser = async () => {
         assertEquals(
           (await postDetail(db, other, "name", "winner")).status,
           200,
@@ -232,6 +233,7 @@ export function registerStateAtomicityTests(
 
   Deno.test("an old email token cannot verify a replacement claim or clear its new token", async () => {
     const db = await createDb();
+    const smtp = installVerificationSmtp();
     try {
       const identity = await seed(db), fingerprint = identity.toFingerprint();
       assertEquals(
@@ -294,6 +296,7 @@ export function registerStateAtomicityTests(
         false,
       );
     } finally {
+      smtp.restore();
       await db.close();
     }
   });

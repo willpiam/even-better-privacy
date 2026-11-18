@@ -35,7 +35,7 @@ export function buildSmtpTransport(account: MailAccountConfig, secrets: MailAuth
   });
 }
 
-export async function compileRawMessage(mail: OutboundMail): Promise<Uint8Array> {
+export async function compileRawMessage(mail: OutboundMail): Promise<Buffer> {
   const composer = nodemailer.createTransport({
     streamTransport: true,
     buffer: true,
@@ -47,14 +47,17 @@ export async function compileRawMessage(mail: OutboundMail): Promise<Uint8Array>
     subject: mail.subject,
     text: mail.text,
     html: mail.html,
-    attachments: mail.attachments,
+    attachments: mail.attachments?.map(({ content, ...attachment }) => ({
+      ...attachment,
+      content: Buffer.from(content.buffer, content.byteOffset, content.byteLength),
+    })),
     headers: mail.headers,
     messageId: mail.messageId,
     inReplyTo: mail.inReplyTo,
     references: mail.references,
   });
   const message = (built as { message?: unknown }).message;
-  if (typeof message === "string") return new TextEncoder().encode(message);
+  if (typeof message === "string") return Buffer.from(message);
   if (message instanceof Uint8Array) return Buffer.from(message);
   throw new Error("mail composer did not return a message");
 }

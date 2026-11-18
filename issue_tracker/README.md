@@ -33,8 +33,8 @@ Writes replace the JSON file atomically. Invalid existing data is never
 silently reset. Stop the server before editing JSON manually, and run only
 one server process per data file.
 
-Resolved issues #1–#66 were removed after the holistic remediation; the next
-issue will be #67. Their descriptions remain in Git history, for example:
+Resolved issues #1–#66 were removed after the holistic remediation. Their
+descriptions remain in Git history, for example:
 
 ```sh
 git show 8a2c25c:issue_tracker/issues.json

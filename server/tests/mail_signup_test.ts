@@ -21,10 +21,10 @@ const E2E_SECRET = "e2e-test-secret-value";
 type FakeStalwart = {
   calls: Array<{ method: string; args: Record<string, unknown> }>;
   failCreate: boolean;
-  accounts: Map<string, string>;
+  accounts: Map<string, Record<string, unknown>>;
 };
 
-function installFakeStalwart(): FakeStalwart {
+function installFakeStalwart(domainId: string | null): FakeStalwart {
   const state: FakeStalwart = { calls: [], failCreate: false, accounts: new Map() };
   let nextId = 1;
   const fakeFetch = (url: string, init: RequestInit): Promise<Response> => {
@@ -34,15 +34,21 @@ function installFakeStalwart(): FakeStalwart {
     state.calls.push({ method, args });
     let result: Record<string, unknown> = {};
     if (method === "x:Domain/get") {
-      result = { list: [{ id: "d1", name: Deno.env.get("MAIL_DOMAIN") }] };
+      const domains = [{ id: "d1", name: Deno.env.get("MAIL_DOMAIN") }];
+      if (domains[0].name === "pqpost.com") {
+        domains.push({ id: "d2", name: "test.pqpost.com" });
+      }
+      result = { list: domains.filter((domain) => !args.ids || args.ids.includes(domain.id)) };
     } else if (method === "x:Account/set" && args.create) {
       if (state.failCreate) {
         result = { notCreated: { new1: { type: "serverFail", description: "boom" } } };
       } else {
         const id = `a${nextId++}`;
-        state.accounts.set(id, args.create.new1.name);
+        state.accounts.set(id, { ...args.create.new1, id });
         result = { created: { new1: { id } } };
       }
+    } else if (method === "x:Account/get") {
+      result = { list: args.ids.map((id: string) => state.accounts.get(id)).filter(Boolean) };
     } else if (method === "x:Account/set" && args.destroy) {
       for (const id of args.destroy) state.accounts.delete(id);
       result = { destroyed: args.destroy };
@@ -57,14 +63,14 @@ function installFakeStalwart(): FakeStalwart {
     );
   };
   setStalwartClientForTests(
-    new StalwartClient({ baseUrl: "https://stalwart.test", token: "t", domainId: null }, fakeFetch),
+    new StalwartClient({ baseUrl: "https://stalwart.test", token: "t", domainId }, fakeFetch),
   );
   return state;
 }
 
 async function withServer(
   fn: (mod: MainModule, stalwart: FakeStalwart) => Promise<void>,
-  opts: { enabled?: boolean; domain?: string } = {},
+  opts: { enabled?: boolean; domain?: string; domainId?: string } = {},
 ): Promise<void> {
   const dbPath = await Deno.makeTempFile({ suffix: ".sqlite" });
   Deno.env.set("DB_TYPE", "sqlite");
@@ -73,7 +79,7 @@ async function withServer(
   Deno.env.set("MAIL_HOST", `mail.${DOMAIN}`);
   Deno.env.set("MAIL_SIGNUP_ENABLED", opts.enabled === false ? "false" : "true");
   Deno.env.set("MAIL_E2E_SECRET", E2E_SECRET);
-  const stalwart = installFakeStalwart();
+  const stalwart = installFakeStalwart(opts.domainId ?? null);
   rateLimitStore.clear();
   const mod: MainModule = await import(`../main.ts#${crypto.randomUUID()}`);
   try {
@@ -143,10 +149,14 @@ async function signup(
   headers: Record<string, string> = {},
   resetLimit = true,
 ): Promise<Response> {
+  const primaryDomain = Deno.env.get("MAIL_DOMAIN");
+  const domain = primaryDomain === "pqpost.com" && headers["x-ebp-mail-mode"] === "test"
+    ? "test.pqpost.com"
+    : primaryDomain;
   const { proof } = createSignedProof(identity.signingKey, {
     nonce,
     path: "email",
-    detail: `${username.trim().toLowerCase()}@${Deno.env.get("MAIL_DOMAIN")}`,
+    detail: `${username.trim().toLowerCase()}@${domain}`,
     timestamp: Date.now(),
   });
   return await post(mod, "/api/v1/mail/signup", {
@@ -214,6 +224,29 @@ Deno.test("signup provisions mailbox, stores verified email detail", async () =>
     const avail = await availRes.json();
     assertEquals(avail.available, false);
   });
+});
+
+Deno.test("a configured production domain ID still provisions the exact test mailbox", async () => {
+  await withServer(async (mod, stalwart) => {
+    const username = "longfreename";
+    for (const [domain, domainId, headers] of [
+      ["pqpost.com", "d1", {}],
+      ["test.pqpost.com", "d2", { "x-ebp-mail-mode": "test" }],
+    ] as const) {
+      const identity = await registerIdentity(mod);
+      const response = await signup(mod, identity, username, 0, headers);
+      const result = await response.json();
+      assertEquals(response.status, 200, JSON.stringify(result));
+      assertEquals(result.email, `${username}@${domain}`);
+      const account = [...stalwart.accounts.values()].find((entry) =>
+        entry.domainId === domainId && entry.description === identity.fingerprint
+      );
+      assertEquals(account?.name, username);
+      const record = await (await get(mod, `/api/v1/identity/${identity.fingerprint}`)).json();
+      assertEquals(record.details.email[0], result.email);
+      assertEquals(record.detailsMeta.email.verified, true);
+    }
+  }, { domain: "pqpost.com", domainId: "d1" });
 });
 
 Deno.test("username-available rejects reserved and accepts free names", async () => {

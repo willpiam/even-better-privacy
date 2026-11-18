@@ -103,26 +103,37 @@ export class StalwartClient {
   }
 
   async resolveDomainId(domain: string): Promise<string> {
-    if (this.config.domainId) return this.config.domainId;
-    const cached = this.domainIdCache.get(domain);
+    const name = domain.toLowerCase();
+    const cached = this.domainIdCache.get(name);
     if (cached) return cached;
+
+    const hint = this.config.domainId;
+    if (hint) {
+      const result = await this.call("x:Domain/get", { ids: [hint] });
+      const list = (result.list ?? []) as Array<{ id?: string; name?: string }>;
+      if (list.some((d) => d.id === hint && d.name?.toLowerCase() === name)) {
+        this.domainIdCache.set(name, hint);
+        return hint;
+      }
+    }
+
     const result = await this.call("x:Domain/get", { ids: null });
     const list = (result.list ?? []) as Array<{ id?: string; name?: string }>;
-    const match = list.find((d) =>
-      d.name?.toLowerCase() === domain.toLowerCase()
-    );
+    const match = list.find((d) => d.name?.toLowerCase() === name);
     if (!match?.id) {
       throw new StalwartError(
         `domain ${domain} not configured in Stalwart`,
         "no_domain",
       );
     }
-    this.domainIdCache.set(domain, match.id);
+    this.domainIdCache.set(name, match.id);
     return match.id;
   }
 
-  async createUser(input: MailboxProvisioning): Promise<string> {
-    const domainId = await this.resolveDomainId(input.domain);
+  private async createUser(
+    input: MailboxProvisioning,
+    domainId: string,
+  ): Promise<string> {
     const result = await this.call("x:Account/set", {
       create: {
         new1: {
@@ -167,25 +178,34 @@ export class StalwartClient {
   }
 
   async createOrRecoverUser(input: MailboxProvisioning): Promise<string> {
+    const domainId = await this.resolveDomainId(input.domain);
+    let accountId: string;
     try {
-      return await this.createUser(input);
+      accountId = await this.createUser(input, domainId);
     } catch (error) {
       if (
         error instanceof StalwartCreateRejected &&
         error.code !== "already_exists"
       ) throw error;
-      const accountId = await this.findOwnedUser(input);
-      if (!accountId) throw error;
+      const recoveredId = await this.findOwnedUser(input, domainId);
+      if (!recoveredId) throw error;
       // A retry may have generated a different password on the client.
-      await this.setPassword(accountId, input.password);
-      return accountId;
+      await this.setPassword(recoveredId, input.password);
+      return recoveredId;
     }
+    if (!await this.isOwnedUser(accountId, domainId, input)) {
+      throw new StalwartError(
+        "created account does not match the requested mailbox",
+        "mailbox_mismatch",
+      );
+    }
+    return accountId;
   }
 
   private async findOwnedUser(
     input: MailboxProvisioning,
+    domainId: string,
   ): Promise<string | null> {
-    const domainId = await this.resolveDomainId(input.domain);
     const query = await this.call("x:Account/query", {
       filter: {
         operator: "AND",
@@ -203,20 +223,28 @@ export class StalwartClient {
     if (query.ids.length !== 1) {
       throw new StalwartError("ambiguous account lookup");
     }
+    const [accountId] = query.ids;
+    return await this.isOwnedUser(accountId, domainId, input)
+      ? accountId
+      : null;
+  }
+
+  private async isOwnedUser(
+    accountId: string,
+    domainId: string,
+    input: MailboxProvisioning,
+  ): Promise<boolean> {
     const result = await this.call("x:Account/get", {
-      ids: query.ids,
+      ids: [accountId],
       properties: ["id", "@type", "name", "domainId", "description"],
     });
     if (!Array.isArray(result.list) || result.list.length !== 1) {
       throw new StalwartError("account disappeared during lookup");
     }
     const [account] = result.list;
-    return account && account.id === query.ids[0] &&
-        account["@type"] === "User" &&
-        account.name === input.name && account.domainId === domainId &&
-        account.description === input.description
-      ? account.id
-      : null;
+    return account?.id === accountId && account["@type"] === "User" &&
+      account.name === input.name && account.domainId === domainId &&
+      account.description === input.description;
   }
 
   async setPassword(accountId: string, password: string): Promise<void> {

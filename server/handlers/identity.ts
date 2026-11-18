@@ -20,14 +20,12 @@ import {
   insertDetail,
   insertIdentity,
   isIdentityRevoked,
-  issueDetailVerification,
   updateDetail,
 } from "../db/index.ts";
 import type { DatabaseAdapter } from "../db/index.ts";
 import {
   computeIdentityFingerprint,
   computeStateHash,
-  computeTokenHash,
   stableStringify,
   validatePostQuantumSigningKey,
 } from "../crypto.ts";
@@ -35,11 +33,9 @@ import { verifyDetailProof } from "../detail.ts";
 import { buildState } from "../state.ts";
 import type { DetailPayload } from "../types.ts";
 import {
-  EMAIL_VERIFICATION_STORE_PLAINTEXT,
-  EMAIL_VERIFICATION_TTL_MS,
-  generateVerificationToken,
-  getPublicBaseUrl,
-  sendVerificationEmail,
+  issueAndSendVerificationEmail,
+  parseVerificationMailbox,
+  prepareVerificationDelivery,
 } from "../verify-email.ts";
 
 function invalidIdentitySubmission(): Response {
@@ -319,8 +315,9 @@ export async function handlePostDetail(
   );
   if (!detailCheck.ok) return json({ error: detailCheck.error }, 400);
   const detail = detailCheck.value;
-  if (path === "email" && detail.length === 0) {
-    return json({ error: "email detail cannot be empty" }, 400);
+  const mailbox = path === "email" ? parseVerificationMailbox(detail) : null;
+  if (path === "email" && !mailbox) {
+    return json({ error: "email must identify one mailbox" }, 400);
   }
 
   const proofLengthCheck = validateStringLength(
@@ -366,45 +363,31 @@ export async function handlePostDetail(
   }, `identity:${fingerprint}`);
   if (stored) return stored;
 
-  try {
-    if (path === "email") {
-      const token = generateVerificationToken();
-      const tokenHash = computeTokenHash(token);
-      const now = Date.now();
-      const issued = await issueDetailVerification(db, {
-        fingerprint,
-        path,
-        detail,
-        proof,
-        token: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
-        tokenHash,
-        expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
-        sentAt: now,
-        recipientHash: sha256Hex(detail.trim().toLowerCase()),
-      });
-      if (!issued) return json({ok:true,fingerprint,path,verificationStatus:"pending"});
-
-      const baseUrl = getPublicBaseUrl(req);
-      if (!baseUrl) {
-        console.warn(
-          "public base URL not configured; skipping verification email",
-        );
-        return json({ ok: true, warning: "verification_email_not_sent" });
-      }
-
-      const link = `${baseUrl}/api/v1/verify-email#token=${
-        encodeURIComponent(token)
-      }`;
-      sendVerificationEmail(detail, link, fingerprint).catch((err) => {
-        console.error("failed to send verification email:", err);
+  if (path === "email" && mailbox) {
+    const delivery = prepareVerificationDelivery(req);
+    if (!delivery) {
+      return json({
+        ok: true,
+        verificationStatus: "delivery_unavailable",
+        warning: "verification_email_not_sent",
       });
     }
-  } catch (e) {
-    if (String(e).includes("UNIQUE")) {
-      return json({ error: "detail already exists for path" }, 409);
+    try {
+      const verificationStatus = await issueAndSendVerificationEmail(
+        db,
+        { fingerprint, path, detail, proof },
+        mailbox,
+        delivery,
+      );
+      return json({ ok: true, fingerprint, path, verificationStatus });
+    } catch {
+      console.error("Verification email token could not be issued.");
+      return json({
+        ok: true,
+        verificationStatus: "issuance_failed",
+        warning: "verification_email_not_sent",
+      });
     }
-    console.error(e);
-    return json({ error: "failed to store detail" }, 500);
   }
 
   return json({ ok: true });

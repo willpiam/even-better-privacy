@@ -1,6 +1,9 @@
-import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from "../common/MailVerification.ts";
-import {verifyDetailProof} from "./detail.ts";
-import {getIdentity, consumeNonce, isIdentityRevoked} from "./db/index.ts";
+import { domainToASCII } from "node:url";
+import {
+  EMAIL_VERIFY_REQUEST_PATH,
+  verificationRequestDetail,
+} from "../common/MailVerification.ts";
+import { verifyDetailProof } from "./detail.ts";
 import nodemailer from "nodemailer";
 import {
   LIMITS,
@@ -13,8 +16,11 @@ import { buildSecurityHeaders } from "./cors.ts";
 import { computeTokenHash, toHex } from "./crypto.ts";
 import {
   consumeDetailVerification,
+  consumeNonce,
   getDetailByVerificationToken,
   getDetailRecord,
+  getIdentity,
+  isIdentityRevoked,
   issueDetailVerification,
 } from "./db/index.ts";
 import type { DatabaseAdapter } from "./db/index.ts";
@@ -25,11 +31,11 @@ import { sha256Hex } from "../core/MessageHash.ts";
 // Email Verification Configuration
 // =============================================================================
 
-export const EMAIL_VERIFICATION_TTL_MS = Number(
+const EMAIL_VERIFICATION_TTL_MS = Number(
   Deno.env.get("EMAIL_VERIFICATION_TTL_MS") ?? String(24 * 60 * 60 * 1000),
 );
 
-export const EMAIL_VERIFICATION_STORE_PLAINTEXT =
+const EMAIL_VERIFICATION_STORE_PLAINTEXT =
   (Deno.env.get("EMAIL_VERIFICATION_STORE_PLAINTEXT") ?? "false")
     .toLowerCase() === "true";
 
@@ -40,44 +46,63 @@ export function isVerifyEmailPath(path: string): path is VerifyEmailPath {
   return (VERIFY_EMAIL_PATHS as readonly string[]).includes(path);
 }
 
-export function generateVerificationToken(): string {
+function generateVerificationToken(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return toHex(bytes);
 }
 
-export function isLocalHostname(hostname: string): boolean {
+function isLocalHostname(hostname: string): boolean {
   if (
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
   ) return true;
   return hostname.endsWith(".localhost");
 }
 
-export function getPublicBaseUrl(req: Request): string | null {
-  const configured = Deno.env.get("PUBLIC_BASE_URL");
-  if (configured) return configured;
-
-  const url = new URL(req.url);
-  if (isLocalHostname(url.hostname)) return url.origin;
-
-  return null;
+function getPublicBaseUrl(req: Request): string | null {
+  const configured = Deno.env.get("PUBLIC_BASE_URL")?.trim();
+  const url = URL.parse(configured || new URL(req.url).origin);
+  if (!url || url.username || url.password || url.search || url.hash) {
+    return null;
+  }
+  if (url.protocol === "http:" && isLocalHostname(url.hostname)) {
+    return url.href.replace(/\/+$/, "");
+  }
+  return configured && url.protocol === "https:"
+    ? url.href.replace(/\/+$/, "")
+    : null;
 }
 
-export async function sendVerificationEmail(
-  to: string,
-  link: string,
-  fingerprint: string,
-): Promise<void> {
-  const host = Deno.env.get("SMTP_HOST");
-  const from = Deno.env.get("SMTP_FROM");
-  if (!host || !from) {
-    console.log(
-      `[email-verification] ${to}: ${link} (fingerprint: ${fingerprint})`,
-    );
-    return;
-  }
+const localPartPattern =
+  /^[a-z0-9!#$%&'*+/=?^`{|}~_-]+(?:\.[a-z0-9!#$%&'*+/=?^`{|}~_-]+)*$/i;
+const domainLabelPattern = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i;
 
+/** Accept a bare mailbox and keep the signed local part intact for delivery. */
+export function parseVerificationMailbox(claim: string): string | null {
+  if (claim !== claim.trim() || claim.length > 254) return null;
+  const [local, domain, extra] = claim.split("@");
+  if (
+    !domain || extra !== undefined || local.length > 64 ||
+    !localPartPattern.test(local) || !/^[\p{L}\p{M}\p{N}.-]+$/u.test(domain)
+  ) return null;
+  const asciiDomain = domainToASCII(domain).toLowerCase();
+  const labels = asciiDomain.split(".");
+  if (
+    labels.length < 2 ||
+    !labels.every((label) => domainLabelPattern.test(label)) ||
+    !/[a-z]/.test(labels[labels.length - 1]) ||
+    local.length + 1 + asciiDomain.length > 254
+  ) return null;
+  return `${local}@${asciiDomain}`;
+}
+
+export function createVerificationMailer() {
+  const host = Deno.env.get("SMTP_HOST")?.trim();
+  const from = Deno.env.get("SMTP_FROM")?.trim();
   const port = Number(Deno.env.get("SMTP_PORT") ?? "587");
+  if (!host || !from || !Number.isInteger(port) || port < 1 || port > 65535) {
+    return null;
+  }
   const secure = (Deno.env.get("SMTP_SECURE") ?? "").toLowerCase() === "true" ||
     port === 465;
   const user = Deno.env.get("SMTP_USER") ?? undefined;
@@ -88,17 +113,67 @@ export async function sendVerificationEmail(
     port,
     secure,
     requireTLS: true,
+    maxRecipients: 1,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 30_000,
     auth: user ? { user, pass: pass ?? "" } : undefined,
   });
 
-  await transport.sendMail({
-    from,
-    to,
-    subject: "Verify your email",
-    text: `Please verify your email by visiting this link:\n\n${link}\n\n` +
-      `Identity fingerprint:\n${fingerprint}\n\n` +
-      `If you did not request this, you can ignore this message.`,
+  return async (mailbox: string, link: string, fingerprint: string) => {
+    const info = await transport.sendMail({
+      from,
+      to: { name: "", address: mailbox },
+      subject: "Verify your email",
+      text: `Please verify your email by visiting this link:\n\n${link}\n\n` +
+        `Identity fingerprint:\n${fingerprint}\n\n` +
+        `If you did not request this, you can ignore this message.`,
+    });
+    if (info.accepted?.length !== 1) {
+      throw new Error("SMTP did not accept the verification recipient");
+    }
+  };
+}
+
+export function prepareVerificationDelivery(req: Request) {
+  const baseUrl = getPublicBaseUrl(req);
+  const send = baseUrl ? createVerificationMailer() : null;
+  return baseUrl && send ? { baseUrl, send } : null;
+}
+
+export async function issueAndSendVerificationEmail(
+  db: DatabaseAdapter,
+  claim: {
+    fingerprint: string;
+    path: VerifyEmailPath;
+    detail: string;
+    proof: string;
+  },
+  mailbox: string,
+  delivery: NonNullable<ReturnType<typeof prepareVerificationDelivery>>,
+): Promise<"sent" | "pending" | "delivery_unconfirmed"> {
+  const now = Date.now();
+  const token = generateVerificationToken();
+  const issued = await issueDetailVerification(db, {
+    ...claim,
+    token: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
+    tokenHash: computeTokenHash(token),
+    expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
+    sentAt: now,
+    recipientHash: sha256Hex(mailbox.toLowerCase()),
   });
+  if (!issued) return "pending";
+
+  // The fragment keeps the token out of HTTP request URLs and access logs.
+  const link = `${delivery.baseUrl}/api/v1/verify-email#token=${token}`;
+  try {
+    await delivery.send(mailbox, link, claim.fingerprint);
+    return "sent";
+  } catch {
+    // The transport may have accepted the message before losing its response.
+    console.error("Verification email delivery could not be confirmed.");
+    return "delivery_unconfirmed";
+  }
 }
 
 export function wantsJson(req: Request): boolean {
@@ -283,50 +358,69 @@ export async function handleRequestVerifyEmail(
     mailTo = record.detail;
   }
 
+  const mailbox = parseVerificationMailbox(mailTo);
+  if (!mailbox) return json({ error: "email must identify one mailbox" }, 400);
+
   if (record.verified_at !== null) {
     return json({ ok: true, status: "already_verified" });
   }
 
   const identity = await getIdentity(db, fingerprint);
-  const authorization = typeof payload.authorization === "string" ? payload.authorization : "";
+  const authorization = typeof payload.authorization === "string"
+    ? payload.authorization
+    : "";
   const verified = identity && authorization.length <= LIMITS.proof
-    ? verifyDetailProof(identity, EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail(path, providedDetail), authorization) : null;
+    ? verifyDetailProof(
+      identity,
+      EMAIL_VERIFY_REQUEST_PATH,
+      verificationRequestDetail(path, providedDetail),
+      authorization,
+    )
+    : null;
   const now = Date.now();
-  if (!verified?.ok || await isIdentityRevoked(db, fingerprint) || verified.record.timestamp < now - 10 * 60_000 || verified.record.timestamp > now + 2 * 60_000) {
-    return json({error: "owner authorization required"}, 401);
+  if (
+    !verified?.ok || await isIdentityRevoked(db, fingerprint) ||
+    verified.record.timestamp < now - 10 * 60_000 ||
+    verified.record.timestamp > now + 2 * 60_000
+  ) {
+    return json({ error: "owner authorization required" }, 401);
   }
-  const accepted = await db.writeTransaction(tx => consumeNonce(tx, fingerprint, verified.record.nonce), `identity:${fingerprint}`);
-  if (!accepted.ok) return json({error: accepted.error}, 409);
-  const baseUrl = getPublicBaseUrl(req);
-  if (!baseUrl) return json({error: "public base url not configured"}, 500);
-  const token = generateVerificationToken();
-  const tokenHash = computeTokenHash(token);
-  const issued = await issueDetailVerification(db, {
-    fingerprint,
-    path,
-    detail: record.detail,
-    proof: record.proof,
-    token: EMAIL_VERIFICATION_STORE_PLAINTEXT ? token : null,
-    tokenHash,
-    expiresAt: now + EMAIL_VERIFICATION_TTL_MS,
-    sentAt: now,
-    recipientHash: sha256Hex(mailTo.trim().toLowerCase()),
-  });
-  if (!issued) return json({ok: true, status: "pending", message: "An existing link remains valid, or the recipient issuance limit has been reached."}, 202);
-
-  // F-SERVER-09: keep tokens out of request URLs/logs by placing them in the
-  // fragment; fragments are processed client-side and never sent to the server.
-  const link = `${baseUrl}/api/v1/verify-email#token=${
-    encodeURIComponent(token)
-  }`;
-  try {
-    await sendVerificationEmail(mailTo, link, fingerprint);
-  } catch (err) {
-    console.error("failed to send verification email:", err);
-    return json({error: "verification delivery could not be confirmed; an issued link remains valid"}, 503);
+  const delivery = prepareVerificationDelivery(req);
+  if (!delivery) {
+    return json({ error: "verification delivery is unavailable" }, 503);
+  }
+  const accepted = await db.writeTransaction(
+    (tx) => consumeNonce(tx, fingerprint, verified.record.nonce),
+    `identity:${fingerprint}`,
+  );
+  if (!accepted.ok) return json({ error: accepted.error }, 409);
+  const status = await issueAndSendVerificationEmail(
+    db,
+    {
+      fingerprint,
+      path,
+      detail: record.detail,
+      proof: record.proof,
+    },
+    mailbox,
+    delivery,
+  );
+  if (status === "pending") {
+    return json({
+      ok: true,
+      status,
+      message:
+        "An existing link remains valid, or the recipient issuance limit has been reached.",
+    }, 202);
+  }
+  if (status === "delivery_unconfirmed") {
+    return json({
+      error:
+        "verification delivery could not be confirmed; an issued link remains valid",
+    }, 503);
   }
 
-  return json({ ok: true, status: "sent" });
+  return json({ ok: true, status });
 }
 
 export function handleVerifyEmailPage(url: URL): Response {

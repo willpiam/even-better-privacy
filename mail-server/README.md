@@ -92,13 +92,16 @@ ssh -L 8080:127.0.0.1:8080 root@203.0.113.10
 | `MAIL_HOST` | `mail.pqpost.com` | IMAP/SMTP host returned to clients |
 | `STALWART_ADMIN_URL` | `https://mail.pqpost.com` | Stalwart HTTPS base URL |
 | `STALWART_ADMIN_TOKEN` | `...` | API key from step 5.7 |
-| `STALWART_DOMAIN_ID` | `b` | JMAP id of the domain (looked up automatically when unset) |
+| `STALWART_DOMAIN_ID` | `b` | Optional JMAP domain ID hint. Signup verifies its domain name and looks up other requested domains by name. |
 | `MAIL_QUOTA_BYTES` | `1073741824` | Per-mailbox disk quota (default 1 GiB) |
 | `MAIL_E2E_SECRET` | long random string | Lets `deno task test:pqpost-mail` create and delete only `e2e` plus digits addresses |
 
 Optionally point the existing verification mailer at Stalwart too:
 `SMTP_HOST=mail.pqpost.com`, `SMTP_PORT=465`, `SMTP_SECURE=true`,
 `SMTP_USER=noreply`, `SMTP_PASS=...`, `SMTP_FROM=noreply@pqpost.com`.
+Set `PUBLIC_BASE_URL` to the HTTPS key-server URL. If verification delivery
+is unconfigured, publishing the claim still succeeds and reports the delivery
+problem. The owner can request verification after configuring delivery.
 
 For `pqpost.com`, mailbox names shorter than nine characters require a confirmed
 purchase when paid signup is enabled; otherwise they remain unavailable. Existing

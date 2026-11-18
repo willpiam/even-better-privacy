@@ -1,6 +1,29 @@
-import { assertEquals, assertRejects } from "jsr:@std/assert";
+import { assert, assertEquals, assertRejects } from "jsr:@std/assert";
 import { createServer, type Socket } from "node:net";
-import { sendVerificationEmail } from "../verify-email.ts";
+import {
+  createVerificationMailer,
+  parseVerificationMailbox,
+} from "../verify-email.ts";
+
+Deno.test("verification accepts only a bare mailbox and normalizes its domain", () => {
+  assertEquals(
+    parseVerificationMailbox("User+tag@BÜCHER.example"),
+    "User+tag@xn--bcher-kva.example",
+  );
+  for (const value of [
+    "alice@example.test, bob@example.test",
+    "Example <alice@example.test>",
+    "Family: alice@example.test;",
+    "alice@example.test\r\n",
+    "alice(comment)@example.test",
+    "alice..bob@example.test",
+    "alice@-example.test",
+    "alice@example..test",
+    "alice@[127.0.0.1]",
+    "alice@127.0.0.1",
+    "alice@exa／mple.test",
+  ]) assertEquals(parseVerificationMailbox(value), null, value);
+});
 
 for (const advertiseTls of [false, true]) {
   Deno.test(`verification SMTP refuses credentials and mail when STARTTLS is ${advertiseTls ? "rejected" : "missing"}`, async () => {
@@ -60,8 +83,10 @@ for (const advertiseTls of [false, true]) {
     ];
     keys.forEach((key, i) => Deno.env.set(key, values[i]));
     try {
+      const send = createVerificationMailer();
+      assert(send);
       await assertRejects(() =>
-        sendVerificationEmail(
+        send(
           "recipient@example.test",
           "https://example.test/verify#test",
           "test-fingerprint",

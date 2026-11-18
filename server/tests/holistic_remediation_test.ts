@@ -9,6 +9,7 @@ import {handlePostDetail} from '../handlers/identity.ts';
 import {handleVerifiedEmailLookup, handleListIdentities} from '../handlers/discovery.ts';
 import {EMAIL_VERIFY_REQUEST_PATH, verificationRequestDetail} from '../../common/MailVerification.ts';
 import {checkCardanoPayment} from '../payments/verification.ts';
+import {installVerificationSmtp} from './verification_smtp_fixture.ts';
 
 async function regressionDatabase(): Promise<DatabaseAdapter> {
   if (Deno.env.get('HOLISTIC_TEST_POSTGRES') === 'true') {
@@ -52,7 +53,7 @@ Deno.test('authorization nonces are consumed once, including when a different en
 
 Deno.test('verification issuance preserves active tokens, authenticates resends, and bounds one recipient across identities', async () => {
   const db=await regressionDatabase();
-  const previous=Deno.env.get('PUBLIC_BASE_URL');Deno.env.set('PUBLIC_BASE_URL','http://localhost');
+  const smtp=installVerificationSmtp();
   try {
     const identity=new Identity('dilithium','kyber');const fingerprint=await register(db,identity);
     const email='victim@example.test';identity.attachDetail('email',email);
@@ -69,6 +70,7 @@ Deno.test('verification issuance preserves active tokens, authenticates resends,
     const reused=await handleRequestVerifyEmail(post('/api/v1/verify-email/request',payload),db);
     assertEquals(reused.status,409);await reused.body?.cancel();
     assertEquals((await getDetailRecord(db,fingerprint,'email'))!.verification_token_hash,'original');
+    assertEquals(smtp.deliveries.length, 0);
     const records=[];
     for(let index=0;index<4;index++) {
       const other=new Identity('dilithium','kyber');const fp=await register(db,other);
@@ -78,7 +80,7 @@ Deno.test('verification issuance preserves active tokens, authenticates resends,
     }
     const issued=await Promise.all(records.map(record => issueDetailVerification(db,record)));
     assertEquals(issued.filter(Boolean).length,2); // one original + two = daily recipient budget
-  } finally {if(previous===undefined)Deno.env.delete('PUBLIC_BASE_URL');else Deno.env.set('PUBLIC_BASE_URL',previous);await db.close();}
+  } finally {smtp.restore();await db.close();}
 });
 
 Deno.test('exact verified-email lookup and summary projection omit proofs while retaining verification and ambiguity', async () => {

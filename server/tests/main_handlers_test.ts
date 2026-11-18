@@ -9,6 +9,8 @@ import {
   buildMessageHashEnvelopeFromHash,
   sha256Hex,
 } from "../../core/MessageHash.ts";
+import { getDetailRecord } from "../db/index.ts";
+import { installVerificationSmtp } from "./verification_smtp_fixture.ts";
 
 function signHashedMessageForTest(
   message: string,
@@ -23,17 +25,23 @@ function signHashedMessageForTest(
 type MainModule = typeof import("../main.ts");
 
 async function withServer(
-  fn: (mod: MainModule, dbPath: string) => Promise<void>,
+  fn: (
+    mod: MainModule,
+    dbPath: string,
+    smtp: ReturnType<typeof installVerificationSmtp>,
+  ) => Promise<void>,
 ): Promise<void> {
   const dbPath = await Deno.makeTempFile({ suffix: ".sqlite" });
   // Ensure each test gets a fresh module instance and DB
   Deno.env.set("DB_PATH", dbPath);
   Deno.env.set("EMAIL_VERIFICATION_STORE_PLAINTEXT", "true");
   const mod: MainModule = await import(`../main.ts#${crypto.randomUUID()}`);
+  const smtp = installVerificationSmtp();
 
   try {
-    await fn(mod, dbPath);
+    await fn(mod, dbPath, smtp);
   } finally {
+    smtp.restore();
     try {
       await mod.closeDb();
     } catch {
@@ -104,6 +112,148 @@ async function postVerifySignature(
     }),
   );
 }
+
+function verificationRequest(
+  fingerprint: string,
+  path: "email" | "opaque::email",
+  detail: string,
+  authorization: string,
+) {
+  return new Request("http://localhost/api/v1/verify-email/request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ fingerprint, path, detail, authorization }),
+  });
+}
+
+Deno.test("automatic and opaque verification reject recipient lists before issuing tokens", async () => {
+  await withServer(async (mod, _dbPath, smtp) => {
+    const { fingerprint, signingKey } = await registerIdentity(mod);
+    const list = "first@example.test, second@example.test";
+    const plain = await postDetail(mod, fingerprint, signingKey, "email", list);
+    assertEquals(plain.status, 400);
+    await plain.body?.cancel();
+
+    const db = await mod.getDbForTests();
+    assertEquals(await getDetailRecord(db, fingerprint, "email"), null);
+
+    const path = "opaque::email";
+    const opaque = await postDetail(
+      mod, fingerprint, signingKey, path, sha256Hex(list),
+    );
+    assertEquals(opaque.status, 200);
+    await opaque.body?.cancel();
+    const authorization = createSignedProof(signingKey, {
+      nonce: 1,
+      path: EMAIL_VERIFY_REQUEST_PATH,
+      detail: verificationRequestDetail(path, list),
+      timestamp: Date.now(),
+    }).proof;
+    const response = await mod.handleRequest(
+      verificationRequest(fingerprint, path, list, authorization),
+    );
+    assertEquals(response.status, 400);
+    await response.body?.cancel();
+    assertEquals((await getDetailRecord(db, fingerprint, path))?.verification_token_hash, null);
+    assertEquals(await db.query("SELECT recipient_hash FROM verification_recipient_budget"), []);
+    assertEquals(smtp.deliveries, []);
+  });
+});
+
+Deno.test("missing verification configuration leaves an unverified claim that can be resent", async () => {
+  await withServer(async (mod, _dbPath, smtp) => {
+    const { fingerprint, signingKey } = await registerIdentity(mod);
+    const detail = "User+tag@BÜCHER.example";
+    const smtpHost = Deno.env.get("SMTP_HOST")!;
+    const smtpFrom = Deno.env.get("SMTP_FROM")!;
+    const baseUrl = Deno.env.get("PUBLIC_BASE_URL")!;
+    const log = console.log;
+    const messages: string[] = [];
+    console.log = (...args: unknown[]) => { messages.push(args.join(" ")); };
+    try {
+      Deno.env.delete("SMTP_HOST");
+      const submitted = await postDetail(mod, fingerprint, signingKey, "email", detail);
+      assertEquals(submitted.status, 200);
+      assertEquals((await submitted.json()).verificationStatus, "delivery_unavailable");
+
+      const authorization = createSignedProof(signingKey, {
+        nonce: 1,
+        path: EMAIL_VERIFY_REQUEST_PATH,
+        detail: verificationRequestDetail("email", detail),
+        timestamp: Date.now(),
+      }).proof;
+      const resend = () => mod.handleRequest(verificationRequest(
+        fingerprint, "email", detail, authorization,
+      ));
+      for (const missing of ["SMTP_HOST", "SMTP_FROM", "PUBLIC_BASE_URL"]) {
+        Deno.env.set("SMTP_HOST", smtpHost);
+        Deno.env.set("SMTP_FROM", smtpFrom);
+        Deno.env.set("PUBLIC_BASE_URL", baseUrl);
+        if (missing === "PUBLIC_BASE_URL") {
+          Deno.env.set(missing, "https://keys.example.test/#invalid");
+        } else {
+          Deno.env.delete(missing);
+        }
+        const response = await resend();
+        assertEquals(response.status, 503);
+        assertEquals((await response.json()).error, "verification delivery is unavailable");
+      }
+
+      const db = await mod.getDbForTests();
+      const pending = await getDetailRecord(db, fingerprint, "email");
+      assertEquals(pending?.detail, detail);
+      assertEquals(pending?.verification_token_hash, null);
+      assertEquals(pending?.verification_sent_at, null);
+      assertEquals(await db.query("SELECT recipient_hash FROM verification_recipient_budget"), []);
+      assertEquals(smtp.deliveries, []);
+
+      Deno.env.set("PUBLIC_BASE_URL", baseUrl);
+      const sent = await resend();
+      assertEquals(sent.status, 200);
+      assertEquals((await sent.json()).status, "sent");
+      assertEquals(smtp.deliveries.map(({ recipients }) => recipients), [
+        ["User+tag@xn--bcher-kva.example"],
+      ]);
+      assertEquals(await db.query("SELECT recipient_hash FROM verification_recipient_budget"), [
+        [sha256Hex("user+tag@xn--bcher-kva.example")],
+      ]);
+      assert(messages.every((line) => !line.includes("#token=")));
+    } finally {
+      console.log = log;
+    }
+  });
+});
+
+Deno.test("uncertain verification delivery reports failure without logging the link or reissuing", async () => {
+  await withServer(async (mod, _dbPath, smtp) => {
+    const { fingerprint, signingKey } = await registerIdentity(mod);
+    const detail = "user@example.test";
+    smtp.failDelivery = true;
+    const error = console.error;
+    const messages: string[] = [];
+    console.error = (...args: unknown[]) => { messages.push(args.join(" ")); };
+    try {
+      const submitted = await postDetail(mod, fingerprint, signingKey, "email", detail);
+      assertEquals(submitted.status, 200);
+      assertEquals((await submitted.json()).verificationStatus, "delivery_unconfirmed");
+      const authorization = createSignedProof(signingKey, {
+        nonce: 1,
+        path: EMAIL_VERIFY_REQUEST_PATH,
+        detail: verificationRequestDetail("email", detail),
+        timestamp: Date.now(),
+      }).proof;
+      const resend = await mod.handleRequest(verificationRequest(
+        fingerprint, "email", detail, authorization,
+      ));
+      assertEquals(resend.status, 202);
+      assertEquals((await resend.json()).status, "pending");
+      assertEquals(smtp.deliveries.length, 1);
+      assertEquals(messages, ["Verification email delivery could not be confirmed."]);
+    } finally {
+      console.error = error;
+    }
+  });
+});
 
 Deno.test("POST /identity then GET /identity returns stored record", async () => {
   await withServer(async (mod) => {
@@ -261,7 +411,7 @@ Deno.test("Revoked detail rejects old proof but accepts new proof", async () => 
 });
 
 Deno.test("Email detail is unverified until verification endpoint is called", async () => {
-  await withServer(async (mod, _dbPath) => {
+  await withServer(async (mod, _dbPath, smtp) => {
     const { fingerprint, signingKey } = await registerIdentity(mod);
     const detailRes = await postDetail(
       mod,
@@ -284,6 +434,10 @@ Deno.test("Email detail is unverified until verification endpoint is called", as
     const [verifiedAtRaw, verificationToken] = rows[0];
     assertEquals(verifiedAtRaw, null);
     assert(verificationToken, "verification token should be set");
+    assertEquals(smtp.deliveries.map(({ recipients }) => recipients), [
+      ["user@example.com"],
+    ]);
+    assert(smtp.deliveries[0].text.includes(`#token=${verificationToken}`));
 
     const verifyRes = await mod.handleRequest(
       new Request("http://localhost/api/v1/verify-email", {

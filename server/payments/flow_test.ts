@@ -273,7 +273,7 @@ Deno.test({
       holdReplacedHash = true;
       calls.clear();
       const reconciliation = reconcilePendingPayments(db);
-      let timer: number | undefined;
+          let timer: ReturnType<typeof setTimeout> | undefined;
       try {
         const completed = await Promise.race([
           reconciliation.then(() => true),
@@ -317,6 +317,7 @@ Deno.test({
       let failCreate = true;
       let dropCreationReply = false;
       let failLookup = false;
+      let createInWrongDomain = false;
       let remoteAccount: Record<string, unknown> | undefined;
       const passwordUpdates: string[] = [];
       const stalwartFetch = ((_url: unknown, init?: RequestInit) => {
@@ -324,7 +325,11 @@ Deno.test({
         const [method, args] = body.methodCalls[0];
         let result: Record<string, unknown> = {};
         if (method === "x:Domain/get") {
-          result = { list: [{ id: "d1", name: "test.pqpost.com" }] };
+          const domains = [
+            { id: "primary", name: "pqpost.com" },
+            { id: "d1", name: "test.pqpost.com" },
+          ];
+          result = { list: domains.filter(domain => !args.ids || args.ids.includes(domain.id)) };
         } else if (method === "x:Account/query") {
           assertEquals(args.filter.conditions, [{ name: "alice" }, {
             domainId: "d1",
@@ -336,6 +341,7 @@ Deno.test({
         } else if (method === "x:Account/get") {
           result = { list: remoteAccount ? [remoteAccount] : [] };
         } else if (args.create) {
+          assertEquals(args.create.new1.domainId, "d1");
           if (failCreate || remoteAccount) {
             result = {
               notCreated: {
@@ -343,7 +349,11 @@ Deno.test({
               },
             };
           } else {
-            remoteAccount = { ...args.create.new1, id: "account" };
+            remoteAccount = {
+              ...args.create.new1,
+              id: "account",
+              domainId: createInWrongDomain ? "primary" : args.create.new1.domainId,
+            };
             if (dropCreationReply) {
               return Promise.reject(new Error("creation response lost"));
             }
@@ -361,7 +371,7 @@ Deno.test({
         new StalwartClient({
           baseUrl: "https://stalwart.test",
           token: "test",
-          domainId: null,
+          domainId: "primary",
         }, stalwartFetch),
       );
       const emailProof = createSignedProof(signingKey, {
@@ -426,6 +436,19 @@ Deno.test({
       assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
 
       remoteAccount = undefined;
+      createInWrongDomain = true;
+      assertEquals((await handleMailSignup(signupRequest(), db)).status, 502);
+      assertEquals((await getMailboxByFingerprint(db, fingerprint))?.stalwartId, null);
+      assertEquals((await handleMailSignup(signupRequest(), db)).status, 409);
+      assertEquals(passwordUpdates, []);
+      assertEquals(await getDetailRecord(db, fingerprint, "email"), null);
+      assertEquals(
+        (await (await handlePaymentOrder(post({ orderId }), db, false)).json()).status,
+        "confirmed",
+      );
+
+      remoteAccount = undefined;
+      createInWrongDomain = false;
       dropCreationReply = true;
       failLookup = true;
       assertEquals((await handleMailSignup(signupRequest(), db)).status, 502);
@@ -546,14 +569,19 @@ Deno.test({
         }, now),
         true,
       );
+      let account: Record<string, unknown> | undefined;
       const fetchFake = ((_url: unknown, init?: { body?: unknown }) => {
         const body = JSON.parse(String(init?.body));
         const [method, args] = body.methodCalls[0];
-        const result = method === "x:Domain/get"
-          ? { list: [{ id: "d1", name: "test.pqpost.com" }] }
-          : args.create
-          ? { created: { new1: { id: "account" } } }
-          : {};
+        let result: Record<string, unknown> = {};
+        if (method === "x:Domain/get") {
+          result = { list: [{ id: "d1", name: "test.pqpost.com" }] };
+        } else if (args.create) {
+          account = { ...args.create.new1, id: "account" };
+          result = { created: { new1: { id: "account" } } };
+        } else if (method === "x:Account/get") {
+          result = { list: account ? [account] : [] };
+        }
         return Promise.resolve(
           Response.json({ methodResponses: [[method, result, "c1"]] }),
         );

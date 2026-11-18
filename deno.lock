@@ -35,8 +35,8 @@
     "npm:bech32@2": "2.0.0",
     "npm:imapflow@1.2.12": "1.2.12",
     "npm:mailparser@3.9.3": "3.9.3",
-    "npm:nodemailer@*": "8.0.1",
-    "npm:nodemailer@^6.10.1": "6.10.1",
+    "npm:nodemailer@*": "10.6.0",
+    "npm:nodemailer@^10.6.0": "10.6.0",
     "npm:playwright@1.57.0": "1.57.0",
     "npm:solc@0.8.24": "0.8.24"
   },
@@ -2036,8 +2036,8 @@
       ],
       "bin": true
     },
-    "nodemailer@6.10.1": {
-      "integrity": "sha512-Z+iLaBGVaSjbIzQ4pX6XV41HrooLsQ10ZWPUehGmuantvzWoDVBnmsdUcOIDM1t+yPor5pDhVlDESgOMEGxhHA=="
+    "nodemailer@10.6.0": {
+      "integrity": "sha512-jWanL7D9GD3jvUDYKmoC5rWTiG8MnBgnN2yV68bgMKip1zUJhiSTyz7Eg+18y8sk5OvdVDzws5nZK5arSI4f5Q=="
     },
     "nodemailer@7.0.13": {
       "integrity": "sha512-PNDFSJdP+KFgdsG3ZzMXCgquO7I6McjY2vlqILjtJd0hy8wEvtugS9xKRF2NWlPNGxvLCXlTNIae4serI7dinw=="
@@ -3014,7 +3014,7 @@
       "npm:bech32@2",
       "npm:imapflow@1.2.12",
       "npm:mailparser@3.9.3",
-      "npm:nodemailer@^6.10.1"
+      "npm:nodemailer@^10.6.0"
     ],
     "packageJson": {
       "dependencies": [

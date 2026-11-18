@@ -18,7 +18,7 @@
     "@lucid-evolution/lucid": "npm:@lucid-evolution/lucid@0.4.29",
     "imapflow": "npm:imapflow@1.2.12",
     "mailparser": "npm:mailparser@3.9.3",
-    "nodemailer": "npm:nodemailer@^6.10.1",
+    "nodemailer": "npm:nodemailer@^10.6.0",
     "postgres": "jsr:@db/postgres@^0.19.5",
     "sqlite": "jsr:@db/sqlite@^0.13.0",
     "std/dotenv": "jsr:@std/dotenv@^0.225.5",
