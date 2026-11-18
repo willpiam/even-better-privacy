@@ -28,7 +28,41 @@ export function paymentConfigMatchesDomain(
     domain === "test.pqpost.com" &&
       config.assets.every((asset) => !asset.network.endsWith("-mainnet"));
 }
-type PaymentPrefix = "MAIL_PAYMENT" | "MAIL_TEST_PAYMENT";
+export type PaymentPrefix = "MAIL_PAYMENT" | "MAIL_TEST_PAYMENT";
+
+export type PaymentProvider =
+  | { chain: "ethereum"; network: "mainnet" | "sepolia"; rpcUrl: string }
+  | { chain: "cardano"; network: "mainnet" | "preview"; apiKey: string };
+
+/** In-flight orders only require credentials for the network stored in the quote. */
+export function readPaymentProvider(
+  prefix: PaymentPrefix,
+  network: PaymentNetwork,
+): PaymentProvider | null {
+  switch (network) {
+    case "ethereum-mainnet":
+    case "ethereum-sepolia": {
+      const rpcUrl = paymentEnv(prefix, "ETH_RPC_URL")?.trim();
+      if (!rpcUrl || URL.parse(rpcUrl)?.protocol !== "https:") return null;
+      return {
+        chain: "ethereum",
+        network: network === "ethereum-sepolia" ? "sepolia" : "mainnet",
+        rpcUrl,
+      };
+    }
+    case "cardano-mainnet":
+    case "cardano-preview": {
+      const apiKey = paymentEnv(prefix, "BLOCKFROST_KEY")?.trim();
+      if (!apiKey) return null;
+      return {
+        chain: "cardano",
+        network: network === "cardano-preview" ? "preview" : "mainnet",
+        apiKey,
+      };
+    }
+  }
+  return null;
+}
 
 function paymentEnv(prefix: PaymentPrefix, name: string, fallback = false): string | undefined {
   const value = Deno.env.get(`${prefix}_${name}`);

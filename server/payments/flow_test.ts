@@ -1,6 +1,10 @@
 import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
-import { insertIdentity } from "../db/index.ts";
+import {
+  getDetailRecord,
+  getMailboxByFingerprint,
+  insertIdentity,
+} from "../db/index.ts";
 import { DilithiumSigningKey } from "../../core/Dilithium.ts";
 import { computeIdentityFingerprint } from "../crypto.ts";
 import { createSignedProof } from "../tests/helpers.ts";
@@ -17,6 +21,7 @@ import {
   reconcilePendingPayments,
 } from "../handlers/mail-payment.ts";
 import {
+  handleMailE2eCleanup,
   handleMailSignup,
   setStalwartClientForTests,
 } from "../handlers/mail-signup.ts";
@@ -179,6 +184,7 @@ Deno.test({
       assert(!view.message.includes(orderId));
       assertEquals(view.amountAtomic, "4000000");
       const hash = `0x${"1".repeat(64)}`;
+      const replacedHash = `0x${"5".repeat(64)}`;
       const blockHash = `0x${"2".repeat(64)}`;
       const msg = Array.from(
         new TextEncoder().encode(view.message),
@@ -210,15 +216,16 @@ Deno.test({
           data: `0x${BigInt(view.amountAtomic).toString(16).padStart(64, "0")}`,
         }],
       };
-      let latestBlock = "0xa";
+      let canonicalBlock = `0x${"6".repeat(64)}`;
       globalThis.fetch = ((_url: unknown, init?: { body?: unknown }) => {
         const request = JSON.parse(String(init?.body));
+        const found = request.params.includes(hash);
         const results: Record<string, unknown> = {
           eth_chainId: "0xaa36a7",
-          eth_getTransactionByHash: transaction,
-          eth_getTransactionReceipt: receipt,
-          eth_blockNumber: latestBlock,
-          eth_getBlockByNumber: { hash: blockHash },
+          eth_getTransactionByHash: found ? transaction : null,
+          eth_getTransactionReceipt: found ? receipt : null,
+          eth_blockNumber: "0xe",
+          eth_getBlockByNumber: { hash: canonicalBlock },
         };
         return Promise.resolve(
           Response.json({
@@ -229,19 +236,30 @@ Deno.test({
         );
       }) as typeof fetch;
       const verified = await handlePaymentOrder(
-        post({ orderId, transactionId: hash }),
+        post({ orderId, transactionId: replacedHash }),
         db,
         true,
       );
       assertEquals(verified.status, 200);
       assertEquals((await verified.json()).status, "pending");
-      latestBlock = "0xe";
-      await reconcilePendingPayments(db);
-      assertEquals(
-        (await (await handlePaymentOrder(post({ orderId }), db, false)).json())
-          .status,
-        "confirmed",
+      // Toggling the catalog off must not pause verification of stored quotes.
+      Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
+      Deno.env.delete("MAIL_PAYMENT_BLOCKFROST_KEY");
+      Deno.env.delete("ETHEREUM_ALCHEMY_API_KEY");
+      assertEquals((await handlePaymentConfig().json()).enabled, false);
+      const replacement = await handlePaymentOrder(
+        post({ orderId, transactionId: hash }),
+        db,
+        true,
       );
+      assertEquals(replacement.status, 200);
+      assertEquals((await replacement.json()).status, "pending");
+      canonicalBlock = blockHash;
+      await reconcilePendingPayments(db);
+      const finalPayment =
+        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals(finalPayment.status, "confirmed");
+      assertEquals(finalPayment.transactionId, hash.slice(2));
       const recoveryProof = createSignedProof(signingKey, {
         nonce: 12,
         path: MAIL_PAYMENT_RECOVER_PATH,
@@ -322,6 +340,22 @@ Deno.test({
         "confirmed",
       );
       failCreate = false;
+      await db.execute(`CREATE TRIGGER fail_payment_fulfillment
+        BEFORE UPDATE OF status ON mail_payment_orders WHEN NEW.status = 'fulfilled'
+        BEGIN SELECT RAISE(ABORT, 'simulated payment write failure'); END`);
+      const failedFulfillment = await handleMailSignup(
+        post({
+          fingerprint,
+          username: "alice",
+          mailPassword: "x".repeat(32),
+          detailProof: emailProof,
+        }),
+        db,
+      );
+      assertEquals(failedFulfillment.status, 500);
+      assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
+      assertEquals(await getDetailRecord(db, fingerprint, "email"), null);
+      await db.execute("DROP TRIGGER fail_payment_fulfillment");
       const signup = await handleMailSignup(
         post({
           fingerprint,
@@ -339,10 +373,11 @@ Deno.test({
           .status,
         "fulfilled",
       );
-      assert(
-        (await db.query(
-          "SELECT order_id FROM mail_payment_orders WHERE status = 'fulfilled'",
-        )).length === 1,
+      assertEquals(
+        await db.query(
+          "SELECT order_id FROM mail_payment_orders WHERE status = 'fulfilled' AND active = 0",
+        ),
+        [[orderId]],
       );
     } finally {
       globalThis.fetch = originalFetch;
@@ -366,6 +401,7 @@ Deno.test({
       reservePaymentOrder,
       submitPaymentTransaction,
       confirmPaymentOrder,
+      getPaymentOrder,
     } = await import("./orders.ts");
     const saved = Object.fromEntries(
       ["MAIL_SIGNUP_ENABLED", "MAIL_DOMAIN", "MAIL_E2E_SECRET"].map((
@@ -480,6 +516,30 @@ Deno.test({
       const result = await signup(true);
       assertEquals(result.status, 200, await result.clone().text());
       assertEquals((await result.json()).email, "e2e12345@test.pqpost.com");
+      const cleanup = await handleMailE2eCleanup(
+        new Request("http://localhost/", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-ebp-e2e-secret": "test-only-e2e-secret",
+          },
+          body: JSON.stringify({ usernames: ["e2e12345"] }),
+        }),
+        db,
+      );
+      assertEquals(cleanup.status, 200);
+      assertEquals(await getMailboxByFingerprint(db, fingerprint), null);
+      const fulfilledOrder = (await getPaymentOrder(db, orderId))!;
+      assertEquals(fulfilledOrder.status, "fulfilled");
+      assertEquals(fulfilledOrder.active, false);
+      assertEquals(
+        await reservePaymentOrder(db, {
+          ...fulfilledOrder,
+          orderId: crypto.randomUUID(),
+          proofNonce: 2,
+        }, now),
+        true,
+      );
     } finally {
       setStalwartClientForTests(null);
       for (const [key, value] of Object.entries(saved)) {

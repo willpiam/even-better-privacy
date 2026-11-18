@@ -86,16 +86,21 @@ export function checkEthereumPayment(input: {
   if (!tx || !receipt) return "pending";
   const block = hexInteger(receipt.blockNumber);
   const latest = hexInteger(input.latestBlock);
+  const txBlock = hexInteger(tx.blockNumber);
   if (
     tx.hash?.toLowerCase() !== hash ||
     receipt.transactionHash?.toLowerCase() !== hash ||
-    hexInteger(receipt.status) !== 1n || block === null || latest === null ||
-    latest < block ||
+    block === null || latest === null ||
     !receipt.blockHash || !/^0x[0-9a-f]{64}$/i.test(receipt.blockHash) ||
-    tx.blockHash?.toLowerCase() !== receipt.blockHash.toLowerCase() ||
-    hexInteger(tx.blockNumber) !== block ||
-    input.canonicalBlockHash?.toLowerCase() !== receipt.blockHash.toLowerCase()
+    !/^0x[0-9a-f]{64}$/i.test(input.canonicalBlockHash ?? "")
   ) return "invalid";
+  // RPC reads can briefly describe different chain tips during a reorg.
+  if (
+    latest < block || txBlock !== block ||
+    tx.blockHash?.toLowerCase() !== receipt.blockHash.toLowerCase() ||
+    input.canonicalBlockHash?.toLowerCase() !== receipt.blockHash.toLowerCase()
+  ) return "pending";
+  if (hexInteger(receipt.status) !== 1n) return "invalid";
   const data = tx.input?.toLowerCase() ?? "";
   if (!HEX_DATA.test(data)) return "invalid";
   const message = hexBytes(expected.message);
@@ -164,16 +169,16 @@ export function checkCardanoPayment(input: {
     !Number.isSafeInteger(input.latestHeight) || input.latestHeight < 0
   ) return "invalid";
   if (!tx) return "pending";
-  // Failed phase-2 transactions do not create their ordinary outputs. Do not
-  // grant entitlements from either collateral or failed script execution.
-  if (tx.valid_contract !== true) return "invalid";
   if (
     tx.hash?.toLowerCase() !== input.txHash.toLowerCase() ||
     typeof tx.block !== "string" || !/^[0-9a-f]{64}$/i.test(tx.block) ||
-    tx.block.toLowerCase() !== input.canonicalBlockHash?.toLowerCase() ||
     !Number.isSafeInteger(tx.block_height) || tx.block_height! < 0 ||
-    tx.block_height! > input.latestHeight
+    !/^[0-9a-f]{64}$/i.test(input.canonicalBlockHash ?? "")
   ) return "invalid";
+  if (tx.block_height! > input.latestHeight ||
+    tx.block.toLowerCase() !== input.canonicalBlockHash?.toLowerCase()) return "pending";
+  // Failed phase-2 transactions do not create their ordinary outputs.
+  if (tx.valid_contract !== true) return "invalid";
   const messages = input.metadata.filter((item) => item.label === "674");
   const body = messages[0]?.json_metadata as { msg?: unknown } | null;
   if (

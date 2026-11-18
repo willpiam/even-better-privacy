@@ -2,6 +2,7 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { loadSync } from "std/dotenv";
 import { Pool, type PoolClient } from "postgres";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
+import { PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
 
 /** Dead or reset connections should open a new pool instead of failing every request. */
 export function isTransientDbError(err: unknown): boolean {
@@ -352,6 +353,7 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
       `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
       ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`,
     );
+    for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await this.execute(sql);
 
     await this.execute(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (

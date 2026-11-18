@@ -24,19 +24,22 @@ import {
   isMailSignupReady,
   mailModeFromRequest,
   mailSettingsForMode,
-  paymentConfigForDomain,
+  paymentPrefixForDomain,
   paymentConfigForSettings,
   TEST_MAIL_DOMAIN,
 } from "./mail-signup.ts";
 import {
   cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
+  expirePaymentOrder,
   expirePaymentOrders,
   getPaymentOrder,
+  paymentTransactionIds,
   reservePaymentOrder,
   submitPaymentTransaction,
   type StoredOrder,
 } from "../payments/orders.ts";
+import { readPaymentProvider } from "../payments/config.ts";
 import { quoteAtomicUnits } from "../payments/quote.ts";
 import { fetchUsdRate } from "../payments/rates.ts";
 import {
@@ -155,31 +158,33 @@ export async function handlePaymentCreate(
   const amountAtomic = quoteAtomicUnits(usdCents, rate, chosen.decimals)
     .toString();
   const orderId = crypto.randomUUID();
-  const reserved = await db.writeTransaction(async tx => {
+  const reserved = await db.writeTransaction(async (tx) => {
+    if (await getMailboxByFingerprint(tx, fingerprint) ||
+      await isMailboxUsernameTaken(tx, check.username, mail.domain)) return false;
     if (!(await consumeNonce(tx, fingerprint, proofResult.record.nonce)).ok) return false;
     return await reservePaymentOrder(tx, {
-    orderId,
-    username: check.username,
-    domain: mail.domain,
-    fingerprint,
-    proofNonce: proofResult.record.nonce,
-    asset,
-    network: chosen.network,
-    recipient: chosen.recipient,
-    assetUnit: chosen.unit,
-    usdCents,
-    amountAtomic,
-    decimals: chosen.decimals,
-    usdPerToken: rate,
-    confirmations: chosen.network.startsWith("ethereum-")
-      ? config.ethereumConfirmations
-      : config.cardanoConfirmations,
-    // The on-chain reference is public; it must not reveal the checkout capability.
-    message: `pqpost:${crypto.randomUUID()}`,
-    createdAt: now,
-    expiresAt: now + QUOTE_MS,
-    graceUntil: now + QUOTE_MS + GRACE_MS,
-  }, now);
+      orderId,
+      username: check.username,
+      domain: mail.domain,
+      fingerprint,
+      proofNonce: proofResult.record.nonce,
+      asset,
+      network: chosen.network,
+      recipient: chosen.recipient,
+      assetUnit: chosen.unit,
+      usdCents,
+      amountAtomic,
+      decimals: chosen.decimals,
+      usdPerToken: rate,
+      confirmations: chosen.network.startsWith("ethereum-")
+        ? config.ethereumConfirmations
+        : config.cardanoConfirmations,
+      // The on-chain reference is public and separate from the checkout capability.
+      message: `pqpost:${crypto.randomUUID()}`,
+      createdAt: now,
+      expiresAt: now + QUOTE_MS,
+      graceUntil: now + QUOTE_MS + GRACE_MS,
+    }, now);
   }, `identity:${fingerprint}`);
   if (!reserved) {
     return json({
@@ -283,9 +288,9 @@ export async function handlePaymentOrder(
   const { orderId, transactionId, checkPayment } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const now = Date.now();
-  await expirePaymentOrders(db, now);
   let order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
+  order = await expirePaymentOrder(db, order, now);
   if (submit) {
     if (
       typeof transactionId !== "string" ||
@@ -305,10 +310,12 @@ export async function handlePaymentOrder(
     order = (await getPaymentOrder(db, orderId))!;
   }
   if (submit || checkPayment !== false) {
-    try { order = await refreshPaymentOrder(db, order); }
-    catch (error) {
-      if (error instanceof PaymentRefreshError) return json({error: error.message}, 503);
-      throw error;
+    try {
+      order = await refreshPaymentOrder(db, order);
+    } catch (error) {
+      if (!(error instanceof PaymentRefreshError)) throw error;
+      // Submission already committed. Let checkout acknowledge the saved hash.
+      if (!submit) return json({ error: error.message }, 503);
     }
   }
   return json({
@@ -336,78 +343,66 @@ export class PaymentRefreshError extends Error {
   constructor(readonly stage: string, message: string) { super(message); }
 }
 /** Domain service shared by the request adapter and scheduled reconciliation. */
-export async function refreshPaymentOrder(db: DatabaseAdapter, order: StoredOrder): Promise<StoredOrder> {
-  const orderId = order.orderId;
-  if (order.status === "pending") {
-    const config = paymentConfigForDomain(order.domain);
-    if (
-      !config ||
-      !config.assets.some((entry) => entry.network === order!.network)
-    ) throw new PaymentRefreshError("configuration", "payment verification unavailable");
-    const expected = {
-      recipient: order.recipient,
-      amount: BigInt(order.amountAtomic),
-      message: order.message,
-      confirmations: order.confirmations,
-    };
-    try {
-      const result = order.network.startsWith("ethereum-")
-        ? await verifyEthereumPayment({
-          rpcUrl: config.ethereumRpcUrl,
-          network: order.network === "ethereum-sepolia" ? "sepolia" : "mainnet",
-          txHash: `0x${order.transactionId}`,
-          tokenContract: order.assetUnit === "native"
-            ? undefined
-            : order.assetUnit,
-          expected,
-        })
-        : await verifyCardanoPayment({
-          apiKey: config.blockfrostKey,
-          network: order.network === "cardano-preview" ? "preview" : "mainnet",
-          txHash: order.transactionId!,
-          assetUnit: order.assetUnit,
-          expected,
-        });
-      if (result === "confirmed") {
-        // A concurrent mailbox signup or an operator-created name must never
-        // turn a payment into an entitlement that cannot be fulfilled.
-        const emailDetail = await getDetailRecord(
-          db,
-          order.fingerprint,
-          "email",
-        );
-        if (
-          await getMailboxByFingerprint(db, order.fingerprint) ||
-          await isMailboxUsernameTaken(db, order.username, order.domain) ||
-          await isIdentityRevoked(db, order.fingerprint) ||
-          (emailDetail && emailDetail.revoked_at === null)
-        ) {
-          await db.query(
-            "UPDATE mail_payment_orders SET status = 'manual_review', active = 0 WHERE order_id = ? AND status = 'pending'",
-            [orderId],
-          );
-          order = (await getPaymentOrder(db, orderId))!;
-        } else {
-          await confirmPaymentOrder(
-            db,
-            orderId,
-            order.transactionId!,
-            Date.now(),
-          );
-          order = (await getPaymentOrder(db, orderId))!;
-        }
-      } else if (result === "invalid") {
-        await db.query(
-          `UPDATE mail_payment_orders SET status = 'manual_review', active = 0 WHERE order_id = ? AND status = 'pending'`,
-          [orderId],
-        );
-        order = (await getPaymentOrder(db, orderId))!;
-      }
-    } catch {
+export async function refreshPaymentOrder(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+): Promise<StoredOrder> {
+  if (order.status !== "pending") return order;
+  const prefix = paymentPrefixForDomain(order.domain);
+  const provider = prefix && readPaymentProvider(prefix, order.network);
+  if (!provider) {
+    throw new PaymentRefreshError("configuration", "payment verification unavailable");
+  }
+  const expected = {
+    recipient: order.recipient,
+    amount: BigInt(order.amountAtomic),
+    message: order.message,
+    confirmations: order.confirmations,
+  };
+  const hashes = await paymentTransactionIds(db, order);
+  const outcomes = await Promise.allSettled(hashes.map((hash) =>
+    provider.chain === "ethereum"
+      ? verifyEthereumPayment({
+        rpcUrl: provider.rpcUrl,
+        network: provider.network,
+        txHash: `0x${hash}`,
+        tokenContract: order.assetUnit === "native" ? undefined : order.assetUnit,
+        expected,
+      })
+      : verifyCardanoPayment({
+        apiKey: provider.apiKey,
+        network: provider.network,
+        txHash: hash,
+        assetUnit: order.assetUnit,
+        expected,
+      })
+  ));
+  const winner = outcomes.findIndex((outcome) =>
+    outcome.status === "fulfilled" && outcome.value === "confirmed"
+  );
+  if (winner < 0) {
+    if (outcomes.some((outcome) => outcome.status === "rejected")) {
       throw new PaymentRefreshError("provider", "payment verification temporarily unavailable");
     }
+    // Keep the reservation open through grace for reorgs and replacement hashes.
+    return order;
   }
-  return order;
+
+  await db.writeTransaction(async (tx) => {
+    const emailDetail = await getDetailRecord(tx, order.fingerprint, "email");
+    const unavailable = await getMailboxByFingerprint(tx, order.fingerprint) ||
+      await isMailboxUsernameTaken(tx, order.username, order.domain) ||
+      await isIdentityRevoked(tx, order.fingerprint) ||
+      (emailDetail && emailDetail.revoked_at === null);
+    await confirmPaymentOrder(
+      tx,
+      order.orderId,
+      hashes[winner],
+      Date.now(),
+      unavailable ? "manual_review" : "confirmed",
+    );
+  }, `identity:${order.fingerprint}`);
+  return (await getPaymentOrder(db, order.orderId))!;
 }
 
 const MAX_WALLET_UTXOS = 256;
@@ -426,7 +421,6 @@ async function quotedCardanoOrder(db: DatabaseAdapter, orderId: unknown): Promis
   if (typeof orderId !== "string" || orderId.length > 80) {
     return { error: json({ error: "invalid cardano payment request" }, 400) };
   }
-  await expirePaymentOrders(db, Date.now());
   const order = await getPaymentOrder(db, orderId);
   if (!order) return { error: json({ error: "unknown order" }, 404) };
   const refusal = cardanoPayError(order, Date.now());
@@ -449,8 +443,11 @@ export async function handleCardanoUnsigned(
   ) {
     return json({ error: "invalid cardano payment request" }, 400);
   }
-  const config = paymentConfigForDomain(loaded.order.domain);
-  if (!config?.blockfrostKey) return json({ error: "cardano payment is not configured" }, 503);
+  const prefix = paymentPrefixForDomain(loaded.order.domain);
+  const provider = prefix && readPaymentProvider(prefix, loaded.order.network);
+  if (!provider || provider.chain !== "cardano") {
+    return json({ error: "cardano payment is not configured" }, 503);
+  }
   try {
     const unsignedTx = await buildPreviewUnsigned(loaded.order, {
       changeAddress: bech32Address(changeAddress),
@@ -460,7 +457,7 @@ export async function handleCardanoUnsigned(
         }
         return utxoFromCip30(hex);
       }), loaded.order.assetUnit),
-    }, previewBlockfrost(config.blockfrostKey));
+    }, previewBlockfrost(provider.apiKey));
     return json({ unsignedTx });
   } catch (error) {
     return json({ error: cardanoFailure(error) }, 400);

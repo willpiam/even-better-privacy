@@ -36,10 +36,12 @@ import {
 import { timingSafeEqual } from "node:crypto";
 import {
   expirePaymentOrders,
+  fulfillPaymentOrder,
   getConfirmedPaymentOrder,
 } from "../payments/orders.ts";
 import {
   type PaymentConfig,
+  type PaymentPrefix,
   paymentConfigMatchesDomain,
   readPaymentConfig,
   readTestPaymentConfig,
@@ -145,11 +147,10 @@ export function mailSettingsForMode(mode: MailMode): MailSignupSettings {
 export function paymentConfigForSettings(
   settings: MailSignupSettings,
 ): PaymentConfig | null {
-  const primary = readMailSignupSettings();
-  const config = settings.domain === primary.domain
+  const prefix = paymentPrefixForDomain(settings.domain);
+  const config = prefix === "MAIL_PAYMENT"
     ? readPaymentConfig()
-    : settings.domain === TEST_MAIL_DOMAIN &&
-        primary.domain === PRODUCTION_MAIL_DOMAIN
+    : prefix === "MAIL_TEST_PAYMENT"
     ? readTestPaymentConfig()
     : null;
   if (!config || !paymentConfigMatchesDomain(settings.domain, config)) {
@@ -158,13 +159,13 @@ export function paymentConfigForSettings(
   return config;
 }
 
-export function paymentConfigForDomain(domain: string): PaymentConfig | null {
+export function paymentPrefixForDomain(domain: string): PaymentPrefix | null {
   const primary = readMailSignupSettings();
-  if (domain === primary.domain) return paymentConfigForSettings(primary);
+  if (domain === primary.domain) return "MAIL_PAYMENT";
   if (
     domain === TEST_MAIL_DOMAIN && primary.domain === PRODUCTION_MAIL_DOMAIN
   ) {
-    return paymentConfigForSettings({ ...primary, domain: TEST_MAIL_DOMAIN });
+    return "MAIL_TEST_PAYMENT";
   }
   return null;
 }
@@ -463,6 +464,9 @@ export async function handleMailSignup(
         });
       }
       await markDetailVerified(db, fingerprint, "email", now);
+      if (paidOrder && !await fulfillPaymentOrder(db, paidOrder.orderId)) {
+        throw new MailSignupConflict("payment order is no longer available");
+      }
     }, `identity:${fingerprint}`);
   } catch (err) {
     if (!(err instanceof MailSignupConflict)) {
@@ -476,17 +480,6 @@ export async function handleMailSignup(
       return json({ error: err.message }, 409);
     }
     return json({ error: "failed to store mailbox" }, 500);
-  }
-
-  if (paidOrder) {
-    // A bookkeeping failure must not destroy an already-created mailbox.
-    await db.query(
-      "UPDATE mail_payment_orders SET status = 'fulfilled' WHERE order_id = ? AND status = 'confirmed'",
-      [paidOrder.orderId],
-    )
-      .catch((err) =>
-        console.error("payment fulfillment bookkeeping failed:", err)
-      );
   }
 
   return json({

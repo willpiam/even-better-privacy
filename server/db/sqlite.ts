@@ -2,6 +2,7 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { Database } from "sqlite";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
 import { KeyedQueue } from "../../common/KeyedQueue.ts";
+import { PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
 
 export class SqliteDatabaseAdapter extends DatabaseAdapter {
   private db: Database;
@@ -277,6 +278,7 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       ON mail_payment_orders (identity_fingerprint) WHERE active = 1`);
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_transaction
       ON mail_payment_orders (network, transaction_id) WHERE transaction_id IS NOT NULL`);
+    for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) this.db.exec(sql);
 
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS retired_mail_usernames (

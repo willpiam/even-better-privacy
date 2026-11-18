@@ -70,7 +70,11 @@ Deno.test("Ethereum payments bind recipient, message, canonical block and confir
   );
   assertEquals(
     checkEthereumPayment({ ...payment, canonicalBlockHash: hash }),
-    "invalid",
+    "pending",
+  );
+  assertEquals(
+    checkEthereumPayment({ ...payment, latestBlock: "0x9" }),
+    "pending",
   );
   assertEquals(
     checkEthereumPayment({ ...payment, transaction: { ...tx, value: "0x9" } }),
@@ -190,8 +194,9 @@ Deno.test("Cardano checks CIP-20, outputs, asset, canonical block and depth", ()
   );
   assertEquals(
     checkCardanoPayment({ ...payment, canonicalBlockHash: hash }),
-    "invalid",
+    "pending",
   );
+  assertEquals(checkCardanoPayment({ ...payment, latestHeight: 9 }), "pending");
   assertEquals(
     checkCardanoPayment({
       ...payment,

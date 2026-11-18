@@ -1,7 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  cip30PaymentAmount,
   messageInput,
   quantityHex,
+  SEPOLIA_CHAIN_ID,
   sepoliaPayment,
   walletPayKind,
 } from "./checkout-wallet.js";
@@ -44,6 +46,7 @@ Deno.test("Sepolia payment carries the order message as transaction input", () =
   const from = `0x${"12".repeat(20)}`;
   assertEquals(sepoliaPayment(quoted, from), {
     from,
+    chainId: SEPOLIA_CHAIN_ID,
     to: quoted.recipient,
     value: quantityHex(quoted.amountAtomic),
     data: messageInput(quoted.message),
@@ -65,11 +68,25 @@ Deno.test("Sepolia stablecoin wallet payment sends zero ETH and the quoted trans
     ),
     {
       from,
+      chainId: SEPOLIA_CHAIN_ID,
       to: assetUnit,
       value: "0x0",
       data: `0xa9059cbb${quoted.recipient.slice(2).padStart(64, "0")}${
         "2a".padStart(64, "0")
       }${messageInput(quoted.message).slice(2)}`,
     },
+  );
+});
+
+Deno.test("Cardano payment asks for a CBOR value containing the token and ADA", () => {
+  const policy = "ab".repeat(28);
+  const longName = "cd".repeat(32);
+  assertEquals(
+    cip30PaymentAmount({ assetUnit: policy + longName, amountAtomic: "42" }),
+    `821a002dc6c0a1581c${policy}a15820${longName}182a`,
+  );
+  assertEquals(
+    cip30PaymentAmount({ assetUnit: policy, amountAtomic: "1" }),
+    `821a002dc6c0a1581c${policy}a14001`,
   );
 });

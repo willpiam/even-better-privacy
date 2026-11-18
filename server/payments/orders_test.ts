@@ -1,12 +1,15 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
+import { PAYMENT_ORDER_SCHEMA_UPDATES } from "../db/payment-schema.ts";
 import { handlePaymentCancel } from "../handlers/mail-payment.ts";
 import {
   cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
+  expirePaymentOrder,
   expirePaymentOrders,
   getPaymentOrder,
   type PaymentOrder,
+  paymentTransactionIds,
   reservePaymentOrder,
   submitPaymentTransaction,
 } from "./orders.ts";
@@ -85,6 +88,26 @@ Deno.test({
         (await getPaymentOrder(db, "order1"))?.transactionId,
         "a".repeat(64),
       );
+      const firstHash = "a".repeat(64);
+      const replacementHash = "c".repeat(64);
+      assertEquals(
+        await submitPaymentTransaction(
+          db,
+          "order1",
+          "one",
+          replacementHash,
+          201,
+        ),
+        true,
+      );
+      assertEquals(
+        await submitPaymentTransaction(db, "order1", "one", firstHash, 202),
+        true,
+      );
+      assertEquals(
+        await paymentTransactionIds(db, (await getPaymentOrder(db, "order1"))!),
+        [replacementHash, firstHash],
+      );
       const another = {
         ...base,
         orderId: "order2",
@@ -103,11 +126,33 @@ Deno.test({
         false,
       );
       assertEquals(
+        (await expirePaymentOrder(
+          db,
+          (await getPaymentOrder(db, "order2"))!,
+          300,
+        )).status,
+        "expired",
+      );
+      assertEquals(
         await confirmPaymentOrder(db, "order1", "a".repeat(64), 250),
         true,
       );
       await expirePaymentOrders(db, 300);
       assertEquals((await getPaymentOrder(db, "order1"))?.status, "confirmed");
+      assertEquals(
+        (await getPaymentOrder(db, "order1"))?.transactionId,
+        firstHash,
+      );
+      assertEquals(
+        await submitPaymentTransaction(
+          db,
+          "order1",
+          "one",
+          replacementHash,
+          301,
+        ),
+        true,
+      );
       assertEquals((await getPaymentOrder(db, "order2"))?.status, "expired");
       assertEquals(
         await reservePaymentOrder(db, {
@@ -172,26 +217,87 @@ Deno.test({
         graceUntil: 800,
       };
       assertEquals(await reservePaymentOrder(db, cancellable, 600), true);
-      const cancel = (orderId: string, confirmUnpaid: boolean) => handlePaymentCancel(new Request("http://localhost/cancel", {
-        method: "POST",
-        body: JSON.stringify({orderId, confirmUnpaid}),
-      }), db);
+      const cancel = (orderId: string, confirmUnpaid: boolean) =>
+        handlePaymentCancel(
+          new Request("http://localhost/cancel", {
+            method: "POST",
+            body: JSON.stringify({ orderId, confirmUnpaid }),
+          }),
+          db,
+        );
       assertEquals((await cancel(cancellable.orderId, false)).status, 400);
       assertEquals((await cancel(cancellable.orderId, true)).status, 200);
       assertEquals((await cancel(cancellable.orderId, true)).status, 200);
       const cancelled = await getPaymentOrder(db, cancellable.orderId);
-      assertEquals([cancelled?.status, cancelled?.active], ["cancelled", false]);
-      assertEquals((await db.query<[number]>("SELECT cancelled_at FROM mail_payment_orders WHERE order_id = ?", [cancellable.orderId]))[0][0] > 0, true);
-      assertEquals(await submitPaymentTransaction(db, cancellable.orderId, "two", "c".repeat(64), 650), false);
-      assertEquals(await reservePaymentOrder(db, {...cancellable, orderId: "replacement", fingerprint: "three"}, 600), true);
+      assertEquals([cancelled?.status, cancelled?.active], [
+        "cancelled",
+        false,
+      ]);
+      assertEquals(
+        (await db.query<[number]>(
+          "SELECT cancelled_at FROM mail_payment_orders WHERE order_id = ?",
+          [cancellable.orderId],
+        ))[0][0] > 0,
+        true,
+      );
+      assertEquals(
+        await submitPaymentTransaction(
+          db,
+          cancellable.orderId,
+          "two",
+          "c".repeat(64),
+          650,
+        ),
+        false,
+      );
+      assertEquals(
+        await reservePaymentOrder(db, {
+          ...cancellable,
+          orderId: "replacement",
+          fingerprint: "three",
+        }, 600),
+        true,
+      );
 
       const [, submitted] = await Promise.all([
         cancelUnpaidPaymentOrder(db, "replacement", 650),
-        submitPaymentTransaction(db, "replacement", "three", "d".repeat(64), 650),
+        submitPaymentTransaction(
+          db,
+          "replacement",
+          "three",
+          "d".repeat(64),
+          650,
+        ),
       ]);
-      assertEquals((await getPaymentOrder(db, "replacement"))?.status, submitted ? "pending" : "cancelled");
-      assertEquals((await cancelUnpaidPaymentOrder(db, "order1", 650))?.status, "confirmed");
-      assertEquals((await cancelUnpaidPaymentOrder(db, "order4", 650))?.status, "manual_review");
+      assertEquals(
+        (await getPaymentOrder(db, "replacement"))?.status,
+        submitted ? "pending" : "cancelled",
+      );
+      assertEquals(
+        (await cancelUnpaidPaymentOrder(db, "order1", 650))?.status,
+        "confirmed",
+      );
+      assertEquals(
+        (await cancelUnpaidPaymentOrder(db, "order4", 650))?.status,
+        "manual_review",
+      );
+      // Simulate a completed mailbox from the pre-upgrade schema.
+      await db.query(
+        `INSERT INTO mailboxes (username, domain, identity_fingerprint, stalwart_id, created_at)
+        VALUES (?, ?, ?, 'account', 250)`,
+        [base.username, base.domain, base.fingerprint],
+      );
+      await db.query("DELETE FROM mail_payment_transactions");
+      for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await db.execute(sql);
+      const migrated = (await getPaymentOrder(db, base.orderId))!;
+      assertEquals([migrated.status, migrated.active], ["fulfilled", false]);
+      assertEquals(
+        await db.query(
+          "SELECT order_id FROM mail_payment_transactions WHERE transaction_id = ?",
+          [firstHash],
+        ),
+        [[base.orderId]],
+      );
     } finally {
       await db.close();
     }

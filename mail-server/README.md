@@ -282,13 +282,16 @@ Set `MAIL_PAYMENT_ETH_RPC_URL` to an HTTPS JSON-RPC endpoint,
 `MAIL_PAYMENT_BLOCKFROST_KEY` to the appropriate Blockfrost project key, and
 `ETHEREUM_ALCHEMY_API_KEY` to an Alchemy API key. ETH and ADA quotes read
 Chainlink through that key: ETH/USD on Ethereum mainnet, accepted for 70
-minutes, and ADA/USD on Polygon mainnet, accepted for 5 minutes. Orders expire
-after 30 minutes; transactions submitted in time have two additional hours to
-confirm.
+minutes, and ADA/USD on Polygon mainnet, accepted for 5 minutes. Start a payment
+within the 30-minute quote. The following two hours allow delayed hash
+submission, replacement hashes from a wallet fee bump, and confirmation.
 Confirmation counts default to 5 Ethereum blocks and 2 Cardano blocks; set
 `MAIL_PAYMENT_ETH_CONFIRMATIONS` and `MAIL_PAYMENT_CARDANO_CONFIRMATIONS` to
 positive integers to change the thresholds for new orders.
-Transactions that are invalid or do not confirm in time require manual review.
+Orders still awaiting a valid confirmation at the end of the grace period
+require manual review. To pause new quotes while existing payments finish,
+disable the payment catalog and keep the verification credentials for each
+network with outstanding orders.
 Keep payment records and the database durable and backed up. Never put spending
 keys on the key server. Use only a receiving wallet and wallet infrastructure
 capable of handling the required on-chain message and token transactions.

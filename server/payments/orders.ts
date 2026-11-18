@@ -1,4 +1,5 @@
 import type { DatabaseAdapter } from "../db/adapter.ts";
+import type { PaymentNetwork } from "./config.ts";
 import { quoteAtomicUnits } from "./quote.ts";
 
 export type PaymentOrder = {
@@ -8,11 +9,7 @@ export type PaymentOrder = {
   fingerprint: string;
   proofNonce: number;
   asset: string;
-  network:
-    | "ethereum-mainnet"
-    | "ethereum-sepolia"
-    | "cardano-mainnet"
-    | "cardano-preview";
+  network: PaymentNetwork;
   recipient: string;
   assetUnit: string;
   usdCents: number;
@@ -132,6 +129,24 @@ export async function expirePaymentOrders(
   );
 }
 
+export async function expirePaymentOrder(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+  now: number,
+): Promise<StoredOrder> {
+  if (
+    order.graceUntil > now || !order.active ||
+    (order.status !== "quoted" && order.status !== "pending")
+  ) return order;
+  await db.query(
+    `UPDATE mail_payment_orders
+    SET status = CASE status WHEN 'quoted' THEN 'expired' ELSE 'manual_review' END, active = 0
+    WHERE order_id = ? AND active = 1 AND status IN ('quoted', 'pending') AND grace_until <= ?`,
+    [order.orderId, now],
+  );
+  return (await getPaymentOrder(db, order.orderId))!;
+}
+
 /** A unique partial index serializes competing reservations across server processes. */
 export async function reservePaymentOrder(
   db: DatabaseAdapter,
@@ -234,7 +249,9 @@ export async function cancelUnpaidPaymentOrder(
   }, `identity:${order.fingerprint}`);
 }
 
-/** Bind a transaction once, including delayed submission within the reserved grace period. */
+const MAX_PAYMENT_TRANSACTIONS = 8;
+
+/** Accept retries and keep earlier hashes eligible until a payment confirms. */
 export async function submitPaymentTransaction(
   db: DatabaseAdapter,
   orderId: string,
@@ -245,17 +262,47 @@ export async function submitPaymentTransaction(
   const hash = transactionId.toLowerCase().replace(/^0x/, "");
   if (!/^[0-9a-f]{64}$/.test(hash)) return false;
   try {
-    const rows = await db.query<[string]>(
-      `UPDATE mail_payment_orders SET transaction_id = ?, status = 'pending'
-      WHERE order_id = ? AND identity_fingerprint = ? AND status = 'quoted' AND active = 1 AND grace_until > ?
-      RETURNING order_id`,
-      [hash, orderId, fingerprint, now],
-    );
-    return rows.length === 1;
+    return await db.writeTransaction(async (tx) => {
+      const order = await getPaymentOrder(tx, orderId);
+      if (!order || order.fingerprint !== fingerprint) return false;
+      const hashes = await paymentTransactionIds(tx, order);
+      if (hashes.includes(hash)) return true;
+      if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;
+
+      const rows = await tx.query<[string]>(
+        `UPDATE mail_payment_orders SET transaction_id = ?, status = 'pending'
+        WHERE order_id = ? AND active = 1 AND status IN ('quoted', 'pending') AND grace_until > ?
+        RETURNING order_id`,
+        [hash, orderId, now],
+      );
+      if (!rows.length) return false;
+      await tx.query(
+        `INSERT INTO mail_payment_transactions (order_id, network, transaction_id, submitted_at)
+        VALUES (?, ?, ?, ?)`,
+        [orderId, order.network, hash, now],
+      );
+      return true;
+    }, `identity:${fingerprint}`);
   } catch (err) {
     if (/unique|duplicate/i.test(String(err))) return false;
     throw err;
   }
+}
+
+export async function paymentTransactionIds(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+): Promise<string[]> {
+  const rows = await db.query<[string]>(
+    `SELECT transaction_id FROM mail_payment_transactions
+    WHERE order_id = ? ORDER BY submitted_at DESC, transaction_id`,
+    [order.orderId],
+  );
+  // Lead with the latest hash shown in checkout, with a fallback for older orders.
+  const hashes = rows.map(([hash]) => hash);
+  return order.transactionId
+    ? [...new Set([order.transactionId, ...hashes])]
+    : hashes;
 }
 
 /** Only a verifier may call this after independently validating chain evidence. */
@@ -264,12 +311,39 @@ export async function confirmPaymentOrder(
   orderId: string,
   transactionId: string,
   now: number,
+  status: "confirmed" | "manual_review" = "confirmed",
+): Promise<boolean> {
+  const hash = transactionId.toLowerCase().replace(/^0x/, "");
+  const rows = await db.query<[string]>(
+    `UPDATE mail_payment_orders SET status = ?, active = ?, transaction_id = ?
+    WHERE order_id = ? AND status = 'pending' AND active = 1 AND grace_until > ?
+      AND (transaction_id = ? OR EXISTS (
+        SELECT 1 FROM mail_payment_transactions WHERE order_id = ? AND transaction_id = ?
+      ))
+    RETURNING order_id`,
+    [
+      status,
+      status === "confirmed" ? 1 : 0,
+      hash,
+      orderId,
+      now,
+      hash,
+      orderId,
+      hash,
+    ],
+  );
+  return rows.length === 1;
+}
+
+/** Run with the transaction that commits the provisioned mailbox. */
+export async function fulfillPaymentOrder(
+  db: DatabaseAdapter,
+  orderId: string,
 ): Promise<boolean> {
   const rows = await db.query<[string]>(
-    `UPDATE mail_payment_orders SET status = 'confirmed'
-    WHERE order_id = ? AND transaction_id = ? AND status = 'pending' AND active = 1 AND grace_until > ?
-    RETURNING order_id`,
-    [orderId, transactionId.toLowerCase().replace(/^0x/, ""), now],
+    `UPDATE mail_payment_orders SET status = 'fulfilled', active = 0
+    WHERE order_id = ? AND status = 'confirmed' AND active = 1 RETURNING order_id`,
+    [orderId],
   );
   return rows.length === 1;
 }

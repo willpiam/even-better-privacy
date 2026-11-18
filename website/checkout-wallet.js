@@ -43,14 +43,13 @@ export function sepoliaPayment(order, from) {
   if (typeof from !== "string" || !/^0x[0-9a-f]{40}$/i.test(from)) {
     throw new Error("Connect an Ethereum account first.");
   }
-  if (order.assetUnit !== "native") {
-    return { from, to: order.assetUnit, value: "0x0", data: tokenPaymentData(order) };
-  }
+  const native = order.assetUnit === "native";
   return {
     from,
-    to: order.recipient,
-    value: quantityHex(order.amountAtomic),
-    data: messageInput(order.message),
+    chainId: SEPOLIA_CHAIN_ID,
+    to: native ? order.recipient : order.assetUnit,
+    value: native ? quantityHex(order.amountAtomic) : "0x0",
+    data: native ? messageInput(order.message) : tokenPaymentData(order),
   };
 }
 
@@ -68,4 +67,20 @@ export function cip30LovelaceAmount(amount) {
   for (const [bytes, prefix] of [[1, "18"], [2, "19"], [4, "1a"], [8, "1b"]]) {
     if (n < (1n << BigInt(bytes * 8))) return prefix + n.toString(16).padStart(bytes * 2, "0");
   }
+}
+
+/** CIP-30 Value for the quoted asset and the ADA needed for fees and outputs. */
+export function cip30PaymentAmount(order) {
+  const amount = BigInt(order.amountAtomic);
+  const feeBuffer = 3_000_000n;
+  if (order.assetUnit === "lovelace") return cip30LovelaceAmount(amount + feeBuffer);
+
+  const [unit, policy, name] = /^([0-9a-f]{56})((?:[0-9a-f]{2}){0,32})$/.exec(order.assetUnit) ?? [];
+  if (!unit || amount <= 0n) throw new Error("Invalid Cardano payment asset or amount.");
+  const nameLength = name.length / 2;
+  const nameHeader = nameLength < 24
+    ? (0x40 + nameLength).toString(16)
+    : `58${nameLength.toString(16)}`;
+  // [lovelace, { policy ID: { asset name: quantity } }]
+  return `82${cip30LovelaceAmount(feeBuffer)}a1581c${policy}a1${nameHeader}${name}${cip30LovelaceAmount(amount)}`;
 }
