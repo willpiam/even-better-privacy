@@ -25,7 +25,8 @@ import {
   setCurrentIdentity,
 } from '../services/storage';
 import type {StoredIdentityMeta} from '../types';
-import {getServerUrl} from '../services/settings';
+import {getMailTestMode, getServerUrl} from '../services/settings';
+import {pendingSignups} from '../services/mail/pendingSignup';
 import {PROTOCOL_VERSION} from '../../../core/version';
 import Screen from '../components/Screen';
 import Chip from '../components/Chip';
@@ -50,6 +51,7 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   const [serverUrl, setServerUrl] = useState<string>('');
   const [status, setStatus] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
+  const [hasPendingSignup, setHasPendingSignup] = useState(false);
 
   const refresh = useCallback(async () => {
     const [list, current, server] = await Promise.all([
@@ -60,6 +62,12 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
     setIdentities(list);
     setCurrentIdentityValue(current);
     setServerUrl(server);
+    const testingEnabled = await getMailTestMode();
+    const saved = [
+      ...await pendingSignups(server, undefined, false),
+      ...(testingEnabled ? await pendingSignups(server, undefined, true) : []),
+    ];
+    setHasPendingSignup(saved.length > 0);
   }, []);
 
   useFocusEffect(
@@ -150,6 +158,13 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           <Chip label={`Current: ${currentIdentity}`} />
         ) : null}
         <StatusBanner message={status} kind={statusKind(status)} />
+        {hasPendingSignup ? (
+          <AppButton
+            title="Resume email setup"
+            testID="identities-resume-onboarding"
+            onPress={() => navigation.navigate('OnboardingWizard')}
+          />
+        ) : null}
         <SectionTitle>{`Local identities · ${identities.length}`}</SectionTitle>
         {identities.length === 0 ? (
           <View style={styles.empty} testID="identities-empty">

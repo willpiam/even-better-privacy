@@ -28,6 +28,12 @@ import {
   signupEbpMailbox,
 } from '../services/mail/ebpSignup';
 import {
+  pendingSignups,
+  savePendingSignup,
+  removePendingSignup,
+  type PendingSignup,
+} from '../services/mail/pendingSignup';
+import {
   checkoutHandoff,
   chooseIdentityName,
   formatUsdPrice,
@@ -102,6 +108,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const [restored, setRestored] = useState(false);
   const [createStatus, setCreateStatus] = useState<number | undefined>();
   const [published, setPublished] = useState(false);
+  const [pending, setPending] = useState<PendingSignup[]>([]);
+  const [resuming, setResuming] = useState(false);
+  const creating = useRef(false);
   const [result, setResult] = useState<{
     email: string;
     fingerprint: string;
@@ -129,6 +138,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
         const cfg = await fetchEbpSignupConfig(url);
         if (cancelled) return;
         setConfig(cfg);
+        const saved = [
+          ...await pendingSignups(url, undefined, false),
+          ...(testingEnabled ? await pendingSignups(url, undefined, true) : []),
+        ];
+        if (!cancelled) setPending(saved);
         if (!cfg.enabled) {
           setConfigError(
             "This key server doesn't offer EBP email addresses yet. You can still create keys and add an existing mailbox manually.",
@@ -187,6 +201,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
     (value: string) => {
       const seq = ++checkSeq.current;
       setUsername(value);
+      setOrderId('');
       setUsernameOk(false);
       setPaid(false);
       setAssets([]);
@@ -275,10 +290,16 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const setTask = (key: TaskKey, value: TaskState) =>
     setTasks(prev => ({...prev, [key]: value}));
 
+  const signupCheckpoint = (name = identityName, id = orderId): PendingSignup => ({
+    server, domain, identityName: name, username: normalizedUsername, orderId: id, testMode,
+  });
+
   const runCreate = async () => {
+    if (creating.current) return;
     if (!config?.enabled) return;
     if (testMode && config.domain !== TEST_MAIL_DOMAIN) return;
     if (paid && (!testMode || domain !== TEST_MAIL_DOMAIN)) return;
+    creating.current = true;
     setStep('create');
     setCreateError('');
     setCreateStatus(undefined);
@@ -312,8 +333,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
         setTask('publish', 'done');
       }
       if (paid) {
-        const asset = assets[assetIndex] ?? assets[0];
-        if (!asset) throw new Error('Choose a test-network payment.');
+        await savePendingSignup(signupCheckpoint(name));
         let id = orderId || await rememberedPaymentOrder(server, name, normalizedUsername);
         if (!id) {
           id = await recoverTestPaymentOrder({
@@ -325,6 +345,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
           }) ?? '';
         }
         if (!id) {
+          if (resuming) throw new Error('No payment order was found. Contact support if you already paid.');
+          const asset = assets[assetIndex] ?? assets[0];
+          if (!asset) throw new Error('Choose a test-network payment.');
           const created = await createTestPaymentOrder({
             identityName: name,
             password,
@@ -336,14 +359,13 @@ export default function OnboardingWizardScreen(): JSX.Element {
           id = created.orderId;
         }
         setOrderId(id);
+        await savePendingSignup(signupCheckpoint(name, id));
         await rememberPaymentOrder(server, name, normalizedUsername, id);
         const status = await fetchPaymentOrderStatus(server, id);
         if (status === 'expired') {
-          await rememberPaymentOrder(server, name, normalizedUsername, null);
-          setOrderId('');
           setCheckoutUrl('');
           setAwaitingPayment(false);
-          setCreateError('The quote expired. If you sent a payment, contact support. Otherwise, request a new quote.');
+          setCreateError('The quote expired. Your order is saved. If you sent a payment, contact support before paying again.');
           return;
         }
         if (status !== 'confirmed' && status !== 'fulfilled') {
@@ -373,6 +395,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
         testMode,
       });
       setTask('mailbox', 'done');
+      if (paid) {
+        await removePendingSignup(signupCheckpoint(name)).catch(() => {});
+        setPending(prev => prev.filter(item => item.identityName !== name || item.username !== normalizedUsername));
+      }
       setResult({
         email: res.email,
         fingerprint: res.fingerprint,
@@ -388,12 +414,22 @@ export default function OnboardingWizardScreen(): JSX.Element {
     } catch (error) {
       if (!(current === 'publish' && keysPublished)) setTask(current, 'error');
       setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
-      setCreateError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setCreateError(message);
+      if (resuming && /wrong password|failed to decrypt identity/i.test(message)) {
+        setPassword('');
+        setPasswordHint(message);
+        setStep('unlock');
+      }
+    } finally {
+      creating.current = false;
     }
   };
 
   const runRestore = async () => {
+    if (creating.current) return;
     if (!config?.enabled || !identityName) return;
+    creating.current = true;
     setCreateError('');
     setCreateStatus(undefined);
     setTask('mailbox', 'running');
@@ -405,6 +441,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
         config,
       });
       setTask('mailbox', 'done');
+      if (paid) {
+        await removePendingSignup(signupCheckpoint()).catch(() => {});
+        setPending(prev => prev.filter(item => item.identityName !== identityName || item.username !== normalizedUsername));
+      }
       setResult({
         email: res.email,
         fingerprint: res.fingerprint,
@@ -422,17 +462,55 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setTask('mailbox', 'error');
       setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
       setCreateError(error instanceof Error ? error.message : String(error));
+    } finally {
+      creating.current = false;
     }
   };
 
   const startUseCurrent = () => {
     if (!currentIdentity) return;
     setUseExisting(true);
+    setResuming(false);
+    setOrderId('');
+    setUsername('');
+    setUsernameHint('');
+    setUsernameOk(false);
+    setPaid(false);
+    setAssets([]);
     setIdentityName(currentIdentity);
     setPublished(false);
     setPassword('');
     setPasswordHint('');
     setStep(wizardSteps(true, testMailEnabled)[1]);
+  };
+
+  const resumeSignup = async (signup: PendingSignup) => {
+    setConfigLoading(true);
+    setConfigError('');
+    try {
+      const cfg = await fetchEbpSignupConfig(server, signup.testMode);
+      if (!cfg.enabled || cfg.domain !== signup.domain) {
+        throw new Error('This key server did not offer the saved signup domain.');
+      }
+      setConfig(cfg);
+      setTestMode(signup.testMode);
+      setUsername(signup.username);
+      setUsernameOk(true);
+      setIdentityName(signup.identityName);
+      setOrderId(signup.orderId);
+      setPaid(true);
+      setUseExisting(true);
+      setResuming(true);
+      setPublished(false);
+      setPassword('');
+      setPasswordHint('');
+      setTasks({keys: 'done', publish: 'pending', mailbox: 'pending'});
+      setStep('unlock');
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setConfigLoading(false);
+    }
   };
 
   const onUnlockNext = () => {
@@ -491,16 +569,33 @@ export default function OnboardingWizardScreen(): JSX.Element {
             post-quantum keys that sign and encrypt your mail end to end.
           </Text>
           <StatusBanner message={configError} kind="error" />
+          {pending.map(signup => (
+            <AppButton
+              key={`${signup.identityName}:${signup.username}`}
+              title={`Resume email setup: ${signup.username}@${signup.domain} (${signup.identityName})`}
+              testID={`onboarding-resume-${signup.username}`}
+              disabled={configLoading || !server}
+              onPress={() => { void resumeSignup(signup); }}
+            />
+          ))}
           <AppButton
             title="Get started"
             testID="onboarding-start"
             disabled={!canStart}
             onPress={() => {
               setUseExisting(false);
+              setResuming(false);
               setIdentityName('');
+              setOrderId('');
               setPublished(false);
               setPassword('');
               setConfirmPassword('');
+              setMnemonic('');
+              setUsername('');
+              setUsernameHint('');
+              setUsernameOk(false);
+              setPaid(false);
+              setAssets([]);
               setStep(wizardSteps(false, testMailEnabled)[1]);
             }}
           />
@@ -643,7 +738,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
             testID="onboarding-unlock-next"
             onPress={onUnlockNext}
           />
-          <AppButton title="Back" variant="secondary" onPress={() => setStep('address')} />
+          <AppButton title="Back" variant="secondary" onPress={() => setStep(resuming ? 'welcome' : 'address')} />
         </Card>
       ) : null}
 
@@ -754,6 +849,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
           />
           {awaitingPayment && checkoutUrl ? (
             <View style={styles.stack} testID="onboarding-checkout">
+              <Text style={styles.hint}>
+                Your progress is saved. You can close the app and choose Resume email setup when you return.
+              </Text>
               <Text style={styles.hint}>{checkoutMessage}</Text>
               <Text style={styles.fingerprint} selectable testID="onboarding-checkout-url">
                 {checkoutUrl}
@@ -795,7 +893,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
                   : awaitingPayment
                     ? 'Check payment'
                     : createError.startsWith('The quote expired')
-                      ? 'Get a new quote'
+                      ? 'Check payment'
                       : addressTaken
                         ? 'Choose another address'
                         : 'Try again'

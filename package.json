@@ -13,6 +13,7 @@
     "build:website-crypto": "node scripts/build_website_crypto.mjs",
     "check:website-crypto": "node scripts/build_website_crypto.mjs --check",
     "test:website-browser": "node scripts/test_website_browser.mjs",
+    "test:onboarding-resume": "node scripts/test_onboarding_resume.mjs",
     "test:review-contracts": "node issue_tracker/review_checks.mjs && node scripts/test_checkout_contracts.mjs && python3 -m unittest scripts/test_deploy_ftp.py"
   }
 }

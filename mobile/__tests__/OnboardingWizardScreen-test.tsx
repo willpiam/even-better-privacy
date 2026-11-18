@@ -1,5 +1,6 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingWizardScreen from '../src/screens/OnboardingWizardScreen';
 import AppButton from '../src/components/AppButton';
 import TextField from '../src/components/TextField';
@@ -17,6 +18,9 @@ import {
   TEST_MAIL_DOMAIN,
 } from '../src/services/mail/ebpSignupLogic';
 
+jest.mock('@react-native-async-storage/async-storage', () =>
+  require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
+);
 jest.mock('@react-navigation/native', () => ({useNavigation: () => ({})}));
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
@@ -99,9 +103,10 @@ async function createMailbox() {
   );
   await press('onboarding-unlock-next');
 }
-beforeEach(() => {
+beforeEach(async () => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  await AsyncStorage.clear();
   jest
     .mocked(fetchEbpSignupConfig)
     .mockImplementation(async (_, testing) => config(!!testing));
