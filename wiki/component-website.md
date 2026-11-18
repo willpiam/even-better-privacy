@@ -106,7 +106,7 @@ Static rendering of the project's privacy policy: minimal data collection, only 
 
 - No build toolchain — files are served as-is.
 - Images (logo, promo artwork) load from GitHub raw URLs (`raw.githubusercontent.com/willpiam/even-better-privacy/master/assets/`).
-- Nav links reference `https://williamdoyle.ca/ebp/privacy.html` as the deployed privacy policy URL, suggesting the site is hosted at `williamdoyle.ca/ebp/`.
+- The homepage links to the deployed privacy policy at `https://pqpost.com/privacy`.
 - Favicon also loads from GitHub raw.
 
 ## Design

@@ -75,7 +75,7 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
       <AppButton
         title="Project website"
         variant="secondary"
-        onPress={() => void Linking.openURL('https://williamdoyle.ca/ebp')}
+        onPress={() => void Linking.openURL('https://pqpost.com/')}
       />
     </Screen>
   );

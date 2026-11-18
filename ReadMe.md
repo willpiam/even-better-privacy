@@ -9,7 +9,7 @@ This repository contains the reference implementation of EBP. Its purpose is to
 demonstrate the architecture, protocols, and intended usage model of the system
 rather than to serve as a production-hardened security solution.
 
-Project page: [williamdoyle.ca/ebp](https://williamdoyle.ca/ebp)
+Project page: [pqpost.com](https://pqpost.com/)
 
 ## Installation
 
