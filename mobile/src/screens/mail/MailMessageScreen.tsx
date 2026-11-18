@@ -263,6 +263,20 @@ export default function MailMessageScreen({
               ) : null}
               {date ? <Text style={styles.metadata}>{date}</Text> : null}
             </View>
+            {canReply ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Reply"
+                accessibilityState={{disabled: busy || decrypting}}
+                disabled={busy || decrypting}
+                onPress={() => void onReply()}
+                style={({pressed}) => [
+                  styles.replyIcon,
+                  (busy || decrypting || pressed) && styles.replyIconDimmed,
+                ]}>
+                <MailIcon name="reply" />
+              </Pressable>
+            ) : null}
           </View>
         </>
       ) : null}
@@ -381,6 +395,16 @@ const styles = StyleSheet.create({
   },
   senderRow: {flexDirection: 'row', alignItems: 'flex-start', gap: 12},
   senderCopy: {flex: 1, gap: 4},
+  replyIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: mailColors.accentSoft,
+  },
+  replyIconDimmed: {opacity: 0.5},
   senderName: {fontSize: 15, fontWeight: '600', color: mailColors.text},
   metadata: {color: mailColors.muted, fontSize: 12, lineHeight: 18},
   securityLine: {

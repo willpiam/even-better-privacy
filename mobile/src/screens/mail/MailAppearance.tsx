@@ -21,6 +21,7 @@ const paths = {
   mail: 'M3 5h18v14H3zM3 6l9 7 9-7',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   compose: 'M13 5H4v16h16v-9M10 14l1-5 8-8 4 4-8 8z',
+  reply: 'M9 4L3 10l6 6M3 10h10a8 8 0 0 1 8 8v2',
 } as const;
 
 export function MailIcon({
