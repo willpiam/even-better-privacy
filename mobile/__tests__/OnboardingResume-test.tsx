@@ -4,14 +4,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import OnboardingWizardScreen from '../src/screens/OnboardingWizardScreen';
 import AppButton from '../src/components/AppButton';
 import TextField from '../src/components/TextField';
-import {pendingSignups, savePendingSignup, type PendingSignup} from '../src/services/mail/pendingSignup';
+import {useFocusEffect} from '@react-navigation/native';
+import {pendingSignups, savePendingSignup, completeMailboxSignup, type PendingSignup} from '../src/services/mail/pendingSignup';
 import {createTestPaymentOrder, fetchPaymentOrderStatus, recoverTestPaymentOrder, signupEbpMailbox} from '../src/services/mail/ebpSignup';
 import {publishIdentity} from '../src/services/publish';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
-jest.mock('@react-navigation/native', () => ({useNavigation: () => ({goBack: jest.fn()})}));
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({goBack: jest.fn()}),
+  useFocusEffect: jest.fn((cb: () => void) => require('react').useEffect(cb, [cb])),
+}));
 jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react-native').View}));
 jest.mock('@react-native-clipboard/clipboard', () => ({setString: jest.fn()}));
 jest.mock('react-native-share', () => ({open: jest.fn()}));
@@ -118,4 +122,26 @@ it('lets the user correct a wrong identity password when resuming', async () => 
   await act(async () => passwordField.props.onChangeText('correct-password'));
   await act(async () => button('onboarding-unlock-next').props.onPress());
   expect(fetchPaymentOrderStatus).toHaveBeenCalledWith(signup.server, signup.orderId);
+});
+
+it('does not offer a completed process after reopening setup, while keeping other pending processes', async () => {
+  await savePendingSignup({...signup, username: 'bob', orderId: 'bob-order'});
+  jest.mocked(fetchPaymentOrderStatus).mockResolvedValue('confirmed');
+  await mount();
+  await resume();
+  await act(async () => tree.unmount());
+  await mount();
+  expect(button('onboarding-resume-alice')).toBeUndefined();
+  expect(button('onboarding-resume-bob')).toBeDefined();
+});
+
+it('refreshes a mounted resume list after the process completes from another screen', async () => {
+  await mount();
+  expect(button('onboarding-resume-alice')).toBeDefined();
+  await completeMailboxSignup(signup.server, signup.identityName, 'alice@test.pqpost.com');
+  await act(async () => {
+    const calls = jest.mocked(useFocusEffect).mock.calls;
+    calls[calls.length - 1][0]();
+  });
+  expect(button('onboarding-resume-alice')).toBeUndefined();
 });

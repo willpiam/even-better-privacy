@@ -129,6 +129,13 @@ try {
   assert.equal((await saved()).length, 0);
   assert.equal(calls.filter(c => c.path === '/mail/ebp-payment/order').length, 1);
 
+  // Completion also removes the visible resume entry when setup is reopened.
+  await page.click('#onboarding-open-inbox');
+  await page.click('#identities-open-onboarding');
+  await expect(resume()).toHaveCount(0);
+  await reload();
+  await expect(page.locator('#onboarding-modal')).not.toBeVisible();
+
   // The older order-only storage format also offers resume.
   await page.evaluate(({server, orderId}) => {
     localStorage.setItem(`ebp.mail.order:${server}:Old identity:alice`, orderId);
@@ -140,6 +147,23 @@ try {
   await unlock();
   await expect(page.locator('#onboarding-result-email')).toHaveText(`alice@${domain}`);
   assert.equal(await page.evaluate(() => Object.keys(localStorage).some(key => key.startsWith('ebp.mail.order:'))), false);
+  // A failed deletion must not bring completed records back via legacy storage.
+  const remaining = await page.evaluate(async ({server, domain, orderId}) => {
+    const {savePendingSignup, completeMailboxSignup, pendingSignups} = await import('/js/mail-signup-resume.js');
+    const signup = {server, domain, orderId, identityName: 'Personal', username: 'alice'};
+    savePendingSignup(localStorage, signup);
+    savePendingSignup(localStorage, {...signup, username: 'bob'});
+    localStorage.setItem(`ebp.mail.order:${server}:Personal:alice`, orderId);
+    const original = Storage.prototype.removeItem;
+    Storage.prototype.removeItem = () => { throw new Error('Delete failed'); };
+    try {
+      completeMailboxSignup(localStorage, server, 'Personal', `alice@${domain}`);
+    } finally {
+      Storage.prototype.removeItem = original;
+    }
+    return pendingSignups(localStorage, server, domain).map(item => item.username);
+  }, {server, domain, orderId});
+  assert.deepEqual(remaining, ['bob']);
   await context.close();
   console.log('Onboarding resumes the original order across reloads, retains failures/expired orders, and supports older saved orders.');
 } finally {

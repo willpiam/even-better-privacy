@@ -2,7 +2,7 @@ import { DEFAULT_SERVER_URL, state } from "./state.js";
 import { api, setStatus } from "./ui.js";
 import { requestPassword } from "./modals.js";
 import { loadAll } from "./render.js";
-import { pendingSignups, savePendingSignup, removePendingSignup } from "./mail-signup-resume.js";
+import { pendingSignups, savePendingSignup, completeMailboxSignup } from "./mail-signup-resume.js";
 
 const FIRST_RUN_DISMISSED_KEY = "ebp.onboarding.dismissed";
 const STEPS = ["welcome", "address", "password", "phrase", "confirm", "create", "done"];
@@ -148,6 +148,7 @@ function signupCheckpoint() {
 
 function renderPendingSignups() {
   const container = $("onboarding-pending");
+  container.replaceChildren();
   try {
     for (const signup of pendingSignups(localStorage, wizard.server, wizard.domain)) {
       const button = document.createElement("button");
@@ -166,6 +167,11 @@ function renderPendingSignups() {
       container.append(button);
     }
     container.hidden = !container.childElementCount;
+    if (container.hidden) {
+      document.querySelectorAll("[data-open-onboarding]").forEach(btn => {
+        if (btn.dataset.onboardingLabel) btn.textContent = btn.dataset.onboardingLabel;
+      });
+    }
   } catch (err) {
     $("onboarding-unavailable").textContent = `Couldn't read saved email setup: ${err.message}`;
   }
@@ -540,14 +546,10 @@ async function restoreAccess() {
 }
 
 function renderDone(result, verb = "Created") {
-  if (wizard.paid) {
+  if (wizard.identityName && result.email) {
     try {
-      removePendingSignup(localStorage, signupCheckpoint());
-      if (!pendingSignups(localStorage, wizard.server, wizard.domain).length) {
-        document.querySelectorAll("[data-open-onboarding]").forEach(btn => {
-          if (btn.dataset.onboardingLabel) btn.textContent = btn.dataset.onboardingLabel;
-        });
-      }
+      completeMailboxSignup(localStorage, wizard.server, wizard.identityName, result.email);
+      renderPendingSignups();
     } catch { /* The ready mailbox is saved; stale setup can be retried safely. */ }
   }
   wizard.password = "";
@@ -578,6 +580,10 @@ function renderDone(result, verb = "Created") {
 export function initOnboarding({ navigateTo }) {
   if (!modal) return;
   wizard.navigateTo = navigateTo;
+  window.addEventListener('ebp-mail-signup-completed', renderPendingSignups);
+  window.addEventListener('storage', event => {
+    if (event.key?.startsWith('ebp.mail.')) renderPendingSignups();
+  });
 
   document.querySelectorAll("[data-open-onboarding]").forEach((btn) => {
     btn.addEventListener("click", () => void openOnboarding());

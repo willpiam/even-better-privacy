@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {pendingSignups, savePendingSignup, removePendingSignup, type PendingSignup} from '../src/services/mail/pendingSignup';
+import {pendingSignups, savePendingSignup, removePendingSignup, completeMailboxSignup, type PendingSignup} from '../src/services/mail/pendingSignup';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
@@ -38,4 +38,13 @@ it('clears only the completed setup and its legacy order', async () => {
   await AsyncStorage.setItem(`ebp.mail.order:${signup.server}:Personal:alice`, signup.orderId);
   await removePendingSignup(signup);
   expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([other]);
+});
+
+it('keeps completed setup hidden even if cleanup fails and legacy records remain', async () => {
+  await savePendingSignup(signup);
+  await AsyncStorage.setItem(`ebp.mail.order:${signup.server}:Personal:alice`, signup.orderId);
+  jest.mocked(AsyncStorage.multiRemove).mockRejectedValueOnce(new Error('Delete failed'));
+  await completeMailboxSignup(signup.server, signup.identityName, 'alice@test.pqpost.com');
+  expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([]);
+  expect(await pendingSignups(signup.server, undefined, true)).toEqual([]);
 });

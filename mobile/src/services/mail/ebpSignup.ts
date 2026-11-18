@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {completeMailboxSignup} from './pendingSignup';
 import {
   Identity,
   MAIL_DELETE_PATH,
@@ -327,6 +328,7 @@ export async function signupEbpMailbox(params: {
     smtpPassword: mailPassword,
   });
   await selectMailAccount(params.identityName, accountId);
+  await completeMailboxSignup(params.server, params.identityName, result.email).catch(() => {});
   return {...result, accountId, mailPassword};
 }
 
@@ -485,6 +487,7 @@ export async function resetEbpMailbox(params: {
     accountId: params.accountId,
     fromName: params.fromName,
   });
+  await completeMailboxSignup(params.server, params.identityName, result.email).catch(() => {});
   return {...result, accountId, mailPassword};
 }
 

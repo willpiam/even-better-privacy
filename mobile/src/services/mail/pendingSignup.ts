@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PREFIX = 'ebp.mail.signup:';
+const COMPLETED_PREFIX = 'ebp.mail.signup.completed:';
 export type PendingSignup = {
   server: string;
   domain: string;
@@ -14,12 +15,17 @@ function storageKey(signup: PendingSignup): string {
   return PREFIX + JSON.stringify([signup.server, signup.domain, signup.identityName, signup.username, signup.testMode]);
 }
 
+function completedKey(signup: PendingSignup): string {
+  return COMPLETED_PREFIX + storageKey(signup);
+}
+
 export async function savePendingSignup(signup: PendingSignup): Promise<void> {
   // Explicitly whitelist public metadata: never persist passwords or mnemonics.
   const {server, domain, identityName, username, orderId, testMode} = signup;
   await AsyncStorage.setItem(storageKey(signup), JSON.stringify({
     server, domain, identityName, username, orderId, testMode,
   }));
+  await AsyncStorage.removeItem(completedKey(signup));
 }
 
 export async function pendingSignups(server: string, domain: string | undefined, testMode: boolean): Promise<PendingSignup[]> {
@@ -49,10 +55,24 @@ export async function pendingSignups(server: string, domain: string | undefined,
     const value = {server, domain: domain ?? 'test.pqpost.com', testMode, identityName: suffix.slice(0, split), username: suffix.slice(split + 1), orderId};
     if (value.username && !found.has(storageKey(value))) found.set(storageKey(value), value);
   }
-  return [...found.values()];
+  const active: PendingSignup[] = [];
+  for (const signup of found.values()) {
+    if (await AsyncStorage.getItem(completedKey(signup)) !== '1') active.push(signup);
+  }
+  return active;
 }
 
 export async function removePendingSignup(signup: PendingSignup): Promise<void> {
-  await AsyncStorage.removeItem(storageKey(signup));
-  await AsyncStorage.removeItem(`ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`);
+  // Record completion first so a failed delete cannot resurrect a completed
+  // signup through either the new record or the legacy order fallback.
+  await AsyncStorage.setItem(completedKey(signup), '1');
+  await AsyncStorage.multiRemove([
+    storageKey(signup),
+    `ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`,
+  ]).catch(() => {});
+}
+
+export async function completeMailboxSignup(server: string, identityName: string, email: string): Promise<void> {
+  const [username, domain] = email.toLowerCase().split('@');
+  await removePendingSignup({server, identityName, username, domain, orderId: '', testMode: domain === 'test.pqpost.com'});
 }

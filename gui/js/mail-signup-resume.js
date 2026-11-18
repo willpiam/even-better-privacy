@@ -1,4 +1,5 @@
 const PREFIX = "ebp.mail.signup:";
+const COMPLETED_PREFIX = "ebp.mail.signup.completed:";
 
 export function signupStorageKey({server, domain, identityName, username}) {
   return PREFIX + JSON.stringify([server, domain, identityName, username]);
@@ -11,6 +12,7 @@ export function savePendingSignup(storage, signup) {
   storage.setItem(signupStorageKey(signup), JSON.stringify({
     server, domain, identityName, username, orderId,
   }));
+  storage.removeItem(COMPLETED_PREFIX + signupStorageKey(signup));
 }
 
 export function pendingSignups(storage, server, domain) {
@@ -40,10 +42,19 @@ export function pendingSignups(storage, server, domain) {
     const value = {server, domain, identityName: suffix.slice(0, split), username: suffix.slice(split + 1), orderId};
     if (value.username) found.set(signupStorageKey(value), found.get(signupStorageKey(value)) ?? value);
   }
-  return [...found.values()];
+  return [...found.values()].filter(signup => storage.getItem(COMPLETED_PREFIX + signupStorageKey(signup)) !== '1');
 }
 
 export function removePendingSignup(storage, signup) {
-  storage.removeItem(signupStorageKey(signup));
-  storage.removeItem(`ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`);
+  storage.setItem(COMPLETED_PREFIX + signupStorageKey(signup), '1');
+  try {
+    storage.removeItem(signupStorageKey(signup));
+    storage.removeItem(`ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`);
+  } catch { /* The completion marker suppresses leftover records. */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event('ebp-mail-signup-completed'));
+}
+
+export function completeMailboxSignup(storage, server, identityName, email) {
+  const [username, domain] = email.toLowerCase().split('@');
+  removePendingSignup(storage, {server, domain, identityName, username, orderId: ''});
 }

@@ -1,5 +1,6 @@
 import { mailPageCache, mailBodyCache, mailCacheScope, clearMailCache, onMailCacheClear, resetMailReader } from "./mail-cache.js";
-import { state, saveBooleanPreference, MAIL_RENDER_HTML_PREF_KEY, MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY } from "./state.js";
+import { state, DEFAULT_SERVER_URL, saveBooleanPreference, MAIL_RENDER_HTML_PREF_KEY, MAIL_INCLUDE_PUBLIC_KEYS_PREF_KEY } from "./state.js";
+import {completeMailboxSignup} from './mail-signup-resume.js';
 import { api, setStatus, withLoading, escapeHtml } from "./ui.js";
 import { requestPassword, requestTextInput } from "./modals.js";
 import { ensureIdentityUnlocked, isIdentityUnlocked, isUnlockCancelled, withIdentity } from "./unlock.js";
@@ -162,6 +163,9 @@ async function restoreEbpMailboxAccess() {
   }), "Enter your identity password to restore mailbox access");
   await loadMailAccount();
   if (result?.savedLocally) {
+    try {
+      completeMailboxSignup(localStorage, body.server || DEFAULT_SERVER_URL, body.identity, result.email);
+    } catch { /* Restored access remains usable if browser storage is unavailable. */ }
     setStatus(`Restored mailbox access for ${result.email}`, "success");
   } else {
     setStatus(

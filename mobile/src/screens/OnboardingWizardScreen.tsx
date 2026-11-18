@@ -3,7 +3,7 @@ import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {Linking, StyleSheet, Text, View} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import Screen from '../components/Screen';
 import TextField from '../components/TextField';
 import AppButton from '../components/AppButton';
@@ -126,6 +126,20 @@ export default function OnboardingWizardScreen(): JSX.Element {
     void getCurrentIdentity().then(name => setCurrentIdentityName(name));
   }, []);
 
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    if (server) {
+      (async () => {
+        const saved = [
+          ...await pendingSignups(server, undefined, false),
+          ...(testMailEnabled ? await pendingSignups(server, undefined, true) : []),
+        ];
+        if (!cancelled) setPending(saved);
+      })().catch(() => {});
+    }
+    return () => { cancelled = true; };
+  }, [server, testMailEnabled]));
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -138,11 +152,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
         const cfg = await fetchEbpSignupConfig(url);
         if (cancelled) return;
         setConfig(cfg);
-        const saved = [
-          ...await pendingSignups(url, undefined, false),
-          ...(testingEnabled ? await pendingSignups(url, undefined, true) : []),
-        ];
-        if (!cancelled) setPending(saved);
         if (!cfg.enabled) {
           setConfigError(
             "This key server doesn't offer EBP email addresses yet. You can still create keys and add an existing mailbox manually.",

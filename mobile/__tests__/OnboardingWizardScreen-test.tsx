@@ -21,7 +21,10 @@ import {
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
-jest.mock('@react-navigation/native', () => ({useNavigation: () => ({})}));
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({}),
+  useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
+}));
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
 }));
