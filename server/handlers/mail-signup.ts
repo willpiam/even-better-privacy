@@ -386,14 +386,20 @@ export async function handleMailSignup(
 
   const now = Date.now();
   try {
-    await insertMailbox(db, {
-      username,
-      domain: settings.domain,
-      fingerprint,
-      stalwartId: null,
-      createdAt: now,
-    });
+    await db.writeTransaction(async tx => {
+      if (paidOrder && (await getConfirmedPaymentOrder(tx, username, settings.domain, fingerprint))?.orderId !== paidOrder.orderId) {
+        throw new MailSignupConflict("payment is no longer available for this address");
+      }
+      await insertMailbox(tx, {
+        username,
+        domain: settings.domain,
+        fingerprint,
+        stalwartId: null,
+        createdAt: now,
+      });
+    }, `identity:${fingerprint}`);
   } catch (e) {
+    if (e instanceof MailSignupConflict) return json({ error: e.message }, 409);
     if (String(e).toUpperCase().includes("UNIQUE")) {
       return json({ error: "That address is taken." }, 409);
     }

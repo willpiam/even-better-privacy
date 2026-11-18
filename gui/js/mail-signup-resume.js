@@ -22,7 +22,8 @@ export function pendingSignups(storage, server, domain) {
     if (!key?.startsWith(PREFIX)) continue;
     try {
       const value = JSON.parse(storage.getItem(key));
-      if (value.server === server && value.domain === domain &&
+      if (value.server === server && (!domain || value.domain === domain) &&
+          typeof value.domain === "string" && value.domain &&
           typeof value.identityName === "string" && value.identityName &&
           typeof value.username === "string" && value.username &&
           typeof value.orderId === "string") {
@@ -39,19 +40,22 @@ export function pendingSignups(storage, server, domain) {
     const split = suffix.lastIndexOf(":");
     const orderId = storage.getItem(key);
     if (split < 1 || !orderId) continue;
-    const value = {server, domain, identityName: suffix.slice(0, split), username: suffix.slice(split + 1), orderId};
+    const identityName = suffix.slice(0, split);
+    const username = suffix.slice(split + 1);
+    const value = {server, domain: domain || "test.pqpost.com", identityName, username, orderId};
+    if (!domain && [...found.values()].some(item => item.identityName === identityName && item.username === username)) continue;
     if (value.username) found.set(signupStorageKey(value), found.get(signupStorageKey(value)) ?? value);
   }
-  return [...found.values()].filter(signup => storage.getItem(COMPLETED_PREFIX + signupStorageKey(signup)) !== '1');
+  return [...found.values()].filter(signup => !["1", "cancelled", "dismissed"].includes(storage.getItem(COMPLETED_PREFIX + signupStorageKey(signup))));
 }
 
-export function removePendingSignup(storage, signup) {
-  storage.setItem(COMPLETED_PREFIX + signupStorageKey(signup), '1');
+export function removePendingSignup(storage, signup, reason = "1", notify = true) {
+  storage.setItem(COMPLETED_PREFIX + signupStorageKey(signup), reason);
   try {
     storage.removeItem(signupStorageKey(signup));
     storage.removeItem(`ebp.mail.order:${signup.server}:${signup.identityName}:${signup.username}`);
   } catch { /* The completion marker suppresses leftover records. */ }
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event('ebp-mail-signup-completed'));
+  if (notify && typeof window !== 'undefined') window.dispatchEvent(new Event('ebp-mail-signup-completed'));
 }
 
 export function completeMailboxSignup(storage, server, identityName, email) {

@@ -16,6 +16,7 @@ const html = readFileSync(new URL('gui/index.html', root), 'utf8')
     .modal-overlay.active, .onboarding-step.active {display:block}
     .modal-overlay {position:fixed;inset:0;background:white;overflow:auto}
     #password-modal {z-index:100}
+    #confirm-modal {z-index:100}
     [hidden] {display:none!important}
   </style>
   <script type="module">
@@ -31,11 +32,23 @@ try {
   let status = 'pending';
   let orderExists = false;
   let signupFails = false;
+  let abandonedOrder = 'quoted';
   const page = await context.newPage();
   await page.exposeFunction('mockApi', async (path, init = {}) => {
     const body = init.body ? JSON.parse(init.body) : {};
     calls.push({path, body});
     if (path.startsWith('/mail/ebp-signup/config')) return {enabled: true, domain};
+    if (path === '/mail/ebp-signup/resume-state') {
+      if (body.identity === 'Removed') return {action: abandonedOrder === 'cancelled' ? 'cancelled' : 'unavailable', reason: 'Identity removed from this device'};
+      if (body.email.startsWith('tester@')) return {action: 'completed'};
+      return {action: 'resume'};
+    }
+    if (path === '/mail/ebp-payment/cancel') {
+      assert.equal(body.confirmUnpaid, true);
+      assert.equal(body.orderId, orderId);
+      abandonedOrder = 'cancelled';
+      return {status: 'cancelled'};
+    }
     if (path.startsWith('/mail/ebp-signup/username')) return {purchasable: true, username: 'alice', usdCents: 500};
     if (path.startsWith('/mail/ebp-payment/config')) return {enabled: true, assets: [{network: 'ethereum-sepolia', symbol: 'ETH'}]};
     if (path === '/publish') return {ok: true};
@@ -164,6 +177,22 @@ try {
     return pendingSignups(localStorage, server, domain).map(item => item.username);
   }, {server, domain, orderId});
   assert.deepEqual(remaining, ['bob']);
+
+  await page.evaluate(({server, orderId, domain}) => {
+    localStorage.clear();
+    localStorage.setItem(`ebp.mail.order:${server}:Personal:tester`, orderId);
+    localStorage.setItem(`ebp.mail.order:${server}:Removed:test`, orderId);
+  }, {server, orderId, domain});
+  await reload();
+  await expect(page.locator('#identities-open-onboarding')).toHaveText('Manage unfinished email purchases');
+  await page.click('#identities-open-onboarding');
+  await expect(page.getByText('Identity removed from this device')).toBeVisible();
+  await expect(page.getByRole('button', {name: /Resume email setup:/})).toHaveCount(0);
+  await page.getByRole('button', {name: 'Cancel email purchase'}).click();
+  await page.getByRole('button', {name: 'Cancel unpaid purchase'}).click();
+  await expect(page.getByRole('button', {name: 'Cancel email purchase'})).toHaveCount(0);
+  await reload();
+  await expect(page.locator('#identities-open-onboarding')).toHaveText('Get started');
   await context.close();
   console.log('Onboarding resumes the original order across reloads, retains failures/expired orders, and supports older saved orders.');
 } finally {

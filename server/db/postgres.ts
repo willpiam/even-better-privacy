@@ -330,10 +330,12 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
         expires_at BIGINT NOT NULL,
         grace_until BIGINT NOT NULL,
         transaction_id TEXT,
+        cancelled_at BIGINT,
         last_checked BIGINT NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1
       )
     `);
+    await this.execute("ALTER TABLE mail_payment_orders ADD COLUMN IF NOT EXISTS cancelled_at BIGINT");
     await this.execute(
       `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
       ON mail_payment_orders (username, domain) WHERE active = 1`,

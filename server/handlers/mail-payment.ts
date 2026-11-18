@@ -29,6 +29,7 @@ import {
   TEST_MAIL_DOMAIN,
 } from "./mail-signup.ts";
 import {
+  cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
   expirePaymentOrders,
   getPaymentOrder,
@@ -196,7 +197,7 @@ export async function handlePaymentRecover(
 ): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { fingerprint, username, proof } = parsed.data;
+  const { fingerprint, username, proof, forCancellation } = parsed.data;
   const mail = mailSettingsForMode(mailModeFromRequest(req));
   if (
     typeof fingerprint !== "string" || fingerprint.length > 128 ||
@@ -237,17 +238,38 @@ export async function handlePaymentRecover(
   const rows = await db.query<[string]>(
     `SELECT order_id FROM mail_payment_orders
     WHERE username = ? AND domain = ? AND identity_fingerprint = ?
-      AND (active = 1 AND status IN ('quoted', 'pending', 'confirmed') OR status = 'manual_review')
-    ORDER BY created_at DESC LIMIT 1`,
-    [check.username, mail.domain, fingerprint],
+      AND (? = 1 OR active = 1 AND status IN ('quoted', 'pending', 'confirmed') OR status = 'manual_review')
+    ORDER BY active DESC, created_at DESC LIMIT 1`,
+    [check.username, mail.domain, fingerprint, forCancellation === true ? 1 : 0],
   );
-  return json({ orderId: rows[0]?.[0] ?? null });
+  return json({ orderId: rows[0]?.[0] ?? null, ...(forCancellation === true ? {cancellationLookup: true} : {}) });
 }
 
 function validOrderId(value: unknown): value is string {
   return typeof value === "string" &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
       .test(value);
+}
+
+export async function handlePaymentCancel(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const parsed = await readJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const { orderId, confirmUnpaid } = parsed.data;
+  if (!validOrderId(orderId) || confirmUnpaid !== true) {
+    return json({ error: "Confirm that you haven't sent payment to cancel this order." }, 400);
+  }
+  const order = await cancelUnpaidPaymentOrder(db, orderId, Date.now());
+  if (!order) return json({ error: "order not found" }, 404);
+  if (order.status === "cancelled") return json({ status: "cancelled" });
+  const message = order.status === "manual_review"
+    ? "This payment needs review. Contact support with your transaction ID."
+    : order.status === "pending" || order.status === "confirmed"
+    ? "Payment is already recorded. Check payment to continue setup."
+    : "A mailbox is already associated with this purchase. Restore mailbox access to continue.";
+  return json({
+    status: order.status,
+    error: message,
+  }, 409);
 }
 
 /** Order ID is an unguessable checkout capability. It never authorizes a change of identity or address. */
@@ -258,7 +280,7 @@ export async function handlePaymentOrder(
 ): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, transactionId } = parsed.data;
+  const { orderId, transactionId, checkPayment } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const now = Date.now();
   await expirePaymentOrders(db, now);
@@ -275,14 +297,19 @@ export async function handlePaymentOrder(
         now,
       )
     ) {
+      if ((await getPaymentOrder(db, orderId))?.status === "cancelled") {
+        return json({ error: "This purchase was cancelled. Contact support with your transaction ID if you sent payment." }, 409);
+      }
       return json({ error: "transaction could not be submitted" }, 409);
     }
     order = (await getPaymentOrder(db, orderId))!;
   }
-  try { order = await refreshPaymentOrder(db, order); }
-  catch (error) {
-    if (error instanceof PaymentRefreshError) return json({error: error.message}, 503);
-    throw error;
+  if (submit || checkPayment !== false) {
+    try { order = await refreshPaymentOrder(db, order); }
+    catch (error) {
+      if (error instanceof PaymentRefreshError) return json({error: error.message}, 503);
+      throw error;
+    }
   }
   return json({
     orderId: order.orderId,

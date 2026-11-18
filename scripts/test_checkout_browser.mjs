@@ -66,7 +66,14 @@ try {
     await link.waitFor();
     if (await link.getAttribute("href") !== explorerUrl) throw new Error(`incorrect explorer URL after reload on ${network}`);
   }
-  console.log("Checkout links to submitted transactions on Ethereum and Cardano mainnets and testnets.");
+  order = {...ethereumOrder, status: "cancelled"};
+  await page.goto(`http://127.0.0.1:8789/checkout.html#${order.orderId}`);
+  await page.locator("#email").waitFor();
+  if (await page.locator("#status").textContent() !== "cancelled") throw new Error("missing cancellation status");
+  for (const selector of ["#transaction-form", "#wallet-pay", "#recipient"]) {
+    if (await page.locator(selector).isVisible()) throw new Error(`cancelled checkout still shows ${selector}`);
+  }
+  console.log("Checkout links to submitted transactions and hides payment controls for cancelled orders.");
 } finally {
   await browser.close();
 }

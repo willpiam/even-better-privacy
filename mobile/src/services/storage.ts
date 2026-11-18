@@ -104,6 +104,7 @@ function publicDataToMeta(
   return {
     name,
     fingerprint: publicData.fingerprint,
+    ...(publicData.revocationCertificate ? {revoked: true} : {}),
     signingKeyType: publicData.signingKeyType as SigningType,
     encryptionKeyType: publicData.encryptionKeyType,
   };

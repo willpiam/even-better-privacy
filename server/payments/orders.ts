@@ -32,6 +32,7 @@ export type StoredOrder = PaymentOrder & {
     | "pending"
     | "confirmed"
     | "fulfilled"
+    | "cancelled"
     | "expired"
     | "manual_review";
   transactionId: string | null;
@@ -210,6 +211,27 @@ export async function getConfirmedPaymentOrder(
     [username, domain, fingerprint],
   );
   return rows[0] ? fromRow(rows[0]) : null;
+}
+
+/** The conditional update competes atomically with transaction submission. */
+export async function cancelUnpaidPaymentOrder(
+  db: DatabaseAdapter,
+  orderId: string,
+  now: number,
+): Promise<StoredOrder | null> {
+  const order = await getPaymentOrder(db, orderId);
+  if (!order || order.status === "cancelled") return order;
+  return await db.writeTransaction(async (tx) => {
+    await tx.query(
+      `UPDATE mail_payment_orders SET status = 'cancelled', active = 0, cancelled_at = ?
+      WHERE order_id = ? AND status IN ('quoted', 'expired') AND transaction_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM mailboxes
+          WHERE identity_fingerprint = mail_payment_orders.identity_fingerprint
+            AND username = mail_payment_orders.username AND domain = mail_payment_orders.domain)`,
+      [now, orderId],
+    );
+    return await getPaymentOrder(tx, orderId);
+  }, `identity:${order.fingerprint}`);
 }
 
 /** Bind a transaction once, including delayed submission within the reserved grace period. */

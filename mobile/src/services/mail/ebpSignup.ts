@@ -32,6 +32,7 @@ import {
   buildMailPasswordResetRequest,
   buildSignupRequest,
   MAIL_TEST_MODE_HEADER,
+  isManagedMailAddress,
   mailboxDeleteConfirmed,
   managedEmailLookupError,
   parseSignupConfig,
@@ -126,6 +127,7 @@ export type PaymentOrderStatus =
   | 'pending'
   | 'confirmed'
   | 'fulfilled'
+  | 'cancelled'
   | 'expired'
   | 'manual_review';
 
@@ -215,6 +217,7 @@ export async function recoverTestPaymentOrder(params: {
   username: string;
   domain: string;
   server: string;
+  forCancellation?: boolean;
 }): Promise<string | null> {
   const check = validateMailUsername(params.username);
   if (!check.ok) throw new Error(check.reason);
@@ -226,18 +229,22 @@ export async function recoverTestPaymentOrder(params: {
   );
   const res = await fetch(
     apiUrl(params.server, '/api/v1/mail/payment/recover'),
-    testModeInit(true, {
+    testModeInit(params.domain === 'test.pqpost.com', {
       method: 'POST',
       headers: {'content-type': 'application/json'},
       body: JSON.stringify({
         fingerprint: signed.fingerprint,
         username: check.username,
         proof: signed.proof,
+        forCancellation: params.forCancellation,
       }),
     }),
   );
-  const body = (await res.json().catch(() => ({}))) as {orderId?: string | null; error?: string};
+  const body = (await res.json().catch(() => ({}))) as {orderId?: string | null; cancellationLookup?: boolean; error?: string};
   if (!res.ok) throw new EbpMailApiError(res.status, body.error ?? `HTTP ${res.status}`);
+  if (params.forCancellation && !body.orderId && body.cancellationLookup !== true) {
+    throw new Error('This key server could not check whether the purchase can be cancelled. Your setup is still saved.');
+  }
   return typeof body.orderId === 'string' ? body.orderId : null;
 }
 
@@ -245,19 +252,53 @@ export async function fetchPaymentOrderStatus(
   server: string,
   orderId: string,
 ): Promise<PaymentOrderStatus> {
+  return (await fetchPaymentOrderSnapshot(server, orderId, undefined, true)).status;
+}
+
+export async function fetchPaymentOrderSnapshot(
+  server: string,
+  orderId: string,
+  signal?: AbortSignal,
+  checkPayment = false,
+): Promise<{status: PaymentOrderStatus; email?: string; fingerprint?: string}> {
   const res = await fetch(
     apiUrl(server, '/api/v1/mail/payment/status'),
     {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      body: JSON.stringify({orderId}),
+      body: JSON.stringify({orderId, checkPayment}),
+      signal,
     },
   );
-  const body = (await res.json().catch(() => ({}))) as {status?: string; error?: string};
+  const body = (await res.json().catch(() => ({}))) as {status?: PaymentOrderStatus; email?: string; fingerprint?: string; error?: string};
   if (!res.ok || typeof body.status !== 'string') {
     throw new EbpMailApiError(res.status, body.error ?? `HTTP ${res.status}`);
   }
-  return body.status as PaymentOrderStatus;
+  return {status: body.status, email: body.email, fingerprint: body.fingerprint};
+}
+
+export async function cancelPaymentOrder(server: string, orderId: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const res = await fetch(apiUrl(server, '/api/v1/mail/payment/cancel'), {
+      method: 'POST',
+      headers: {'content-type': 'application/json'},
+      body: JSON.stringify({orderId, confirmUnpaid: true}),
+      signal: controller.signal,
+    });
+    const body = (await res.json().catch(() => ({}))) as {status?: string; error?: string};
+    if (!res.ok || body.status !== 'cancelled') {
+      throw new EbpMailApiError(res.status, res.status === 404
+        ? 'This key server could not cancel the purchase. Your setup is still saved.'
+        : body.error ?? 'Cancellation could not be confirmed. Try again.');
+    }
+  } catch (error) {
+    if (error instanceof EbpMailApiError) throw error;
+    throw new Error('Cancellation could not be confirmed. Your setup is still saved. Try again.');
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -437,6 +478,7 @@ export async function resetEbpMailbox(params: {
   password: string;
   server: string;
   config: EbpSignupConfig;
+  expectedEmail?: string;
   accountId?: string;
   fromName?: string;
 }): Promise<EbpSignupResult & {accountId: string; mailPassword: string}> {
@@ -449,7 +491,13 @@ export async function resetEbpMailbox(params: {
       'Stored mail credentials could not be unlocked with the identity password',
     );
   }
-  const email = await fetchVerifiedManagedEmail(
+  const expectedEmail = params.expectedEmail?.trim().toLowerCase();
+  if (expectedEmail && !isManagedMailAddress(expectedEmail, params.config.domain)) {
+    throw new Error('The mailbox does not match this setup domain.');
+  }
+  // The reset proof binds this exact address to the identity. The server
+  // compares the proof to its provisioned mailbox before changing credentials.
+  const email = expectedEmail ?? await fetchVerifiedManagedEmail(
     params.server,
     identity.toFingerprint(),
     params.config.domain,

@@ -920,6 +920,7 @@ export async function loadAll() {
     }
     
     renderIdentities();
+    window.dispatchEvent(new Event('ebp-identities-refreshed'));
     
     if (state.currentIdentity) {
       await loadPublicIdentityInfo();

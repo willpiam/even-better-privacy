@@ -1,6 +1,7 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { initDb } from "../db/index.ts";
 import {
+  cancelUnpaidPaymentOrder,
   getPaymentOrder,
   type PaymentOrder,
   reservePaymentOrder,
@@ -67,6 +68,11 @@ Deno.test({
       const read = await getPaymentOrder(db, order.orderId);
       assertEquals(read?.status, "pending");
       assertEquals(read?.transactionId, "a".repeat(64));
+      assertEquals((await cancelUnpaidPaymentOrder(db, order.orderId, now))?.status, "pending");
+      const unpaid = {...order, orderId: crypto.randomUUID(), username: `unpaid-${suffix}`, fingerprint: second};
+      assertEquals(await reservePaymentOrder(db, unpaid, now), true);
+      assertEquals((await cancelUnpaidPaymentOrder(db, unpaid.orderId, now))?.active, false);
+      assertEquals(await reservePaymentOrder(db, {...unpaid, proofNonce: 2, orderId: crypto.randomUUID()}, now), true);
     } finally {
       await db.query(
         "DELETE FROM mail_payment_orders WHERE identity_fingerprint IN (?, ?)",

@@ -3,6 +3,7 @@ export type SigningType = 'dilithium' | 'sphincs';
 export type StoredIdentityMeta = {
   name: string;
   fingerprint: string;
+  revoked?: boolean;
   signingKeyType: SigningType;
   encryptionKeyType: 'kyber';
 };

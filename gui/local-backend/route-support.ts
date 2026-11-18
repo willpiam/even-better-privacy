@@ -174,10 +174,11 @@ export type EbpMailConfig = {
 
 export async function fetchEbpMailConfig(
   server: string,
+  mode?: "test",
 ): Promise<EbpMailConfig> {
   let res: Response;
   try {
-    res = await fetch(apiUrl(server, "/api/v1/mail/signup/config"));
+    res = await fetch(apiUrl(server, "/api/v1/mail/signup/config"), mode ? {headers: {"x-ebp-mail-mode": mode}} : undefined);
   } catch (e) {
     throw new HttpError(
       STATUS.BadGateway,

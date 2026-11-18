@@ -1,6 +1,6 @@
 import {useSecretPrompt} from '../hooks/useSecretPrompt';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Linking, StyleSheet, Text, View} from 'react-native';
+import {Alert, AppState, Linking, StyleSheet, Text, View} from 'react-native';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Share from 'react-native-share';
 import {useFocusEffect, useNavigation} from '@react-navigation/native';
@@ -16,6 +16,7 @@ import {getEnforcePasswordPolicy, getMailTestMode, getServerUrl} from '../servic
 import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../services/storage';
 import {
   checkEbpUsername,
+  cancelPaymentOrder,
   createTestPaymentOrder,
   EbpMailApiError,
   fetchEbpSignupConfig,
@@ -28,11 +29,11 @@ import {
   signupEbpMailbox,
 } from '../services/mail/ebpSignup';
 import {
-  pendingSignups,
   savePendingSignup,
   removePendingSignup,
   type PendingSignup,
 } from '../services/mail/pendingSignup';
+import {reconcilePendingSignups, type SignupEntry} from '../services/mail/reconcileSignup';
 import {
   checkoutHandoff,
   chooseIdentityName,
@@ -70,7 +71,7 @@ function randomInt(max: number): number {
 export default function OnboardingWizardScreen(): JSX.Element {
   // Registered in both the Identities and Mail stacks.
   const navigation = useNavigation<any>();
-  const {secretPrompt} = useSecretPrompt();
+  const {secretPrompt, promptSecret} = useSecretPrompt();
   const [step, setStep] = useState<Step>('welcome');
   const [server, setServer] = useState('');
   const [config, setConfig] = useState<EbpSignupConfig | null>(null);
@@ -108,7 +109,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const [restored, setRestored] = useState(false);
   const [createStatus, setCreateStatus] = useState<number | undefined>();
   const [published, setPublished] = useState(false);
-  const [pending, setPending] = useState<PendingSignup[]>([]);
+  const [pending, setPending] = useState<SignupEntry[]>([]);
+  const [managingPurchase, setManagingPurchase] = useState(false);
+  const [restoringPurchase, setRestoringPurchase] = useState(false);
+  const refreshGeneration = useRef(0);
   const [resuming, setResuming] = useState(false);
   const creating = useRef(false);
   const [result, setResult] = useState<{
@@ -127,17 +131,21 @@ export default function OnboardingWizardScreen(): JSX.Element {
   }, []);
 
   useFocusEffect(useCallback(() => {
-    let cancelled = false;
-    if (server) {
-      (async () => {
-        const saved = [
-          ...await pendingSignups(server, undefined, false),
-          ...(testMailEnabled ? await pendingSignups(server, undefined, true) : []),
-        ];
-        if (!cancelled) setPending(saved);
-      })().catch(() => {});
-    }
-    return () => { cancelled = true; };
+    const reload = () => {
+      if (!server) return;
+      const generation = ++refreshGeneration.current;
+      reconcilePendingSignups(server, testMailEnabled).then(saved => {
+        if (generation === refreshGeneration.current) setPending(saved);
+      }).catch(() => {});
+    };
+    reload();
+    const subscription = AppState.addEventListener('change', value => {
+      if (value === 'active') reload();
+    });
+    return () => {
+      ++refreshGeneration.current;
+      subscription.remove();
+    };
   }, [server, testMailEnabled]));
 
   useEffect(() => {
@@ -371,6 +379,13 @@ export default function OnboardingWizardScreen(): JSX.Element {
         await savePendingSignup(signupCheckpoint(name, id));
         await rememberPaymentOrder(server, name, normalizedUsername, id);
         const status = await fetchPaymentOrderStatus(server, id);
+        if (status === 'cancelled') {
+          await removePendingSignup(signupCheckpoint(name, id), 'cancelled');
+          forgetEntry(signupCheckpoint(name, id));
+          setPassword('');
+          setStep('welcome');
+          return;
+        }
         if (status === 'expired') {
           setCheckoutUrl('');
           setAwaitingPayment(false);
@@ -406,7 +421,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setTask('mailbox', 'done');
       if (paid) {
         await removePendingSignup(signupCheckpoint(name)).catch(() => {});
-        setPending(prev => prev.filter(item => item.identityName !== name || item.username !== normalizedUsername));
+        forgetEntry(signupCheckpoint(name));
       }
       setResult({
         email: res.email,
@@ -439,6 +454,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
     if (creating.current) return;
     if (!config?.enabled || !identityName) return;
     creating.current = true;
+    setStep('create');
     setCreateError('');
     setCreateStatus(undefined);
     setTask('mailbox', 'running');
@@ -448,11 +464,12 @@ export default function OnboardingWizardScreen(): JSX.Element {
         password,
         server,
         config,
+        expectedEmail: resuming ? `${normalizedUsername}@${domain}` : undefined,
       });
       setTask('mailbox', 'done');
       if (paid) {
         await removePendingSignup(signupCheckpoint()).catch(() => {});
-        setPending(prev => prev.filter(item => item.identityName !== identityName || item.username !== normalizedUsername));
+        forgetEntry(signupCheckpoint());
       }
       setResult({
         email: res.email,
@@ -470,7 +487,13 @@ export default function OnboardingWizardScreen(): JSX.Element {
     } catch (error) {
       setTask('mailbox', 'error');
       setCreateStatus(error instanceof EbpMailApiError ? error.status : undefined);
-      setCreateError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      setCreateError(message);
+      if (restoringPurchase && /wrong password|failed to decrypt identity/i.test(message)) {
+        setPassword('');
+        setPasswordHint(message);
+        setStep('unlock');
+      }
     } finally {
       creating.current = false;
     }
@@ -493,7 +516,13 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setStep(wizardSteps(true, testMailEnabled)[1]);
   };
 
-  const resumeSignup = async (signup: PendingSignup) => {
+  const forgetEntry = (signup: PendingSignup) => {
+    ++refreshGeneration.current;
+    setPending(prev => prev.filter(item => !(item.server === signup.server && item.testMode === signup.testMode &&
+      item.domain === signup.domain && item.identityName === signup.identityName && item.username === signup.username)));
+  };
+
+  const resumeSignup = async (signup: SignupEntry) => {
     setConfigLoading(true);
     setConfigError('');
     try {
@@ -510,6 +539,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setPaid(true);
       setUseExisting(true);
       setResuming(true);
+      setRestoringPurchase(signup.action === 'restore');
       setPublished(false);
       setPassword('');
       setPasswordHint('');
@@ -522,13 +552,53 @@ export default function OnboardingWizardScreen(): JSX.Element {
     }
   };
 
+  const cancelSignup = async (signup: SignupEntry) => {
+    setManagingPurchase(true);
+    setConfigError('');
+    try {
+      let order = signup.orderId;
+      const localOnly = !order && signup.action === 'unavailable';
+      if (!order && !localOnly) {
+        const secret = await promptSecret({title: `Unlock ${signup.identityName} to find the order`});
+        if (!secret) return;
+        order = await recoverTestPaymentOrder({...signup, password: secret, forCancellation: true}) ?? '';
+        if (order) {
+          await savePendingSignup({...signup, orderId: order});
+          setPending(prev => prev.map(item => item === signup ? {...item, orderId: order} : item));
+        }
+      }
+      if (order) await cancelPaymentOrder(signup.server, order);
+      await removePendingSignup(signup, order ? 'cancelled' : 'dismissed');
+      forgetEntry(signup);
+    } catch (error) {
+      setConfigError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setManagingPurchase(false);
+    }
+  };
+
+  const confirmCancelSignup = (signup: SignupEntry) => {
+    const localOnly = !signup.orderId && signup.action === 'unavailable';
+    Alert.alert(
+      localOnly ? 'Remove setup reminder?' : `Cancel ${signup.username}@${signup.domain}?`,
+      localOnly
+        ? 'This device cannot find the purchase. Unpaid server reservations expire on their own.'
+        : 'Confirm that you have not sent payment. Cancelling releases this address reservation and keeps your identity.',
+      [
+        {text: 'Keep setup', style: 'cancel'},
+        {text: localOnly ? 'Remove reminder' : 'Cancel unpaid purchase', style: 'destructive', onPress: () => {void cancelSignup(signup);}},
+      ],
+    );
+  };
+
   const onUnlockNext = () => {
     if (!password) {
       setPasswordHint('Enter the password for this identity.');
       return;
     }
     setPasswordHint('');
-    void runCreate();
+    if (resuming && restoringPurchase) void runRestore();
+    else void runCreate();
   };
 
   const onCreate = () => {
@@ -557,7 +627,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
   };
 
   const words = mnemonic.trim() ? mnemonic.trim().split(/\s+/) : [];
-  const canStart = !configLoading && !!server && (testMailEnabled || config?.enabled === true);
+  const canStart = !managingPurchase && !configLoading && !!server && (testMailEnabled || config?.enabled === true);
   const addressTaken = isAddressTakenError(createError);
   const mailboxExists = isAlreadyHasMailboxError(createError, createStatus);
   const taskKeys: TaskKey[] = useExisting
@@ -579,13 +649,27 @@ export default function OnboardingWizardScreen(): JSX.Element {
           </Text>
           <StatusBanner message={configError} kind="error" />
           {pending.map(signup => (
-            <AppButton
-              key={`${signup.identityName}:${signup.username}`}
-              title={`Resume email setup: ${signup.username}@${signup.domain} (${signup.identityName})`}
-              testID={`onboarding-resume-${signup.username}`}
-              disabled={configLoading || !server}
-              onPress={() => { void resumeSignup(signup); }}
-            />
+            <View key={JSON.stringify([signup.identityName, signup.domain, signup.username])} style={styles.stack}>
+              <Text style={styles.body}>{signup.username}@{signup.domain} ({signup.identityName})</Text>
+              {signup.reason ? <Text style={styles.hint}>{signup.reason}</Text> : null}
+              {signup.action !== 'unavailable' ? (
+                <AppButton
+                  title={signup.action === 'restore' ? 'Restore mailbox access' : 'Resume email setup'}
+                  testID={`onboarding-resume-${signup.username}`}
+                  disabled={configLoading || managingPurchase}
+                  onPress={() => { void resumeSignup(signup); }}
+                />
+              ) : null}
+              {signup.action !== 'restore' ? (
+                <AppButton
+                  title={!signup.orderId && signup.action === 'unavailable' ? 'Remove reminder' : 'Cancel email purchase'}
+                  testID={`onboarding-cancel-${signup.username}`}
+                  variant="secondary"
+                  disabled={managingPurchase || configLoading}
+                  onPress={() => confirmCancelSignup(signup)}
+                />
+              ) : null}
+            </View>
           ))}
           <AppButton
             title="Get started"
@@ -897,7 +981,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
           {createError || awaitingPayment ? (
             <AppButton
               title={
-                mailboxExists
+                mailboxExists || (resuming && restoringPurchase)
                   ? 'Restore access'
                   : awaitingPayment
                     ? 'Check payment'
@@ -909,7 +993,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
               }
               testID={mailboxExists ? 'onboarding-restore' : 'onboarding-retry'}
               onPress={() => {
-                if (mailboxExists) {
+                if (mailboxExists || (resuming && restoringPurchase)) {
                   void runRestore();
                   return;
                 }

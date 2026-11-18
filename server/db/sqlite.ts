@@ -253,10 +253,22 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
         expires_at INTEGER NOT NULL,
         grace_until INTEGER NOT NULL,
         transaction_id TEXT,
+        cancelled_at INTEGER,
         last_checked INTEGER NOT NULL DEFAULT 0,
         active INTEGER NOT NULL DEFAULT 1
       )
     `);
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const columns = this.db.prepare("PRAGMA table_info(mail_payment_orders)").values<[number, string]>();
+      if (!columns.some(([, name]) => name === "cancelled_at")) {
+        this.db.exec("ALTER TABLE mail_payment_orders ADD COLUMN cancelled_at INTEGER");
+      }
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_active_name
       ON mail_payment_orders (username, domain) WHERE active = 1`);
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_proof_nonce

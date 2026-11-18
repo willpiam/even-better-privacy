@@ -50,10 +50,15 @@ function render(order) {
   $("amount").textContent = `${decimalAmount(order.amountAtomic, order.decimals)} ${order.asset}`;
   $("expiry").textContent = new Date(order.expiresAt).toLocaleString();
   $("instructions").replaceChildren();
+  document.querySelectorAll("[data-quote]").forEach(element => {
+    element.hidden = order.status === "cancelled";
+  });
   const test = order.network === "ethereum-sepolia" || order.network === "cardano-preview";
   if ((localTest || location.hostname === "test.pqpost.com") !== test) throw new Error("The order is for a different network environment.");
   $("testnet").hidden = !test;
-  if (order.network.startsWith("cardano-")) {
+  if (order.status === "cancelled") {
+    addInstruction("This purchase was cancelled. The address is no longer reserved. If you already sent payment, contact support with your transaction ID.");
+  } else if (order.network.startsWith("cardano-")) {
     addInstruction("Send the exact asset and amount to the receiving address above. Include the payment message as the only entry in the CIP-20 msg array under metadata label 674. For native tokens, your wallet must also include the minimum ADA required by Cardano.");
     if (order.assetUnit !== "lovelace") addInstruction("Cardano asset identifier:", order.assetUnit);
   } else {

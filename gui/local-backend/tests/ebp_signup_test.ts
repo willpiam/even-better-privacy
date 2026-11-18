@@ -155,6 +155,12 @@ Deno.test({
       const idRes = await handleRequest(req("GET", `/api/v1/identity/public?home=${encodeURIComponent(home)}&server=${SERVER}`));
       const idText = await idRes.text();
       assert(idText.includes(`alice@${DOMAIN}`), "identity should carry the email detail");
+
+      const reconcile = (identity: string) => handleRequest(req("POST", "/api/v1/mail/ebp-signup/resume-state", {
+        home, server: SERVER, identity, email: `alice@${DOMAIN}`,
+      }));
+      assertEquals((await (await reconcile("wizard")).json()).action, "completed");
+      assertEquals((await (await reconcile("removed")).json()).action, "unavailable");
     });
   },
 });
