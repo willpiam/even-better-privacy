@@ -20,7 +20,7 @@ type Props = NativeStackScreenProps<MoreStackParamList, 'MailAccountSettings'>;
 
 export default function MailAccountSettingsScreen({
   navigation,
-}: Props): JSX.Element {
+}: Props): React.JSX.Element {
   const [mail, setMail] = useState<{
     identityName: string;
     store: MailAccountStore;
