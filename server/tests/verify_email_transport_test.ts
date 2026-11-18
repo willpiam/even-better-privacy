@@ -3,7 +3,9 @@ import { createServer, type Socket } from "node:net";
 import {
   createVerificationMailer,
   parseVerificationMailbox,
+  prepareVerificationDelivery,
 } from "../verify-email.ts";
+import { installVerificationSmtp } from "./verification_smtp_fixture.ts";
 
 Deno.test("verification accepts only a bare mailbox and normalizes its domain", () => {
   assertEquals(
@@ -23,6 +25,19 @@ Deno.test("verification accepts only a bare mailbox and normalizes its domain", 
     "alice@127.0.0.1",
     "alice@exa／mple.test",
   ]) assertEquals(parseVerificationMailbox(value), null, value);
+});
+
+Deno.test("verification rejects public URLs with query or fragment delimiters", () => {
+  const smtp = installVerificationSmtp();
+  try {
+    const request = new Request("https://keys.example.test/api/v1/detail");
+    for (const suffix of ["?", "#", "?key=value", "#fragment"]) {
+      Deno.env.set("PUBLIC_BASE_URL", `https://keys.example.test/${suffix}`);
+      assertEquals(prepareVerificationDelivery(request), null);
+    }
+  } finally {
+    smtp.restore();
+  }
 });
 
 for (const advertiseTls of [false, true]) {

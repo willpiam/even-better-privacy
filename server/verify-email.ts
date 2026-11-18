@@ -62,7 +62,7 @@ function isLocalHostname(hostname: string): boolean {
 function getPublicBaseUrl(req: Request): string | null {
   const configured = Deno.env.get("PUBLIC_BASE_URL")?.trim();
   const url = URL.parse(configured || new URL(req.url).origin);
-  if (!url || url.username || url.password || url.search || url.hash) {
+  if (!url || url.username || url.password || /[?#]/.test(url.href)) {
     return null;
   }
   if (url.protocol === "http:" && isLocalHostname(url.hostname)) {
