@@ -279,6 +279,12 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     });
   }, [navigation, folder]);
 
+  const openMailAccountSettings = () =>
+    navigation.getParent()?.navigate('MoreTab', {
+      screen: 'MailAccountSettings',
+      initial: false,
+    });
+
   const onUnlock = async () => {
     try {
       if (!(await ensureUnlocked())) return;
@@ -487,7 +493,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
                   <AppButton
                     title="Mail accounts"
                     variant="secondary"
-                    onPress={() => navigation.navigate('MailAccounts')}
+                    onPress={openMailAccountSettings}
                   />
                 </View>
               ) : null}
@@ -502,7 +508,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
                     onPress={() => void onUnlock()}
                   />
                   <AppButton
-                    title="Open Mail Accounts"
+                    title="Back to Mail"
                     variant="secondary"
                     onPress={() => navigation.navigate('MailAccounts')}
                   />
@@ -519,7 +525,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
                   <AppButton
                     title="Mail accounts"
                     variant="secondary"
-                    onPress={() => navigation.navigate('MailAccounts')}
+                    onPress={openMailAccountSettings}
                   />
                 </View>
               ) : null}

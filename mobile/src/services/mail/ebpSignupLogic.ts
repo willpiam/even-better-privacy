@@ -278,7 +278,7 @@ export function mailboxDeleteConfirmed(email: string, typed: string): boolean {
 }
 
 export function managedMailboxRestoreHint(email: string): string {
-  return `This identity has a verified mailbox (${email}). Mailbox access can be restored from Mail accounts.`;
+  return `This identity has a verified mailbox (${email}). Open the Mail tab and choose Restore mailbox access.`;
 }
 
 export const TEST_MAIL_DOMAIN = 'test.pqpost.com';

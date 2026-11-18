@@ -1,8 +1,9 @@
 import React from 'react';
-import {BackHandler, ScrollView} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
 import MailAccountsScreen from '../src/screens/mail/MailAccountsScreen';
 import AppButton from '../src/components/AppButton';
+import ListRow from '../src/components/ListRow';
+import PlaceHeader from '../src/components/PlaceHeader';
 import {
   readMailStore,
   getMailSecretsInMemory,
@@ -22,6 +23,9 @@ jest.mock('../src/services/storage', () => ({
 }));
 jest.mock('../src/services/mail/accountStore', () => ({
   readMailStore: jest.fn(),
+  resolveSelectedAccountId: jest.requireActual(
+    '../src/services/mail/accountStoreLogic',
+  ).resolveSelectedAccountId,
   getMailSecretsStatus: jest.fn(),
   getMailSecretsInMemory: jest.fn(),
 }));
@@ -44,7 +48,7 @@ jest.mock('../src/hooks/useSecretPrompt', () => ({
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
 }));
-const navigation = {navigate: jest.fn(), setOptions: jest.fn()};
+const navigation = {navigate: jest.fn()};
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(useIdentityUnlock).mockReturnValue({
@@ -149,16 +153,6 @@ describe('account creation actions', () => {
     });
   }
 
-  function headerButton() {
-    return navigation.setOptions.mock.lastCall![0].headerRight?.();
-  }
-
-  async function toggleMenu() {
-    const button = headerButton();
-    expect(button.props.accessibilityLabel).toBe('Add mail account');
-    await act(async () => button.props.onPress());
-  }
-
   async function pressAction(testID: string) {
     const button = tree.root.findAll(
       node =>
@@ -170,7 +164,6 @@ describe('account creation actions', () => {
 
   afterEach(async () => {
     await act(async () => tree.unmount());
-    jest.restoreAllMocks();
   });
 
   it.each([
@@ -180,7 +173,6 @@ describe('account creation actions', () => {
     'keeps %s directly available with no accounts',
     async (id, target) => {
       await renderAccounts(false);
-      expect(headerButton()).toBeUndefined();
       expect(
         tree.root.findAllByType(AppButton).map(node => node.props.title),
       ).toEqual(
@@ -191,81 +183,17 @@ describe('account creation actions', () => {
     },
   );
 
-  it.each([
-    ['mail-add-account', ['MailAccountSetup', {}]],
-    ['mail-onboarding', ['OnboardingWizard']],
-  ] as const)(
-    'opens %s from the + menu when an account exists',
-    async (id, target) => {
-      await renderAccounts(true);
-      expect(
-        tree.root.findAllByProps({testID: 'mail-add-account'}),
-      ).toHaveLength(0);
-      expect(
-        tree.root.findAllByProps({testID: 'mail-onboarding'}),
-      ).toHaveLength(0);
-      expect(
-        tree.root.findAllByType(AppButton).map(node => node.props.title),
-      ).toContain('Open inbox');
-      expect(headerButton().props.accessibilityState.expanded).toBe(false);
-
-      await toggleMenu();
-      expect(headerButton().props.accessibilityState.expanded).toBe(true);
-      expect(
-        tree.root.findByType(ScrollView).props.accessibilityElementsHidden,
-      ).toBe(true);
-      expect(
-        tree.root.findAllByProps({testID: 'mail-add-account'}).length,
-      ).toBeGreaterThan(0);
-      expect(
-        tree.root.findAllByProps({testID: 'mail-onboarding'}).length,
-      ).toBeGreaterThan(0);
-      await pressAction(id);
-
-      expect(navigation.navigate).toHaveBeenCalledWith(...target);
-      expect(
-        tree.root.findAllByProps({testID: 'mail-menu-dismiss'}),
-      ).toHaveLength(0);
-      expect(headerButton().props.accessibilityState.expanded).toBe(false);
-    },
-  );
-
-  it('dismisses on an outside tap or a second + tap', async () => {
+  it('shows the active mailbox address and opens the inbox without an account list', async () => {
     await renderAccounts(true);
-    await toggleMenu();
-    await pressAction('mail-menu-dismiss');
-    expect(tree.root.findAllByProps({testID: 'mail-onboarding'})).toHaveLength(
-      0,
-    );
-    expect(
-      tree.root.findByType(ScrollView).props.accessibilityElementsHidden,
-    ).toBe(false);
-    await toggleMenu();
-    await toggleMenu();
-    expect(tree.root.findAllByProps({testID: 'mail-onboarding'})).toHaveLength(
-      0,
-    );
-    expect(navigation.navigate).not.toHaveBeenCalled();
-  });
-
-  it('closes the menu with Android Back and removes its back handler', async () => {
-    await renderAccounts(true);
-    let onBack!: () => boolean | null | undefined;
-    const remove = jest.fn();
-    jest
-      .spyOn(BackHandler, 'addEventListener')
-      .mockImplementation((_, handler) => {
-        onBack = handler;
-        return {remove};
-      });
-    await toggleMenu();
-    act(() => {
-      expect(onBack()).toBe(true);
+    expect(readMailStore).toHaveBeenCalledWith('Personal');
+    expect(tree.root.findByType(PlaceHeader).props).toMatchObject({
+      eyebrow: 'CURRENT IDENTITY · Personal',
+      subtitle: 'me@example.com',
     });
-    expect(tree.root.findAllByProps({testID: 'mail-onboarding'})).toHaveLength(
-      0,
-    );
-    expect(remove).toHaveBeenCalledTimes(1);
-    expect(navigation.navigate).not.toHaveBeenCalled();
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(0);
+    const buttons = tree.root.findAllByType(AppButton);
+    expect(buttons.map(button => button.props.title)).toEqual(['Open inbox']);
+    await act(async () => buttons[0].props.onPress());
+    expect(navigation.navigate).toHaveBeenCalledWith('MailInbox');
   });
 });

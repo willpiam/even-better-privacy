@@ -31,6 +31,7 @@ import DecryptMessageScreen from '../screens/crypto/DecryptMessageScreen';
 import EncryptFileScreen from '../screens/crypto/EncryptFileScreen';
 import DecryptFileScreen from '../screens/crypto/DecryptFileScreen';
 import MailAccountsScreen from '../screens/mail/MailAccountsScreen';
+import MailAccountSettingsScreen from '../screens/mail/MailAccountSettingsScreen';
 import MailAccountSetupScreen from '../screens/mail/MailAccountSetupScreen';
 import MailHelpScreen from '../screens/mail/MailHelpScreen';
 import MailInboxScreen from '../screens/mail/MailInboxScreen';
@@ -96,6 +97,9 @@ export type MailStackParamList = {
 export type MoreStackParamList = {
   MoreHome: undefined;
   Settings: undefined;
+  MailAccountSettings: undefined;
+  MailAccountSetup: MailStackParamList['MailAccountSetup'];
+  OnboardingWizard: undefined;
   Diagnostics: undefined;
   ProjectInfo: undefined;
   MailTrace: undefined;
@@ -377,6 +381,23 @@ function MoreNavigator(): JSX.Element {
           name="Settings"
           component={SettingsScreen}
           options={{title: 'Settings'}}
+        />
+        <MoreStack.Screen
+          name="MailAccountSettings"
+          component={MailAccountSettingsScreen}
+          options={{title: 'Mail accounts'}}
+        />
+        <MoreStack.Screen
+          name="MailAccountSetup"
+          component={MailAccountSetupScreen}
+          options={({route}) => ({
+            title: route.params?.accountId ? 'Edit Account' : 'Add Account',
+          })}
+        />
+        <MoreStack.Screen
+          name="OnboardingWizard"
+          component={OnboardingWizardScreen}
+          options={{title: 'Create EBP email'}}
         />
         {__DEV__ && (
           <MoreStack.Screen

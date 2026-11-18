@@ -218,9 +218,9 @@ describe('ebpSignupLogic', () => {
     expect(mailboxDeleteConfirmed('', 'alice@pqpost.test')).toBe(false);
   });
 
-  test('managedMailboxRestoreHint points at Mail accounts', () => {
+  test('managedMailboxRestoreHint points to the restore action', () => {
     expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('alice@pqpost.test');
-    expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('Mail accounts');
+    expect(managedMailboxRestoreHint('alice@pqpost.test')).toContain('Restore mailbox access');
   });
 
   const ORDER = 'b34af21f-ccfd-404b-84cc-865afdad3100';

@@ -3,7 +3,7 @@ import React, {useCallback, useState} from 'react';
 import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import type {MailStackParamList} from '../../navigation/AppNavigator';
+import type {MailStackParamList, MoreStackParamList} from '../../navigation/AppNavigator';
 import {getCurrentIdentityRequired} from '../../services/storage';
 import {getServerUrl} from '../../services/settings';
 import {
@@ -39,7 +39,9 @@ import StatusBanner from '../../components/StatusBanner';
 import {statusKind} from '../../theme/statusKind';
 import {colors, spacing, typography} from '../../theme/tokens';
 
-type Props = NativeStackScreenProps<MailStackParamList, 'MailAccountSetup'>;
+type Props =
+  | NativeStackScreenProps<MailStackParamList, 'MailAccountSetup'>
+  | NativeStackScreenProps<MoreStackParamList, 'MailAccountSetup'>;
 
 export default function MailAccountSetupScreen({
   navigation,

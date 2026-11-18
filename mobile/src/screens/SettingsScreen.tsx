@@ -35,7 +35,7 @@ import PlaceHeader from '../components/PlaceHeader';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
 
-export default function SettingsScreen(_props: Props): JSX.Element {
+export default function SettingsScreen({navigation}: Props): JSX.Element {
   const [serverUrl, setServerUrlValue] = useState('');
   const [enforcePasswordPolicy, setEnforcePasswordPolicyValue] = useState(true);
   const [autoLockMinutes, setAutoLockMinutesValue] = useState(15);
@@ -194,6 +194,11 @@ export default function SettingsScreen(_props: Props): JSX.Element {
       </Text>
 
       <SectionTitle>Mail preferences</SectionTitle>
+      <AppButton
+        title="Mail accounts"
+        variant="secondary"
+        onPress={() => navigation.navigate('MailAccountSettings')}
+      />
       <View style={styles.switchRow}>
         <Text style={styles.switchLabel}>Render HTML mail bodies</Text>
         <Switch
