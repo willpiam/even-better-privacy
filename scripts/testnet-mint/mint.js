@@ -108,9 +108,13 @@ function render() {
     row(
       ethereum,
       symbol,
-      mint?.unit ? "Confirmed" : mint ? "Awaiting confirmation" : "ERC-20",
       mint?.unit
-        ? button("Minted", () => {}, true)
+        ? `Confirmed · ${mint.unit}`
+        : mint
+        ? "Awaiting confirmation"
+        : "ERC-20",
+      mint?.unit
+        ? button("Add to wallet", () => addSepoliaToWallet(symbol))
         : mint
         ? pendingActions(symbol, () => checkSepolia(symbol))
         : button("Mint", () => mintSepolia(symbol)),
@@ -227,6 +231,32 @@ async function checkSepolia(symbol) {
   status(`${symbol} confirmed · ${receipt.contractAddress}`);
 }
 
+async function addSepoliaToWallet(symbol) {
+  const address = mints[symbol]?.unit;
+  if (!ETH_ADDRESS.test(address ?? "")) {
+    throw new Error(`Confirm the ${symbol} mint before adding it to the wallet.`);
+  }
+  const wallet = ethereumWallet();
+  await useSepolia(wallet);
+  await wallet.request({ method: "eth_requestAccounts" });
+  const params = {
+    type: "ERC20",
+    options: { address, symbol, decimals: catalog.decimals },
+  };
+  let added;
+  try {
+    added = await wallet.request({ method: "wallet_watchAsset", params });
+  } catch (error) {
+    if (error?.code === 4001) throw new Error("The wallet dismissed the token.");
+    added = await wallet.request({
+      method: "wallet_watchAsset",
+      params: [params],
+    });
+  }
+  if (added === false) throw new Error(`The wallet did not add ${symbol}.`);
+  status(`${symbol} added to the wallet · ${address}`);
+}
+
 async function mintPreview() {
   const whole = amount();
   const wallet = await window.cardano[$("cardano-wallet").value].enable();
@@ -279,42 +309,122 @@ async function checkPreview() {
   );
 }
 
+function receivingAddress(network) {
+  if (network === "ethereum-sepolia") {
+    const address = $("sepolia-recipient").value.trim();
+    return ETH_ADDRESS.test(address) && !/^0x0{40}$/i.test(address)
+      ? address
+      : "";
+  }
+  const address = $("preview-recipient").value.trim();
+  return /^addr_test1[023456789acdefghjklmnpqrstuvwxyz]{50,}$/.test(address)
+    ? address
+    : "";
+}
+
+function serverAssets() {
+  const entries = [];
+  const add = (asset, gaps) => entries.push({ asset, gaps });
+  const sepolia = receivingAddress("ethereum-sepolia");
+  const preview = receivingAddress("cardano-preview");
+  if ($("native-eth").checked) {
+    add({
+      network: "ethereum-sepolia",
+      symbol: "ETH",
+      recipient: sepolia,
+      unit: "native",
+      decimals: 18,
+    }, sepolia ? [] : ["recipient"]);
+  }
+  for (const symbol of catalog.sepolia) {
+    const unit = ETH_ADDRESS.test(mints[symbol]?.unit ?? "")
+      ? mints[symbol].unit
+      : "";
+    const gaps = [];
+    if (!sepolia) gaps.push("recipient");
+    if (!unit) gaps.push("unit");
+    add({
+      network: "ethereum-sepolia",
+      symbol,
+      recipient: sepolia,
+      unit,
+      decimals: catalog.decimals,
+    }, gaps);
+  }
+  if ($("native-ada").checked) {
+    add({
+      network: "cardano-preview",
+      symbol: "ADA",
+      recipient: preview,
+      unit: "lovelace",
+      decimals: 6,
+    }, preview ? [] : ["recipient"]);
+  }
+  for (const symbol of catalog.preview) {
+    const token = mints.preview?.tokens?.find((item) => item.symbol === symbol);
+    const known = typeof token?.unit === "string" ? token.unit : "";
+    const confirmed = Boolean(mints.preview?.confirmed && known);
+    const gaps = [];
+    if (!preview) gaps.push("recipient");
+    if (!confirmed) gaps.push("unit");
+    add({
+      network: "cardano-preview",
+      symbol,
+      recipient: preview,
+      unit: known,
+      decimals: catalog.decimals,
+    }, gaps);
+  }
+  return entries;
+}
+
+function fieldText(asset, name, missing) {
+  if (!missing) return String(asset[name]);
+  if (name === "recipient") {
+    return asset.network === "ethereum-sepolia"
+      ? "Enter the Sepolia address that will receive checkout payments"
+      : "Enter the Preview address that will receive checkout payments";
+  }
+  return asset.network === "ethereum-sepolia"
+    ? "Confirm the Sepolia mint to get the contract address"
+    : "Confirm the Preview mint to get the asset ID";
+}
+
 function renderExport() {
-  const assets = [];
-  const sepolia = $("sepolia-recipient").value.trim();
-  const preview = $("preview-recipient").value.trim();
-  if (ETH_ADDRESS.test(sepolia) && !/^0x0{40}$/i.test(sepolia)) {
-    const add = (symbol, unit, decimals) =>
-      assets.push({
-        network: "ethereum-sepolia",
-        symbol,
-        recipient: sepolia,
-        unit,
-        decimals,
-      });
-    if ($("native-eth").checked) add("ETH", "native", 18);
-    for (const symbol of catalog.sepolia) {
-      if (mints[symbol]?.unit) {
-        add(symbol, mints[symbol].unit, catalog.decimals);
-      }
+  const entries = serverAssets();
+  const list = $("asset-list");
+  list.replaceChildren();
+  for (const { asset, gaps } of entries) {
+    const card = document.createElement("article");
+    card.className = "asset-detail";
+    const heading = document.createElement("h3");
+    heading.textContent = `${asset.symbol} · ${asset.network}`;
+    const note = document.createElement("p");
+    note.textContent = gaps.includes("unit") && asset.unit
+      ? "The asset ID is known. It stays out of the JSON until the mint is confirmed."
+      : gaps.length
+      ? "Not included in the JSON until every field is filled."
+      : "Included in the JSON below.";
+    const fields = document.createElement("dl");
+    for (const name of ["network", "symbol", "recipient", "unit", "decimals"]) {
+      const term = document.createElement("dt");
+      term.textContent = name;
+      const value = document.createElement("dd");
+      const pendingUnit = name === "unit" && gaps.includes("unit") &&
+        asset.unit;
+      const missing = gaps.includes(name) && !pendingUnit;
+      value.textContent = pendingUnit
+        ? asset.unit
+        : fieldText(asset, name, missing);
+      if (missing) value.className = "missing";
+      fields.append(term, value);
     }
+    card.append(heading, note, fields);
+    list.append(card);
   }
-  if (/^addr_test1[023456789acdefghjklmnpqrstuvwxyz]{50,}$/.test(preview)) {
-    const add = (symbol, unit, decimals) =>
-      assets.push({
-        network: "cardano-preview",
-        symbol,
-        recipient: preview,
-        unit,
-        decimals,
-      });
-    if ($("native-ada").checked) add("ADA", "lovelace", 6);
-    if (mints.preview?.confirmed) {
-      for (const { symbol, unit } of mints.preview.tokens) {
-        add(symbol, unit, catalog.decimals);
-      }
-    }
-  }
+  const assets = entries.filter((entry) => entry.gaps.length === 0).map((
+    entry,
+  ) => entry.asset);
   $("output").value = JSON.stringify(assets, null, 2);
   $("download").disabled = assets.length === 0;
 }

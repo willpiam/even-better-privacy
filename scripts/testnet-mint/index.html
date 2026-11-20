@@ -37,8 +37,8 @@
     <div id="activity" role="status" aria-live="polite"></div>
 
     <section class="export">
-      <h2>Checkout config</h2>
-      <p>Enter the addresses that will receive checkout payments. The JSON includes confirmed mints and any native coins you select.</p>
+      <h2>Server assets</h2>
+      <p>The key server accepts a token only when <span class="env">MAIL_TEST_PAYMENT_ASSETS</span> includes that token’s network, symbol, recipient, unit, and decimals. A confirmed mint fills unit. The receiving address fills recipient.</p>
       <div class="networks">
         <div>
           <label for="sepolia-recipient">Sepolia receiving address</label>
@@ -51,6 +51,7 @@
           <label class="check"><input id="native-ada" type="checkbox"> Include Preview ADA</label>
         </div>
       </div>
+      <div id="asset-list"></div>
       <label for="output">Payment asset JSON</label>
       <textarea id="output" readonly rows="8" spellcheck="false"></textarea>
       <button id="download" type="button" disabled>Download asset JSON</button>

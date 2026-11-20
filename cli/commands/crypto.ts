@@ -1,5 +1,5 @@
-import { parseEbpPayloadInput } from "../../core/PayloadInput.ts";
-type CryptoInput = {type: string; message: string; signature: string; fingerprint: string; messageHash: string; salt?: string; ciphertext: string; senderFingerprint?: string};
+import { parseEbpPayloadInput, parseMultiRecipientEntries } from "../../core/PayloadInput.ts";
+type CryptoInput = {type: string; message: string; signature: string; fingerprint: string; messageHash: string; salt?: string; ciphertext: string; senderFingerprint?: string; contentNonce?: string; recipients?: unknown};
 import { parseArgs } from "@std/cli/parse-args";
 import { Identity, ExternalIdentity } from "../../core/Identity.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
@@ -228,7 +228,48 @@ export async function cmdDecrypt(args: ReturnType<typeof parseArgs>, ctx: CLICon
 	
 	const data = parseEbpPayloadInput(input) as CryptoInput;
 	
-	if (data.type === "ebp-encrypted-message") {
+	if (data.type === "ebp-encrypted-signed-message-multi") {
+		const contentNonce = typeof data.contentNonce === "string" ? data.contentNonce : "";
+		const recipients = parseMultiRecipientEntries(data.recipients);
+		if (!data.ciphertext || !contentNonce || recipients.length === 0) {
+			console.error("Invalid multi-recipient payload.");
+			Deno.exit(1);
+		}
+		let sender: ExternalIdentity;
+		if (senderName) {
+			sender = await loadContact(ctx, senderName);
+		} else if (typeof data.senderFingerprint === "string" && data.senderFingerprint) {
+			sender = await loadContact(ctx, data.senderFingerprint.substring(0, 16));
+		} else {
+			console.error("Sender required to verify signature. Use --sender <name>");
+			Deno.exit(1);
+		}
+		if (
+			typeof data.senderFingerprint === "string" &&
+			data.senderFingerprint &&
+			sender.fingerprint !== data.senderFingerprint
+		) {
+			console.error("Fingerprint mismatch between the payload and selected contact");
+			Deno.exit(1);
+		}
+		let result: ReturnType<Identity["decryptAndVerifyMulti"]>;
+		try {
+			result = identity.decryptAndVerifyMulti({
+				recipients,
+				contentNonce,
+				ciphertext: data.ciphertext,
+			}, sender);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			Deno.exit(1);
+		}
+		if (!result.verified) {
+			console.error("✗ Decrypted but signature verification FAILED!");
+			Deno.exit(1);
+		}
+		console.error("✓ Decrypted and verified!");
+		console.log(result.message);
+	} else if (data.type === "ebp-encrypted-message") {
 		// Unsigned encrypted message
 		const message = identity.encryptionKey.decrypt(data.ciphertext);
 		console.error("✓ Decrypted (unsigned - sender unknown)");

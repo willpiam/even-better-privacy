@@ -61,14 +61,34 @@ function checkedCbor(value: unknown, maxLength: number): string {
   return value;
 }
 
+const blockfrostKeyFile = new URL("./.blockfrost-key", import.meta.url);
+
 function previewProjectId(): string {
-  const projectId = Deno.env.get("MAIL_TEST_PAYMENT_BLOCKFROST_KEY")?.trim();
-  if (!projectId?.startsWith("preview")) {
+  const projectId = Deno.env.get("MAIL_TEST_PAYMENT_BLOCKFROST_KEY")?.trim() ||
+    readBlockfrostKeyFile();
+  if (!projectId.startsWith("preview")) {
     throw new Error(
-      "Start the local server with a Preview Blockfrost project ID.",
+      "Put a Preview Blockfrost project ID in scripts/testnet-mint/.blockfrost-key.",
     );
   }
   return projectId;
+}
+
+function readBlockfrostKeyFile(): string {
+  let text: string;
+  try {
+    text = Deno.readTextFileSync(blockfrostKeyFile);
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) return "";
+    throw error;
+  }
+  const line = text.split(/\r?\n/).map((entry) => entry.trim()).find((entry) =>
+    entry.length > 0 && !entry.startsWith("#")
+  ) ?? "";
+  const value = line.includes("=")
+    ? line.slice(line.indexOf("=") + 1).trim()
+    : line;
+  return value.replace(/^['"]|['"]$/g, "");
 }
 
 async function previewConfirmed(hash: unknown): Promise<boolean> {
@@ -221,7 +241,7 @@ export async function handleMintRequest(request: Request): Promise<Response> {
       : "Mint preparation failed.";
     return json({
       error: /blockfrost|project_id/i.test(message) &&
-          !message.startsWith("Start the local server")
+          !message.includes(".blockfrost-key")
         ? "Preview Blockfrost request failed. Check the project ID and wallet network."
         : message,
     }, 400);

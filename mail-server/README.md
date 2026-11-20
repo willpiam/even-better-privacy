@@ -344,8 +344,9 @@ browser.
 #### Browser wallets
 
 Run the local mint page on the computer that has your browser wallets.
-Install Deno, and export `MAIL_TEST_PAYMENT_BLOCKFROST_KEY` with a
-Preview project ID. From the repository root:
+Install Deno, and put a Blockfrost Preview project ID in
+`scripts/testnet-mint/.blockfrost-key` (one line, the ID only). That file is
+gitignored. From the repository root:
 
 ```sh
 deno task mint:testnet
@@ -360,7 +361,10 @@ compiles the Ethereum contract and builds the unsigned Cardano transaction.
 It listens only on `127.0.0.1` and is outside the deployed website.
 
 Click **Check** for each submitted mint to load its confirmed asset IDs.
-Enter your checkout receiving addresses and download the payment asset JSON.
+On a confirmed Sepolia token, click **Add to wallet** so the extension tracks
+that contract. The page lists every asset with the `network`, `symbol`,
+`recipient`, `unit`, and `decimals` the key server requires. Enter your
+checkout receiving addresses and download the payment asset JSON.
 Include native ETH and ADA in the export if you accept them for checkout.
 Use faucet funds for those two native coins. Set the resulting array once in
 `MAIL_TEST_PAYMENT_ASSETS` for hosted test mode, or `MAIL_PAYMENT_ASSETS` for a

@@ -84,9 +84,20 @@ undefined/
 Untitled*.base
 plot_remaining_findings.py
 
+# Local Chuck agent. Ignored as a directory, and the env file is listed on
+# its own so it stays untracked if this directory rule is removed later.
+/chuck-bot/
+/chuck-bot/.env
+
 
 
 
 # C core build output
 /c-core/libebp_core.so
 /python/*.egg-info/
+
+# Local testnet receiving wallets. Addresses and encrypted private keys stay here.
+/hidden/
+
+# Blockfrost Preview project ID for the local testnet mint page.
+/scripts/testnet-mint/.blockfrost-key

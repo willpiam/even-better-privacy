@@ -26,7 +26,15 @@ button:disabled { opacity: .55; cursor: default; }
 :focus-visible { outline: 2px solid #fbd698; outline-offset: 3px; }
 .check { font-weight: 400; margin-bottom: .8rem; }
 .asset-row { display: flex; gap: 1rem; align-items: center; justify-content: space-between; margin-top: .5rem; padding-top: .5rem; border-top: 1px solid #364640; }
-.asset-row small { display: block; margin-top: .15rem; color: #bdccc4; }
+.asset-row small { display: block; margin-top: .15rem; color: #bdccc4; overflow-wrap: anywhere; }
+.asset-detail { margin: 0 0 .75rem; padding: .75rem; background: #111a16; border: 1px solid #364640; border-radius: .4rem; }
+.asset-detail h3 { margin: 0; font-size: 1rem; }
+.asset-detail p { margin: .25rem 0 .55rem; }
+.asset-detail dl { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: .2rem .75rem; margin: 0; }
+.asset-detail dt { color: #a4dbbd; }
+.asset-detail dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: .85rem; }
+.asset-detail dd.missing { color: #fbd698; font-family: inherit; }
+.env { font-family: ui-monospace, monospace; color: #edf3ee; }
 .actions { display: flex; gap: .4rem; flex-wrap: wrap; }
 #activity { min-height: 3rem; padding: .65rem 0; color: #a4dbbd; overflow-wrap: anywhere; }
 #activity[data-error="true"] { color: #ffbcab; }
