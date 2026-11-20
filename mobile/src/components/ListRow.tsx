@@ -1,6 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {colors, spacing, typography} from '../theme/tokens';
+import {colors, layout, radius, spacing, typography} from '../theme/tokens';
 import {usePlaceTheme} from '../theme/PlaceTheme';
 import AppIcon, {type IconName} from './AppIcon';
 
@@ -26,19 +26,29 @@ export default function ListRow({
   onPress?: () => void;
   showChevron?: boolean;
   right?: React.ReactNode;
-  /** Hairline under the row. Pass false for the last row in a Card. */
+  /** Hairline under the row. Hide it on the last row of a group. */
   showDivider?: boolean;
   testID?: string;
 }): JSX.Element {
   const theme = usePlaceTheme();
+  const hasLeading = Boolean(avatarText || icon);
   const content = (
     <>
-      {avatarText || icon ? (
-        <View style={[styles.avatar, {backgroundColor: theme.pale}]}>
+      {hasLeading ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={[
+            styles.avatar,
+            icon && styles.iconTile,
+            {backgroundColor: theme.pale},
+          ]}>
           {icon ? (
             <AppIcon name={icon} color={theme.accent} size={20} />
           ) : (
-            <Text style={[styles.avatarText, {color: theme.accent}]}>
+            <Text
+              maxFontSizeMultiplier={1.3}
+              style={[styles.avatarText, {color: theme.accent}]}>
               {avatarText
                 ?.trim()
                 .split(/\s+/)
@@ -51,7 +61,7 @@ export default function ListRow({
         </View>
       ) : null}
       <View style={styles.meta}>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
         {subtitle ? (
@@ -59,36 +69,26 @@ export default function ListRow({
             {subtitle}
           </Text>
         ) : null}
-      </View>
-      {badge ? (
-        <View
-          style={[
-            styles.badge,
-            {backgroundColor: theme.pale},
-            badgeVariant === 'danger' && styles.badgeDanger,
-          ]}>
+        {badge ? (
           <Text
             style={[
-              styles.badgeText,
-              {color: theme.accent},
-              badgeVariant === 'danger' && styles.badgeTextDanger,
+              styles.badge,
+              {backgroundColor: theme.pale, color: theme.accent},
+              badgeVariant === 'danger' && styles.badgeDanger,
             ]}>
             {badge}
           </Text>
-        </View>
-      ) : null}
+        ) : null}
+      </View>
       {right}
       {showChevron && onPress ? (
-        <AppIcon name="chevron" color={theme.accent} size={16} />
+        <AppIcon name="chevron" color={colors.muted} size={16} />
+      ) : null}
+      {showDivider ? (
+        <View style={[styles.divider, hasLeading && styles.leadingDivider]} />
       ) : null}
     </>
   );
-
-  const rowStyle = [
-    styles.row,
-    showDivider && styles.divider,
-    {borderBottomColor: theme.border},
-  ];
 
   if (onPress) {
     return (
@@ -97,7 +97,7 @@ export default function ListRow({
         onPress={onPress}
         accessibilityRole="button"
         style={({pressed}) => [
-          ...rowStyle,
+          styles.row,
           pressed && {backgroundColor: theme.soft},
         ]}>
         {content}
@@ -106,7 +106,7 @@ export default function ListRow({
   }
 
   return (
-    <View testID={testID} style={rowStyle}>
+    <View testID={testID} style={styles.row}>
       {content}
     </View>
   );
@@ -116,58 +116,56 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 13,
-    paddingVertical: spacing.lg + 2,
-    paddingHorizontal: 16,
+    gap: spacing.md,
+    minHeight: layout.controlHeight,
+    paddingVertical: spacing.md,
+    paddingHorizontal: layout.gutter,
     backgroundColor: colors.surface,
   },
   divider: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    position: 'absolute',
+    bottom: 0,
+    start: layout.gutter,
+    end: layout.gutter,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+  },
+  leadingDivider: {
+    start: layout.gutter + layout.avatarSize + spacing.md,
   },
   avatar: {
-    width: 42,
-    height: 42,
-    borderRadius: 16,
-    backgroundColor: colors.accentSoft,
+    width: layout.avatarSize,
+    height: layout.avatarSize,
+    borderRadius: layout.avatarSize / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  iconTile: {borderRadius: radius.sm},
   avatarText: {
-    color: colors.accent,
     fontWeight: '700',
-    fontSize: 13,
+    fontSize: typography.caption,
   },
-  meta: {flex: 1, minWidth: 0},
+  meta: {flex: 1, minWidth: 0, gap: spacing.xs},
   title: {
     fontWeight: '600',
-    fontSize: typography.body,
+    fontSize: typography.row,
     color: colors.text,
   },
   subtitle: {
-    marginTop: 5,
     fontSize: typography.caption,
-    lineHeight: 18,
     color: colors.muted,
   },
   badge: {
-    backgroundColor: colors.accentSoft,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.pill,
+    fontSize: typography.tab,
+    fontWeight: '700',
   },
   badgeDanger: {
     backgroundColor: colors.dangerSoft,
-    borderWidth: 1,
-    borderColor: colors.danger,
-  },
-  badgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.accent,
-    letterSpacing: 0.3,
-  },
-  badgeTextDanger: {
     color: colors.danger,
   },
 });

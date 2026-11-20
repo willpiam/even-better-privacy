@@ -15,7 +15,8 @@ import {
   storedContactToLike,
 } from '../services/contactDisplay';
 
-import {colors} from '../theme/tokens';
+import {colors, layout, radius, spacing, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 
 type Props = {
   value: string;
@@ -75,6 +76,7 @@ function ResultsList({
   selectValue: 'name' | 'fingerprint';
   onPick: (next: string) => void;
 }): JSX.Element {
+  const {pale} = usePlaceTheme();
   if (items.length === 0) {
     return (
       <View style={styles.resultsList}>
@@ -98,8 +100,10 @@ function ResultsList({
               style={[
                 styles.item,
                 !isLast && styles.itemDivider,
-                isSelected && styles.itemSelected,
+                isSelected && {backgroundColor: pale},
               ]}
+              accessibilityRole="button"
+              accessibilityState={{selected: isSelected}}
               onPress={() => onPick(next)}>
               <ContactPickerLabels item={item} />
             </TouchableOpacity>
@@ -118,6 +122,7 @@ export default function ContactPicker({
   selectValue = 'name',
   testID,
 }: Props): JSX.Element {
+  const {accent} = usePlaceTheme();
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [open, setOpen] = useState(false);
   const [focused, setFocused] = useState(false);
@@ -150,7 +155,7 @@ export default function ContactPicker({
     return (
       <View style={styles.wrap}>
         <TouchableOpacity
-          style={styles.dropdownTrigger}
+          style={[styles.dropdownTrigger, open && {borderColor: accent}]}
           onPress={() => setOpen(wasOpen => !wasOpen)}
           accessibilityLabel="EBP contact"
           accessibilityRole="button"
@@ -199,10 +204,11 @@ export default function ContactPicker({
     <View style={styles.wrap}>
       <TextInput
         testID={testID}
-        style={styles.input}
+        style={[styles.input, focused && {borderColor: accent}]}
         value={value}
         onChangeText={onChange}
         placeholder={placeholder}
+        placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
         onFocus={() => setFocused(true)}
@@ -227,48 +233,53 @@ export default function ContactPicker({
 }
 
 const styles = StyleSheet.create({
-  wrap: {gap: 4},
+  wrap: {gap: spacing.xs},
   dropdownTrigger: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    borderColor: colors.fieldBorder,
+    borderRadius: radius.sm,
+    minHeight: layout.controlHeight,
+    padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: colors.surface,
   },
   dropdownTriggerText: {flex: 1, marginRight: 8},
-  selectedLabel: {color: colors.text, fontSize: 15},
-  placeholderLabel: {color: '#999', fontSize: 15},
-  chevron: {color: colors.muted, fontSize: 12},
+  selectedLabel: {color: colors.text, fontSize: typography.body},
+  placeholderLabel: {color: colors.muted, fontSize: typography.body},
+  chevron: {color: colors.muted, fontSize: typography.tab},
   resultsList: {
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
+    borderRadius: radius.sm,
     backgroundColor: colors.surface,
     overflow: 'hidden',
   },
   resultsScroll: {maxHeight: 220},
-  empty: {padding: 12, color: colors.muted, fontSize: 13},
+  empty: {
+    padding: spacing.md,
+    color: colors.muted,
+    fontSize: typography.caption,
+  },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    borderColor: colors.fieldBorder,
+    borderRadius: radius.sm,
+    minHeight: layout.controlHeight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.body,
     color: colors.text,
     backgroundColor: colors.surface,
   },
   item: {
-    padding: 10,
+    padding: spacing.md,
   },
   itemDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
-  itemSelected: {backgroundColor: colors.accentSoft},
-  name: {fontWeight: '700', color: colors.text},
-  fp: {fontSize: 11, color: colors.muted, marginTop: 2},
+  name: {fontSize: typography.body, fontWeight: '600', color: colors.text},
+  fp: {fontSize: typography.caption, color: colors.muted, marginTop: 2},
 });

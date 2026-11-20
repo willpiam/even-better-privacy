@@ -1,9 +1,10 @@
 import React, {useCallback, useState} from 'react';
+import {StyleSheet, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import AppButton from '../../components/AppButton';
-import Card from '../../components/Card';
 import ListRow from '../../components/ListRow';
+import ListSection from '../../components/ListSection';
 import Screen from '../../components/Screen';
 import SectionTitle from '../../components/SectionTitle';
 import StatusBanner from '../../components/StatusBanner';
@@ -15,6 +16,7 @@ import {
 } from '../../services/mail/accountStore';
 import type {MailAccountStore} from '../../services/mail/types';
 import {getCurrentIdentityRequired} from '../../services/storage';
+import {colors, layout, spacing} from '../../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'MailAccountSettings'>;
 
@@ -71,31 +73,42 @@ export default function MailAccountSettingsScreen({
     <Screen scroll>
       {mail ? <SectionTitle>{mail.identityName}</SectionTitle> : null}
       <StatusBanner message={error} kind="error" />
-      {mail?.store.accounts.map(account => (
-        <Card key={account.id}>
-          <ListRow
-            title={account.name}
-            subtitle={account.config.fromEmail || account.config.username}
-            badge={
-              multipleAccounts && account.id === selectedId
-                ? 'Selected'
-                : undefined
-            }
-            avatarText={account.name}
-            onPress={() =>
-              navigation.navigate('MailAccountSetup', {accountId: account.id})
-            }
-          />
-          {account.id !== selectedId ? (
-            <AppButton
-              title="Select"
-              variant="secondary"
-              disabled={selecting}
-              onPress={() => void selectAccount(account.id)}
-            />
-          ) : null}
-        </Card>
-      ))}
+      {mail?.store.accounts.length ? (
+        <ListSection>
+          {mail.store.accounts.map((account, index) => {
+            const selected = account.id === selectedId;
+            return (
+              <View key={account.id} style={styles.account}>
+                <ListRow
+                  title={account.name}
+                  subtitle={account.config.fromEmail || account.config.username}
+                  badge={multipleAccounts && selected ? 'Selected' : undefined}
+                  avatarText={account.name}
+                  showDivider={false}
+                  onPress={() =>
+                    navigation.navigate('MailAccountSetup', {
+                      accountId: account.id,
+                    })
+                  }
+                />
+                {selected ? null : (
+                  <View style={styles.action}>
+                    <AppButton
+                      title={`Select ${account.name}`}
+                      variant="secondary"
+                      disabled={selecting}
+                      onPress={() => void selectAccount(account.id)}
+                    />
+                  </View>
+                )}
+                {index < mail.store.accounts.length - 1 ? (
+                  <View style={styles.divider} />
+                ) : null}
+              </View>
+            );
+          })}
+        </ListSection>
+      ) : null}
       <AppButton
         title="Add account"
         variant="secondary"
@@ -109,3 +122,13 @@ export default function MailAccountSettingsScreen({
     </Screen>
   );
 }
+
+const styles = StyleSheet.create({
+  account: {backgroundColor: colors.surface},
+  action: {paddingHorizontal: layout.gutter, paddingBottom: spacing.md},
+  divider: {
+    backgroundColor: colors.border,
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: layout.gutter,
+  },
+});

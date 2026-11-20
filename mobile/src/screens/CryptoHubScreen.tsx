@@ -6,7 +6,7 @@ import type {CryptoStackParamList} from '../navigation/AppNavigator';
 import {getCurrentIdentity} from '../services/storage';
 import Screen from '../components/Screen';
 import Chip from '../components/Chip';
-import Card from '../components/Card';
+import ListSection from '../components/ListSection';
 import ListRow from '../components/ListRow';
 import SectionTitle from '../components/SectionTitle';
 import {colors, typography} from '../theme/tokens';
@@ -27,7 +27,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
     <Screen scroll>
       <PlaceHeader
         title="Privacy tools"
-        subtitle="A little peace of mind. Sign, verify, and keep your words private."
+        subtitle="Sign, verify, encrypt, and decrypt messages and files."
       />
       {currentIdentity ? (
         <Chip label={`Current: ${currentIdentity}`} />
@@ -38,7 +38,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
       )}
 
       <SectionTitle>Sign / Verify</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           title="Sign message"
           icon="sign"
@@ -72,10 +72,10 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
           onPress={() => navigation.navigate('FingerprintTool')}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
 
       <SectionTitle>Encrypt / Decrypt</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           title="Encrypt message"
           icon="lock"
@@ -101,7 +101,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
           onPress={() => navigation.navigate('DecryptFile')}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
     </Screen>
   );
 }

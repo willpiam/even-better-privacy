@@ -7,18 +7,18 @@ export default function SectionTitle({
 }: {
   children: string;
 }): JSX.Element {
-  return <Text style={styles.title}>{children}</Text>;
+  return (
+    <Text accessibilityRole="header" style={styles.title}>
+      {children}
+    </Text>
+  );
 }
 
 const styles = StyleSheet.create({
   title: {
     fontSize: typography.section,
     fontWeight: '700',
-    color: colors.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.xs,
-    paddingHorizontal: 2,
+    color: colors.text,
+    paddingTop: spacing.sm,
   },
 });

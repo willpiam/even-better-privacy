@@ -1,11 +1,13 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import ContactsScreen from '../src/screens/ContactsScreen';
+import ContactListRow from '../src/components/ContactListRow';
+import {listContacts, type StoredContact} from '../src/services/contacts';
 
 jest.mock('@react-navigation/native', () => ({
   useFocusEffect: (cb: () => void) => require('react').useEffect(cb, [cb]),
 }));
-jest.mock('../src/services/contacts', () => ({listContacts: async () => []}));
+jest.mock('../src/services/contacts', () => ({listContacts: jest.fn()}));
 jest.mock('../src/ebpCore', () => ({shortFingerprint: (fp: string) => fp}));
 jest.mock('../src/components/ImportContactModal', () => jest.fn(() => null));
 jest.mock('../src/components/FetchContactModal', () => jest.fn(() => null));
@@ -20,13 +22,36 @@ import BrowseContactsModal from '../src/components/BrowseContactsModal';
 
 let tree: renderer.ReactTestRenderer;
 let options: {headerRight: () => React.ReactNode};
+const navigate = jest.fn();
+const mockListContacts = jest.mocked(listContacts);
+
+function contact(name: string, revoked = false): StoredContact {
+  return {
+    name,
+    localAlias: name,
+    contact: {
+      fingerprint: `fingerprint-${name}`,
+      details: {},
+      signingKeyType: 'dilithium',
+      encryptionKeyType: 'kyber',
+      signingKey: '',
+      encryptionKey: '',
+      signingKeyDetails: {variant: ''},
+      encryptionKeyDetails: {variant: ''},
+      revoked,
+    },
+  };
+}
+
 beforeEach(async () => {
+  navigate.mockReset();
+  mockListContacts.mockResolvedValue([contact('Avery'), contact('Jo', true)]);
   await act(async () => {
     tree = renderer.create(
       <ContactsScreen
         navigation={
           {
-            navigate: jest.fn(),
+            navigate,
             setOptions: (value: typeof options) => {
               options = value;
             },
@@ -37,6 +62,17 @@ beforeEach(async () => {
     );
   });
 });
+
+it('keeps populated rows actionable and labels revoked contacts', async () => {
+  const [first, last] = tree.root.findAllByType(ContactListRow);
+  expect(first.props.showDivider).toBe(true);
+  expect(last.props.showDivider).toBe(false);
+  expect(last.props.badge).toBe('Revoked');
+  expect(last.props.badgeVariant).toBe('danger');
+  await act(async () => last.props.onPress());
+  expect(navigate).toHaveBeenCalledWith('ContactDetail', {name: 'Jo'});
+});
+
 afterEach(async () => {
   await act(async () => tree.unmount());
 });

@@ -19,7 +19,7 @@ export default function TextField({
     <View
       style={[
         styles.wrap,
-        {borderColor: focused ? theme.accent : theme.border},
+        {borderColor: focused ? theme.accent : colors.fieldBorder},
       ]}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
@@ -47,13 +47,12 @@ const styles = StyleSheet.create({
   wrap: {
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: 12,
   },
   label: {
-    fontSize: 12,
+    fontSize: typography.caption,
     fontWeight: '600',
     color: colors.muted,
     marginBottom: 7,

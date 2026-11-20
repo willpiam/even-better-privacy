@@ -36,7 +36,7 @@ import {onMailCacheCleared} from '../../services/mail/mailCache';
 import type {MailMessageSummary} from '../../services/mail/types';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
-import Card from '../../components/Card';
+import {layout, radius, spacing, typography} from '../../theme/tokens';
 import StatusBanner from '../../components/StatusBanner';
 import TextField from '../../components/TextField';
 import FoxArt from '../../components/FoxArt';
@@ -102,11 +102,7 @@ const MailSummaryRow = React.memo(function MailSummaryRow({
         accessibilityLabel={`${unread ? 'Unread. ' : ''}${
           sent ? 'To: ' : ''
         }${address}. ${item.subject || '(no subject)'}. ${item.date}`}
-        style={({pressed}) => [
-          styles.messageRow,
-          unread && styles.unreadRow,
-          pressed && styles.pressedRow,
-        ]}
+        style={({pressed}) => [styles.messageRow, pressed && styles.pressedRow]}
         onPress={() => onOpen(item.uid)}>
         <MailAvatar address={address} />
         <View style={styles.messageCopy}>
@@ -132,6 +128,14 @@ const MailSummaryRow = React.memo(function MailSummaryRow({
     </SwipeMailRow>
   );
 });
+function MessageSeparator() {
+  return (
+    <View style={styles.separatorTrack}>
+      <View style={styles.separator} />
+    </View>
+  );
+}
+
 const messageKey = (item: MailMessageSummary) => String(item.uid);
 
 export default function MailInboxScreen({navigation}: Props): JSX.Element {
@@ -150,6 +154,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
     useState<(typeof FOLDER_PRESETS)[number]>('INBOX');
   const [customFolder, setCustomFolder] = useState('');
   const [customFolderDraft, setCustomFolderDraft] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [search, setSearch] = useState('');
   const [searchDraft, setSearchDraft] = useState('');
   const [limitText, setLimitText] = useState('20');
@@ -268,7 +273,10 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       title,
       headerRight: () => (
         <Pressable
-          style={styles.compose}
+          style={({pressed}) => [
+            styles.compose,
+            pressed && styles.pressedControl,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Compose"
           onPress={() => navigation.navigate('MailCompose')}>
@@ -353,25 +361,25 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const emptyLabel = loadError ? loadError : status || 'Mailbox empty.';
 
   return (
-    <Screen style={styles.screen} contentStyle={styles.content}>
+    <Screen contentStyle={styles.content}>
       {unlockPrompt}
       <View style={styles.heading}>
-        <View style={styles.headingCopy}>
-          <Text style={styles.eyebrow}>YOUR MAIL</Text>
-          <Text style={styles.accountEmail} numberOfLines={1}>
-            {accountEmail || 'Your mailbox'}
-          </Text>
-        </View>
+        <Text style={styles.accountEmail} numberOfLines={2}>
+          {accountEmail || 'Your mailbox'}
+        </Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Refresh messages"
           disabled={loading}
           onPress={() => void load(undefined, true)}
-          style={styles.iconButton}>
+          style={({pressed}) => [
+            styles.iconButton,
+            pressed && styles.pressedControl,
+          ]}>
           <MailIcon name="refresh" />
         </Pressable>
       </View>
-      <View style={styles.search}>
+      <View style={[styles.search, searchFocused && styles.searchFocused]}>
         <TextInput
           accessibilityLabel="Search mail"
           placeholder="Search your mail"
@@ -379,6 +387,8 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           style={styles.searchInput}
           autoCapitalize="none"
           autoCorrect={false}
+          onFocus={() => setSearchFocused(true)}
+          onBlur={() => setSearchFocused(false)}
           value={searchDraft}
           onChangeText={setSearchDraft}
           returnKeyType="search"
@@ -391,7 +401,10 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Search"
-          style={styles.iconButton}
+          style={({pressed}) => [
+            styles.iconButton,
+            pressed && styles.pressedControl,
+          ]}
           onPress={() => {
             setSearch(searchDraft.trim());
             pageRef.current = 1;
@@ -417,8 +430,9 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
                   pageRef.current = 1;
                   setPage(1);
                 }}
-                style={[
+                style={({pressed}) => [
                   styles.folderChip,
+                  pressed && styles.pressedControl,
                   selected && styles.folderChipSelected,
                 ]}>
                 <Text
@@ -433,170 +447,183 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           })}
         </ScrollView>
       </View>
-      <Card style={styles.listCard}>
-        <FlatList
-          data={messages}
-          keyExtractor={messageKey}
-          refreshing={loading}
-          onRefresh={() => void load(undefined, true)}
-          keyboardShouldPersistTaps="handled"
-          ListHeaderComponent={
-            <View>
-              <View style={styles.listHeading}>
-                <Text style={styles.messageCount}>
-                  {loading
-                    ? 'Loading messages…'
-                    : `${total} ${total === 1 ? 'message' : 'messages'}`}
+      <FlatList
+        style={styles.messageList}
+        data={messages}
+        ItemSeparatorComponent={MessageSeparator}
+        keyExtractor={messageKey}
+        refreshing={loading}
+        onRefresh={() => void load(undefined, true)}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <View>
+            <View style={styles.listHeading}>
+              <Text style={styles.messageCount}>
+                {loading
+                  ? 'Loading messages…'
+                  : `${total} ${total === 1 ? 'message' : 'messages'}`}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{expanded: showOptions}}
+                onPress={() => setShowOptions(v => !v)}
+                style={styles.optionsButton}>
+                <Text style={styles.link}>
+                  {showOptions ? 'Hide options' : 'Mailbox options'}
                 </Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityState={{expanded: showOptions}}
-                  onPress={() => setShowOptions(v => !v)}
-                  style={styles.optionsButton}>
-                  <Text style={styles.link}>
-                    {showOptions ? 'Hide options' : 'Mailbox options'}
-                  </Text>
-                </Pressable>
-              </View>
-              {folderPreset === 'Custom' ? (
-                <View style={styles.options}>
-                  <TextField
-                    label="Custom folder"
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    value={customFolderDraft}
-                    onChangeText={setCustomFolderDraft}
-                    onBlur={() => {
-                      pageRef.current = 1;
-                      setCustomFolder(customFolderDraft);
-                      setPage(1);
-                    }}
-                    placeholder="[Gmail]/Sent Mail"
-                  />
-                </View>
-              ) : null}
-              {showOptions ? (
-                <View style={styles.options}>
-                  <TextField
-                    label="Messages per page (1–100)"
-                    keyboardType="number-pad"
-                    value={limitText}
-                    onChangeText={setLimitText}
-                    onBlur={() => {
-                      const clamped = clampMailLimit(Number(limitText) || 20);
-                      setLimitText(String(clamped));
-                      setLimit(clamped);
-                      pageRef.current = 1;
-                      setPage(1);
-                    }}
-                  />
-                  <AppButton
-                    title="Mail accounts"
-                    variant="secondary"
-                    onPress={openMailAccountSettings}
-                  />
-                </View>
-              ) : null}
-              {secretsLocked ? (
-                <View style={styles.options}>
-                  <Text style={styles.emptyText}>
-                    Unlock your identity to load messages.
-                  </Text>
-                  <AppButton
-                    title="Unlock secrets"
-                    style={styles.primary}
-                    onPress={() => void onUnlock()}
-                  />
-                  <AppButton
-                    title="Back to Mail"
-                    variant="secondary"
-                    onPress={() => navigation.navigate('MailAccounts')}
-                  />
-                </View>
-              ) : null}
-              {loadError && !secretsLocked ? (
-                <View style={styles.options}>
-                  <StatusBanner message={loadError} kind="error" />
-                  <AppButton
-                    title="Retry"
-                    variant="secondary"
-                    onPress={() => void load(undefined, true)}
-                  />
-                  <AppButton
-                    title="Mail accounts"
-                    variant="secondary"
-                    onPress={openMailAccountSettings}
-                  />
-                </View>
-              ) : null}
+              </Pressable>
             </View>
-          }
-          ListEmptyComponent={
-            !loading && !loadError ? (
-              <View style={styles.empty}>
-                <FoxArt place="mail" size={120} />
-                <Text style={styles.emptyTitle}>
-                  {search ? 'No matching messages' : emptyLabel}
-                </Text>
+            {folderPreset === 'Custom' ? (
+              <View style={styles.options}>
+                <TextField
+                  label="Custom folder"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  value={customFolderDraft}
+                  onChangeText={setCustomFolderDraft}
+                  onBlur={() => {
+                    pageRef.current = 1;
+                    setCustomFolder(customFolderDraft);
+                    setPage(1);
+                  }}
+                  placeholder="[Gmail]/Sent Mail"
+                />
+              </View>
+            ) : null}
+            {showOptions ? (
+              <View style={styles.options}>
+                <TextField
+                  label="Messages per page (1–100)"
+                  keyboardType="number-pad"
+                  value={limitText}
+                  onChangeText={setLimitText}
+                  onBlur={() => {
+                    const clamped = clampMailLimit(Number(limitText) || 20);
+                    setLimitText(String(clamped));
+                    setLimit(clamped);
+                    pageRef.current = 1;
+                    setPage(1);
+                  }}
+                />
+                <AppButton
+                  title="Mail accounts"
+                  variant="secondary"
+                  onPress={openMailAccountSettings}
+                />
+              </View>
+            ) : null}
+            {secretsLocked ? (
+              <View style={styles.options}>
                 <Text style={styles.emptyText}>
-                  {search
-                    ? 'Try another name or phrase.'
-                    : 'New messages will appear here. Pull down to refresh.'}
-                </Text>
-              </View>
-            ) : null
-          }
-          ListFooterComponent={
-            totalPages > 1 ? (
-              <View style={styles.pagerRow}>
-                <AppButton
-                  title="Previous"
-                  variant="secondary"
-                  disabled={loading || page <= 1}
-                  onPress={() => void load(page - 1)}
-                />
-                <Text style={styles.pageInfo}>
-                  {page} / {totalPages}
+                  Unlock your identity to load messages.
                 </Text>
                 <AppButton
-                  title="Next"
+                  title="Unlock secrets"
+                  onPress={() => void onUnlock()}
+                />
+                <AppButton
+                  title="Back to Mail"
                   variant="secondary"
-                  disabled={loading || page >= totalPages}
-                  onPress={() => void load(page + 1)}
+                  onPress={() => navigation.navigate('MailAccounts')}
                 />
               </View>
-            ) : null
-          }
-          renderItem={renderMessage}
-        />
-      </Card>
+            ) : null}
+            {loadError && !secretsLocked ? (
+              <View style={styles.options}>
+                <StatusBanner message={loadError} kind="error" />
+                <AppButton
+                  title="Retry"
+                  variant="secondary"
+                  onPress={() => void load(undefined, true)}
+                />
+                <AppButton
+                  title="Mail accounts"
+                  variant="secondary"
+                  onPress={openMailAccountSettings}
+                />
+              </View>
+            ) : null}
+          </View>
+        }
+        ListEmptyComponent={
+          !loading && !loadError ? (
+            <View style={styles.empty}>
+              <FoxArt place="mail" size={120} />
+              <Text style={styles.emptyTitle}>
+                {search ? 'No matching messages' : emptyLabel}
+              </Text>
+              <Text style={styles.emptyText}>
+                {search
+                  ? 'Try another name or phrase.'
+                  : 'New messages will appear here. Pull down to refresh.'}
+              </Text>
+            </View>
+          ) : null
+        }
+        ListFooterComponent={
+          totalPages > 1 ? (
+            <View style={styles.pagerRow}>
+              <AppButton
+                title="Previous"
+                variant="secondary"
+                style={styles.pagerButton}
+                disabled={loading || page <= 1}
+                onPress={() => void load(page - 1)}
+              />
+              <Text style={styles.pageInfo}>
+                {page} / {totalPages}
+              </Text>
+              <AppButton
+                title="Next"
+                variant="secondary"
+                style={styles.pagerButton}
+                disabled={loading || page >= totalPages}
+                onPress={() => void load(page + 1)}
+              />
+            </View>
+          ) : null
+        }
+        renderItem={renderMessage}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {backgroundColor: mailColors.page},
-  content: {flex: 1, padding: 16, paddingBottom: 12, gap: 14},
-  heading: {flexDirection: 'row', alignItems: 'center', gap: 12},
-  headingCopy: {flex: 1, gap: 5},
-  eyebrow: {
-    fontSize: 10,
-    letterSpacing: 1.8,
-    color: mailColors.muted,
-    fontWeight: '600',
+  content: {
+    paddingHorizontal: 0,
+    paddingTop: spacing.md,
+    paddingBottom: 0,
+    gap: spacing.sm,
   },
-  accountEmail: {fontSize: 15, color: mailColors.text},
+  heading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: layout.gutter,
+  },
+  accountEmail: {
+    flex: 1,
+    fontSize: typography.body,
+    color: mailColors.text,
+  },
   compose: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
-    paddingHorizontal: 8,
-    gap: 6,
+    minHeight: layout.controlHeight - 4,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm,
+    gap: spacing.sm,
   },
-  headerAction: {color: mailColors.accent, fontWeight: '600', fontSize: 15},
+  headerAction: {
+    color: mailColors.accent,
+    fontWeight: '600',
+    fontSize: typography.body,
+  },
   iconButton: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: layout.controlHeight - 4,
+    minHeight: layout.controlHeight - 4,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -604,67 +631,88 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: mailColors.surface,
-    borderRadius: 12,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: mailColors.border,
-    paddingLeft: 14,
+    borderColor: mailColors.fieldBorder,
+    marginHorizontal: layout.gutter,
+    paddingStart: spacing.md,
   },
+  searchFocused: {borderColor: mailColors.accent},
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: typography.body,
     color: mailColors.text,
     paddingVertical: 12,
     minWidth: 0,
   },
-  folderRow: {gap: 8},
+  folderRow: {gap: spacing.xs, paddingHorizontal: layout.gutter},
   folderChip: {
     paddingHorizontal: 16,
-    minHeight: 44,
+    minHeight: layout.controlHeight - 4,
     justifyContent: 'center',
-    borderRadius: 22,
+    borderRadius: radius.pill,
   },
   folderChipSelected: {backgroundColor: mailColors.accentSoft},
-  folderChipText: {color: mailColors.muted, fontSize: 14},
+  folderChipText: {color: mailColors.muted, fontSize: typography.body},
   folderChipTextSelected: {color: mailColors.accent, fontWeight: '700'},
-  listCard: {flex: 1, borderRadius: 16, borderColor: mailColors.border},
+  messageList: {flex: 1},
   listHeading: {
-    paddingLeft: 16,
-    paddingRight: 6,
+    paddingHorizontal: layout.gutter,
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
-    borderBottomWidth: 1,
-    borderBottomColor: mailColors.border,
   },
-  messageCount: {color: mailColors.muted, fontSize: 12, paddingVertical: 12},
+  messageCount: {
+    color: mailColors.muted,
+    fontSize: typography.caption,
+    paddingVertical: spacing.md,
+  },
   optionsButton: {
-    minHeight: 44,
+    minHeight: layout.controlHeight - 4,
     justifyContent: 'center',
     paddingHorizontal: 10,
   },
-  link: {fontSize: 12, color: mailColors.accent, fontWeight: '600'},
-  options: {padding: 16, gap: 12},
-  primary: {backgroundColor: mailColors.accent},
+  link: {
+    fontSize: typography.caption,
+    color: mailColors.accent,
+    fontWeight: '600',
+  },
+  options: {
+    paddingHorizontal: layout.gutter,
+    paddingBottom: spacing.md,
+    gap: spacing.md,
+  },
   messageRow: {
     backgroundColor: mailColors.surface,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    padding: 16,
-    minHeight: 94,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: mailColors.border,
+    gap: spacing.md,
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
+    minHeight: 68,
   },
-  unreadRow: {backgroundColor: '#fcfaf5'},
+  pressedControl: {backgroundColor: mailColors.soft},
+  separatorTrack: {backgroundColor: mailColors.surface},
+  separator: {
+    backgroundColor: mailColors.border,
+    height: StyleSheet.hairlineWidth,
+    marginStart: layout.gutter + layout.avatarSize + spacing.md,
+    marginEnd: layout.gutter,
+  },
   pressedRow: {backgroundColor: mailColors.soft},
-  messageCopy: {flex: 1, gap: 7},
+  messageCopy: {flex: 1, gap: spacing.xs},
   rowTop: {flexDirection: 'row', alignItems: 'baseline', gap: 8},
-  sender: {flex: 1, color: mailColors.text, fontSize: 14},
+  sender: {flex: 1, color: mailColors.text, fontSize: typography.body},
   unreadText: {fontWeight: '700'},
-  date: {color: mailColors.muted, fontSize: 11, flexShrink: 1},
+  date: {color: mailColors.muted, fontSize: typography.caption, flexShrink: 1},
   subjectRow: {flexDirection: 'row', alignItems: 'center', gap: 6},
-  subject: {flex: 1, color: mailColors.text, fontSize: 15, lineHeight: 21},
+  subject: {
+    flex: 1,
+    color: mailColors.text,
+    fontSize: typography.body,
+    lineHeight: 21,
+  },
   unreadDot: {
     width: 6,
     height: 6,
@@ -674,21 +722,29 @@ const styles = StyleSheet.create({
   empty: {alignItems: 'center', padding: 28, paddingVertical: 48, gap: 12},
   emptyTitle: {
     color: mailColors.text,
-    fontSize: 18,
+    fontSize: typography.title,
     fontWeight: '600',
     textAlign: 'center',
   },
   emptyText: {
     color: mailColors.muted,
-    fontSize: 14,
+    fontSize: typography.body,
     lineHeight: 21,
     textAlign: 'center',
   },
-  pagerRow: {flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8},
+  pagerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  pagerButton: {flex: 1},
   pageInfo: {
-    flex: 1,
+    flexShrink: 1,
     color: mailColors.muted,
-    fontSize: 12,
+    fontSize: typography.caption,
     textAlign: 'center',
   },
 });

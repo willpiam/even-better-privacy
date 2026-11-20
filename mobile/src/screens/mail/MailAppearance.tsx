@@ -3,9 +3,9 @@ import React from 'react';
 import {StyleSheet, Text, View} from 'react-native';
 import Svg, {Path} from 'react-native-svg';
 import {places} from '../../theme/PlaceTheme';
-import {colors} from '../../theme/tokens';
+import {colors, layout, typography} from '../../theme/tokens';
 
-// Mail keeps the golden meadow palette throughout its list and reader.
+// Mail shares the app surfaces and uses the meadow accents for interactions.
 export const mailColors = {
   ...colors,
   ...places.mail,
@@ -81,12 +81,16 @@ export function mailDateLabel(value: string): string {
 
 const styles = StyleSheet.create({
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: layout.avatarSize,
+    height: layout.avatarSize,
+    borderRadius: layout.avatarSize / 2,
     backgroundColor: mailColors.accentSoft,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  initials: {color: mailColors.accent, fontSize: 13, fontWeight: '600'},
+  initials: {
+    color: mailColors.accent,
+    fontSize: typography.caption,
+    fontWeight: '600',
+  },
 });

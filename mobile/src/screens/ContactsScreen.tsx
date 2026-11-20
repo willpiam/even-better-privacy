@@ -1,8 +1,8 @@
 import React, {useCallback, useEffect, useLayoutEffect, useState} from 'react';
 import {
   BackHandler,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -21,13 +21,14 @@ import {shortFingerprint} from '../ebpCore';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
 import ContactListRow from '../components/ContactListRow';
+import ListRow from '../components/ListRow';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import BusyOverlay from '../components/BusyOverlay';
 import ImportContactModal from '../components/ImportContactModal';
 import FetchContactModal from '../components/FetchContactModal';
 import BrowseContactsModal from '../components/BrowseContactsModal';
-import {colors, typography} from '../theme/tokens';
+import {colors, layout, radius, spacing, typography} from '../theme/tokens';
 import {statusKind} from '../theme/statusKind';
 import PlaceHeader from '../components/PlaceHeader';
 import AppIcon from '../components/AppIcon';
@@ -79,13 +80,16 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
           accessibilityRole="button"
           accessibilityLabel="Add contact"
           accessibilityState={{expanded: menuOpen}}
-          style={styles.headerAction}
+          style={({pressed}) => [
+            styles.headerAction,
+            (pressed || menuOpen) && {backgroundColor: theme.pale},
+          ]}
           onPress={() => setMenuOpen(open => !open)}>
           <AppIcon name="plus" color={theme.accent} />
         </Pressable>
       ),
     });
-  }, [navigation, menuOpen, theme.accent]);
+  }, [navigation, menuOpen, theme.accent, theme.pale]);
 
   const contactFingerprints = new Set(contacts.map(c => c.contact.fingerprint));
 
@@ -125,47 +129,66 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
     }
   };
 
+  const menuItems = [
+    {
+      id: 'contacts-import',
+      title: 'Import contact manually',
+      open: setImportVisible,
+    },
+    {
+      id: 'contacts-fetch',
+      title: 'Import via fingerprint',
+      open: setFetchVisible,
+    },
+    {
+      id: 'contacts-browse',
+      title: 'Browse server identities',
+      open: setBrowseVisible,
+    },
+  ];
+
   return (
     <Screen contentStyle={styles.content}>
-      <ScrollView
-        style={styles.body}
-        contentContainerStyle={styles.bodyContent}
+      <BusyOverlay visible={fetching} message="Fetching contact…" />
+      <FlatList
+        data={contacts}
+        keyExtractor={item => item.name}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         accessibilityElementsHidden={menuOpen}
-        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
-        <BusyOverlay visible={fetching} message="Fetching contact…" />
-        <PlaceHeader
-          title="Your people"
-          subtitle="Familiar faces. Trusted connections."
-        />
-        <StatusBanner message={status} kind={statusKind(status)} />
-
-        <SectionTitle>{`Local contacts · ${contacts.length}`}</SectionTitle>
-        {contacts.length === 0 ? (
-          <Card padded>
-            <Text style={styles.emptyTitle}>Good connections start here</Text>
+        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}
+        ListHeaderComponent={
+          <View style={styles.intro}>
+            <PlaceHeader
+              title="Your people"
+              subtitle="People whose public identities you’ve saved."
+            />
+            <StatusBanner message={status} kind={statusKind(status)} />
+            <SectionTitle>{`Local contacts · ${contacts.length}`}</SectionTitle>
+          </View>
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyTitle}>No contacts yet.</Text>
             <Text style={styles.empty}>
-              No contacts yet. Use + to import someone you know, or find their
-              identity on your server.
+              Use + to import a contact or find their identity on your server.
             </Text>
-          </Card>
-        ) : (
-          <Card>
-            {contacts.map(item => (
-              <ContactListRow
-                key={item.name}
-                testID={`contact-row-${item.name}`}
-                contact={storedContactToLike(item)}
-                badge={item.contact.revoked ? 'REVOKED' : undefined}
-                badgeVariant={item.contact.revoked ? 'danger' : 'default'}
-                onPress={() =>
-                  navigation.navigate('ContactDetail', {name: item.name})
-                }
-              />
-            ))}
-          </Card>
+          </View>
+        }
+        renderItem={({item, index}) => (
+          <ContactListRow
+            testID={`contact-row-${item.name}`}
+            contact={storedContactToLike(item)}
+            badge={item.contact.revoked ? 'Revoked' : undefined}
+            badgeVariant={item.contact.revoked ? 'danger' : 'default'}
+            showDivider={index < contacts.length - 1}
+            onPress={() =>
+              navigation.navigate('ContactDetail', {name: item.name})
+            }
+          />
         )}
-      </ScrollView>
+      />
       {menuOpen ? (
         <View style={StyleSheet.absoluteFill}>
           <Pressable
@@ -176,37 +199,18 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
             onPress={() => setMenuOpen(false)}
           />
           <Card style={styles.menu}>
-            {[
-              {
-                id: 'contacts-import',
-                title: 'Import contact manually',
-                open: setImportVisible,
-              },
-              {
-                id: 'contacts-fetch',
-                title: 'Import via fingerprint',
-                open: setFetchVisible,
-              },
-              {
-                id: 'contacts-browse',
-                title: 'Browse server identities',
-                open: setBrowseVisible,
-              },
-            ].map((item, index) => (
-              <Pressable
+            {menuItems.map((item, index) => (
+              <ListRow
                 key={item.id}
                 testID={item.id}
-                accessibilityRole="button"
-                accessibilityLabel={item.title}
-                style={[styles.menuItem, index > 0 && styles.menuDivider]}
+                title={item.title}
+                showChevron={false}
+                showDivider={index < menuItems.length - 1}
                 onPress={() => {
                   setMenuOpen(false);
                   item.open(true);
-                }}>
-                <Text style={[styles.menuText, {color: theme.accent}]}>
-                  {item.title}
-                </Text>
-              </Pressable>
+                }}
+              />
             ))}
           </Card>
         </View>
@@ -235,38 +239,37 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  content: {flex: 1, paddingBottom: 16},
-  body: {flex: 1},
-  bodyContent: {gap: 14, paddingBottom: 16},
+  content: {padding: 0, paddingBottom: 0},
+  listContent: {paddingBottom: spacing.xl},
+  intro: {
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  emptyState: {padding: layout.gutter, gap: spacing.sm},
   headerAction: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: layout.controlHeight,
+    minHeight: layout.controlHeight,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menu: {
     position: 'absolute',
     top: 0,
-    right: 12,
+    end: layout.gutter,
     width: 260,
-    maxWidth: '100%',
+    maxWidth: '88%',
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.12,
     shadowRadius: 8,
   },
-  menuItem: {minHeight: 48, justifyContent: 'center', padding: 14},
-  menuDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  menuText: {fontSize: typography.body, color: colors.accent},
   emptyTitle: {
     color: colors.text,
-    fontSize: 18,
+    fontSize: typography.title,
     fontWeight: '600',
-    marginBottom: 8,
   },
-  empty: {color: colors.muted, fontSize: 14, lineHeight: 22},
+  empty: {color: colors.muted, fontSize: typography.body},
 });

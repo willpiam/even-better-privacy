@@ -15,11 +15,12 @@ import {
 } from '../services/contacts';
 import {serverIdentityToLike} from '../services/contactDisplay';
 import AppButton from './AppButton';
-import Card from './Card';
+import ListSection from './ListSection';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 import ContactListRow from './ContactListRow';
 import InlineBusy from './InlineBusy';
 import TextField from './TextField';
-import {colors, spacing, typography} from '../theme/tokens';
+import {colors, layout, spacing, typography} from '../theme/tokens';
 
 function formatCreatedAt(createdAt?: number): string {
   if (!createdAt || !Number.isFinite(createdAt)) {
@@ -47,6 +48,7 @@ export default function BrowseContactsModal({
   onImport: (fingerprint: string) => void | Promise<void>;
   importingFingerprint: string | null;
 }): JSX.Element {
+  const {accent} = usePlaceTheme();
   const [browseQuery, setBrowseQuery] = useState('');
   const [browseServer, setBrowseServer] = useState('');
   const [serverResults, setServerResults] = useState<ServerIdentitySummary[]>(
@@ -196,8 +198,8 @@ export default function BrowseContactsModal({
             ) : null}
 
             {!browsingLoading && visibleServerResults.length > 0 ? (
-              <Card>
-                {visibleServerResults.map(entry => {
+              <ListSection>
+                {visibleServerResults.map((entry, index) => {
                   const isAlreadyContact = knownFingerprints.has(
                     entry.fingerprint,
                   );
@@ -216,13 +218,11 @@ export default function BrowseContactsModal({
                       contact={serverIdentityToLike(entry)}
                       subtitleExtra={subtitleExtra}
                       showChevron={false}
+                      showDivider={index < visibleServerResults.length - 1}
                       badge={isAlreadyContact ? 'In contacts' : undefined}
                       right={
                         isAlreadyContact ? undefined : isImporting ? (
-                          <ActivityIndicator
-                            size="small"
-                            color={colors.accent}
-                          />
+                          <ActivityIndicator size="small" color={accent} />
                         ) : (
                           <AppButton
                             title="Import"
@@ -235,7 +235,7 @@ export default function BrowseContactsModal({
                     />
                   );
                 })}
-              </Card>
+              </ListSection>
             ) : null}
 
             {!browsingLoading && browseLoaded && browsePagination.total > 0 ? (
@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: layout.gutter,
     paddingVertical: spacing.sm,
     backgroundColor: colors.surface,
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -300,7 +300,7 @@ const styles = StyleSheet.create({
   },
   status: {fontSize: typography.caption, color: colors.muted},
   scroll: {flex: 1},
-  content: {padding: spacing.lg, gap: spacing.md},
+  content: {padding: layout.gutter, gap: spacing.md},
   muted: {fontSize: typography.caption, color: colors.muted},
   importBtn: {paddingHorizontal: spacing.md},
   pagination: {alignItems: 'center', gap: 8, marginTop: 4},

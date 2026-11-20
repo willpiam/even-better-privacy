@@ -24,7 +24,7 @@ export default function BrandHeader({
           style={[
             styles.title,
             compact && styles.compactTitle,
-            {color: theme.accent},
+            !compact && {color: theme.accent},
           ]}>
           {compact ? 'Even Better Privacy' : 'EBP'}
         </Text>
@@ -39,7 +39,7 @@ export default function BrandHeader({
 const styles = StyleSheet.create({
   compact: {marginBottom: 0, gap: 8},
   compactLogo: {width: 28, height: 28, borderRadius: 10},
-  compactTitle: {fontSize: 14, fontWeight: '600', letterSpacing: -0.3},
+  compactTitle: {fontSize: typography.body, fontWeight: '600'},
   row: {
     flexDirection: 'row',
     alignItems: 'center',

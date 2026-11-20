@@ -1,19 +1,14 @@
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
-import {
-  Button,
-  FlatList,
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import {FlatList, Modal, StyleSheet, Text, View} from 'react-native';
 import {listContacts, type StoredContact} from '../services/contacts';
 import {
   contactSearchHaystack,
   storedContactToLike,
 } from '../services/contactDisplay';
 import ContactListRow from './ContactListRow';
+import AppButton from './AppButton';
+import TextField from './TextField';
+import {colors, layout, radius, spacing, typography} from '../theme/tokens';
 
 type Props = {
   visible: boolean;
@@ -81,14 +76,12 @@ export default function RecipientResolveModal({
               ? `Select a contact to encrypt ${email || 'this address'} for, or send to it without encryption.`
               : `No contact has ${email || 'this address'} as an email or opaque email detail. Select a contact to encrypt for, or send without encryption.`}
           </Text>
-          <TextInput
-            style={styles.input}
+          <TextField
+            label="Search contacts"
             value={query}
             onChangeText={setQuery}
-            placeholder="Search contacts..."
             autoCapitalize="none"
             autoCorrect={false}
-            accessibilityLabel="Search contacts"
           />
           <FlatList
             data={filtered}
@@ -98,23 +91,22 @@ export default function RecipientResolveModal({
             ListEmptyComponent={
               <Text style={styles.empty}>No contacts match this search.</Text>
             }
-            renderItem={({item}) => (
+            renderItem={({item, index}) => (
               <ContactListRow
                 contact={storedContactToLike(item)}
                 showAvatar={false}
                 showChevron={false}
+                showDivider={index < filtered.length - 1}
                 onPress={() => onSelectContact(item.name)}
               />
             )}
           />
-          <Button
+          <AppButton
             title="This email is not intended to be encrypted"
             onPress={onMarkUnencrypted}
-            color="#b00020"
+            variant="danger"
           />
-          <View style={styles.cancelRow}>
-            <Button title="Cancel" onPress={onCancel} />
-          </View>
+          <AppButton title="Cancel" variant="secondary" onPress={onCancel} />
         </View>
       </View>
     </Modal>
@@ -127,28 +119,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 16,
+    padding: layout.gutter,
   },
   modal: {
     width: '100%',
     maxWidth: 420,
     maxHeight: '85%',
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 16,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: layout.gutter,
+    gap: spacing.sm,
   },
-  title: {fontSize: 18, fontWeight: '700', color: '#111', marginBottom: 8},
-  body: {fontSize: 13, color: '#444', marginBottom: 10},
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: '#111',
-    marginBottom: 8,
+  title: {fontSize: typography.title, fontWeight: '700', color: colors.text},
+  body: {fontSize: typography.caption, color: colors.muted},
+  list: {maxHeight: 240, marginHorizontal: -layout.gutter},
+  empty: {
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
+    color: colors.muted,
+    fontSize: typography.caption,
   },
-  list: {maxHeight: 240, marginBottom: 12},
-  empty: {padding: 12, color: '#666', fontSize: 13},
-  cancelRow: {marginTop: 8},
 });

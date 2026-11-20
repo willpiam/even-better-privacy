@@ -311,7 +311,6 @@ export default function MailMessageScreen({
               </Text>
               <AppButton
                 title={hasError ? 'Retry decryption' : 'Decrypt'}
-                style={styles.primary}
                 onPress={() => void onDecrypt()}
                 disabled={busy}
               />
@@ -346,7 +345,6 @@ export default function MailMessageScreen({
       {canReply ? (
         <AppButton
           title="Reply"
-          style={styles.primary}
           disabled={busy || decrypting}
           onPress={() => void onReply()}
         />
@@ -430,7 +428,6 @@ const styles = StyleSheet.create({
   },
   lockedTitle: {color: mailColors.text, fontSize: 18, fontWeight: '600'},
   placeholder: {color: mailColors.muted, fontSize: 14, lineHeight: 22},
-  primary: {backgroundColor: mailColors.accent},
   bodyCard: {paddingVertical: 8, minHeight: 160},
   body: {color: mailColors.text, fontSize: 16, lineHeight: 27},
   infoBtn: {minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start'},

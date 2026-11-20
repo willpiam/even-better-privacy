@@ -8,7 +8,7 @@ import {
 } from '@react-navigation/native';
 import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import {createNativeStackNavigator} from '@react-navigation/native-stack';
-import {colors} from '../theme/tokens';
+import {colors, radius, spacing, typography} from '../theme/tokens';
 import {places, PlaceThemeProvider, type Place} from '../theme/PlaceTheme';
 import AppIcon, {type IconName} from '../components/AppIcon';
 import BrandHeader from '../components/BrandHeader';
@@ -150,9 +150,7 @@ const stackScreenOptions = {
 function placeOptions(place: Place) {
   return {
     ...stackScreenOptions,
-    headerStyle: {backgroundColor: places[place].page},
     headerTintColor: places[place].accent,
-    contentStyle: {backgroundColor: places[place].page},
   };
 }
 
@@ -438,12 +436,13 @@ export default function AppNavigator(): JSX.Element {
           tabBarStyle: {
             backgroundColor: colors.surface,
             borderTopColor: colors.border,
-            paddingTop: 4,
+            borderTopWidth: StyleSheet.hairlineWidth,
+            paddingTop: spacing.xs,
             minHeight: 76,
             elevation: 0,
           },
           tabBarLabelStyle: {
-            fontSize: 11,
+            fontSize: typography.tab,
             fontWeight: '600',
           },
         }}>
@@ -515,7 +514,7 @@ const styles = StyleSheet.create({
   tabIcon: {
     width: 48,
     height: 28,
-    borderRadius: 12,
+    borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,5 +1,5 @@
 import React, {useCallback, useState} from 'react';
-import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
+import {Alert, StyleSheet, Switch, Text, type SwitchProps} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
@@ -24,14 +24,16 @@ import {
   lockAll,
 } from '../services/unlockSession';
 import Screen from '../components/Screen';
+import ListRow from '../components/ListRow';
+import ListSection from '../components/ListSection';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 import SegmentedControl from '../components/SegmentedControl';
 import TextField from '../components/TextField';
 import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
 import {statusKind} from '../theme/statusKind';
-import {colors, spacing, typography} from '../theme/tokens';
-import PlaceHeader from '../components/PlaceHeader';
+import {colors, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'Settings'>;
 
@@ -115,10 +117,6 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
 
   return (
     <Screen scroll>
-      <PlaceHeader
-        title="Settings"
-        subtitle="Your privacy, just the way you like it."
-      />
       <StatusBanner message={status} kind={statusKind(status)} />
 
       <SectionTitle>Key Server</SectionTitle>
@@ -142,9 +140,10 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
       />
 
       <SectionTitle>Identity</SectionTitle>
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Enforce password policy</Text>
-        <Switch
+      <ListSection>
+        <SettingsSwitch
+          label="Enforce password policy"
+          showDivider={false}
           testID="settings-enforce-password-policy"
           value={enforcePasswordPolicy}
           onValueChange={async value => {
@@ -152,7 +151,7 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
             await setEnforcePasswordPolicy(value);
           }}
         />
-      </View>
+      </ListSection>
       <Text style={styles.fieldLabel}>Auto-lock after</Text>
       <SegmentedControl
         testID="settings-auto-lock"
@@ -179,15 +178,16 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
       />
 
       <SectionTitle>Test mail</SectionTitle>
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Enable test emails and payments</Text>
-        <Switch
+      <ListSection>
+        <SettingsSwitch
+          label="Enable test emails and payments"
+          showDivider={false}
           testID="settings-mail-test-mode"
           value={mailTestMode}
           disabled={savingTestMode}
           onValueChange={onTestModeChange}
         />
-      </View>
+      </ListSection>
       <Text style={styles.advancedNote}>
         Adds a choice of test.pqpost.com or pqpost.com when creating an EBP
         email. Only short test names require payment, using test funds only.
@@ -199,9 +199,9 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
         variant="secondary"
         onPress={() => navigation.navigate('MailAccountSettings')}
       />
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Render HTML mail bodies</Text>
-        <Switch
+      <ListSection>
+        <SettingsSwitch
+          label="Render HTML mail bodies"
           testID="settings-mail-render-html"
           value={mailRenderHtml}
           onValueChange={async value => {
@@ -209,10 +209,9 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
             await setMailRenderHtml(value);
           }}
         />
-      </View>
-      <View style={styles.switchRow}>
-        <Text style={styles.switchLabel}>Include public keys in EBP mail</Text>
-        <Switch
+        <SettingsSwitch
+          label="Include public keys in EBP mail"
+          showDivider={false}
           testID="settings-mail-include-public-keys"
           value={mailIncludePublicKeys}
           onValueChange={async value => {
@@ -220,29 +219,35 @@ export default function SettingsScreen({navigation}: Props): JSX.Element {
             await setMailIncludePublicKeys(value);
           }}
         />
-      </View>
+      </ListSection>
     </Screen>
   );
 }
 
+function SettingsSwitch({
+  label,
+  showDivider,
+  ...props
+}: SwitchProps & {label: string; showDivider?: boolean}) {
+  const {accent} = usePlaceTheme();
+  return (
+    <ListRow
+      title={label}
+      showDivider={showDivider}
+      right={
+        <Switch
+          {...props}
+          accessibilityLabel={label}
+          trackColor={{false: colors.fieldBorder, true: accent}}
+          ios_backgroundColor={colors.fieldBorder}
+          thumbColor={colors.surface}
+        />
+      }
+    />
+  );
+}
+
 const styles = StyleSheet.create({
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 10,
-  },
-  switchLabel: {
-    flex: 1,
-    color: colors.text,
-    fontSize: typography.body,
-    marginRight: spacing.sm,
-  },
   advancedNote: {
     fontSize: 13,
     color: colors.muted,

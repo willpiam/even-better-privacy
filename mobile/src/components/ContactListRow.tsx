@@ -13,6 +13,7 @@ export default function ContactListRow({
   badgeVariant = 'default',
   right,
   showAvatar = true,
+  showDivider,
   subtitleExtra,
   testID,
 }: {
@@ -23,6 +24,7 @@ export default function ContactListRow({
   badgeVariant?: 'default' | 'danger';
   right?: React.ReactNode;
   showAvatar?: boolean;
+  showDivider?: boolean;
   /** Appended after secondary with ` · ` (e.g. browse key types · created). */
   subtitleExtra?: string;
   testID?: string;
@@ -40,6 +42,7 @@ export default function ContactListRow({
       avatarText={showAvatar ? primary : undefined}
       onPress={onPress}
       showChevron={showChevron}
+      showDivider={showDivider}
       badge={badge}
       badgeVariant={badgeVariant}
       right={right}

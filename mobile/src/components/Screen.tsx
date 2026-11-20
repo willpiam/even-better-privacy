@@ -1,8 +1,7 @@
 import React from 'react';
 import {ScrollView, StyleSheet, View, ViewStyle} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
-import {colors, spacing} from '../theme/tokens';
-import {usePlaceTheme} from '../theme/PlaceTheme';
+import {colors, layout} from '../theme/tokens';
 
 export default function Screen({
   children,
@@ -15,12 +14,9 @@ export default function Screen({
   style?: ViewStyle;
   contentStyle?: ViewStyle;
 }): JSX.Element {
-  const theme = usePlaceTheme();
   if (scroll) {
     return (
-      <SafeAreaView
-        style={[styles.safe, {backgroundColor: theme.page}, style]}
-        edges={['left', 'right']}>
+      <SafeAreaView style={[styles.safe, style]} edges={['left', 'right']}>
         <ScrollView
           contentContainerStyle={[styles.content, contentStyle]}
           showsVerticalScrollIndicator={false}
@@ -32,9 +28,7 @@ export default function Screen({
   }
 
   return (
-    <SafeAreaView
-      style={[styles.safe, {backgroundColor: theme.page}, style]}
-      edges={['left', 'right']}>
+    <SafeAreaView style={[styles.safe, style]} edges={['left', 'right']}>
       <View style={[styles.content, styles.flex, contentStyle]}>
         {children}
       </View>
@@ -49,7 +43,7 @@ const styles = StyleSheet.create({
   },
   flex: {flex: 1},
   content: {
-    padding: spacing.lg + 4,
+    padding: layout.gutter,
     paddingBottom: 32,
     gap: 14,
   },

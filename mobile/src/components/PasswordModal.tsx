@@ -132,7 +132,7 @@ export default function PasswordModal({
           <TextInput
             testID="password-modal-input"
             accessibilityLabel={placeholder}
-            style={[styles.input, {borderColor: theme.border}]}
+            style={styles.input}
             editable={!biometricBusy}
             value={password}
             onChangeText={setPassword}
@@ -227,8 +227,8 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
+    borderColor: colors.fieldBorder,
+    borderRadius: radius.sm,
     paddingHorizontal: 12,
     paddingVertical: 10,
     color: colors.text,

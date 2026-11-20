@@ -1,6 +1,6 @@
 import React from 'react';
 import {Pressable, StyleSheet, Text, View} from 'react-native';
-import {colors, radius, typography} from '../theme/tokens';
+import {colors, layout, radius, typography} from '../theme/tokens';
 import {usePlaceTheme} from '../theme/PlaceTheme';
 
 export default function SegmentedControl({
@@ -16,7 +16,7 @@ export default function SegmentedControl({
 }): JSX.Element {
   const theme = usePlaceTheme();
   return (
-    <View style={[styles.track, {backgroundColor: theme.soft}]} testID={testID}>
+    <View style={styles.track} testID={testID}>
       {options.map(option => {
         const active = option.value === value;
         return (
@@ -26,7 +26,11 @@ export default function SegmentedControl({
             onPress={() => onChange(option.value)}
             accessibilityRole="button"
             accessibilityState={{selected: active}}
-            style={[styles.item, active && styles.itemActive]}>
+            style={({pressed}) => [
+              styles.item,
+              active && {backgroundColor: theme.pale},
+              !active && pressed && {backgroundColor: theme.soft},
+            ]}>
             <Text
               style={[
                 styles.label,
@@ -46,34 +50,22 @@ const styles = StyleSheet.create({
   track: {
     flexDirection: 'row',
     backgroundColor: colors.segmentTrack,
-    borderRadius: radius.sm + 1,
+    borderRadius: radius.sm,
     padding: 2,
   },
   item: {
     flex: 1,
-    minHeight: 44,
+    minHeight: layout.controlHeight - 4,
     justifyContent: 'center',
     paddingVertical: 9,
     paddingHorizontal: 4,
-    borderRadius: 7,
+    borderRadius: radius.sm - 2,
     alignItems: 'center',
   },
-  itemActive: {
-    backgroundColor: colors.surface,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    shadowOffset: {width: 0, height: 1},
-    elevation: 1,
-  },
   label: {
-    fontSize: 13,
+    fontSize: typography.caption,
     fontWeight: '500',
     color: colors.muted,
   },
-  labelActive: {
-    fontWeight: '600',
-    color: colors.text,
-    fontSize: typography.caption + 1,
-  },
+  labelActive: {fontWeight: '700'},
 });

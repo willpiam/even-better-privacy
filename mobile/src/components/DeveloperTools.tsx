@@ -5,7 +5,7 @@ import type {MoreStackParamList} from '../navigation/AppNavigator';
 import {runCoreSelfTest} from '../services/developerChecks';
 import SectionTitle from './SectionTitle';
 import ListRow from './ListRow';
-import Card from './Card';
+import ListSection from './ListSection';
 import StatusBanner from './StatusBanner';
 import BusyOverlay from './BusyOverlay';
 import {statusKind} from '../theme/statusKind';
@@ -37,7 +37,7 @@ export default function DeveloperTools({navigation}: Props): React.JSX.Element {
       <BusyOverlay visible={busy} message="Running core self-test…" />
       <StatusBanner message={status} kind={statusKind(status)} />
       <SectionTitle>Developer</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           testID="more-self-test"
           title="Core self-test"
@@ -66,7 +66,7 @@ export default function DeveloperTools({navigation}: Props): React.JSX.Element {
           onPress={() => navigation.navigate('Diagnostics')}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
     </>
   );
 }

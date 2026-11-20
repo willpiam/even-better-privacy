@@ -1,10 +1,9 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
-  BackHandler,
   AppState,
+  BackHandler,
   FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -30,14 +29,14 @@ import {getMailTestMode, getServerUrl} from '../services/settings';
 import {reconcilePendingSignups} from '../services/mail/reconcileSignup';
 import {PROTOCOL_VERSION} from '../../../core/version';
 import Screen from '../components/Screen';
-import Chip from '../components/Chip';
 import AppButton from '../components/AppButton';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
 import Card from '../components/Card';
 import StatusBanner from '../components/StatusBanner';
 import {statusKind} from '../theme/statusKind';
-import {colors, typography} from '../theme/tokens';
+import {colors, layout, radius, spacing, typography} from '../theme/tokens';
+import {usePlaceTheme} from '../theme/PlaceTheme';
 import {shortFingerprint} from '../ebpCore';
 import PlaceHeader from '../components/PlaceHeader';
 import AppIcon from '../components/AppIcon';
@@ -45,6 +44,7 @@ import AppIcon from '../components/AppIcon';
 type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentitiesHome'>;
 
 export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
+  const {accent, pale} = usePlaceTheme();
   const [identities, setIdentities] = useState<StoredIdentityMeta[]>([]);
   const [currentIdentity, setCurrentIdentityValue] = useState<string | null>(
     null,
@@ -110,13 +110,16 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
           accessibilityRole="button"
           accessibilityLabel="Add identity"
           accessibilityState={{expanded: menuOpen}}
-          style={styles.headerAction}
+          style={({pressed}) => [
+            styles.headerAction,
+            (pressed || menuOpen) && {backgroundColor: pale},
+          ]}
           onPress={() => setMenuOpen(open => !open)}>
-          <AppIcon name="plus" />
+          <AppIcon name="plus" color={accent} />
         </Pressable>
       ),
     });
-  }, [navigation, menuOpen]);
+  }, [navigation, menuOpen, accent, pale]);
 
   const onSelectIdentity = async (name: string) => {
     await setCurrentIdentity(name);
@@ -154,77 +157,75 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
   };
 
   return (
-    <Screen style={styles.screen} contentStyle={styles.content}>
-      <ScrollView
-        contentContainerStyle={styles.body}
+    <Screen contentStyle={styles.content}>
+      <FlatList
+        data={identities}
+        keyExtractor={item => item.name}
+        testID="identities-list"
+        contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         accessibilityElementsHidden={menuOpen}
-        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
-        <PlaceHeader
-          title="Your identities"
-          subtitle="A little space for every part of you."
-        />
-        {currentIdentity ? (
-          <Chip label={`Current: ${currentIdentity}`} />
-        ) : null}
-        <StatusBanner message={status} kind={statusKind(status)} />
-        {signupAction ? (
-          <AppButton
-            title={signupAction === 'resume' ? 'Resume email setup'
-              : signupAction === 'restore' ? 'Restore mailbox access' : 'Manage unfinished email purchases'}
-            testID="identities-resume-onboarding"
-            variant={signupAction === 'manage' ? 'secondary' : undefined}
-            onPress={() => navigation.navigate('OnboardingWizard')}
-          />
-        ) : null}
-        <SectionTitle>{`Local identities · ${identities.length}`}</SectionTitle>
-        {identities.length === 0 ? (
+        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}
+        ListHeaderComponent={
+          <View style={styles.intro}>
+            <PlaceHeader
+              title="Your identities"
+              subtitle="Manage the keys you use to sign and decrypt."
+            />
+            <StatusBanner message={status} kind={statusKind(status)} />
+            {signupAction ? (
+              <AppButton
+                title={
+                  signupAction === 'resume'
+                    ? 'Resume email setup'
+                    : signupAction === 'restore'
+                    ? 'Restore mailbox access'
+                    : 'Manage unfinished email purchases'
+                }
+                testID="identities-resume-onboarding"
+                variant={signupAction === 'manage' ? 'secondary' : undefined}
+                onPress={() => navigation.navigate('OnboardingWizard')}
+              />
+            ) : null}
+            <SectionTitle>{`Local identities · ${identities.length}`}</SectionTitle>
+          </View>
+        }
+        ListEmptyComponent={
           <View style={styles.empty} testID="identities-empty">
-            <View style={styles.emptyMark}>
-              <AppIcon name="key" size={28} />
-            </View>
             <Text style={styles.emptyTitle}>No identities yet</Text>
             <Text style={styles.emptySub}>
-              Make yourself at home. Create a quantum-secure email address and
-              keys, or use + to create or import an identity.
+              Create a quantum-secure email address and keys, or use + to create
+              or import an identity.
             </Text>
             <AppButton
               title="Get started with EBP email"
               testID="identities-onboarding-empty"
               onPress={() => navigation.navigate('OnboardingWizard')}
-              style={styles.fullBtn}
             />
           </View>
-        ) : (
-          <Card>
-            <FlatList
-              data={identities}
-              keyExtractor={item => item.name}
-              scrollEnabled={false}
-              testID="identities-list"
-              renderItem={({item, index}) => (
-                <ListRow
-                  testID={`identity-row-${item.name}`}
-                  avatarText={item.name}
-                  title={item.name}
-                  subtitle={`${
-                    item.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA'
-                  } · ${shortFingerprint(item.fingerprint)}`}
-                  badge={item.name === currentIdentity ? 'Current' : undefined}
-                  onPress={() => onSelectIdentity(item.name)}
-                  showDivider={index < identities.length - 1}
-                />
-              )}
-            />
-          </Card>
+        }
+        renderItem={({item, index}) => (
+          <ListRow
+            testID={`identity-row-${item.name}`}
+            avatarText={item.name}
+            title={item.name}
+            subtitle={`${
+              item.signingKeyType === 'sphincs' ? 'SLH-DSA' : 'ML-DSA'
+            } · ${shortFingerprint(item.fingerprint)}`}
+            badge={item.name === currentIdentity ? 'Current' : undefined}
+            onPress={() => onSelectIdentity(item.name)}
+            showDivider={index < identities.length - 1}
+          />
         )}
-        <Text style={styles.meta}>
-          Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
-          {'\n'}Protocol:{' '}
-          <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
-        </Text>
-      </ScrollView>
+        ListFooterComponent={
+          <Text style={styles.meta}>
+            Server: <Text style={styles.metaStrong}>{serverUrl || '—'}</Text>
+            {'\n'}Protocol:{' '}
+            <Text style={styles.metaStrong}>{PROTOCOL_VERSION}</Text>
+          </Text>
+        }
+      />
       {menuOpen ? (
         <View style={StyleSheet.absoluteFill}>
           <Pressable
@@ -235,28 +236,25 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
             onPress={() => setMenuOpen(false)}
           />
           <Card style={styles.menu}>
-            <Pressable
+            <ListRow
               testID="identities-create"
-              accessibilityRole="button"
-              accessibilityLabel="Create identity"
-              style={styles.menuItem}
+              title="Create identity"
+              showChevron={false}
               onPress={() => {
                 setMenuOpen(false);
                 navigation.navigate('HdCreate');
-              }}>
-              <Text style={styles.menuText}>Create identity</Text>
-            </Pressable>
-            <Pressable
+              }}
+            />
+            <ListRow
               testID="identities-import"
-              accessibilityRole="button"
-              accessibilityLabel="Import identity file"
-              style={[styles.menuItem, styles.menuDivider]}
+              title="Import identity file"
+              showChevron={false}
+              showDivider={false}
               onPress={() => {
                 setMenuOpen(false);
                 void onImport();
-              }}>
-              <Text style={styles.menuText}>Import identity file</Text>
-            </Pressable>
+              }}
+            />
           </Card>
         </View>
       ) : null}
@@ -265,75 +263,51 @@ export default function IdentitiesHomeScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  screen: {flex: 1},
-  content: {flex: 1, paddingBottom: 16},
-  body: {flexGrow: 1, gap: 14, paddingBottom: 16},
+  content: {padding: 0, paddingBottom: 0},
+  listContent: {paddingBottom: spacing.xl},
+  intro: {
+    paddingHorizontal: layout.gutter,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
   headerAction: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: layout.controlHeight,
+    minHeight: layout.controlHeight,
+    borderRadius: radius.sm,
     alignItems: 'center',
     justifyContent: 'center',
   },
   menu: {
     position: 'absolute',
     top: 0,
-    right: 12,
+    end: layout.gutter,
     width: 240,
-    maxWidth: '100%',
+    maxWidth: '88%',
     elevation: 6,
     shadowColor: '#000',
     shadowOffset: {width: 0, height: 3},
     shadowOpacity: 0.12,
     shadowRadius: 8,
   },
-  menuItem: {minHeight: 48, justifyContent: 'center', padding: 14},
-  menuDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-  },
-  menuText: {fontSize: typography.body, color: colors.accent},
   meta: {
     fontSize: typography.caption,
     color: colors.muted,
     lineHeight: 18,
     marginTop: 12,
-    paddingHorizontal: 4,
+    paddingHorizontal: layout.gutter,
   },
   metaStrong: {
     color: colors.text,
     fontWeight: '600',
   },
-  fullBtn: {alignSelf: 'stretch', width: '100%'},
-  empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    gap: 12,
-    backgroundColor: colors.surface,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  emptyMark: {
-    width: 60,
-    height: 60,
-    borderRadius: 22,
-    backgroundColor: colors.accentSoft,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
+  empty: {paddingHorizontal: layout.gutter, gap: spacing.md},
   emptyTitle: {
-    fontSize: 20,
+    fontSize: typography.title,
     fontWeight: '600',
     color: colors.text,
   },
   emptySub: {
-    fontSize: 13,
+    fontSize: typography.body,
     color: colors.muted,
-    textAlign: 'center',
-    marginBottom: 8,
-    maxWidth: 260,
-    lineHeight: 18,
   },
 });

@@ -2,15 +2,16 @@ export const colors = {
   accent: '#466039',
   accentSoft: '#e5eddd',
   text: '#24392e',
-  muted: '#626f65',
-  border: '#e1e6da',
-  surface: '#fffefa',
-  page: '#f4f7f0',
+  muted: '#56635a',
+  border: '#e4e0d8',
+  fieldBorder: '#918b81',
+  surface: '#fffdfa',
+  page: '#f8f6f1',
   danger: '#a74142',
   success: '#3e6947',
   successSoft: '#e8f0e3',
   dangerSoft: '#faeae6',
-  segmentTrack: '#edf1e7',
+  segmentTrack: '#eeebe4',
 } as const;
 
 export const spacing = {
@@ -28,10 +29,18 @@ export const radius = {
   pill: 24,
 } as const;
 
+export const layout = {
+  gutter: 20,
+  controlHeight: 48,
+  avatarSize: 40,
+} as const;
+
 export const typography = {
+  display: 30,
   title: 20,
+  row: 16,
   body: 15,
-  caption: 12,
-  section: 11,
+  caption: 13,
+  section: 13,
   tab: 11,
 } as const;

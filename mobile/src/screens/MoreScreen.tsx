@@ -1,5 +1,4 @@
 import React, {useCallback, useState} from 'react';
-import {StyleSheet, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MoreStackParamList} from '../navigation/AppNavigator';
@@ -7,7 +6,7 @@ import Screen from '../components/Screen';
 import PlaceHeader from '../components/PlaceHeader';
 import SectionTitle from '../components/SectionTitle';
 import ListRow from '../components/ListRow';
-import Card from '../components/Card';
+import ListSection from '../components/ListSection';
 import {getServerUrl} from '../services/settings';
 
 type Props = NativeStackScreenProps<MoreStackParamList, 'MoreHome'>;
@@ -28,12 +27,9 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
 
   return (
     <Screen scroll>
-      <PlaceHeader
-        title="Your space"
-        subtitle="Make yourself at home. Your preferences, your pace."
-      />
+      <PlaceHeader title="Your space" />
       <SectionTitle>Preferences</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           testID="more-settings"
           title="Settings"
@@ -42,9 +38,9 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           onPress={() => navigation.navigate('Settings')}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
       <SectionTitle>App</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           testID="more-about"
           title="About EBP"
@@ -53,13 +49,8 @@ export default function MoreScreen({navigation}: Props): JSX.Element {
           onPress={() => navigation.navigate('ProjectInfo')}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
       {DeveloperTools ? <DeveloperTools navigation={navigation} /> : null}
-      <View style={styles.spacer} />
     </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  spacer: {height: 24},
-});

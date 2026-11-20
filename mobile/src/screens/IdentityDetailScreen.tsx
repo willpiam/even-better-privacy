@@ -9,6 +9,7 @@ import {
 } from '../services/identityPublication';
 import Screen from '../components/Screen';
 import Card from '../components/Card';
+import ListSection from '../components/ListSection';
 import ListRow from '../components/ListRow';
 import SectionTitle from '../components/SectionTitle';
 import StatusBanner from '../components/StatusBanner';
@@ -89,7 +90,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
         </>
       ) : null}
       {publication.state === 'unpublished' && !locallyRevoked ? (
-        <Card>
+        <ListSection>
           <ListRow
             title="Publish identity"
             icon="shield"
@@ -98,7 +99,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
             onPress={() => navigation.navigate('IdentityPublish', params)}
             showDivider={false}
           />
-        </Card>
+        </ListSection>
       ) : null}
       {emails.length > 0 ? <SectionTitle>Email</SectionTitle> : null}
       {emails.map(email => (
@@ -139,7 +140,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
         </Card>
       ))}
       <SectionTitle>Manage identity</SectionTitle>
-      <Card>
+      <ListSection>
         <ListRow
           title="Identity details"
           icon="key"
@@ -162,7 +163,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
           onPress={() => navigation.navigate('IdentitySecurity', params)}
           showDivider={false}
         />
-      </Card>
+      </ListSection>
     </Screen>
   );
 }

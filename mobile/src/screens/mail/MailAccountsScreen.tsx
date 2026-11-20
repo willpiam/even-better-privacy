@@ -26,7 +26,7 @@ import BusyOverlay from '../../components/BusyOverlay';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
-import {radius, spacing, typography} from '../../theme/tokens';
+import {layout, radius, spacing, typography} from '../../theme/tokens';
 import {mailColors as colors} from './MailAppearance';
 import PlaceHeader from '../../components/PlaceHeader';
 
@@ -184,7 +184,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   };
 
   return (
-    <Screen style={styles.screen} contentStyle={styles.content}>
+    <Screen contentStyle={styles.content}>
       {secretPrompt}
       {unlockPrompt}
       <BusyOverlay
@@ -205,7 +205,6 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         {mailbox?.email != null ? (
           <AppButton
             title="Open inbox"
-            style={styles.primary}
             onPress={() => navigation.navigate('MailInbox')}
           />
         ) : null}
@@ -257,15 +256,13 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
 }
 
 const styles = StyleSheet.create({
-  screen: {backgroundColor: colors.page},
   content: {padding: 0, paddingBottom: 0},
   body: {flex: 1},
   bodyContent: {
-    padding: spacing.lg + 4,
+    padding: layout.gutter,
     paddingBottom: 32,
     gap: 14,
   },
-  primary: {backgroundColor: colors.accent},
   empty: {
     color: colors.muted,
     fontSize: typography.body,

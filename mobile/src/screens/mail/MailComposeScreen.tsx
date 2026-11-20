@@ -23,8 +23,9 @@ import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
 import type {MailAttachmentPart} from '../../services/mail/mime';
 import {statusKind} from '../../theme/statusKind';
 import {MailIcon, mailColors} from './MailAppearance';
-import PlaceHeader from '../../components/PlaceHeader';
 import {places, PlaceThemeProvider} from '../../theme/PlaceTheme';
+import {radius, spacing, typography} from '../../theme/tokens';
+import SectionTitle from '../../components/SectionTitle';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
@@ -171,13 +172,8 @@ export default function MailComposeScreen({
 
   return (
     <PlaceThemeProvider place="compose">
-      <Screen scroll style={styles.screen} contentStyle={styles.content}>
+      <Screen scroll>
         {unlockPrompt}
-        <PlaceHeader
-          title="A new letter"
-          subtitle="Encrypted when every recipient has a contact identity."
-        />
-
         {intent.kind === 'plaintext' ? (
           <StatusBanner
             kind="error"
@@ -215,7 +211,7 @@ export default function MailComposeScreen({
           />
         </View>
         {attachments.length > 0 ? (
-          <Text style={styles.sectionLabel}>ATTACHMENTS</Text>
+          <SectionTitle>Attachments</SectionTitle>
         ) : null}
         {attachments.map((item, index) => (
           <View key={`${item.filename}-${index}`} style={styles.attachmentRow}>
@@ -242,16 +238,14 @@ export default function MailComposeScreen({
         ) : null}
 
         <View style={styles.sendContext}>
-          <MailIcon name={intent.kind === 'encrypted' ? 'lock' : 'mail'} />
+          <MailIcon
+            name={intent.kind === 'encrypted' ? 'lock' : 'mail'}
+            color={places.compose.accent}
+          />
           <Text style={styles.sendHint}>{sendHint}</Text>
         </View>
         <AppButton
           title={sendTitle}
-          style={
-            intent.kind === 'encrypted' || intent.kind === 'plaintext'
-              ? styles.primary
-              : undefined
-          }
           loading={starting}
           onPress={onSend}
           disabled={intent.kind !== 'encrypted' && intent.kind !== 'plaintext'}
@@ -262,50 +256,26 @@ export default function MailComposeScreen({
 }
 
 const styles = StyleSheet.create({
-  screen: {backgroundColor: places.compose.page},
-  content: {padding: 20, paddingBottom: 40, gap: 16},
-  composeHeading: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 8,
-  },
-  headingCopy: {flex: 1, gap: 6},
-  title: {
-    fontSize: 23,
-    color: mailColors.text,
-    fontWeight: '600',
-    letterSpacing: -0.4,
-  },
-  editor: {
-    backgroundColor: mailColors.surface,
-    padding: 12,
-    gap: 12,
-    borderWidth: 1,
-    borderColor: mailColors.border,
-    borderRadius: 16,
-  },
-  sectionLabel: {
-    fontSize: 10,
-    letterSpacing: 1.4,
-    color: mailColors.muted,
-    fontWeight: '600',
-  },
+  editor: {gap: spacing.md},
   sendContext: {
     flexDirection: 'row',
     gap: 10,
     padding: 14,
-    backgroundColor: mailColors.soft,
-    borderRadius: 12,
+    backgroundColor: places.compose.soft,
+    borderRadius: radius.sm,
   },
-  sendHint: {flex: 1, fontSize: 13, lineHeight: 20, color: mailColors.muted},
-  primary: {backgroundColor: places.compose.accent},
+  sendHint: {
+    flex: 1,
+    fontSize: typography.caption,
+    lineHeight: 20,
+    color: mailColors.muted,
+  },
   note: {
-    fontSize: 13,
+    fontSize: typography.caption,
     color: mailColors.muted,
   },
   hint: {
-    fontSize: 13,
+    fontSize: typography.caption,
     color: mailColors.muted,
   },
   bodyField: {
