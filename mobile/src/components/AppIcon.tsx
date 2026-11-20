@@ -2,8 +2,10 @@ import React from 'react';
 import Svg, {Path} from 'react-native-svg';
 import {colors} from '../theme/tokens';
 
+const fileBadgeDocument = 'M9 22H4V2h8l4 4v1M12 2v4h4';
+
 const paths = {
-  key: 'M15 3a6 6 0 1 1-4.8 9.6L3 20H1v-3l7.4-7.4A6 6 0 0 1 15 3ZM16 7h.01',
+  key: 'M2.5 17.5v4H7v-3h3v-3h2.5l1-1a6.5 6.5 0 1 0-4-4zM17 7h0.01',
   contacts:
     'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M17 4a4 4 0 0 1 0 7M22 21v-2a4 4 0 0 0-3-3.87',
   shield: 'M12 2 3 6v6c0 5 9 10 9 10s9-5 9-10V6ZM8 12l3 3 5-6',
@@ -17,6 +19,9 @@ const paths = {
   sign: 'M13 5H4v16h16v-9M10 14l1-5 8-8 4 4-8 8z',
   verify: 'm5 12 4 4L19 6',
   file: 'M14 2H4v20h16V8ZM14 2v6h6M8 13h8M8 17h5',
+  fileSign: `${fileBadgeDocument}M12 17.5l7-7 3 3-7 7-4 1zM17.5 12l3 3`,
+  fileLock: `${fileBadgeDocument}M12 15h10v7H12zM14 15v-3a3 3 0 0 1 6 0v3`,
+  fileUnlock: `${fileBadgeDocument}M12 15h10v7H12zM14 15v-3a3 3 0 0 1 5.6-1.5`,
   fingerprint:
     'M4 10a8 8 0 0 1 16 0M8 21c2-3 2-6 2-11a2 2 0 0 1 4 0c0 5 0 9-2 12M5 15v-5a7 7 0 0 1 14 0v5M4 20l1-2M17 21l1-3',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',

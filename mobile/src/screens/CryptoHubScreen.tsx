@@ -55,7 +55,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         />
         <ListRow
           title="Sign file"
-          icon="file"
+          icon="fileSign"
           subtitle="Sign a file from storage"
           onPress={() => navigation.navigate('SignFile')}
         />
@@ -90,13 +90,13 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         />
         <ListRow
           title="Encrypt file"
-          icon="file"
+          icon="fileLock"
           subtitle="Encrypt a file for a contact"
           onPress={() => navigation.navigate('EncryptFile')}
         />
         <ListRow
           title="Decrypt file"
-          icon="file"
+          icon="fileUnlock"
           subtitle="Decrypt a file payload"
           onPress={() => navigation.navigate('DecryptFile')}
           showDivider={false}
