@@ -1,12 +1,14 @@
 import React, {useEffect, useState} from 'react';
 import {
   ActivityIndicator,
+  Keyboard,
   Modal,
   ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
 import {
   browseServerIdentities,
   type ServerIdentitySummary,
@@ -17,7 +19,7 @@ import Card from './Card';
 import ContactListRow from './ContactListRow';
 import InlineBusy from './InlineBusy';
 import TextField from './TextField';
-import {colors, radius, spacing, typography} from '../theme/tokens';
+import {colors, spacing, typography} from '../theme/tokens';
 
 function formatCreatedAt(createdAt?: number): string {
   if (!createdAt || !Number.isFinite(createdAt)) {
@@ -94,6 +96,10 @@ export default function BrowseContactsModal({
   };
 
   const onBrowse = async () => {
+    if (browsingLoading) {
+      return;
+    }
+    Keyboard.dismiss();
     try {
       await loadBrowsePage(1);
     } catch (error) {
@@ -128,36 +134,33 @@ export default function BrowseContactsModal({
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="fade"
+      presentationStyle="fullScreen"
+      animationType="slide"
       onRequestClose={onCancel}>
-      <View style={styles.overlay}>
-        <View style={styles.modal}>
-          <Text style={styles.title}>Browse server identities</Text>
-          {status ? <Text style={styles.status}>{status}</Text> : null}
+      <SafeAreaProvider>
+        <SafeAreaView style={styles.screen} accessibilityViewIsModal>
+          <View style={styles.header}>
+            <Text style={styles.title} accessibilityRole="header">
+              Browse server identities
+            </Text>
+            <AppButton title="Close" variant="secondary" onPress={onCancel} />
+          </View>
 
           <ScrollView
             style={styles.scroll}
-            keyboardShouldPersistTaps="handled"
-            nestedScrollEnabled>
-            <View style={styles.browseRow}>
-              <View style={styles.browseField}>
-                <TextField
-                  label="Search query"
-                  testID="contacts-browse-query"
-                  value={browseQuery}
-                  onChangeText={setBrowseQuery}
-                  autoCapitalize="none"
-                />
-              </View>
-              <AppButton
-                title="Browse"
-                testID="contacts-browse-submit"
-                onPress={onBrowse}
-                disabled={browsingLoading}
-                style={styles.browseBtn}
-              />
-            </View>
+            contentContainerStyle={styles.content}
+            automaticallyAdjustKeyboardInsets
+            keyboardShouldPersistTaps="handled">
+            <TextField
+              label="Search query"
+              testID="contacts-browse-query"
+              value={browseQuery}
+              onChangeText={setBrowseQuery}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="search"
+              onSubmitEditing={onBrowse}
+            />
             <TextField
               label="Server override (optional)"
               testID="contacts-browse-server"
@@ -169,8 +172,22 @@ export default function BrowseContactsModal({
               autoCapitalize="none"
               autoCorrect={false}
             />
+            <AppButton
+              title="Browse"
+              testID="contacts-browse-submit"
+              onPress={onBrowse}
+              disabled={browsingLoading}
+            />
 
-            {browsingLoading ? <InlineBusy message="Fetching directory…" /> : null}
+            {status ? (
+              <Text style={styles.status} accessibilityLiveRegion="polite">
+                {status}
+              </Text>
+            ) : null}
+
+            {browsingLoading ? (
+              <InlineBusy message="Fetching directory…" />
+            ) : null}
 
             {!browsingLoading &&
             browseLoaded &&
@@ -226,9 +243,7 @@ export default function BrowseContactsModal({
                 <Text style={styles.paginationInfo}>
                   {browsePagination.totalPages <= 1
                     ? `${browsePagination.total} ${
-                        browsePagination.total === 1
-                          ? 'identity'
-                          : 'identities'
+                        browsePagination.total === 1 ? 'identity' : 'identities'
                       }`
                     : `Page ${browsePage} of ${browsePagination.totalPages} (${browsePagination.total} total)`}
                 </Text>
@@ -256,48 +271,38 @@ export default function BrowseContactsModal({
               </View>
             ) : null}
           </ScrollView>
-
-          <AppButton title="Close" variant="secondary" onPress={onCancel} />
-        </View>
-      </View>
+        </SafeAreaView>
+      </SafeAreaProvider>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
+  screen: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.35)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: spacing.lg,
+    backgroundColor: colors.page,
   },
-  modal: {
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '85%',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.md,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
   },
   title: {
+    flex: 1,
     fontSize: typography.title,
     fontWeight: '700',
     color: colors.text,
   },
   status: {fontSize: typography.caption, color: colors.muted},
-  scroll: {flexGrow: 0},
+  scroll: {flex: 1},
+  content: {padding: spacing.lg, gap: spacing.md},
   muted: {fontSize: typography.caption, color: colors.muted},
-  browseRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 8,
-    marginBottom: spacing.sm,
-  },
-  browseField: {flex: 1},
-  browseBtn: {marginBottom: 0, height: 52},
-  importBtn: {height: 36, paddingHorizontal: 12},
+  importBtn: {paddingHorizontal: spacing.md},
   pagination: {alignItems: 'center', gap: 8, marginTop: 4},
   paginationInfo: {fontSize: 13, color: colors.muted},
   paginationButtons: {flexDirection: 'row', gap: 8, alignSelf: 'stretch'},
