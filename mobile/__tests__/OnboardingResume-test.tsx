@@ -7,17 +7,18 @@ import AppButton from '../src/components/AppButton';
 import TextField from '../src/components/TextField';
 import {useFocusEffect} from '@react-navigation/native';
 import {pendingSignups, savePendingSignup, completeMailboxSignup, type PendingSignup} from '../src/services/mail/pendingSignup';
-import {cancelPaymentOrder, createTestPaymentOrder, fetchPaymentOrderStatus, fetchPaymentOrderSnapshot, recoverTestPaymentOrder, signupEbpMailbox} from '../src/services/mail/ebpSignup';
-import {readMailStore} from '../src/services/mail/accountStore';
+import {cancelPaymentOrder, createTestPaymentOrder, fetchPaymentOrderStatus, fetchPaymentOrderSnapshot, recoverTestPaymentOrder, resetEbpMailbox, signupEbpMailbox} from '../src/services/mail/ebpSignup';
+import {readMailStore, selectMailAccount} from '../src/services/mail/accountStore';
 import {fetchIdentityPublication} from '../src/services/identityPublication';
-import {listIdentities} from '../src/services/storage';
+import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../src/services/storage';
 import {publishIdentity} from '../src/services/publish';
 
+const mockNavigate = jest.fn();
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock'),
 );
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({goBack: jest.fn()}),
+  useNavigation: () => ({getParent: () => ({navigate: mockNavigate})}),
   useFocusEffect: jest.fn((cb: () => void) => require('react').useEffect(cb, [cb])),
 }));
 jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react-native').View}));
@@ -30,8 +31,8 @@ jest.mock('../src/hooks/useSecretPrompt', () => ({
 jest.mock('../src/ebpCore', () => ({randomHex: () => 'abcd', validatePassword: () => ({ok: true})}));
 jest.mock('../src/services/hd', () => ({createHdIdentity: jest.fn(), createHdMnemonic: jest.fn()}));
 jest.mock('../src/services/publish', () => ({publishIdentity: jest.fn(async () => {})}));
-jest.mock('../src/services/storage', () => ({getCurrentIdentity: async () => 'Personal', listIdentities: jest.fn(), setCurrentIdentity: jest.fn()}));
-jest.mock('../src/services/mail/accountStore', () => ({readMailStore: jest.fn()}));
+jest.mock('../src/services/storage', () => ({getCurrentIdentity: jest.fn(), listIdentities: jest.fn(), setCurrentIdentity: jest.fn()}));
+jest.mock('../src/services/mail/accountStore', () => ({readMailStore: jest.fn(), selectMailAccount: jest.fn()}));
 jest.mock('../src/services/identityPublication', () => ({fetchIdentityPublication: jest.fn(), isEmailVerified: jest.fn(() => true)}));
 jest.mock('../src/services/settings', () => ({getServerUrl: async () => 'https://keys.pqpost.com', getMailTestMode: async () => true}));
 jest.mock('../src/services/mail/ebpSignup', () => ({
@@ -43,6 +44,7 @@ jest.mock('../src/services/mail/ebpSignup', () => ({
   cancelPaymentOrder: jest.fn(),
   recoverTestPaymentOrder: jest.fn(),
   createTestPaymentOrder: jest.fn(),
+  resetEbpMailbox: jest.fn(),
   signupEbpMailbox: jest.fn(),
   EbpMailApiError: class extends Error {},
 }));
@@ -50,6 +52,15 @@ jest.mock('../src/services/mail/ebpSignup', () => ({
 const signup: PendingSignup = {
   server: 'https://keys.pqpost.com', domain: 'test.pqpost.com',
   identityName: 'Personal', username: 'alice', orderId: '123e4567-e89b-42d3-a456-426614174000', testMode: true,
+};
+const mailbox = {
+  email: 'alice@test.pqpost.com',
+  fingerprint: 'fp',
+  imap: {host: 'mail.test', port: 993, secure: true},
+  smtp: {host: 'mail.test', port: 465, secure: true},
+  login: 'alice@test.pqpost.com',
+  mailPassword: 'mail-secret',
+  accountId: 'account',
 };
 let tree: renderer.ReactTestRenderer;
 const button = (id: string) => tree.root.findAllByType(AppButton).find(node => node.props.testID === id)!;
@@ -69,6 +80,7 @@ beforeEach(async () => {
   jest.clearAllMocks();
   await AsyncStorage.clear();
   await savePendingSignup(signup);
+  jest.mocked(getCurrentIdentity).mockResolvedValue('Personal');
   jest.mocked(listIdentities).mockResolvedValue([{name: 'Personal', fingerprint: 'fp', signingKeyType: 'dilithium', encryptionKeyType: 'kyber'}]);
   jest.mocked(readMailStore).mockResolvedValue({accounts: [], selectedAccountId: null});
   jest.mocked(fetchIdentityPublication).mockResolvedValue({state: 'unpublished'});
@@ -76,9 +88,8 @@ beforeEach(async () => {
   jest.mocked(cancelPaymentOrder).mockResolvedValue(undefined);
   jest.mocked(fetchPaymentOrderStatus).mockResolvedValue('pending');
   jest.mocked(recoverTestPaymentOrder).mockResolvedValue(signup.orderId);
-  jest.mocked(signupEbpMailbox).mockResolvedValue({email: 'alice@test.pqpost.com', fingerprint: 'fp',
-    imap: {host: 'mail.test', port: 993, secure: true}, smtp: {host: 'mail.test', port: 465, secure: true},
-    login: 'alice@test.pqpost.com', mailPassword: 'mail-secret', accountId: 'account'});
+  jest.mocked(signupEbpMailbox).mockResolvedValue(mailbox);
+  jest.mocked(resetEbpMailbox).mockResolvedValue(mailbox);
 });
 afterEach(async () => {if (tree) await act(async () => tree.unmount());});
 
@@ -96,6 +107,34 @@ it('resumes after an unmount, checks the same order, then completes after paymen
   expect(createTestPaymentOrder).not.toHaveBeenCalled();
   expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([]);
 });
+
+it.each(['confirmed', 'fulfilled'] as const)(
+  'opens the mailbox for a %s order with another identity active',
+  async status => {
+    jest.mocked(getCurrentIdentity).mockResolvedValue('Previous');
+    jest.mocked(fetchPaymentOrderSnapshot).mockResolvedValue({
+      status, fingerprint: 'fp', email: 'alice@test.pqpost.com',
+    });
+    jest.mocked(fetchPaymentOrderStatus).mockResolvedValue(status);
+    await mount();
+    await resume();
+    expect(status === 'fulfilled' ? resetEbpMailbox : signupEbpMailbox)
+      .toHaveBeenCalledWith(expect.objectContaining({identityName: signup.identityName}));
+    expect(setCurrentIdentity).not.toHaveBeenCalled();
+
+    await act(async () => button('onboarding-open-inbox').props.onPress());
+
+    expect(selectMailAccount).toHaveBeenCalledWith(signup.identityName, mailbox.accountId);
+    expect(setCurrentIdentity).toHaveBeenCalledWith(signup.identityName);
+    expect(mockNavigate).toHaveBeenCalledWith('MailTab', {screen: 'MailInbox'});
+    expect(mockNavigate.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(
+        jest.mocked(selectMailAccount).mock.invocationCallOrder[0],
+        jest.mocked(setCurrentIdentity).mock.invocationCallOrder[0],
+      ),
+    );
+  },
+);
 
 it('retains paid setup after a temporary mailbox error and completes on retry', async () => {
   jest.mocked(fetchPaymentOrderStatus).mockResolvedValue('confirmed');

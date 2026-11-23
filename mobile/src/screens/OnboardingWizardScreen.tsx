@@ -14,6 +14,7 @@ import {createHdIdentity, createHdMnemonic} from '../services/hd';
 import {publishIdentity} from '../services/publish';
 import {getEnforcePasswordPolicy, getMailTestMode, getServerUrl} from '../services/settings';
 import {getCurrentIdentity, listIdentities, setCurrentIdentity} from '../services/storage';
+import {selectMailAccount} from '../services/mail/accountStore';
 import {
   checkEbpUsername,
   cancelPaymentOrder,
@@ -112,7 +113,10 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const refreshGeneration = useRef(0);
   const [resuming, setResuming] = useState(false);
   const creating = useRef(false);
+  const [openingInbox, setOpeningInbox] = useState(false);
   const [result, setResult] = useState<{
+    identityName: string;
+    accountId: string;
     email: string;
     fingerprint: string;
     imap: string;
@@ -410,6 +414,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
         forgetEntry(signupCheckpoint(name));
       }
       setResult({
+        identityName: name,
+        accountId: res.accountId,
         email: res.email,
         fingerprint: res.fingerprint,
         imap: `${res.imap.host}:${res.imap.port}`,
@@ -458,6 +464,8 @@ export default function OnboardingWizardScreen(): JSX.Element {
         forgetEntry(signupCheckpoint());
       }
       setResult({
+        identityName,
+        accountId: res.accountId,
         email: res.email,
         fingerprint: res.fingerprint,
         imap: `${res.imap.host}:${res.imap.port}`,
@@ -613,8 +621,18 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setStep('password');
   };
 
-  const openInbox = () => {
-    navigation.getParent()?.navigate('MailTab', {screen: 'MailInbox'});
+  const openInbox = async () => {
+    if (!result) return;
+    setOpeningInbox(true);
+    try {
+      await selectMailAccount(result.identityName, result.accountId);
+      await setCurrentIdentity(result.identityName);
+      navigation.getParent()?.navigate('MailTab', {screen: 'MailInbox'});
+    } catch (error) {
+      Alert.alert('Could not open inbox', error instanceof Error ? error.message : String(error));
+    } finally {
+      setOpeningInbox(false);
+    }
   };
 
   const words = mnemonic.trim() ? mnemonic.trim().split(/\s+/) : [];
@@ -1001,6 +1019,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
             title="Open inbox"
             testID="onboarding-open-inbox"
             onPress={openInbox}
+            loading={openingInbox}
           />
           <AppButton
             title={showConnection ? 'Hide settings for other mail apps' : 'Use in other mail apps'}
