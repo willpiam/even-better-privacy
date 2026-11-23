@@ -62,7 +62,15 @@
           <dt>From</dt><dd id="from" class="break"></dd>
           <dt>Recipient</dt><dd id="recipient" class="break"></dd>
           <dt>Payment</dt><dd id="amount"></dd>
-          <dt id="extra-label" hidden>ADA in token output</dt><dd id="extra" hidden></dd>
+          <dt id="extra-label" hidden>
+            ADA in token <span class="info-label">output
+              <button type="button" id="min-utxo-info" class="info-button" aria-label="About minimum UTxO" aria-expanded="false" aria-controls="min-utxo-note">i</button>
+            </span>
+          </dt>
+          <dd id="extra" hidden>
+            <span id="extra-amount"></span>
+            <p id="min-utxo-note" class="info-note" hidden>Cardano requires each token output to carry a minimum amount of ADA (min-UTxO). This ADA goes to the recipient with the tokens. The network fee is listed separately.</p>
+          </dd>
           <dt>Network fee</dt><dd id="fee"></dd>
           <dt>Quote expires</dt><dd id="expiry"></dd>
         </dl>

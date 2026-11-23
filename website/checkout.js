@@ -177,7 +177,7 @@ function walletOptions() {
   }
   return new Map(Object.entries(window.cardano ?? {})
     .filter(([, provider]) => typeof provider?.enable === "function")
-    .map(([key, provider]) => [key, { name: provider.name || (key === "lace" ? "Lace" : key), provider }]));
+    .map(([key, provider]) => [key, { name: key === "lace" ? "Lace" : (provider.name || key), provider }]));
 }
 
 function showWallets() {
@@ -227,7 +227,7 @@ async function connectWallet() {
   } else {
     const api = await wallet.provider.enable();
     if (await api.getNetworkId() !== 0) throw new Error("Switch your Cardano wallet to Preview.");
-    connected = { ...wallet, api, account: await api.getChangeAddress() };
+    connected = { ...wallet, api };
   }
   showAssets();
   if (order.network) await checkFunds();
@@ -264,14 +264,35 @@ async function ethereumPayment(quote) {
   return { tx, fee: `Approximately ${decimalAmount(fee, 18)} ETH` };
 }
 
+function walletErrorMessage(error) {
+  if (typeof error?.info === "string" && error.info.trim()) return error.info;
+  if (typeof error?.message === "string" && error.message.trim()) return error.message;
+  if (typeof error === "string" && error.trim()) return error;
+  return "Checkout could not complete this step. Try again.";
+}
+
 async function cardanoInputs(quote) {
-  const { api, account } = connected;
-  if (await api.getNetworkId() !== 0 || await api.getChangeAddress() !== account) {
+  const { api, name } = connected;
+  try {
+    return await fundedCardanoInputs(api, quote);
+  } catch (error) {
+    if (/no addresses available/i.test(walletErrorMessage(error))) {
+      throw new Error(`${name} has no payment address available. Open your Preview account in the wallet and check its Receive address and test ADA balance, then check funds again.`);
+    }
+    throw error;
+  }
+}
+
+async function fundedCardanoInputs(api, quote) {
+  if (await api.getNetworkId() !== 0) {
     throw new Error("Reconnect the Cardano wallet on Preview.");
   }
   let utxos = await api.getUtxos(cip30PaymentAmount(quote));
   if (!utxos?.length) {
     const balance = cip30WalletLovelace(await api.getBalance());
+    if (balance === 0n) {
+      throw new Error("This wallet has no test ADA available. Fund your Cardano Preview account, then check funds again.");
+    }
     const paymentAda = quote.assetUnit === "lovelace" ? BigInt(quote.amountAtomic) : 0n;
     const available = balance - paymentAda;
     if (available > 0n && available < CARDANO_FUNDING_BUFFER) {
@@ -281,7 +302,9 @@ async function cardanoInputs(quote) {
     if (!utxos?.length && available > 0n) utxos = await api.getUtxos(cip30PaymentAmount(quote, 0n));
   }
   if (!utxos?.length) throw new Error(`Insufficient ${quote.asset} or ADA to fund this payment.`);
-  return { changeAddress: account, utxos };
+  const changeAddress = await api.getChangeAddress();
+  if (typeof changeAddress !== "string" || !changeAddress.trim()) throw new Error("No addresses available");
+  return { changeAddress, utxos };
 }
 
 async function cardanoPayment(quote, selection) {
@@ -289,7 +312,8 @@ async function cardanoPayment(quote, selection) {
   const built = await request("cardano-tx", { ...inputs, ...selection });
   return {
     unsignedTx: built.unsignedTx,
-    from: built.changeAddress,
+    walletAddress: inputs.changeAddress,
+    from: built.changeAddress ?? inputs.changeAddress,
     amountAtomic: built.recipientAmount,
     fee: `${decimalAmount(built.feeLovelace, 6)} ADA`,
     extra: quote.assetUnit === "lovelace" ? "" : `${decimalAmount(built.recipientLovelace, 6)} ADA`,
@@ -312,7 +336,7 @@ async function checkFunds() {
     funded = selection;
     $("balance").textContent = `Wallet can cover ${decimalAmount(quote.amountAtomic, quote.decimals)} ${asset} and the estimated network fee.`;
   } catch (error) {
-    $("balance").textContent = error.message;
+    $("balance").textContent = walletErrorMessage(error);
   }
 }
 
@@ -329,7 +353,7 @@ async function reviewPayment() {
     prepared = { ...payment, quote: order };
   } catch (error) {
     showAssets();
-    $("balance").textContent = error.message;
+    $("balance").textContent = walletErrorMessage(error);
     return;
   }
   $("review-network").textContent = networks.get(network);
@@ -337,7 +361,8 @@ async function reviewPayment() {
   $("from").textContent = prepared.from ?? connected.account;
   $("recipient").textContent = order.recipient;
   $("amount").textContent = `${decimalAmount(prepared.amountAtomic ?? order.amountAtomic, order.decimals)} ${order.asset}`;
-  $("extra").textContent = prepared.extra ?? "";
+  $("extra-amount").textContent = prepared.extra ?? "";
+  showMinUtxoInfo(false);
   $("extra").hidden = $("extra-label").hidden = !prepared.extra;
   $("fee").textContent = prepared.fee;
   $("expiry").textContent = new Date(order.expiresAt).toLocaleString();
@@ -489,7 +514,7 @@ async function sendPayment() {
       await ethereumPayment(current);
       broadcast = () => connected.provider.request({ method: "eth_sendTransaction", params: [tx] });
     } else {
-      if (await connected.api.getNetworkId() !== 0 || await connected.api.getChangeAddress() !== connected.account) {
+      if (await connected.api.getNetworkId() !== 0 || await connected.api.getChangeAddress() !== prepared.walletAddress) {
         throw new Error("The Cardano wallet changed. Reconnect it on Preview.");
       }
       showProgress("Waiting for you to approve the payment in your wallet…");
@@ -518,6 +543,11 @@ async function sendPayment() {
   });
 }
 
+function showMinUtxoInfo(expanded) {
+  $("min-utxo-info").setAttribute("aria-expanded", String(expanded));
+  $("min-utxo-note").hidden = !expanded;
+}
+
 function syncControls() {
   for (const button of document.querySelectorAll("button")) button.disabled = busy;
   $("review").disabled = busy || !funded;
@@ -537,7 +567,7 @@ async function run(action, onError = () => {}) {
   try {
     await action();
   } catch (error) {
-    showError(error.message || "Checkout could not complete this step. Try again.");
+    showError(walletErrorMessage(error));
     onError();
   } finally {
     busy = false;
@@ -586,6 +616,7 @@ $("check-funds").addEventListener("click", () => void run(checkFunds));
 $("back-network").addEventListener("click", () => { showError(""); setStep("network"); });
 $("back-wallet").addEventListener("click", () => { showError(""); showWallets(); setStep("wallet"); });
 $("back-asset").addEventListener("click", () => void run(async () => { showAssets(); await checkFunds(); }));
+$("min-utxo-info").addEventListener("click", () => showMinUtxoInfo($("min-utxo-note").hidden));
 $("send").addEventListener("click", () => void run(sendPayment, () => {
   if (savedHash || uncertain) render(order);
   else setStep("review");

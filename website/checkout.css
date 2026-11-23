@@ -54,6 +54,24 @@
 .checkout select { width: 100%; color: var(--ink); background: white; }
 .checkout button { justify-self: start; color: white; background: #8f421b; border-color: #8f421b; cursor: pointer; font-weight: 600; }
 .checkout button.secondary { color: var(--ink); background: var(--surface); border-color: var(--line); }
+.info-label { white-space: nowrap; }
+.checkout button.info-button {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-inline-start: .15rem;
+  padding: 0;
+  vertical-align: middle;
+  border-color: #c9c9c9;
+  border-radius: 50%;
+  color: #555;
+  background: transparent;
+  font-size: .8rem;
+}
+.checkout button.info-button:hover,
+.checkout button.info-button[aria-expanded="true"] { background: #eee; }
+.checkout .info-note { color: var(--ink-soft); font-size: .9rem; font-weight: 400; }
 .checkout button:disabled { color: var(--ink-soft); background: #ede8df; border-color: var(--line); cursor: default; }
 .checkout :focus-visible { outline: 2px solid #8f421b; outline-offset: 3px; }
 .actions, .status { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; }

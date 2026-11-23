@@ -21,8 +21,8 @@ try {
       expiresAt: Date.now() + 100_000, canRestart: true,
     },
     "cardano-preview": {
-      ...address, asset: "ADA", network: "cardano-preview",
-      recipient: "addr_test1example", assetUnit: "lovelace", amountAtomic: "5000000",
+      ...address, asset: "tUSDCx", network: "cardano-preview",
+      recipient: "addr_test1example", assetUnit: "ab".repeat(28) + "745553444378", amountAtomic: "2000000",
       decimals: 6, confirmations: 3, message: "pqpost:public-ref", expiresAt: Date.now() + 100_000, canRestart: true,
     },
   };
@@ -54,10 +54,18 @@ try {
         }
       },
     };
-    window.cardano = { lace: { name: "Lace", enable: async () => ({
+    window.cardanoFunded = false;
+    window.cardanoHasAddress = false;
+    window.cardanoAddressReads = 0;
+    window.cardano = { lace: { name: "lace", enable: async () => ({
       getNetworkId: async () => 0,
-      getChangeAddress: async () => "addr_test1wallet",
-      getUtxos: async () => ["wallet-utxo"],
+      getChangeAddress: async () => {
+        window.cardanoAddressReads++;
+        if (!window.cardanoHasAddress) throw { code: -2, info: "No addresses available" };
+        return "addr_test1wallet";
+      },
+      getBalance: async () => "00",
+      getUtxos: async () => window.cardanoFunded ? ["wallet-utxo"] : null,
       signTx: async unsigned => { window.cardanoUnsigned = unsigned; return "witness"; },
       submitTx: async signed => { window.cardanoSigned = signed; return hash; },
     }) } };
@@ -85,7 +93,7 @@ try {
           assert.equal(body.changeAddress, "addr_test1wallet");
           return await route.fulfill({ json: {
             ...(!body.preview && { unsignedTx: "unsigned-reviewed" }),
-            feeLovelace: "180000", recipientLovelace: "5000000", recipientAmount: "5000000",
+            feeLovelace: "180000", recipientLovelace: "1043020", recipientAmount: "2000000",
           } });
         case "cardano-assemble":
           assert.equal(body.unsignedTx, "unsigned-reviewed");
@@ -128,6 +136,7 @@ try {
   await button(page, "Review payment").click();
   await page.locator("#review-step").waitFor();
   assert.equal(await page.locator("#amount").textContent(), "4 USDC");
+  assert.equal(await button(page, "About minimum UTxO").isVisible(), false);
   assert.equal(await page.locator("[aria-current=step]").textContent(), "Review");
   assert.equal(await page.locator("pre, #transaction-form").count(), 0);
 
@@ -187,10 +196,28 @@ try {
   await page.getByRole("heading", { name: "Choose a network" }).waitFor();
 
   await connect(page, "cardano-preview", "Lace");
-  await page.locator("#asset").selectOption("ADA");
+  assert.equal(await page.evaluate(() => window.cardanoAddressReads), 0);
+  await page.locator("#asset").selectOption("tUSDCx");
+  await page.getByText("This wallet has no test ADA available.", { exact: false }).waitFor();
+  assert.equal(await page.evaluate(() => window.cardanoAddressReads), 0);
+  assert(await button(page, "Review payment").isDisabled());
+  await page.evaluate(() => { window.cardanoFunded = true; });
+  await button(page, "Check funds again").click();
+  await page.getByText("Lace has no payment address available.", { exact: false }).waitFor();
+  assert(await button(page, "Review payment").isDisabled());
+  await page.evaluate(() => { window.cardanoHasAddress = true; });
+  await button(page, "Check funds again").click();
   await button(page, "Review payment").click();
   await page.locator("#review-step").waitFor();
   assert.equal(await page.locator("#fee").textContent(), "0.18 ADA");
+  assert.equal(await page.locator("#extra-amount").textContent(), "1.04302 ADA");
+  const minUtxo = button(page, "About minimum UTxO");
+  assert.equal(await page.locator("#min-utxo-note").isVisible(), false);
+  await minUtxo.click();
+  await page.getByText("Cardano requires each token output to carry", { exact: false }).waitFor();
+  assert.equal(await minUtxo.getAttribute("aria-expanded"), "true");
+  await minUtxo.press("Enter");
+  assert.equal(await page.locator("#min-utxo-note").isVisible(), false);
   await button(page, "Submit Payment Transaction").click();
   await page.getByText("Waiting for the transaction to be included in a block…").waitFor();
   assert.equal(await page.evaluate(() => window.cardanoUnsigned), "unsigned-reviewed");
