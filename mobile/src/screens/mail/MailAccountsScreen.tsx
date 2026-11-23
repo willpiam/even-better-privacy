@@ -1,6 +1,19 @@
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import React, {useCallback, useRef, useState} from 'react';
-import {ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import {
+  BackHandler,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
@@ -22,7 +35,10 @@ import {
 } from '../../services/mail/ebpSignup';
 import Screen from '../../components/Screen';
 import AppButton from '../../components/AppButton';
+import AppIcon from '../../components/AppIcon';
 import BusyOverlay from '../../components/BusyOverlay';
+import Card from '../../components/Card';
+import ListRow from '../../components/ListRow';
 import StatusBanner from '../../components/StatusBanner';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {statusKind} from '../../theme/statusKind';
@@ -44,8 +60,43 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
   const [status, setStatus] = useState('');
   const [needsRestore, setNeedsRestore] = useState(false);
   const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const hasMailbox = mailbox?.email != null;
   const promptedThisFocus = useRef(false);
   const refreshVersion = useRef(0);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+        setMenuOpen(false);
+        return true;
+      },
+    );
+    return () => subscription.remove();
+  }, [menuOpen]);
+
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: hasMailbox
+        ? () => (
+            <Pressable
+              testID="mail-add"
+              accessibilityRole="button"
+              accessibilityLabel="Add mail account"
+              accessibilityState={{expanded: menuOpen}}
+              style={({pressed}) => [
+                styles.headerAction,
+                (pressed || menuOpen) && styles.headerActionActive,
+              ]}
+              onPress={() => setMenuOpen(open => !open)}>
+              <AppIcon name="plus" color={colors.accent} />
+            </Pressable>
+          )
+        : undefined,
+    });
+  }, [navigation, hasMailbox, menuOpen]);
 
   const refresh = useCallback(async (onLocked?: () => void) => {
     const version = ++refreshVersion.current;
@@ -144,6 +195,7 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
       })();
       return () => {
         cancelled = true;
+        setMenuOpen(false);
         refreshVersion.current += 1;
       };
     }, []),
@@ -195,14 +247,16 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
         style={styles.body}
         contentContainerStyle={styles.bodyContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        accessibilityElementsHidden={menuOpen}
+        importantForAccessibility={menuOpen ? 'no-hide-descendants' : 'auto'}>
         <PlaceHeader
           place="mail"
           title="Your mail"
           subtitle={mailbox?.email ?? ''}
           eyebrow={`CURRENT IDENTITY · ${mailbox?.identityName ?? '…'}`}
         />
-        {mailbox?.email != null ? (
+        {hasMailbox ? (
           <AppButton
             title="Open inbox"
             onPress={() => navigation.navigate('MailInbox')}
@@ -251,6 +305,38 @@ export default function MailAccountsScreen({navigation}: Props): JSX.Element {
           />
         ) : null}
       </ScrollView>
+      {menuOpen ? (
+        <View style={StyleSheet.absoluteFill}>
+          <Pressable
+            testID="mail-menu-dismiss"
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss mail account menu"
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMenuOpen(false)}
+          />
+          <Card style={styles.menu}>
+            <ListRow
+              testID="mail-add-account"
+              title="Add account"
+              showChevron={false}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('MailAccountSetup', {});
+              }}
+            />
+            <ListRow
+              testID="mail-onboarding"
+              title="Create an EBP email address"
+              showChevron={false}
+              showDivider={false}
+              onPress={() => {
+                setMenuOpen(false);
+                navigation.navigate('OnboardingWizard');
+              }}
+            />
+          </Card>
+        </View>
+      ) : null}
     </Screen>
   );
 }
@@ -262,6 +348,26 @@ const styles = StyleSheet.create({
     padding: layout.gutter,
     paddingBottom: 32,
     gap: 14,
+  },
+  headerAction: {
+    minWidth: layout.controlHeight,
+    minHeight: layout.controlHeight,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerActionActive: {backgroundColor: colors.pale},
+  menu: {
+    position: 'absolute',
+    top: 0,
+    end: layout.gutter,
+    width: 260,
+    maxWidth: '88%',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: {width: 0, height: 3},
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
   empty: {
     color: colors.muted,

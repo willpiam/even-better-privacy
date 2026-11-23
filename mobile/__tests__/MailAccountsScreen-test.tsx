@@ -1,4 +1,5 @@
 import React from 'react';
+import type {GestureResponderEvent, PressableProps} from 'react-native';
 import renderer, {act} from 'react-test-renderer';
 import MailAccountsScreen from '../src/screens/mail/MailAccountsScreen';
 import AppButton from '../src/components/AppButton';
@@ -48,7 +49,13 @@ jest.mock('../src/hooks/useSecretPrompt', () => ({
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
 }));
-const navigation = {navigate: jest.fn()};
+const navigation = {
+  navigate: jest.fn(),
+  setOptions: jest.fn<
+    void,
+    [{headerRight?: () => React.ReactElement<PressableProps>}]
+  >(),
+};
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(useIdentityUnlock).mockReturnValue({
@@ -173,6 +180,9 @@ describe('account creation actions', () => {
     'keeps %s directly available with no accounts',
     async (id, target) => {
       await renderAccounts(false);
+      expect(navigation.setOptions).toHaveBeenLastCalledWith({
+        headerRight: undefined,
+      });
       expect(
         tree.root.findAllByType(AppButton).map(node => node.props.title),
       ).toEqual(
@@ -182,6 +192,28 @@ describe('account creation actions', () => {
       expect(navigation.navigate).toHaveBeenCalledWith(...target);
     },
   );
+
+  it.each([
+    ['mail-add-account', ['MailAccountSetup', {}]],
+    ['mail-onboarding', ['OnboardingWizard']],
+  ] as const)('opens %s from the header menu', async (id, target) => {
+    await renderAccounts(true);
+    const headerButton = () =>
+      navigation.setOptions.mock.lastCall?.[0].headerRight?.();
+
+    expect(headerButton()?.props.accessibilityLabel).toBe('Add mail account');
+    expect(headerButton()?.props.accessibilityState?.expanded).toBe(false);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(0);
+
+    await act(async () =>
+      headerButton()?.props.onPress?.({} as GestureResponderEvent),
+    );
+    expect(headerButton()?.props.accessibilityState?.expanded).toBe(true);
+    await pressAction(id);
+    expect(navigation.navigate).toHaveBeenCalledWith(...target);
+    expect(headerButton()?.props.accessibilityState?.expanded).toBe(false);
+    expect(tree.root.findAllByType(ListRow)).toHaveLength(0);
+  });
 
   it('shows the active mailbox address and opens the inbox without an account list', async () => {
     await renderAccounts(true);
