@@ -49,26 +49,26 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         <ListRow
           title="Verify message"
           icon="verify"
-          subtitle="Check a signed payload"
+          subtitle="Check a signed message or detached signature"
           testID="crypto-verify-message"
           onPress={() => navigation.navigate('VerifyMessage')}
         />
         <ListRow
           title="Sign file"
           icon="fileSign"
-          subtitle="Sign a file from storage"
+          subtitle="Create a separate signature for a file"
           onPress={() => navigation.navigate('SignFile')}
         />
         <ListRow
           title="Verify file"
           icon="certificate"
-          subtitle="Verify a file signature"
+          subtitle="Check an original file against its signature"
           onPress={() => navigation.navigate('VerifyFile')}
         />
         <ListRow
-          title="Fingerprint from public JSON"
+          title="Identity fingerprint"
           icon="fingerprint"
-          subtitle="Compute fingerprint from a public identity"
+          subtitle="Calculate a fingerprint from a public identity export"
           onPress={() => navigation.navigate('FingerprintTool')}
           showDivider={false}
         />
@@ -85,7 +85,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         <ListRow
           title="Decrypt message"
           icon="unlock"
-          subtitle="Decrypt a message payload"
+          subtitle="Open a message encrypted for your identity"
           onPress={() => navigation.navigate('DecryptMessage')}
         />
         <ListRow
@@ -97,7 +97,7 @@ export default function CryptoHubScreen({navigation}: Props): JSX.Element {
         <ListRow
           title="Decrypt file"
           icon="fileUnlock"
-          subtitle="Decrypt a file payload"
+          subtitle="Recover a file from its encrypted payload"
           onPress={() => navigation.navigate('DecryptFile')}
           showDivider={false}
         />

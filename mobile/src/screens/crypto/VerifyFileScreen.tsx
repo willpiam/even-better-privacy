@@ -1,115 +1,95 @@
 import React, {useState} from 'react';
 import {Text} from 'react-native';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
-import {verifyFileSignature} from '../../services/signVerify';
 import {parseEbpPayloadInput} from '../../ebpCore';
-import Screen from '../../components/Screen';
-import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import CopyableOutput from '../../components/CopyableOutput';
-import StatusBanner from '../../components/StatusBanner';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {verifyFileSignature} from '../../services/signVerify';
+import {ToolDisclosure, ToolForm, ToolHint} from './ToolForm';
+import {ToolFileInput, ToolFileOptions, ToolImportField} from './ToolInputs';
+import {ToolCopy, ToolResult, toolResultStyles} from './ToolResult';
+import type {ToolFile} from './toolFiles';
+import {useToolAction} from './useToolAction';
 
 export default function VerifyFileScreen(): JSX.Element {
-  const [verifyFileUri, setVerifyFileUri] = useState('');
-  const [verifyFileName, setVerifyFileName] = useState('');
-  const [verifyFilePayload, setVerifyFilePayload] = useState('');
-  const [verifyFileOutput, setVerifyFileOutput] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [file, setFile] = useState<ToolFile | null>(null);
+  const [uri, setUri] = useState('');
+  const [signature, setSignature] = useState('');
+  const action =
+    useToolAction<Awaited<ReturnType<typeof verifyFileSignature>>>();
+  const fileUri = uri.trim() || file?.uri || '';
 
-  const pickVerifyFile = async () => {
-    try {
-      const [file] = await pick({mode: 'open'});
-      const [copyResult] = await keepLocalCopy({
-        files: [{uri: file.uri, fileName: file.name ?? 'picked-file'}],
-        destination: 'cachesDirectory',
-      });
-      if (copyResult.status === 'success') {
-        setVerifyFileUri(copyResult.localUri);
-        setVerifyFileName(file.name ?? 'picked-file');
-      } else {
-        throw new Error(copyResult.copyError);
+  const onVerify = () =>
+    action.run(async () => {
+      const payload = parseEbpPayloadInput(signature);
+      if (payload.type !== 'ebp-signed-file') {
+        throw new Error('Choose the signature that was created for this file.');
       }
-    } catch {
-      // User cancelled picker.
-    }
-  };
+      return verifyFileSignature({fileUri, payload});
+    });
 
-  const onVerifyFile = async () => {
-    setBusyMessage('Verifying file signature…');
-    setStatus('');
-    try {
-      const payload = parseEbpPayloadInput(verifyFilePayload);
-      const result = await verifyFileSignature({
-        fileUri: verifyFileUri,
-        payload,
-      });
-      setVerifyFileOutput(
-        `${result.verified ? 'Valid' : 'Invalid'}\n\n${result.details}\n\n${result.signedMessage}`,
-      );
-      setStatus('File verification complete');
-    } catch (error) {
-      setVerifyFileOutput('');
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const busy = busyMessage !== null;
-
+  const result = action.result;
+  const verdict = result?.verified
+    ? 'Valid file signature'
+    : 'Invalid file signature';
   return (
-    <Screen scroll>
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <AppButton title="Pick File" onPress={pickVerifyFile} />
-      {verifyFileName ? (
-        <Text style={cryptoStyles.helpText} testID="verify-file-name">
-          Selected: {verifyFileName}
-        </Text>
-      ) : (
-        <Text style={cryptoStyles.helpText}>No file selected.</Text>
-      )}
-      <AppButton
-        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
-        variant="secondary"
-        onPress={() => setShowAdvanced(value => !value)}
+    <ToolForm
+      description="Choose the original file and provide its separate signature."
+      action={action}
+      title="Verify file"
+      busyTitle="Verifying…"
+      disabled={!fileUri || !signature.trim()}
+      onSubmit={onVerify}
+      result={
+        result && (
+          <ToolResult
+            title={verdict}
+            tone={result.verified ? 'success' : 'error'}>
+            <Text style={toolResultStyles.text} selectable>
+              {result.details}
+            </Text>
+            {result.verified ? (
+              <ToolHint>
+                Compare the signer fingerprint with one you trust.
+              </ToolHint>
+            ) : null}
+            {result.signedMessage ? (
+              <ToolDisclosure label="Signed text">
+                <Text style={toolResultStyles.text} selectable>
+                  {result.signedMessage}
+                </Text>
+              </ToolDisclosure>
+            ) : null}
+            <ToolCopy
+              title="Copy verification details"
+              value={[verdict, result.details, result.signedMessage]
+                .filter(Boolean)
+                .join('\n\n')}
+            />
+          </ToolResult>
+        )
+      }>
+      <ToolFileInput
+        action={action}
+        label="Original file"
+        file={file}
+        nameTestID="verify-file-name"
+        overridden={!!uri.trim()}
+        onPick={action.edit(selected => {
+          setFile(selected);
+          setUri('');
+        })}
       />
-      {showAdvanced ? (
-        <TextField
-          label="File URI (advanced)"
-          keyboardType="url"
-          autoCorrect={false}
-          spellCheck={false}
-          value={verifyFileUri}
-          onChangeText={setVerifyFileUri}
-          placeholder="file:///..."
-          autoCapitalize="none"
-        />
-      ) : null}
-      <TextField
-        label="Signed file payload"
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        value={verifyFilePayload}
-        onChangeText={setVerifyFilePayload}
-        placeholder="Signed file payload JSON"
-        multiline
+      <ToolFileOptions
+        uri={uri}
+        onChange={action.edit(setUri)}
+        disabled={action.pending !== null}
       />
-      <AppButton
-        title={busy ? 'Verifying…' : 'Verify File Signature'}
-        onPress={onVerifyFile}
-        disabled={busy}
+      <ToolImportField
+        action={action}
+        label="File signature"
+        placeholder="Paste the separate signature"
+        value={signature}
+        onChange={action.edit(setSignature)}
+        pasteMessage="Pasted file signature"
       />
-      <CopyableOutput
-        value={verifyFileOutput}
-        placeholder="File verification result…"
-      />
-    </Screen>
+    </ToolForm>
   );
 }

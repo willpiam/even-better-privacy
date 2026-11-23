@@ -1,190 +1,156 @@
 import React, {useState} from 'react';
-import {Switch, Text, View} from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
-import RNFS from 'react-native-fs';
-import {verifyMessage} from '../../services/signVerify';
-import {parseEbpPayloadInput, type ExternalIdentity} from '../../ebpCore';
-import Screen from '../../components/Screen';
+import {Text} from 'react-native';
 import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import StatusBanner from '../../components/StatusBanner';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {parseEbpPayloadInput, type ExternalIdentity} from '../../ebpCore';
+import {verifyMessage} from '../../services/signVerify';
+import {ToolForm, ToolHint, ToolToggle} from './ToolForm';
+import {ToolImportField} from './ToolInputs';
+import {ToolResult, toolResultStyles} from './ToolResult';
+import {useToolAction} from './useToolAction';
 
 function parsePublicIdentityJson(raw: string): ExternalIdentity {
-  const parsed = JSON.parse(raw) as Record<string, unknown>;
-  if (!parsed || typeof parsed !== 'object') {
-    throw new Error('Public keys must be a JSON object');
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(raw.trim());
+  } catch {
+    throw new Error(
+      'Public identity JSON is invalid. Check the export and try again.',
+    );
   }
-  if (typeof parsed.signingKey !== 'string' || !parsed.signingKey) {
-    throw new Error('public identity missing signing key');
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Public identity JSON must contain an object.');
   }
-  if (typeof parsed.signingKeyType !== 'string' || !parsed.signingKeyType) {
-    throw new Error('public identity missing signing key type');
+  if (
+    typeof parsed.signingKey !== 'string' ||
+    !parsed.signingKey ||
+    typeof parsed.signingKeyType !== 'string' ||
+    !parsed.signingKeyType
+  ) {
+    throw new Error(
+      'Provide a public identity export that includes its signing key.',
+    );
   }
   return parsed as unknown as ExternalIdentity;
 }
 
 export default function VerifyMessageScreen(): JSX.Element {
-  const [verifyPayload, setVerifyPayload] = useState('');
-  const [verifyMessageText, setVerifyMessageText] = useState('');
+  const [payloadText, setPayloadText] = useState('');
+  const [message, setMessage] = useState('');
   const [usePublicKeys, setUsePublicKeys] = useState(false);
-  const [publicKeysJson, setPublicKeysJson] = useState('');
-  const [verifyOutput, setVerifyOutput] = useState('');
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [publicKeys, setPublicKeys] = useState('');
+  const action = useToolAction<{verified: boolean; message: string}>();
+  const busy = action.pending !== null;
 
-  const pastePublicKeys = () => {
-    void Clipboard.getString().then(text => {
-      if (text.trim()) {
-        setPublicKeysJson(text);
-        setStatus('Pasted public keys');
-      } else {
-        setStatus('Clipboard is empty');
+  const onVerify = () =>
+    action.run(async () => {
+      const payload = parseEbpPayloadInput(payloadText);
+      if (payload.type === 'ebp-signature' && !message) {
+        throw new Error(
+          'Enter the exact original message to verify this detached signature.',
+        );
+      }
+      try {
+        const result = await verifyMessage({
+          payload,
+          message: message || undefined,
+          publicIdentity: usePublicKeys
+            ? parsePublicIdentityJson(publicKeys)
+            : undefined,
+        });
+        return {
+          ...result,
+          message:
+            payload.type === 'ebp-signed-message'
+              ? String(payload.message ?? '')
+              : message,
+        };
+      } catch (error) {
+        if (error instanceof Error && error.message === 'Contact not found') {
+          throw new Error(
+            'Signing key not found. Provide the signer’s public identity export and try again.',
+          );
+        }
+        if (
+          error instanceof Error &&
+          error.message === 'Message hash mismatch'
+        ) {
+          return {verified: false, message: ''};
+        }
+        throw error;
       }
     });
-  };
 
-  const importPublicKeysFile = async () => {
-    try {
-      const [file] = await pick({mode: 'open'});
-      const [copyResult] = await keepLocalCopy({
-        files: [{uri: file.uri, fileName: file.name ?? 'public-keys.json'}],
-        destination: 'cachesDirectory',
-      });
-      if (copyResult.status !== 'success') {
-        throw new Error(copyResult.copyError);
-      }
-      const path = copyResult.localUri.startsWith('file://')
-        ? copyResult.localUri.replace('file://', '')
-        : copyResult.localUri;
-      const contents = await RNFS.readFile(path, 'utf8');
-      setPublicKeysJson(contents);
-      setStatus('Imported public keys file');
-    } catch {
-      // User cancelled picker.
-    }
-  };
-
-  const onVerify = async () => {
-    setBusyMessage('Verifying signature…');
-    setStatus('');
-    try {
-      const payload = parseEbpPayloadInput(verifyPayload);
-      let publicIdentity: ExternalIdentity | undefined;
-      if (usePublicKeys) {
-        if (!publicKeysJson.trim()) {
-          throw new Error('Public keys JSON is required');
-        }
-        publicIdentity = parsePublicIdentityJson(publicKeysJson);
-      }
-      const result = await verifyMessage({
-        payload,
-        message: verifyMessageText || undefined,
-        publicIdentity,
-      });
-      setVerifyOutput(result.verified ? 'Valid signature' : 'Invalid signature');
-      setStatus('Verification complete');
-    } catch (error) {
-      setVerifyOutput('');
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const busy = busyMessage !== null;
-
+  const result = action.result;
   return (
-    <Screen scroll>
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
+    <ToolForm
+      description="Check a signed message or a detached signature from Even Better Privacy."
+      action={action}
+      title="Verify message"
+      busyTitle="Verifying…"
+      testID="verify-submit"
+      disabled={!payloadText.trim() || (usePublicKeys && !publicKeys.trim())}
+      onSubmit={onVerify}
+      result={
+        result && (
+          <ToolResult
+            title={result.verified ? 'Valid signature' : 'Invalid signature'}
+            tone={result.verified ? 'success' : 'error'}
+            testID="verify-result">
+            {result.verified ? (
+              <>
+                <ToolHint>
+                  Confirm the signer’s public identity before relying on the
+                  signature.
+                </ToolHint>
+                <Text style={toolResultStyles.text} selectable>
+                  {result.message}
+                </Text>
+              </>
+            ) : null}
+          </ToolResult>
+        )
+      }>
+      <ToolImportField
+        action={action}
         label="Signed payload"
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
+        placeholder="Paste JSON or an EBP block"
+        value={payloadText}
+        onChange={action.edit(setPayloadText)}
+        pasteMessage="Pasted payload"
         testID="verify-payload-input"
-        value={verifyPayload}
-        onChangeText={setVerifyPayload}
-        placeholder="Signed payload JSON"
-        multiline
-      />
-      <AppButton
-        title="Paste from clipboard"
-        testID="verify-paste-clipboard"
-        variant="secondary"
-        onPress={() => {
-          void Clipboard.getString().then(text => {
-            if (text.trim()) {
-              setVerifyPayload(text);
-              setStatus('Pasted payload');
-            } else {
-              setStatus('Clipboard is empty');
-            }
-          });
-        }}
+        pasteTestID="verify-paste-clipboard"
       />
       <TextField
         label="Detached message"
-        value={verifyMessageText}
-        onChangeText={setVerifyMessageText}
-        placeholder="Detached message (if needed)"
+        value={message}
+        onChangeText={action.edit(setMessage)}
+        placeholder="Original text, only for a detached signature"
+        editable={!busy}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
         multiline
       />
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>
-          Provide public keys for verification
-        </Text>
-        <Switch
-          testID="verify-use-public-keys"
-          value={usePublicKeys}
-          onValueChange={setUsePublicKeys}
-        />
-      </View>
-      {usePublicKeys ? (
-        <>
-          <TextField
-            label="Public keys JSON"
-            testID="verify-public-keys"
-            spellCheck={false}
-            value={publicKeysJson}
-            onChangeText={setPublicKeysJson}
-            placeholder='{"fingerprint":"...","signingKey":"...","signingKeyType":"..."}'
-            multiline
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-          <View style={cryptoStyles.signActions}>
-            <AppButton
-              title="Paste"
-              testID="verify-public-keys-paste"
-              variant="secondary"
-              onPress={pastePublicKeys}
-              style={cryptoStyles.flexBtn}
-            />
-            <AppButton
-              title="Import public keys file"
-              variant="secondary"
-              onPress={importPublicKeysFile}
-              style={cryptoStyles.flexBtn}
-            />
-          </View>
-        </>
-      ) : null}
-      <AppButton
-        title={busy ? 'Verifying…' : 'Verify Message'}
-        testID="verify-submit"
-        onPress={onVerify}
+      <ToolToggle
+        label="Use a public identity export"
+        hint="Use a public key you received separately to check the signature."
+        value={usePublicKeys}
+        onChange={action.edit(setUsePublicKeys)}
         disabled={busy}
+        testID="verify-use-public-keys"
       />
-      {verifyOutput ? (
-        <Text testID="verify-result" style={cryptoStyles.output}>
-          {verifyOutput}
-        </Text>
+      {usePublicKeys ? (
+        <ToolImportField
+          action={action}
+          label="Public identity JSON"
+          placeholder="Paste a public identity export with a signing key"
+          value={publicKeys}
+          onChange={action.edit(setPublicKeys)}
+          pasteMessage="Pasted public keys"
+          testID="verify-public-keys"
+          pasteTestID="verify-public-keys-paste"
+        />
       ) : null}
-    </Screen>
+    </ToolForm>
   );
 }

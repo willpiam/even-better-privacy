@@ -1,94 +1,74 @@
 import React, {useState} from 'react';
-import {Switch, Text, View} from 'react-native';
-import Share from 'react-native-share';
-import {encryptMessage} from '../../services/encryptDecrypt';
-import {getCurrentIdentityRequired} from '../../services/storage';
-import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import ContactPicker from '../../components/ContactPicker';
-import CopyableOutput from '../../components/CopyableOutput';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {encryptMessage} from '../../services/encryptDecrypt';
+import {ToolForm, ToolIdentity, ToolToggle} from './ToolForm';
+import {ToolContact} from './ToolInputs';
+import {ToolPayloadResult} from './ToolResult';
+import {useToolAction} from './useToolAction';
 
 export default function EncryptMessageScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [recipient, setRecipient] = useState('');
   const [message, setMessage] = useState('');
   const [sign, setSign] = useState(false);
-  const [encryptOutput, setEncryptOutput] = useState('');
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const action = useToolAction<string>();
+  const busy = action.pending !== null;
 
-  const onEncrypt = async () => {
-    setStatus('');
-    try {
-      const identityName = await getCurrentIdentityRequired();
-      if (sign) {
-        const unlocked = await ensureUnlocked(identityName);
-        if (!unlocked) {
-          return;
-        }
-      }
-      setBusyMessage('Encrypting message…');
+  const onEncrypt = () =>
+    action.run(async () => {
+      const identityName = sign ? await ensureUnlocked() : undefined;
+      if (identityName === null) return;
       const payload = await encryptMessage({
         identityName,
         message,
-        recipient,
+        recipient: recipient.trim(),
         sign,
       });
-      setEncryptOutput(JSON.stringify(payload, null, 2));
-      setStatus('Message encrypted');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const busy = busyMessage !== null;
+      return JSON.stringify(payload, null, 2);
+    });
 
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Create an encrypted message that your chosen contact can open."
+      action={action}
+      title="Encrypt message"
+      busyTitle="Encrypting…"
+      disabled={!message || !recipient.trim()}
+      onSubmit={onEncrypt}
+      result={
+        action.result && (
+          <ToolPayloadResult
+            title="Message encrypted"
+            description="Send the encrypted payload to your recipient."
+            value={action.result}
+          />
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <ContactPicker
+      <ToolContact
         value={recipient}
-        onChange={setRecipient}
-        placeholder="Recipient (name or fingerprint)"
+        onChange={action.edit(setRecipient)}
+        disabled={busy}
       />
       <TextField
         label="Message"
         value={message}
-        onChangeText={setMessage}
-        placeholder="Message"
+        onChangeText={action.edit(setMessage)}
+        placeholder="Enter the message to encrypt"
+        editable={!busy}
         multiline
+        autoCorrect={false}
+        spellCheck={false}
       />
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Sign with identity</Text>
-        <Switch value={sign} onValueChange={setSign} />
-      </View>
-      <AppButton
-        title={busy ? 'Encrypting…' : 'Encrypt Message'}
-        onPress={onEncrypt}
+      <ToolToggle
+        label="Sign with my identity"
+        hint="Let your recipient verify who signed the message."
+        value={sign}
+        onChange={action.edit(setSign)}
         disabled={busy}
       />
-      <AppButton
-        title="Share Output"
-        variant="secondary"
-        disabled={!encryptOutput}
-        onPress={() => {
-          void Share.open({message: encryptOutput, failOnCancel: false});
-        }}
-      />
-      <CopyableOutput
-        value={encryptOutput}
-        placeholder="Encrypted message payload…"
-      />
-    </Screen>
+      {sign ? <ToolIdentity verb="Signing" /> : null}
+    </ToolForm>
   );
 }

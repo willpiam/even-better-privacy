@@ -38,7 +38,7 @@ env:
       id: "identity-export-public-output-copy"
     timeout: 10000
 
-# Sign: detached ON, include-identity OFF (overwrites Android clipboard with signature)
+# Sign with a detached signature and leave the public identity out.
 - tapOn:
     id: "tab-crypto"
 - extendedWaitUntil:
@@ -55,6 +55,8 @@ env:
     id: "sign-message-input"
 - inputText: ${SIGN_MESSAGE}
 - hideKeyboard
+- tapOn:
+    id: "sign-options"
 - scrollUntilVisible:
     element:
       id: "sign-detached"
@@ -64,8 +66,6 @@ env:
     id: "sign-detached"
 - tapOn:
     id: "sign-include-identity"
-- assertVisible:
-    id: "sign-include-salt"
 - scrollUntilVisible:
     element:
       id: "sign-message-submit"
@@ -89,10 +89,11 @@ env:
 - tapOn:
     id: "password-modal-submit"
 - extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
+    visible: "Message signed"
     timeout: 120000
 - assertVisible: "Message signed"
+- tapOn:
+    id: "sign-message-output-copy"
 - back
 - extendedWaitUntil:
     visible:
@@ -123,9 +124,10 @@ env:
     timeout: 10000
 - tapOn:
     id: "verify-use-public-keys"
-- extendedWaitUntil:
-    visible:
+- scrollUntilVisible:
+    element:
       id: "verify-public-keys-paste"
+    direction: DOWN
     timeout: 10000
 
 # Restore public JSON onto Android clipboard from the still-mounted identity detail
@@ -157,7 +159,7 @@ env:
 - tapOn:
     id: "verify-submit"
 - extendedWaitUntil:
-    visible: "Verification complete"
+    visible: "Valid signature"
     timeout: 60000
 - assertVisible:
     id: "verify-result"

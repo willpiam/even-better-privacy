@@ -1,17 +1,12 @@
 import React, {useState} from 'react';
-import {Alert, Switch, Text, View} from 'react-native';
-import Share from 'react-native-share';
-import Clipboard from '@react-native-clipboard/clipboard';
-import {signMessage} from '../../services/signVerify';
-import Screen from '../../components/Screen';
+import {Alert} from 'react-native';
 import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import CopyableOutput from '../../components/CopyableOutput';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {signMessage} from '../../services/signVerify';
+import {getCurrentIdentityRequired} from '../../services/storage';
+import {ToolDisclosure, ToolForm, ToolIdentity, ToolToggle} from './ToolForm';
+import {ToolPayloadResult} from './ToolResult';
+import {useToolAction} from './useToolAction';
 
 export default function SignMessageScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
@@ -19,132 +14,100 @@ export default function SignMessageScreen(): JSX.Element {
   const [detached, setDetached] = useState(false);
   const [includeIdentity, setIncludeIdentity] = useState(true);
   const [includeSalt, setIncludeSalt] = useState(true);
-  const [signOutput, setSignOutput] = useState('');
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const action = useToolAction<string>();
+  const busy = action.pending !== null;
 
-  const runSign = async (identityName: string) => {
-    setBusyMessage('Signing message…');
-    setStatus('');
-    try {
+  const onSign = () =>
+    action.run(async () => {
+      const identityName = await getCurrentIdentityRequired();
+      const confirmed = await new Promise<boolean>(resolve => {
+        Alert.alert(
+          'Confirm sign',
+          `Sign this message with ${identityName}?`,
+          [
+            {text: 'Cancel', style: 'cancel', onPress: () => resolve(false)},
+            {text: 'Sign', onPress: () => resolve(true)},
+          ],
+          {cancelable: true, onDismiss: () => resolve(false)},
+        );
+      });
+      if (!confirmed || !(await ensureUnlocked(identityName))) {
+        return;
+      }
       const payload = await signMessage({
         identityName,
         message,
         options: {detached, includeIdentity, includeSalt},
       });
-      const serialized = JSON.stringify(payload, null, 2);
-      Clipboard.setString(serialized);
-      setSignOutput(serialized);
-      setStatus('Message signed');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const onSign = () => {
-    Alert.alert('Confirm sign', 'Sign this message with the current identity?', [
-      {text: 'Cancel', style: 'cancel'},
-      {
-        text: 'Sign',
-        onPress: () => {
-          void (async () => {
-            try {
-              const identityName = await ensureUnlocked();
-              if (!identityName) {
-                return;
-              }
-              await runSign(identityName);
-            } catch (error) {
-              setStatus(error instanceof Error ? error.message : String(error));
-            }
-          })();
-        },
-      },
-    ]);
-  };
-
-  const busy = busyMessage !== null;
+      return JSON.stringify(payload, null, 2);
+    });
 
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Create a signature so someone can verify who signed your message and whether it changed."
+      action={action}
+      title="Sign message"
+      busyTitle="Signing…"
+      testID="sign-message-submit"
+      disabled={!message}
+      onSubmit={onSign}
+      result={
+        action.result && (
+          <ToolPayloadResult
+            testID="sign-message-output"
+            title="Message signed"
+            description={
+              detached
+                ? 'Send the signature and the original message separately.'
+                : 'The payload includes your message in plain text.'
+            }
+            value={action.result}
+          />
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
+      <ToolIdentity verb="Signing" />
       <TextField
         label="Message"
         testID="sign-message-input"
         value={message}
-        onChangeText={setMessage}
-        placeholder="Message"
+        onChangeText={action.edit(setMessage)}
+        placeholder="Enter the exact text to sign"
+        editable={!busy}
         multiline
         autoCapitalize="none"
         autoCorrect={false}
+        spellCheck={false}
       />
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Detached signature</Text>
-        <Switch
+      <ToolDisclosure
+        label="Signature options"
+        disabled={busy}
+        testID="sign-options">
+        <ToolToggle
+          label="Detached signature"
+          hint="Keep the original message separate from its signature."
           testID="sign-detached"
           value={detached}
-          onValueChange={setDetached}
+          onChange={action.edit(setDetached)}
+          disabled={busy}
         />
-      </View>
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Include identity</Text>
-        <Switch
+        <ToolToggle
+          label="Include public identity"
+          hint="Include the public keys needed to check the signature."
           testID="sign-include-identity"
           value={includeIdentity}
-          onValueChange={setIncludeIdentity}
+          onChange={action.edit(setIncludeIdentity)}
+          disabled={busy}
         />
-      </View>
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Include random salt</Text>
-        <Switch
+        <ToolToggle
+          label="Include random salt"
+          hint="Use a new random value each time you sign."
           testID="sign-include-salt"
           value={includeSalt}
-          onValueChange={setIncludeSalt}
-        />
-      </View>
-      <Text style={cryptoStyles.helpText}>
-        Signs ebp::message::v1::&lt;sha256&gt;::&lt;optional salt&gt; rather than
-        the raw message body.
-      </Text>
-      <View style={cryptoStyles.signActions}>
-        <AppButton
-          title={busy ? 'Signing…' : 'Sign Message'}
-          testID="sign-message-submit"
-          onPress={onSign}
+          onChange={action.edit(setIncludeSalt)}
           disabled={busy}
-          style={cryptoStyles.flexBtn}
         />
-        <AppButton
-          title="Copy"
-          testID="sign-message-output-copy"
-          variant="secondary"
-          disabled={!signOutput}
-          onPress={() => {
-            if (signOutput) {
-              Clipboard.setString(signOutput);
-            }
-          }}
-          style={cryptoStyles.flexBtn}
-        />
-      </View>
-      <AppButton
-        title="Share Output"
-        variant="secondary"
-        disabled={!signOutput}
-        onPress={() => {
-          void Share.open({message: signOutput, failOnCancel: false});
-        }}
-      />
-      <CopyableOutput
-        testID="sign-message-output"
-        value={signOutput}
-        placeholder="Signed output…"
-        showCopyButton={false}
-      />
-    </Screen>
+      </ToolDisclosure>
+    </ToolForm>
   );
 }

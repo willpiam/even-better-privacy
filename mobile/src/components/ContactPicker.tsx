@@ -26,6 +26,8 @@ type Props = {
   /** What to write into `value` when a contact is selected. Default: storage name. */
   selectValue?: 'name' | 'fingerprint';
   testID?: string;
+  label?: string;
+  disabled?: boolean;
 };
 
 function ContactPickerLabels({item}: {item: StoredContact}): JSX.Element {
@@ -121,6 +123,8 @@ export default function ContactPicker({
   variant = 'search',
   selectValue = 'name',
   testID,
+  label = 'EBP contact',
+  disabled = false,
 }: Props): JSX.Element {
   const {accent} = usePlaceTheme();
   const [contacts, setContacts] = useState<StoredContact[]>([]);
@@ -157,9 +161,10 @@ export default function ContactPicker({
         <TouchableOpacity
           style={[styles.dropdownTrigger, open && {borderColor: accent}]}
           onPress={() => setOpen(wasOpen => !wasOpen)}
-          accessibilityLabel="EBP contact"
+          accessibilityLabel={label}
           accessibilityRole="button"
-          accessibilityState={{expanded: open}}>
+          accessibilityState={{expanded: open, disabled}}
+          disabled={disabled}>
           <View style={styles.dropdownTriggerText}>
             <Text
               style={value ? styles.selectedLabel : styles.placeholderLabel}>
@@ -175,7 +180,7 @@ export default function ContactPicker({
           </View>
           <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
         </TouchableOpacity>
-        {open ? (
+        {open && !disabled ? (
           contacts.length === 0 ? (
             <View style={styles.resultsList}>
               <Text style={styles.empty}>
@@ -198,12 +203,14 @@ export default function ContactPicker({
     );
   }
 
-  const showResults = focused;
+  const showResults = focused && !disabled;
 
   return (
     <View style={styles.wrap}>
       <TextInput
         testID={testID}
+        accessibilityLabel={label}
+        editable={!disabled}
         style={[styles.input, focused && {borderColor: accent}]}
         value={value}
         onChangeText={onChange}

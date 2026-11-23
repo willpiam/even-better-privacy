@@ -19,6 +19,7 @@ export default function AppButton({
   loading = false,
   style,
   testID,
+  accessibilityLabel = title,
 }: {
   title: string;
   onPress: () => void;
@@ -27,6 +28,7 @@ export default function AppButton({
   loading?: boolean;
   style?: ViewStyle;
   testID?: string;
+  accessibilityLabel?: string;
 }): JSX.Element {
   const theme = usePlaceTheme();
   const isDisabled = disabled || loading;
@@ -45,7 +47,7 @@ export default function AppButton({
       testID={testID}
       accessible
       accessibilityRole="button"
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{disabled: isDisabled, busy: loading}}
       disabled={isDisabled}
       onPress={onPress}

@@ -1,148 +1,88 @@
 import React, {useState} from 'react';
-import {Switch, Text, View} from 'react-native';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
-import Share from 'react-native-share';
-import {signFile} from '../../services/signVerify';
-import Screen from '../../components/Screen';
 import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import CopyableOutput from '../../components/CopyableOutput';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {signFile} from '../../services/signVerify';
+import {ToolForm, ToolIdentity, ToolToggle} from './ToolForm';
+import {ToolFileInput, ToolFileOptions} from './ToolInputs';
+import {ToolPayloadResult} from './ToolResult';
+import type {ToolFile} from './toolFiles';
+import {useToolAction} from './useToolAction';
 
 export default function SignFileScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [fileUri, setFileUri] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileContext, setFileContext] = useState('');
+  const [file, setFile] = useState<ToolFile | null>(null);
+  const [uri, setUri] = useState('');
+  const [context, setContext] = useState('');
   const [includeSalt, setIncludeSalt] = useState(true);
-  const [generatedSalt, setGeneratedSalt] = useState('');
-  const [fileSignOutput, setFileSignOutput] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const action = useToolAction<string>();
+  const busy = action.pending !== null;
+  const fileUri = uri.trim() || file?.uri || '';
 
-  const pickSignFile = async () => {
-    try {
-      const [file] = await pick({mode: 'open'});
-      const [copyResult] = await keepLocalCopy({
-        files: [{uri: file.uri, fileName: file.name ?? 'picked-file'}],
-        destination: 'cachesDirectory',
-      });
-      if (copyResult.status === 'success') {
-        setFileUri(copyResult.localUri);
-        setFileName(file.name ?? 'picked-file');
-      } else {
-        throw new Error(copyResult.copyError);
-      }
-    } catch {
-      // User cancelled picker.
-    }
-  };
-
-  const onSignFile = async () => {
-    setStatus('');
-    try {
+  const onSign = () =>
+    action.run(async () => {
       const identityName = await ensureUnlocked();
       if (!identityName) {
         return;
       }
-      setBusyMessage('Signing file…');
       const result = await signFile({
         identityName,
         fileUri,
-        fileName: fileName || undefined,
-        contextMessage: fileContext || undefined,
+        fileName: uri.trim() ? undefined : file?.name,
+        contextMessage: context || undefined,
         includeSalt,
       });
-      setGeneratedSalt(result.salt);
-      setFileSignOutput(JSON.stringify(result.payload, null, 2));
-      setStatus('File signed');
-    } catch (error) {
-      setGeneratedSalt('');
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const busy = busyMessage !== null;
+      return JSON.stringify(result.payload, null, 2);
+    });
 
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Create a separate signature for a file. Keep the original file to verify it later."
+      action={action}
+      title="Sign file"
+      busyTitle="Signing…"
+      disabled={!fileUri}
+      onSubmit={onSign}
+      result={
+        action.result && (
+          <ToolPayloadResult
+            title="File signed"
+            description="Send the signature JSON alongside the original file."
+            value={action.result}
+            documentName="file-signature.ebp.json"
+          />
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <AppButton title="Pick File" onPress={pickSignFile} />
-      {fileName ? (
-        <Text style={cryptoStyles.helpText} testID="sign-file-name">
-          Selected: {fileName}
-        </Text>
-      ) : (
-        <Text style={cryptoStyles.helpText}>No file selected.</Text>
-      )}
-      <AppButton
-        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
-        variant="secondary"
-        onPress={() => setShowAdvanced(value => !value)}
+      <ToolIdentity verb="Signing" />
+      <ToolFileInput
+        action={action}
+        label="Original file"
+        file={file}
+        nameTestID="sign-file-name"
+        overridden={!!uri.trim()}
+        onPick={action.edit(selected => {
+          setFile(selected);
+          setUri('');
+        })}
       />
-      {showAdvanced ? (
-        <TextField
-          label="File URI (advanced)"
-          keyboardType="url"
-          autoCorrect={false}
-          spellCheck={false}
-          value={fileUri}
-          onChangeText={setFileUri}
-          placeholder="file:///..."
-          autoCapitalize="none"
-        />
-      ) : null}
       <TextField
-        label="Context message"
-        value={fileContext}
-        onChangeText={setFileContext}
-        placeholder="Optional context message"
+        label="Context (optional)"
+        value={context}
+        onChangeText={action.edit(setContext)}
+        placeholder="Add a note to include in the signature"
+        editable={!busy}
         multiline
       />
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Include random salt</Text>
-        <Switch
-          testID="sign-file-include-salt"
+      <ToolFileOptions uri={uri} onChange={action.edit(setUri)} disabled={busy}>
+        <ToolToggle
+          label="Include random salt"
+          hint="Use a new random value each time you sign."
           value={includeSalt}
-          onValueChange={setIncludeSalt}
+          onChange={action.edit(setIncludeSalt)}
+          disabled={busy}
+          testID="sign-file-include-salt"
         />
-      </View>
-      <Text style={cryptoStyles.helpText}>
-        Signed message format: ebp::filehash::&lt;hash&gt;::&lt;optional
-        salt&gt;::&lt;optional context&gt;
-      </Text>
-      {fileSignOutput ? (
-        <TextField
-          label="Generated salt"
-          testID="sign-file-salt"
-          value={generatedSalt}
-          editable={false}
-          placeholder="(none — salt disabled)"
-        />
-      ) : null}
-      <AppButton
-        title={busy ? 'Signing…' : 'Sign File'}
-        onPress={onSignFile}
-        disabled={busy}
-      />
-      <AppButton
-        title="Share Output"
-        variant="secondary"
-        disabled={!fileSignOutput}
-        onPress={() => {
-          void Share.open({message: fileSignOutput, failOnCancel: false});
-        }}
-      />
-      <CopyableOutput value={fileSignOutput} placeholder="Signed file payload…" />
-    </Screen>
+      </ToolFileOptions>
+    </ToolForm>
   );
 }

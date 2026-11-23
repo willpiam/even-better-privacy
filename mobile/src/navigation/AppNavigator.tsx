@@ -260,47 +260,47 @@ function CryptoNavigator(): JSX.Element {
         <CryptoStack.Screen
           name="SignMessage"
           component={SignMessageScreen}
-          options={{title: 'Sign Message'}}
+          options={{title: 'Sign message'}}
         />
         <CryptoStack.Screen
           name="VerifyMessage"
           component={VerifyMessageScreen}
-          options={{title: 'Verify Message'}}
+          options={{title: 'Verify message'}}
         />
         <CryptoStack.Screen
           name="SignFile"
           component={SignFileScreen}
-          options={{title: 'Sign File'}}
+          options={{title: 'Sign file'}}
         />
         <CryptoStack.Screen
           name="VerifyFile"
           component={VerifyFileScreen}
-          options={{title: 'Verify File'}}
+          options={{title: 'Verify file'}}
         />
         <CryptoStack.Screen
           name="FingerprintTool"
           component={FingerprintToolScreen}
-          options={{title: 'Fingerprint'}}
+          options={{title: 'Identity fingerprint'}}
         />
         <CryptoStack.Screen
           name="EncryptMessage"
           component={EncryptMessageScreen}
-          options={{title: 'Encrypt Message'}}
+          options={{title: 'Encrypt message'}}
         />
         <CryptoStack.Screen
           name="DecryptMessage"
           component={DecryptMessageScreen}
-          options={{title: 'Decrypt Message'}}
+          options={{title: 'Decrypt message'}}
         />
         <CryptoStack.Screen
           name="EncryptFile"
           component={EncryptFileScreen}
-          options={{title: 'Encrypt File'}}
+          options={{title: 'Encrypt file'}}
         />
         <CryptoStack.Screen
           name="DecryptFile"
           component={DecryptFileScreen}
-          options={{title: 'Decrypt File'}}
+          options={{title: 'Decrypt file'}}
         />
       </CryptoStack.Navigator>
     </PlaceThemeProvider>

@@ -11,7 +11,7 @@ import {
   parseMultiRecipientEntries,
 } from '../ebpCore';
 import {loadContact} from './contacts';
-import {loadIdentityForUse} from './storage';
+import {getCurrentIdentityRequired, loadIdentityForUse} from './storage';
 import {resolveSenderForDecrypt} from './senderContext';
 import {
   decryptMessageWithIdentity,
@@ -34,7 +34,7 @@ export {
 } from './encryptDecryptLogic';
 
 export async function encryptMessage(params: {
-  identityName: string;
+  identityName?: string;
   password?: string;
   message: string;
   recipient: string;
@@ -49,7 +49,10 @@ export async function encryptMessage(params: {
   const contact = await loadContact(params.recipient);
   let identity: Identity | undefined;
   if (params.sign) {
-    identity = await loadIdentityForUse(params.identityName, params.password);
+    identity = await loadIdentityForUse(
+      params.identityName ?? (await getCurrentIdentityRequired()),
+      params.password,
+    );
   }
   return encryptMessageWithIdentity({
     message: params.message,
@@ -144,7 +147,7 @@ export async function decryptMessage(params: {
 }
 
 export async function encryptFile(params: {
-  identityName: string;
+  identityName?: string;
   password?: string;
   fileUri: string;
   fileName: string;
@@ -186,7 +189,7 @@ export async function encryptFile(params: {
   const cleartext = JSON.stringify(envelope);
   if (params.sign) {
     const identity = await loadIdentityForUse(
-      params.identityName,
+      params.identityName ?? (await getCurrentIdentityRequired()),
       params.password,
     );
     const ciphertext = identity.signAndEncryptFor(cleartext, recipient);

@@ -1,64 +1,60 @@
 import React, {useState} from 'react';
 import {Text} from 'react-native';
-import Clipboard from '@react-native-clipboard/clipboard';
 import {fingerprintFromPublicIdentity} from '../../services/identityHelpers';
-import Screen from '../../components/Screen';
-import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import StatusBanner from '../../components/StatusBanner';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {ToolForm, ToolHint} from './ToolForm';
+import {ToolImportField} from './ToolInputs';
+import {ToolCopy, ToolResult, toolResultStyles} from './ToolResult';
+import {useToolAction} from './useToolAction';
 
 export default function FingerprintToolScreen(): JSX.Element {
-  const [publicIdentityJson, setPublicIdentityJson] = useState('');
-  const [computedFingerprint, setComputedFingerprint] = useState('');
-  const [status, setStatus] = useState('');
+  const [publicIdentity, setPublicIdentity] = useState('');
+  const action = useToolAction<string>();
 
-  const onFingerprintFromPublic = () => {
-    try {
-      const parsed = JSON.parse(publicIdentityJson) as Record<string, unknown>;
-      const fp = fingerprintFromPublicIdentity(parsed);
-      setComputedFingerprint(fp);
-      setStatus('Fingerprint computed');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-      setComputedFingerprint('');
-    }
-  };
+  const onCompute = () =>
+    action.run(() => {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(publicIdentity.trim());
+      } catch {
+        throw new Error(
+          'Public identity JSON is invalid. Check the export and try again.',
+        );
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Public identity JSON must contain an object.');
+      }
+      return fingerprintFromPublicIdentity(parsed);
+    });
 
   return (
-    <Screen scroll>
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
+    <ToolForm
+      description="Calculate a fingerprint from someone’s public identity export so you can compare it with theirs."
+      action={action}
+      title="Calculate fingerprint"
+      disabled={!publicIdentity.trim()}
+      onSubmit={onCompute}
+      result={
+        action.result && (
+          <ToolResult title="Public identity fingerprint">
+            <Text style={toolResultStyles.text} selectable>
+              {action.result}
+            </Text>
+            <ToolCopy title="Copy fingerprint" value={action.result} />
+            <ToolHint>
+              Compare the full fingerprint with the owner through a channel you
+              trust.
+            </ToolHint>
+          </ToolResult>
+        )
+      }>
+      <ToolImportField
+        action={action}
         label="Public identity JSON"
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        value={publicIdentityJson}
-        onChangeText={setPublicIdentityJson}
-        placeholder="Public identity JSON"
-        multiline
+        placeholder="Paste a public identity export"
+        value={publicIdentity}
+        onChange={action.edit(setPublicIdentity)}
+        pasteMessage="Pasted public identity"
       />
-      <AppButton
-        title="Paste from clipboard"
-        variant="secondary"
-        onPress={() => {
-          void Clipboard.getString().then(text => {
-            if (text.trim()) {
-              setPublicIdentityJson(text);
-              setStatus('Pasted public identity');
-            } else {
-              setStatus('Clipboard is empty');
-            }
-          });
-        }}
-      />
-      <AppButton title="Compute fingerprint" onPress={onFingerprintFromPublic} />
-      {computedFingerprint ? (
-        <Text style={cryptoStyles.output} selectable>
-          {computedFingerprint}
-        </Text>
-      ) : null}
-    </Screen>
+    </ToolForm>
   );
 }

@@ -8,16 +8,19 @@ export default function Screen({
   scroll = false,
   style,
   contentStyle,
+  scrollRef,
 }: {
   children: React.ReactNode;
   scroll?: boolean;
   style?: ViewStyle;
   contentStyle?: ViewStyle;
+  scrollRef?: React.Ref<ScrollView>;
 }): JSX.Element {
   if (scroll) {
     return (
       <SafeAreaView style={[styles.safe, style]} edges={['left', 'right']}>
         <ScrollView
+          ref={scrollRef}
           contentContainerStyle={[styles.content, contentStyle]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled">

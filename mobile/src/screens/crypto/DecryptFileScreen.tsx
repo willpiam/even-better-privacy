@@ -1,133 +1,98 @@
 import React, {useState} from 'react';
-import {Text} from 'react-native';
-import Share from 'react-native-share';
-import RNFS from 'react-native-fs';
-import {decryptFile} from '../../services/encryptDecrypt';
+import {StyleSheet, Text} from 'react-native';
 import {parseEbpPayloadInput} from '../../ebpCore';
-import Screen from '../../components/Screen';
-import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
-
-type DecryptedFile = {
-  fileName: string;
-  mimeType: string;
-  fileSize: number;
-  fileDataBase64: string;
-  verifyStatus: string;
-};
-
-function formatBytes(n: number): string {
-  if (n < 1024) {
-    return `${n} B`;
-  }
-  if (n < 1024 * 1024) {
-    return `${(n / 1024).toFixed(1)} KB`;
-  }
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
+import {decryptFile} from '../../services/encryptDecrypt';
+import {
+  isEncryptedFileType,
+  isEncryptedSignedFileType,
+  requireCiphertext,
+} from '../../services/encryptDecryptLogic';
+import {colors, typography} from '../../theme/tokens';
+import {ToolForm, ToolHint, ToolIdentity} from './ToolForm';
+import {ToolContact, ToolImportField} from './ToolInputs';
+import {ToolResult, ToolShare, ToolSignatureStatus} from './ToolResult';
+import {formatToolFileSize, shareToolFile} from './toolFiles';
+import {useToolAction} from './useToolAction';
 
 export default function DecryptFileScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [decryptFilePayload, setDecryptFilePayload] = useState('');
-  const [decryptFileSender, setDecryptFileSender] = useState('');
-  const [decrypted, setDecrypted] = useState<DecryptedFile | null>(null);
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [payloadText, setPayloadText] = useState('');
+  const [sender, setSender] = useState('');
+  const action = useToolAction<Awaited<ReturnType<typeof decryptFile>>>();
 
-  const onDecryptFile = async () => {
-    setStatus('');
-    try {
-      const identityName = await ensureUnlocked();
-      if (!identityName) {
-        return;
+  const onDecrypt = () =>
+    action.run(async () => {
+      const payload = parseEbpPayloadInput(payloadText);
+      if (
+        !isEncryptedFileType(payload.type) &&
+        !isEncryptedSignedFileType(payload.type)
+      ) {
+        throw new Error('Provide an encrypted file payload.');
       }
-      setBusyMessage('Decrypting file…');
-      const payload = parseEbpPayloadInput(decryptFilePayload);
-      const result = await decryptFile({
+      requireCiphertext(payload);
+      const identityName = await ensureUnlocked();
+      if (!identityName) return;
+      return decryptFile({
         identityName,
         payload,
-        sender: decryptFileSender || undefined,
+        sender: sender.trim() || undefined,
       });
-      setDecrypted({
-        fileName: result.fileName,
-        mimeType: result.mimeType,
-        fileSize: result.fileSize,
-        fileDataBase64: result.fileDataBase64,
-        verifyStatus: result.verifyStatus,
-      });
-      setStatus('File decrypted');
-    } catch (error) {
-      setDecrypted(null);
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
+    });
 
-  const onShareFile = async () => {
-    if (!decrypted) {
-      return;
-    }
-    try {
-      const safeName = decrypted.fileName.replace(/[/\\]/g, '_') || 'decrypted-file';
-      const path = `${RNFS.CachesDirectoryPath}/${safeName}`;
-      await RNFS.writeFile(path, decrypted.fileDataBase64, 'base64');
-      await Share.open({
-        url: `file://${path}`,
-        type: decrypted.mimeType || 'application/octet-stream',
-        filename: safeName,
-        failOnCancel: false,
-      });
-      setStatus('Shared decrypted file');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    }
-  };
-
-  const busy = busyMessage !== null;
-  const preview =
-    decrypted &&
-    `Verify: ${decrypted.verifyStatus}\nName: ${decrypted.fileName}\nType: ${decrypted.mimeType}\nSize: ${formatBytes(decrypted.fileSize)}`;
-
+  const file = action.result;
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Import an encrypted file payload to recover the original file."
+      action={action}
+      title="Decrypt file"
+      busyTitle="Decrypting…"
+      disabled={!payloadText.trim()}
+      onSubmit={onDecrypt}
+      result={
+        file && (
+          <ToolResult title="File decrypted">
+            <Text style={styles.fileName} selectable>
+              {file.fileName}
+            </Text>
+            <ToolHint>
+              {formatToolFileSize(file.fileSize)} · {file.mimeType}
+            </ToolHint>
+            <ToolSignatureStatus status={file.verifyStatus} />
+            <ToolShare
+              title="Share or save file"
+              share={() =>
+                shareToolFile(
+                  file.fileName,
+                  file.fileDataBase64,
+                  file.mimeType,
+                  'base64',
+                )
+              }
+            />
+          </ToolResult>
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
+      <ToolIdentity verb="Decrypting" />
+      <ToolImportField
+        action={action}
         label="Encrypted file payload"
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        value={decryptFilePayload}
-        onChangeText={setDecryptFilePayload}
-        placeholder="Encrypted file payload JSON"
-        multiline
+        placeholder="Paste JSON or import the encrypted file"
+        value={payloadText}
+        onChange={action.edit(setPayloadText)}
+        pasteMessage="Pasted encrypted file payload"
       />
-      <TextField
-        label="Sender"
-        value={decryptFileSender}
-        onChangeText={setDecryptFileSender}
-        placeholder="Sender (for signed payloads)"
+      <ToolContact
+        sender
+        value={sender}
+        onChange={action.edit(setSender)}
+        disabled={action.pending !== null}
       />
-      <AppButton
-        title={busy ? 'Decrypting…' : 'Decrypt File'}
-        onPress={onDecryptFile}
-        disabled={busy}
-      />
-      {preview ? (
-        <>
-          <Text style={cryptoStyles.output} selectable>
-            {preview}
-          </Text>
-          <AppButton title="Share / save file" onPress={onShareFile} />
-        </>
-      ) : null}
-    </Screen>
+    </ToolForm>
   );
 }
+
+const styles = StyleSheet.create({
+  fileName: {color: colors.text, fontSize: typography.row, fontWeight: '600'},
+});

@@ -1,153 +1,119 @@
 import React, {useState} from 'react';
-import {Switch, Text, View} from 'react-native';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
-import Share from 'react-native-share';
-import {encryptFile} from '../../services/encryptDecrypt';
-import {getCurrentIdentityRequired} from '../../services/storage';
-import Screen from '../../components/Screen';
+import {MAX_ENCRYPTED_FILE_BYTES} from '../../../../common/FileLimits';
 import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import ContactPicker from '../../components/ContactPicker';
-import CopyableOutput from '../../components/CopyableOutput';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
-import {cryptoStyles} from './cryptoStyles';
+import {encryptFile} from '../../services/encryptDecrypt';
+import {ToolForm, ToolHint, ToolIdentity, ToolToggle} from './ToolForm';
+import {ToolContact, ToolFileInput, ToolFileOptions} from './ToolInputs';
+import {ToolPayloadResult} from './ToolResult';
+import {formatToolFileSize, type ToolFile} from './toolFiles';
+import {useToolAction} from './useToolAction';
 
 export default function EncryptFileScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [fileUri, setFileUri] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [fileMime, setFileMime] = useState('application/octet-stream');
-  const [fileRecipient, setFileRecipient] = useState('');
-  const [fileSign, setFileSign] = useState(false);
-  const [encryptFileOutput, setEncryptFileOutput] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [file, setFile] = useState<ToolFile | null>(null);
+  const [uri, setUri] = useState('');
+  const [name, setName] = useState('');
+  const [mime, setMime] = useState('');
+  const [recipient, setRecipient] = useState('');
+  const [sign, setSign] = useState(false);
+  const action = useToolAction<string>();
+  const busy = action.pending !== null;
+  const manualUri = uri.trim();
+  const fileUri = manualUri || file?.uri || '';
+  const fileName =
+    name.trim() ||
+    (manualUri ? 'encrypted.bin' : file?.name) ||
+    'encrypted.bin';
 
-  const pickEncryptFile = async () => {
-    try {
-      const [file] = await pick({mode: 'open'});
-      const [copyResult] = await keepLocalCopy({
-        files: [{uri: file.uri, fileName: file.name ?? 'picked-file'}],
-        destination: 'cachesDirectory',
-      });
-      if (copyResult.status !== 'success') {
-        throw new Error(copyResult.copyError);
-      }
-      setFileUri(copyResult.localUri);
-      setFileName(file.name ?? 'encrypted.bin');
-      setFileMime(file.type ?? 'application/octet-stream');
-    } catch {
-      // User cancelled picker.
-    }
-  };
-
-  const onEncryptFile = async () => {
-    setStatus('');
-    try {
-      const identityName = await getCurrentIdentityRequired();
-      if (fileSign) {
-        const unlocked = await ensureUnlocked(identityName);
-        if (!unlocked) {
-          return;
-        }
-      }
-      setBusyMessage('Encrypting file…');
+  const onEncrypt = () =>
+    action.run(async () => {
+      const identityName = sign ? await ensureUnlocked() : undefined;
+      if (identityName === null) return;
       const payload = await encryptFile({
         identityName,
         fileUri,
-        fileName: fileName || 'encrypted.bin',
-        mimeType: fileMime || undefined,
-        recipient: fileRecipient,
-        sign: fileSign,
+        fileName,
+        mimeType: mime.trim() || (manualUri ? undefined : file?.mime),
+        recipient: recipient.trim(),
+        sign,
       });
-      setEncryptFileOutput(JSON.stringify(payload, null, 2));
-      setStatus('File encrypted');
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
-
-  const busy = busyMessage !== null;
+      return JSON.stringify(payload, null, 2);
+    });
 
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Create an encrypted copy of a file for one of your saved contacts."
+      action={action}
+      title="Encrypt file"
+      busyTitle="Encrypting…"
+      disabled={!fileUri || !recipient.trim()}
+      onSubmit={onEncrypt}
+      result={
+        action.result && (
+          <ToolPayloadResult
+            title="File encrypted"
+            description="Share the JSON file so the recipient can import it in Decrypt file."
+            value={action.result}
+            documentName="encrypted-file.ebp.json"
+          />
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <AppButton title="Pick File" onPress={pickEncryptFile} />
-      {fileName ? (
-        <Text style={cryptoStyles.helpText} testID="encrypt-file-name">
-          Selected: {fileName}
-        </Text>
-      ) : (
-        <Text style={cryptoStyles.helpText}>No file selected.</Text>
-      )}
-      <AppButton
-        title={showAdvanced ? 'Hide advanced' : 'Show advanced'}
-        variant="secondary"
-        onPress={() => setShowAdvanced(value => !value)}
+      <ToolFileInput
+        action={action}
+        label="File to encrypt"
+        file={file}
+        nameTestID="encrypt-file-name"
+        overridden={!!manualUri}
+        onPick={action.edit(selected => {
+          setFile(selected);
+          setUri('');
+          setName('');
+          setMime('');
+        })}
       />
-      {showAdvanced ? (
-        <>
-          <TextField
-            label="File URI (advanced)"
-            keyboardType="url"
-            autoCorrect={false}
-            spellCheck={false}
-            value={fileUri}
-            onChangeText={setFileUri}
-            placeholder="file:///..."
-            autoCapitalize="none"
-          />
-          <TextField
-            label="File name"
-            value={fileName}
-            onChangeText={setFileName}
-            placeholder="File name"
-          />
-          <TextField
-            label="MIME type"
-            autoCorrect={false}
-            spellCheck={false}
-            value={fileMime}
-            onChangeText={setFileMime}
-            placeholder="MIME type"
-            autoCapitalize="none"
-          />
-        </>
-      ) : null}
-      <ContactPicker
-        value={fileRecipient}
-        onChange={setFileRecipient}
-        placeholder="Recipient (name or fingerprint)"
-      />
-      <View style={cryptoStyles.switchRow}>
-        <Text style={cryptoStyles.switchLabel}>Sign with identity</Text>
-        <Switch value={fileSign} onValueChange={setFileSign} />
-      </View>
-      <AppButton
-        title={busy ? 'Encrypting…' : 'Encrypt File'}
-        onPress={onEncryptFile}
+      <ToolHint>
+        Maximum file size {formatToolFileSize(MAX_ENCRYPTED_FILE_BYTES)}.
+      </ToolHint>
+      <ToolFileOptions uri={uri} onChange={action.edit(setUri)} disabled={busy}>
+        <TextField
+          label="Output file name (optional)"
+          value={name}
+          onChangeText={action.edit(setName)}
+          placeholder={
+            manualUri ? 'encrypted.bin' : file?.name || 'encrypted.bin'
+          }
+          editable={!busy}
+        />
+        <TextField
+          label="MIME type (optional)"
+          value={mime}
+          onChangeText={action.edit(setMime)}
+          placeholder={
+            manualUri
+              ? 'application/octet-stream'
+              : file?.mime || 'application/octet-stream'
+          }
+          editable={!busy}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+        />
+      </ToolFileOptions>
+      <ToolContact
+        value={recipient}
+        onChange={action.edit(setRecipient)}
         disabled={busy}
       />
-      <AppButton
-        title="Share Output"
-        variant="secondary"
-        disabled={!encryptFileOutput}
-        onPress={() => {
-          void Share.open({message: encryptFileOutput, failOnCancel: false});
-        }}
+      <ToolToggle
+        label="Sign with my identity"
+        hint="Let your recipient verify who signed the file."
+        value={sign}
+        onChange={action.edit(setSign)}
+        disabled={busy}
       />
-      <CopyableOutput
-        value={encryptFileOutput}
-        placeholder="Encrypted file payload…"
-      />
-    </Screen>
+      {sign ? <ToolIdentity verb="Signing" /> : null}
+    </ToolForm>
   );
 }

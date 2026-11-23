@@ -1,95 +1,96 @@
 import React, {useState} from 'react';
-import Clipboard from '@react-native-clipboard/clipboard';
-import {decryptMessage} from '../../services/encryptDecrypt';
+import {Text} from 'react-native';
 import {parseEbpPayloadInput} from '../../ebpCore';
-import Screen from '../../components/Screen';
-import TextField from '../../components/TextField';
-import AppButton from '../../components/AppButton';
-import BusyOverlay from '../../components/BusyOverlay';
-import StatusBanner from '../../components/StatusBanner';
 import {useIdentityUnlock} from '../../hooks/useIdentityUnlock';
-import {statusKind} from '../../theme/statusKind';
+import {decryptMessage} from '../../services/encryptDecrypt';
+import {
+  isEncryptedMessageType,
+  isEncryptedSignedMessageMultiType,
+  isEncryptedSignedMessageType,
+  requireCiphertext,
+} from '../../services/encryptDecryptLogic';
+import {ToolForm, ToolHint, ToolIdentity} from './ToolForm';
+import {ToolContact, ToolImportField} from './ToolInputs';
+import {
+  ToolCopy,
+  ToolResult,
+  ToolSignatureStatus,
+  toolResultStyles,
+} from './ToolResult';
+import {useToolAction} from './useToolAction';
 
 export default function DecryptMessageScreen(): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
-  const [decryptPayload, setDecryptPayload] = useState('');
-  const [decryptSender, setDecryptSender] = useState('');
-  const [decryptOutput, setDecryptOutput] = useState('');
-  const [status, setStatus] = useState('');
-  const [busyMessage, setBusyMessage] = useState<string | null>(null);
+  const [payloadText, setPayloadText] = useState('');
+  const [sender, setSender] = useState('');
+  const action = useToolAction<Awaited<ReturnType<typeof decryptMessage>>>();
 
-  const onDecrypt = async () => {
-    setStatus('');
-    try {
-      const identityName = await ensureUnlocked();
-      if (!identityName) {
-        return;
+  const onDecrypt = () =>
+    action.run(async () => {
+      const payload = parseEbpPayloadInput(payloadText);
+      if (
+        !isEncryptedMessageType(payload.type) &&
+        !isEncryptedSignedMessageType(payload.type) &&
+        !isEncryptedSignedMessageMultiType(payload.type)
+      ) {
+        throw new Error('Provide an encrypted message payload.');
       }
-      setBusyMessage('Decrypting message…');
-      const payload = parseEbpPayloadInput(decryptPayload);
-      const result = await decryptMessage({
+      requireCiphertext(payload);
+      const identityName = await ensureUnlocked();
+      if (!identityName) return;
+      return decryptMessage({
         identityName,
         payload,
-        sender: decryptSender || undefined,
+        sender: sender.trim() || undefined,
       });
-      setDecryptOutput(`Verify: ${result.verifyStatus}\n\n${result.message}`);
-      setStatus('Message decrypted');
-    } catch (error) {
-      setDecryptOutput('');
-      setStatus(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusyMessage(null);
-    }
-  };
+    });
 
-  const busy = busyMessage !== null;
-
+  const result = action.result;
   return (
-    <Screen scroll>
+    <ToolForm
+      description="Open a message encrypted for your current identity."
+      action={action}
+      title="Decrypt message"
+      busyTitle="Decrypting…"
+      disabled={!payloadText.trim()}
+      onSubmit={onDecrypt}
+      result={
+        result && (
+          <ToolResult title="Message decrypted">
+            <ToolSignatureStatus
+              status={result.verifyStatus}
+              fingerprint={result.signerFingerprint}
+              knownContact={result.isKnownContact}
+            />
+            {result.message ? (
+              <>
+                <Text style={toolResultStyles.text} selectable>
+                  {result.message}
+                </Text>
+                <ToolCopy value={result.message} title="Copy message" />
+              </>
+            ) : (
+              <ToolHint>The decrypted message is empty.</ToolHint>
+            )}
+          </ToolResult>
+        )
+      }>
       {unlockPrompt}
-      <BusyOverlay visible={busy} message={busyMessage ?? undefined} />
-      <StatusBanner message={status} kind={statusKind(status)} />
-      <TextField
-        label="Encrypted payload"
-        autoCapitalize="none"
-        autoCorrect={false}
-        spellCheck={false}
-        value={decryptPayload}
-        onChangeText={setDecryptPayload}
-        placeholder="Encrypted payload JSON"
-        multiline
+      <ToolIdentity verb="Decrypting" />
+      <ToolImportField
+        action={action}
+        label="Encrypted message"
+        placeholder="Paste JSON or an EBP block"
+        value={payloadText}
+        onChange={action.edit(setPayloadText)}
+        pasteMessage="Pasted encrypted message"
       />
-      <AppButton
-        title="Paste from clipboard"
-        variant="secondary"
-        onPress={() => {
-          void Clipboard.getString().then(text => {
-            if (text.trim()) {
-              setDecryptPayload(text);
-              setStatus('Pasted payload');
-            } else {
-              setStatus('Clipboard is empty');
-            }
-          });
-        }}
+      <ToolContact
+        sender
+        value={sender}
+        onChange={action.edit(setSender)}
+        disabled={action.pending !== null}
       />
-      <TextField
-        label="Sender"
-        value={decryptSender}
-        onChangeText={setDecryptSender}
-        placeholder="Sender (for signed payloads)"
-      />
-      <AppButton
-        title={busy ? 'Decrypting…' : 'Decrypt Message'}
-        onPress={onDecrypt}
-        disabled={busy}
-      />
-      <TextField
-        label="Decrypted output"
-        value={decryptOutput}
-        editable={false}
-        multiline
-      />
-    </Screen>
+    </ToolForm>
   );
 }

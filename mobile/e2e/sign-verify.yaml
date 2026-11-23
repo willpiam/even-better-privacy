@@ -45,12 +45,11 @@ env:
     id: "password-modal-submit"
 # Do not hideKeyboard here: with no IME up, Android Back pops Sign Message.
 - extendedWaitUntil:
-    visible:
-      id: "status-banner-text"
+    visible: "Message signed"
     timeout: 120000
 - assertVisible: "Message signed"
-# Payload is already on the clipboard from sign. Do not tap Copy/Share —
-# on this device Copy can open system Quick Share over the app.
+- tapOn:
+    id: "sign-message-output-copy"
 # One Android Back returns to the Crypto hub. Do not hideKeyboard first.
 - back
 - extendedWaitUntil:
@@ -76,7 +75,7 @@ env:
 - tapOn:
     id: "verify-submit"
 - extendedWaitUntil:
-    visible: "Verification complete"
+    visible: "Valid signature"
     timeout: 60000
 - assertVisible:
     id: "verify-result"
