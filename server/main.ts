@@ -8,7 +8,7 @@ import type { DatabaseAdapter } from "./db/index.ts";
 import { isOriginAllowed, buildCorsHeaders, isHostAllowed } from "./cors.ts";
 import { checkRateLimit, getClientIp, RATE_LIMIT_DISABLED, RATE_LIMIT_CLEANUP } from "./rate-limit.ts";
 import { json, attachCors, logRequest, generateTraceId } from "./response.ts";
-import { handleCardanoAssemble, handleCardanoUnsigned, handlePaymentCancel, handlePaymentConfig, handlePaymentCreate, handlePaymentOrder, handlePaymentRecover, reconcilePendingPayments } from "./handlers/mail-payment.ts";
+import { handleCardanoAssemble, handleCardanoUnsigned, handlePaymentCancel, handlePaymentConfig, handlePaymentCreate, handlePaymentOrder, handlePaymentRecover, handlePaymentSelect, reconcilePendingPayments } from "./handlers/mail-payment.ts";
 import {
   handleRequestVerifyEmail,
   handleVerifyEmailPage,
@@ -196,6 +196,9 @@ async function handleRequest(req: Request, connInfo?: ConnInfo): Promise<Respons
     }
     if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/recover") {
       return respond(attachCors(await handlePaymentRecover(req, db), corsHeaders));
+    }
+    if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/select") {
+      return respond(attachCors(await handlePaymentSelect(req, db), corsHeaders));
     }
     if (req.method === "POST" && url.pathname === "/api/v1/mail/payment/status") {
       return respond(attachCors(await handlePaymentOrder(req, db, false), corsHeaders));

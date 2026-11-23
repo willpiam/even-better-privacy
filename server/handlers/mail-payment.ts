@@ -60,6 +60,38 @@ const QUOTE_MS = 30 * 60_000;
 const GRACE_MS = 2 * 60 * 60_000;
 const TEST_PAYMENT_NETWORKS = new Set(["ethereum-sepolia", "cardano-preview"]);
 
+function checkoutAssets(config: NonNullable<ReturnType<typeof paymentConfigForSettings>>) {
+  return config.assets.filter(({ network }) => TEST_PAYMENT_NETWORKS.has(network));
+}
+
+async function paymentQuote(
+  config: NonNullable<ReturnType<typeof paymentConfigForSettings>>,
+  chosen: ReturnType<typeof checkoutAssets>[number],
+  usdCents: number,
+  now: number,
+) {
+  let rate = "1";
+  if (chosen.symbol === "ETH" || chosen.symbol === "ADA") {
+    try {
+      rate = await fetchUsdRate(chosen.symbol, config.alchemyApiKey, now);
+    } catch {
+      return null;
+    }
+  }
+  return {
+    asset: chosen.symbol,
+    network: chosen.network,
+    recipient: chosen.recipient,
+    assetUnit: chosen.unit,
+    amountAtomic: quoteAtomicUnits(usdCents, rate, chosen.decimals).toString(),
+    decimals: chosen.decimals,
+    usdPerToken: rate,
+    confirmations: chosen.network.startsWith("ethereum-")
+      ? config.ethereumConfirmations
+      : config.cardanoConfirmations,
+  };
+}
+
 export function handlePaymentConfig(req?: Request): Response {
   const mail = mailSettingsForMode(req ? mailModeFromRequest(req) : "production");
   const config = paymentConfigForSettings(mail);
@@ -96,7 +128,8 @@ export async function handlePaymentCreate(
     typeof asset !== "string" ||
     typeof proof !== "string" || proof.length > 100_000
   ) return json({ error: "invalid payment request" }, 400);
-  if (!TEST_PAYMENT_NETWORKS.has(network)) {
+  const deferred = network === "" && asset === "";
+  if (!deferred && !TEST_PAYMENT_NETWORKS.has(network)) {
     return json({ error: "unsupported payment asset" }, 400);
   }
   if (!isValidFingerprintBech32(fingerprint)) {
@@ -108,10 +141,11 @@ export async function handlePaymentCreate(
   if ((!check.ok && !authorizedTestName) || check.username.length > 8) {
     return json({ error: "invalid paid username" }, 400);
   }
-  const chosen = config.assets.find((item) =>
-    item.network === network && item.symbol === asset
-  );
-  if (!chosen) return json({ error: "unsupported payment asset" }, 400);
+  const assets = checkoutAssets(config);
+  const chosen = assets.find((item) => item.network === network && item.symbol === asset);
+  if (!chosen && (!deferred || !assets.length)) {
+    return json({ error: "unsupported payment asset" }, 400);
+  }
   const identity = await getIdentity(db, fingerprint);
   if (
     !identity || await isIdentityRevoked(db, fingerprint) ||
@@ -146,17 +180,19 @@ export async function handlePaymentCreate(
   if (!(await ensureNewNonce(db, fingerprint, proofResult.record.nonce)).ok) {
     return json({ error: "payment authorization already used" }, 400);
   }
-  let rate = "1";
-  try {
-    if (asset === "ETH" || asset === "ADA") {
-      rate = await fetchUsdRate(asset, config.alchemyApiKey, now);
-    }
-  } catch {
-    return json({ error: "exchange rate unavailable; please retry" }, 503);
-  }
   const usdCents = config.prices[check.username.length];
-  const amountAtomic = quoteAtomicUnits(usdCents, rate, chosen.decimals)
-    .toString();
+  // An empty network reserves the address without an on-chain quote.
+  const quote = chosen ? await paymentQuote(config, chosen, usdCents, now) : {
+    asset: "",
+    network: "" as const,
+    recipient: "",
+    assetUnit: "",
+    amountAtomic: "0",
+    decimals: 0,
+    usdPerToken: "1",
+    confirmations: 1,
+  };
+  if (!quote) return json({ error: "exchange rate unavailable; please retry" }, 503);
   const orderId = crypto.randomUUID();
   const reserved = await db.writeTransaction(async (tx) => {
     if (await getMailboxByFingerprint(tx, fingerprint) ||
@@ -168,17 +204,8 @@ export async function handlePaymentCreate(
       domain: mail.domain,
       fingerprint,
       proofNonce: proofResult.record.nonce,
-      asset,
-      network: chosen.network,
-      recipient: chosen.recipient,
-      assetUnit: chosen.unit,
+      ...quote,
       usdCents,
-      amountAtomic,
-      decimals: chosen.decimals,
-      usdPerToken: rate,
-      confirmations: chosen.network.startsWith("ethereum-")
-        ? config.ethereumConfirmations
-        : config.cardanoConfirmations,
       // The on-chain reference is public and separate from the checkout capability.
       message: `pqpost:${crypto.randomUUID()}`,
       createdAt: now,
@@ -277,6 +304,37 @@ export async function handlePaymentCancel(req: Request, db: DatabaseAdapter): Pr
   }, 409);
 }
 
+/** Lock in the first asset selected by the holder of the checkout capability. */
+export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const parsed = await readJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const { orderId, network, asset } = parsed.data;
+  if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
+  const order = await getPaymentOrder(db, orderId);
+  if (!order) return json({ error: "order not found" }, 404);
+  if (order.domain !== TEST_MAIL_DOMAIN || order.network || !order.active ||
+    order.status !== "quoted" || order.graceUntil <= Date.now()) {
+    return json({ error: "Payment selection is closed. Refresh the order status." }, 409);
+  }
+  const config = paymentConfigForSettings(mailSettingsForMode("test"));
+  if (!config || !isMailSignupReady()) return json({ error: "paid signup is not enabled" }, 503);
+  const chosen = checkoutAssets(config).find((item) => item.network === network && item.symbol === asset);
+  if (!chosen) return json({ error: "unsupported payment asset" }, 400);
+  const quote = await paymentQuote(config, chosen, order.usdCents, Date.now());
+  if (!quote) return json({ error: "exchange rate unavailable; please retry" }, 503);
+  const now = Date.now();
+  const rows = await db.query<[string]>(
+    `UPDATE mail_payment_orders SET asset = ?, network = ?, recipient = ?, asset_unit = ?,
+      amount_atomic = ?, decimals = ?, usd_per_token = ?, confirmations = ?, expires_at = ?, grace_until = ?
+    WHERE order_id = ? AND active = 1 AND status = 'quoted' AND network = '' AND grace_until > ?
+    RETURNING order_id`,
+    [quote.asset, quote.network, quote.recipient, quote.assetUnit, quote.amountAtomic, quote.decimals,
+      quote.usdPerToken, quote.confirmations, now + QUOTE_MS, now + QUOTE_MS + GRACE_MS, orderId, now],
+  );
+  if (!rows.length) return json({ error: "Payment selection is closed. Refresh the order status." }, 409);
+  return json({ orderId });
+}
+
 /** Order ID is an unguessable checkout capability. It never authorizes a change of identity or address. */
 export async function handlePaymentOrder(
   req: Request,
@@ -318,6 +376,22 @@ export async function handlePaymentOrder(
       if (!submit) return json({ error: error.message }, 503);
     }
   }
+  if (!order.network) {
+    const config = order.domain === TEST_MAIL_DOMAIN && isMailSignupReady()
+      ? paymentConfigForSettings(mailSettingsForMode("test"))
+      : null;
+    return json({
+      orderId: order.orderId,
+      email: `${order.username}@${order.domain}`,
+      fingerprint: order.fingerprint,
+      usdCents: order.usdCents,
+      status: order.status,
+      testnet: order.domain === TEST_MAIL_DOMAIN,
+      paymentAssets: config && order.active && order.status === "quoted"
+        ? checkoutAssets(config).map(({ network, symbol }) => ({ network, symbol }))
+        : [],
+    });
+  }
   return json({
     orderId: order.orderId,
     email: `${order.username}@${order.domain}`,
@@ -349,7 +423,7 @@ export async function refreshPaymentOrder(
 ): Promise<StoredOrder> {
   if (order.status !== "pending") return order;
   const prefix = paymentPrefixForDomain(order.domain);
-  const provider = prefix && readPaymentProvider(prefix, order.network);
+  const provider = prefix && order.network && readPaymentProvider(prefix, order.network);
   if (!provider) {
     throw new PaymentRefreshError("configuration", "payment verification unavailable");
   }
@@ -454,7 +528,7 @@ export async function handleCardanoUnsigned(
     return json({ error: "invalid cardano payment request" }, 400);
   }
   const prefix = paymentPrefixForDomain(loaded.order.domain);
-  const provider = prefix && readPaymentProvider(prefix, loaded.order.network);
+  const provider = prefix && loaded.order.network && readPaymentProvider(prefix, loaded.order.network);
   if (!provider || provider.chain !== "cardano") {
     return json({ error: "cardano payment is not configured" }, 503);
   }

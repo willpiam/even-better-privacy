@@ -9,7 +9,7 @@ export type PaymentOrder = {
   fingerprint: string;
   proofNonce: number;
   asset: string;
-  network: PaymentNetwork;
+  network: PaymentNetwork | "";
   recipient: string;
   assetUnit: string;
   usdCents: number;
@@ -163,10 +163,10 @@ export async function reservePaymentOrder(
     !Number.isInteger(order.decimals) || order.decimals < 0 ||
     order.decimals > 30 ||
     !/^(?:0|[1-9][0-9]*)(?:\.[0-9]{1,18})?$/.test(order.usdPerToken) ||
-    !/^[1-9][0-9]*$/.test(order.amountAtomic)
+    !(order.network ? /^[1-9][0-9]*$/.test(order.amountAtomic) : order.amountAtomic === "0")
   ) throw new Error("invalid payment order");
   if (
-    quoteAtomicUnits(order.usdCents, order.usdPerToken, order.decimals)
+    order.network && quoteAtomicUnits(order.usdCents, order.usdPerToken, order.decimals)
       .toString() !== order.amountAtomic
   ) {
     throw new Error("payment amount does not match quote");
@@ -276,7 +276,7 @@ export async function submitPaymentTransaction(
   if (!/^[0-9a-f]{64}$/.test(hash)) return false;
   return await db.writeTransaction(async (tx) => {
     const order = await getPaymentOrder(tx, orderId);
-    if (!order || order.fingerprint !== fingerprint) return false;
+    if (!order?.network || order.fingerprint !== fingerprint) return false;
     const hashes = await paymentTransactionIds(tx, order);
     if (hashes.includes(hash)) return true;
     if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;

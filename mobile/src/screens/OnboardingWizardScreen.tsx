@@ -49,7 +49,6 @@ import {
   wizardSteps,
   type EbpSignupConfig,
   type OnboardingWizardStep,
-  type PaymentAsset,
 } from '../services/mail/ebpSignupLogic';
 import {colors, spacing} from '../theme/tokens';
 import FoxArt, {FoxMotion} from '../components/FoxArt';
@@ -83,8 +82,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
   const [testMode, setTestMode] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
   const [paid, setPaid] = useState(false);
-  const [assets, setAssets] = useState<PaymentAsset[]>([]);
-  const [assetIndex, setAssetIndex] = useState(0);
   const [orderId, setOrderId] = useState('');
   const [checkoutUrl, setCheckoutUrl] = useState('');
   const [checkoutMessage, setCheckoutMessage] = useState('');
@@ -189,7 +186,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setUsernameOk(false);
     setUsernameHint('');
     setPaid(false);
-    setAssets([]);
     setOrderId('');
     setCheckoutUrl('');
     setAwaitingPayment(false);
@@ -221,7 +217,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
       setOrderId('');
       setUsernameOk(false);
       setPaid(false);
-      setAssets([]);
       setOrderId('');
       setCheckoutUrl('');
       setAwaitingPayment(false);
@@ -255,8 +250,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
             setUsernameHint(`${choice.username}@${domain} is available`);
           } else if (choice.kind === 'purchase') {
             setPaid(true);
-            setAssets(choice.assets);
-            setAssetIndex(0);
             setUsernameOk(true);
             setUsernameHint(`One-time price: ${formatUsdPrice(choice.usdCents)}`);
           } else {
@@ -363,15 +356,12 @@ export default function OnboardingWizardScreen(): JSX.Element {
         }
         if (!id) {
           if (resuming) throw new Error('No payment order was found. Contact support if you already paid.');
-          const asset = assets[assetIndex] ?? assets[0];
-          if (!asset) throw new Error('Choose a test-network payment.');
           const created = await createTestPaymentOrder({
             identityName: name,
             password,
             username: normalizedUsername,
             domain,
             server,
-            asset,
           });
           id = created.orderId;
         }
@@ -508,7 +498,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setUsernameHint('');
     setUsernameOk(false);
     setPaid(false);
-    setAssets([]);
     setIdentityName(currentIdentity);
     setPublished(false);
     setPassword('');
@@ -688,7 +677,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
               setUsernameHint('');
               setUsernameOk(false);
               setPaid(false);
-              setAssets([]);
               setStep(wizardSteps(false, testMailEnabled)[1]);
             }}
           />
@@ -777,20 +765,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
             style={[styles.hint, usernameOk ? styles.ok : styles.err]}>
             {usernameHint}
           </Text>
-          {paid && assets.length ? (
-            <View style={styles.stack} testID="onboarding-payment-assets">
-              <Text style={styles.hint}>Payment asset</Text>
-              {assets.map((asset, index) => (
-                <AppButton
-                  key={`${asset.network}:${asset.symbol}`}
-                  title={`${assetIndex === index ? '✓ ' : ''}${asset.symbol} · ${asset.network}`}
-                  testID={`onboarding-asset-${asset.symbol}`}
-                  variant={assetIndex === index ? 'primary' : 'secondary'}
-                  onPress={() => setAssetIndex(index)}
-                />
-              ))}
-            </View>
-          ) : null}
           <AppButton
             title="Next"
             testID="onboarding-address-next"

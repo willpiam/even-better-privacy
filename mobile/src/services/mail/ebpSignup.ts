@@ -176,7 +176,6 @@ export async function createTestPaymentOrder(params: {
   username: string;
   domain: string;
   server: string;
-  asset: PaymentAsset;
 }): Promise<{orderId: string; checkoutUrl: string}> {
   const check = validateMailUsername(params.username);
   if (!check.ok) throw new Error(check.reason);
@@ -185,7 +184,7 @@ export async function createTestPaymentOrder(params: {
     params.identityName,
     params.password,
     MAIL_PAYMENT_ORDER_PATH,
-    buildMailPaymentOrderDetail(email, params.asset.network, params.asset.symbol),
+    buildMailPaymentOrderDetail(email, "", ""),
   );
   const res = await fetch(
     apiUrl(params.server, '/api/v1/mail/payment/order'),
@@ -195,8 +194,8 @@ export async function createTestPaymentOrder(params: {
       body: JSON.stringify({
         fingerprint: signed.fingerprint,
         username: check.username,
-        network: params.asset.network,
-        asset: params.asset.symbol,
+        network: "",
+        asset: "",
         proof: signed.proof,
       }),
     }),

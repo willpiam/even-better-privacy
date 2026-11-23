@@ -64,33 +64,55 @@ function renderTransactionLink(order) {
     link.textContent = "";
   }
 }
+function renderPaymentMethods(assets) {
+  const select = $("payment-method");
+  const selected = select.value;
+  select.replaceChildren(new Option("Choose an asset", ""));
+  for (const { network, symbol } of assets) {
+    select.add(new Option(`${symbol} · ${network}`, JSON.stringify({ network, asset: symbol })));
+  }
+  select.value = Array.from(select.options).some(option => option.value === selected) ? selected : "";
+  $("payment-method-form").hidden = !assets.length;
+}
 function render(order) {
-  for (const key of ["email", "fingerprint", "network", "recipient", "message", "status"]) $(key).textContent = order[key];
+  const awaitingAsset = Array.isArray(order.paymentAssets);
+  const test = order.testnet === true || order.network === "ethereum-sepolia" || order.network === "cardano-preview";
+  if ((localTest || location.hostname === "test.pqpost.com") !== test) throw new Error("The order is for a different network environment.");
+  for (const key of ["email", "fingerprint", "network", "recipient", "message", "status"]) $(key).textContent = order[key] ?? "";
   $("price").textContent = `$${(order.usdCents / 100).toFixed(2)} USD`;
-  $("confirmations").textContent = String(order.confirmations);
-  $("amount").textContent = `${decimalAmount(order.amountAtomic, order.decimals)} ${order.asset}`;
-  $("expiry").textContent = new Date(order.expiresAt).toLocaleString();
+  if (!awaitingAsset) {
+    $("confirmations").textContent = String(order.confirmations);
+    $("amount").textContent = `${decimalAmount(order.amountAtomic, order.decimals)} ${order.asset}`;
+    $("expiry").textContent = new Date(order.expiresAt).toLocaleString();
+  }
   $("instructions").replaceChildren();
   document.querySelectorAll("[data-quote]").forEach(element => {
-    element.hidden = order.status === "cancelled";
+    element.hidden = awaitingAsset || order.status === "cancelled";
   });
-  const test = order.network === "ethereum-sepolia" || order.network === "cardano-preview";
-  if ((localTest || location.hostname === "test.pqpost.com") !== test) throw new Error("The order is for a different network environment.");
+  renderPaymentMethods(order.paymentAssets ?? []);
   $("testnet").hidden = !test;
   if (order.status === "cancelled") {
     addInstruction("This purchase was cancelled. The address is no longer reserved. If you already sent payment, contact support with your transaction ID.");
+  } else if (awaitingAsset && order.status === "expired") {
+    addInstruction("This reservation expired. Return to the app to check the address again.");
   } else if (order.status === "pending") {
     addInstruction("If your wallet replaced the transaction, submit the new transaction ID below.");
   } else if (order.status === "quoted") {
-    renderQuoteInstructions(order);
+    if (awaitingAsset) {
+      $("status").textContent = "Awaiting payment selection";
+      if (!order.paymentAssets.length) addInstruction("Payment assets are unavailable. Refresh status to retry.");
+    } else {
+      renderQuoteInstructions(order);
+    }
   }
-  const canSubmit = order.status === "quoted" || order.status === "pending";
+  const canSubmit = !awaitingAsset && (order.status === "quoted" || order.status === "pending");
   $("transaction-form").hidden = !canSubmit;
   $("transaction-submit").textContent = order.status === "pending" ? "Submit replacement transaction" : "Submit transaction";
   if (savedHash && (normalizeHash(savedHash) === normalizeHash(order.transactionId) ||
     order.status === "confirmed" || order.status === "fulfilled")) saveHash("");
   renderTransactionLink(order);
-  renderWallet(order);
+  if (awaitingAsset) $("wallet-pay").hidden = true;
+  else renderWallet(order);
   $("loading").hidden = true; $("order").hidden = false;
 }
 function renderQuoteInstructions(order) {
@@ -285,6 +307,21 @@ async function refresh() {
   try { render(await request("status")); } catch (error) { showError(error.message); $("loading").hidden = true; } finally { busy = false; }
 }
 $("refresh").addEventListener("click", refresh);
+$("payment-method-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const selected = $("payment-method").value;
+  if (busy || !selected) return;
+  busy = true;
+  showError("");
+  try {
+    await request("select", JSON.parse(selected));
+    render(await request("status"));
+  } catch (error) {
+    showError(error.message);
+  } finally {
+    busy = false;
+  }
+});
 $("transaction-form").addEventListener("submit", async (event) => {
   event.preventDefault(); if (busy) return; busy = true; showError("");
   try { render(await submitTransaction($("transaction").value.trim())); }

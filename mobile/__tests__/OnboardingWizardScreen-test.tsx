@@ -206,13 +206,12 @@ it('completes the payment flow for a short test name before creating its mailbox
   await mount(true);
   await press('onboarding-domain-test');
   await enterUsername('alice');
-  expect(has('onboarding-payment-assets')).toBe(true);
+  expect(has('onboarding-payment-assets')).toBe(false);
   await createMailbox();
   expect(createTestPaymentOrder).toHaveBeenCalledWith(
     expect.objectContaining({
       username: 'alice',
       domain: TEST_MAIL_DOMAIN,
-      asset: {network: 'ethereum-sepolia', symbol: 'ETH'},
     }),
   );
   expect(has('onboarding-checkout')).toBe(true);
@@ -229,9 +228,8 @@ it('clears payment state when changing from a short to a long name', async () =>
   await mount(true);
   await press('onboarding-domain-test');
   await enterUsername('alice');
-  expect(has('onboarding-payment-assets')).toBe(true);
+  expect(button('onboarding-address-next').props.disabled).toBe(false);
   await enterUsername('longusername');
-  expect(has('onboarding-payment-assets')).toBe(false);
   await createMailbox();
   expect(createTestPaymentOrder).not.toHaveBeenCalled();
   expect(signupEbpMailbox).toHaveBeenCalled();

@@ -22,9 +22,9 @@
       <dl>
         <dt>Address</dt><dd id="email"></dd>
         <dt>Identity fingerprint</dt><dd id="fingerprint" class="break"></dd>
-        <dt data-quote>Price</dt><dd id="price" data-quote></dd>
+        <dt>Price</dt><dd id="price"></dd>
         <dt data-quote>Send</dt><dd id="amount" data-quote></dd>
-        <dt>Network</dt><dd id="network"></dd>
+        <dt data-quote>Network</dt><dd id="network" data-quote></dd>
         <dt data-quote>Receiving address</dt><dd id="recipient" class="break" data-quote></dd>
         <dt data-quote>Payment message</dt><dd id="message" class="break" data-quote></dd>
         <dt data-quote>Quote expires</dt><dd id="expiry" data-quote></dd>
@@ -32,6 +32,11 @@
       </dl>
       <p id="transaction-explorer" hidden><a id="transaction-link" target="_blank" rel="noopener noreferrer"></a></p>
       <div id="instructions"></div>
+      <form id="payment-method-form" hidden>
+        <label for="payment-method">Payment asset</label>
+        <select id="payment-method" required></select>
+        <button type="submit">Get payment quote</button>
+      </form>
       <div id="wallet-pay" hidden></div>
       <form id="transaction-form">
         <label for="transaction">Transaction ID</label>

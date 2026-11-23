@@ -18,6 +18,7 @@ import {
   handlePaymentCreate,
   handlePaymentOrder,
   handlePaymentRecover,
+  handlePaymentSelect,
   reconcilePendingPayments,
 } from "../handlers/mail-payment.ts";
 import {
@@ -99,8 +100,8 @@ Deno.test({
         path: MAIL_PAYMENT_ORDER_PATH,
         detail: buildMailPaymentOrderDetail(
           "alice@test.pqpost.com",
-          "ethereum-sepolia",
-          "USDC",
+          "",
+          "",
         ),
         timestamp: Date.now(),
       }).proof;
@@ -148,8 +149,8 @@ Deno.test({
         post({
           fingerprint,
           username: "bob",
-          network: "ethereum-sepolia",
-          asset: "USDC",
+          network: "",
+          asset: "",
           proof,
         }),
         db,
@@ -159,8 +160,8 @@ Deno.test({
         post({
           fingerprint,
           username: "alice",
-          network: "ethereum-sepolia",
-          asset: "USDC",
+          network: "",
+          asset: "",
           proof,
         }),
         db,
@@ -171,13 +172,33 @@ Deno.test({
         post({
           fingerprint,
           username: "alice",
-          network: "ethereum-sepolia",
-          asset: "USDC",
+          network: "",
+          asset: "",
           proof,
         }),
         db,
       );
       assertEquals(replay.status, 400);
+      const unquoted =
+        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals(unquoted.paymentAssets, [
+        { network: "ethereum-sepolia", symbol: "USDC" },
+      ]);
+      assertEquals(unquoted.amountAtomic, undefined);
+      assertEquals(
+        (await handlePaymentOrder(post({ orderId, transactionId: "1".repeat(64) }), db, true)).status,
+        409,
+      );
+      assertEquals(
+        (await handlePaymentSelect(post({ orderId, network: "ethereum-mainnet", asset: "USDC" }), db)).status,
+        400,
+      );
+      const select = () => handlePaymentSelect(
+        post({ orderId, network: "ethereum-sepolia", asset: "USDC" }),
+        db,
+      );
+      const selections = await Promise.all([select(), select()]);
+      assertEquals(selections.map(({ status }) => status).sort(), [200, 409]);
       const view =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(view.email, "alice@test.pqpost.com");
