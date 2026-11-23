@@ -120,6 +120,17 @@ Deno.test({
         }, now),
         true,
       );
+      const lateHash = "d".repeat(64);
+      assertEquals(
+        await db.writeTransaction((tx) =>
+          confirmPaymentOrder(tx, unpaid.orderId, lateHash, now, "confirmed", true),
+          `identity:${second}`),
+        true,
+      );
+      const late = await getPaymentOrder(db, unpaid.orderId);
+      assertEquals([late?.status, late?.active, late?.transactionId], [
+        "manual_review", false, lateHash,
+      ]);
     } finally {
       await db.query(
         "DELETE FROM mail_payment_orders WHERE identity_fingerprint IN (?, ?)",

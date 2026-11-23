@@ -81,16 +81,11 @@
         </div>
       </section>
       <section id="restart-step" class="stage" hidden>
-        <h2 tabindex="-1">Your quote expired</h2>
+        <h2 tabindex="-1">Your reservation expired</h2>
         <p id="restart-status" role="status"></p>
         <form id="restart-form" hidden>
-          <label id="no-payment-label" class="checkbox-label" for="no-payment">
-            <input id="no-payment" type="checkbox">
-            <span>I checked my wallet and haven’t sent payment for this order.</span>
-          </label>
           <button type="submit">Start a new quote</button>
         </form>
-        <button type="button" class="secondary" id="cancel-restart" hidden>Back</button>
       </section>
       <section id="confirmation-step" class="stage" hidden>
         <h2 id="confirmation-title" tabindex="-1">Payment status</h2>
@@ -101,9 +96,13 @@
         <progress id="confirmations" aria-label="Block confirmations" hidden></progress>
         <p id="transaction-explorer" hidden><a id="transaction-link" target="_blank" rel="noopener noreferrer"></a></p>
         <button type="button" id="recover" hidden>Retry recording payment</button>
+        <form id="report-payment" hidden>
+          <label for="transaction-id">Transaction ID</label>
+          <input id="transaction-id" type="text" required maxlength="66" spellcheck="false" autocomplete="off">
+          <button type="submit">Report payment</button>
+        </form>
       </section>
       <div class="actions">
-        <button type="button" class="secondary" id="change-payment" hidden>Change network or asset</button>
         <button type="button" class="secondary" id="refresh" hidden>Refresh status</button>
       </div>
     </section>

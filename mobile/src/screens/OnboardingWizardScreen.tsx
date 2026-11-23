@@ -381,11 +381,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
           if (!url) throw new Error('Checkout is not available for this key server.');
           const handoff = checkoutHandoff(url);
           setCheckoutUrl(handoff.url);
-          setCanOpenCheckout(handoff.canOpenOnDevice && status !== 'manual_review');
-          setCheckoutMessage(status === 'manual_review'
-            ? 'This order needs support. Contact support before paying again.'
-            : status === 'expired'
-              ? 'Open checkout to restart this order if you haven’t sent a payment.'
+          setCanOpenCheckout(handoff.canOpenOnDevice);
+          setCheckoutMessage(status === 'expired'
+            ? 'The quote expired. If you already paid, open checkout to submit your transaction ID for review.'
+            : status === 'manual_review'
+              ? 'This order needs support. Open checkout for payment details.'
               : handoff.message);
           setAwaitingPayment(true);
           setCreateError('');
@@ -541,18 +541,24 @@ export default function OnboardingWizardScreen(): JSX.Element {
     setManagingPurchase(true);
     setConfigError('');
     try {
+      if (signup.action === 'unavailable') {
+        await removePendingSignup(signup, 'dismissed');
+        forgetEntry(signup);
+        return;
+      }
+      const secret = await promptSecret({title: `Unlock ${signup.identityName} to cancel the order`});
+      if (!secret) return;
       let order = signup.orderId;
-      const localOnly = !order && signup.action === 'unavailable';
-      if (!order && !localOnly) {
-        const secret = await promptSecret({title: `Unlock ${signup.identityName} to find the order`});
-        if (!secret) return;
+      if (!order) {
         order = await recoverTestPaymentOrder({...signup, password: secret, forCancellation: true}) ?? '';
         if (order) {
           await savePendingSignup({...signup, orderId: order});
           setPending(prev => prev.map(item => item === signup ? {...item, orderId: order} : item));
         }
       }
-      if (order) await cancelPaymentOrder(signup.server, order);
+      if (order) await cancelPaymentOrder({
+        server: signup.server, orderId: order, identityName: signup.identityName, password: secret,
+      });
       await removePendingSignup(signup, order ? 'cancelled' : 'dismissed');
       forgetEntry(signup);
     } catch (error) {
@@ -563,11 +569,11 @@ export default function OnboardingWizardScreen(): JSX.Element {
   };
 
   const confirmCancelSignup = (signup: SignupEntry) => {
-    const localOnly = !signup.orderId && signup.action === 'unavailable';
+    const localOnly = signup.action === 'unavailable';
     Alert.alert(
       localOnly ? 'Remove setup reminder?' : `Cancel ${signup.username}@${signup.domain}?`,
       localOnly
-        ? 'This device cannot find the purchase. Unpaid server reservations expire on their own.'
+        ? 'The original identity is required to cancel the purchase. Keep your checkout link if you already sent payment.'
         : 'Confirm that you have not sent payment. Cancelling releases this address reservation and keeps your identity.',
       [
         {text: 'Keep setup', style: 'cancel'},
@@ -647,7 +653,7 @@ export default function OnboardingWizardScreen(): JSX.Element {
               ) : null}
               {signup.action !== 'restore' ? (
                 <AppButton
-                  title={!signup.orderId && signup.action === 'unavailable' ? 'Remove reminder' : 'Cancel email purchase'}
+                  title={signup.action === 'unavailable' ? 'Remove reminder' : 'Cancel email purchase'}
                   testID={`onboarding-cancel-${signup.username}`}
                   variant="secondary"
                   disabled={managingPurchase || configLoading}

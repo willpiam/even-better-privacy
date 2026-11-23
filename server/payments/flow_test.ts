@@ -10,10 +10,12 @@ import { computeIdentityFingerprint } from "../crypto.ts";
 import { createSignedProof } from "../tests/helpers.ts";
 import {
   buildMailPaymentOrderDetail,
+  MAIL_PAYMENT_CANCEL_PATH,
   MAIL_PAYMENT_ORDER_PATH,
   MAIL_PAYMENT_RECOVER_PATH,
 } from "../../common/MailUsername.ts";
 import {
+  handlePaymentCancel,
   handlePaymentConfig,
   handlePaymentCreate,
   handlePaymentOrder,
@@ -97,7 +99,7 @@ Deno.test({
         createdAt: Date.now(),
       });
       const proof = createSignedProof(signingKey, {
-        nonce: 11,
+        nonce: 12,
         path: MAIL_PAYMENT_ORDER_PATH,
         detail: buildMailPaymentOrderDetail(
           "alice@test.pqpost.com",
@@ -143,9 +145,21 @@ Deno.test({
         db,
       );
       assertEquals(unpaidTestSignup.status, 409);
-      await db.query("DELETE FROM mail_payment_orders WHERE order_id = ?", [
-        (await testOrder.json()).orderId,
-      ]);
+      const unpaidId = (await testOrder.json()).orderId;
+      const authorization = createSignedProof(signingKey, {
+        nonce: 11,
+        path: MAIL_PAYMENT_CANCEL_PATH,
+        detail: unpaidId,
+        timestamp: Date.now(),
+      }).proof;
+      const cancel = (orderId: string, proof?: string) =>
+        handlePaymentCancel(post({ orderId, confirmUnpaid: true, proof }), db);
+      assertEquals((await cancel(unpaidId)).status, 403);
+      assertEquals((await cancel(crypto.randomUUID(), authorization)).status, 404);
+      assertEquals((await cancel(unpaidId, authorization)).status, 200);
+      assertEquals((await cancel(unpaidId, authorization)).status, 403);
+      const cancelledView =
+        await (await handlePaymentOrder(post({ orderId: unpaidId }), db, false)).json();
       const unauthorized = await handlePaymentCreate(
         post({
           fingerprint,
@@ -169,6 +183,7 @@ Deno.test({
       );
       assertEquals(created.status, 200);
       const { orderId } = await created.json();
+      assertEquals((await cancel(orderId, authorization)).status, 403);
       const replay = await handlePaymentCreate(
         post({
           fingerprint,
@@ -203,6 +218,17 @@ Deno.test({
       const afterPreview =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(afterPreview.paymentAssets, unquoted.paymentAssets);
+      await db.query("UPDATE mail_payment_orders SET grace_until = ? WHERE order_id = ?", [
+        Date.now() - 1000, orderId,
+      ]);
+      const expired = await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals([expired.status, expired.canRestart], ["expired", true]);
+      const restart = (paymentReference: string) =>
+        handlePaymentRestart(post({ orderId, paymentReference }), db);
+      assertEquals((await restart(expired.message)).status, 200);
+      const renewed = await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals(renewed.paymentAssets, unquoted.paymentAssets);
+      assert(renewed.message !== expired.message);
       const select = () => handlePaymentSelect(
         post({ orderId, network: "ethereum-sepolia", asset: "USDC" }),
         db,
@@ -211,50 +237,39 @@ Deno.test({
       assertEquals(selections.map(({ status }) => status).sort(), [200, 409]);
       const firstQuote =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
-      const restart = (paymentReference: string) =>
-        handlePaymentRestart(post({ orderId, noPaymentSent: true, paymentReference }), db);
-      assertEquals(firstQuote.canRestart, true);
+      assertEquals(firstQuote.canRestart, false);
       assertEquals(firstQuote.expiresAt > Date.now(), true);
-      assertEquals(
-        (await handlePaymentRestart(post({ orderId, paymentReference: firstQuote.message }), db)).status,
-        409,
-      );
-      const restarts = await Promise.all([restart(firstQuote.message), restart(firstQuote.message)]);
-      assertEquals(restarts.map(({ status }) => status).sort(), [200, 409]);
-      const reset =
-        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
-      assertEquals(reset.paymentAssets, unquoted.paymentAssets);
-      assertEquals((await select()).status, 200);
+      assertEquals((await restart(firstQuote.message)).status, 409);
       const view =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(view.email, "alice@test.pqpost.com");
       assert(!view.message.includes(orderId));
-      assert(view.message !== firstQuote.message);
+      assertEquals(view.message, firstQuote.message);
       assertEquals(view.amountAtomic, "4000000");
-      assertEquals((await restart(firstQuote.message)).status, 409);
       assertEquals(
         (await handlePaymentOrder(post({
           orderId,
-          paymentReference: firstQuote.message,
+          paymentReference: expired.message,
           transactionId: "1".repeat(64),
         }), db, true)).status,
         409,
       );
       const hash = `0x${"1".repeat(64)}`;
       const replacedHash = `0x${"5".repeat(64)}`;
+      const lateHash = `0x${"7".repeat(64)}`;
       const blockHash = `0x${"2".repeat(64)}`;
-      const msg = Array.from(
-        new TextEncoder().encode(view.message),
+      const messageHex = (message: string) => Array.from(
+        new TextEncoder().encode(message),
         (b) => b.toString(16).padStart(2, "0"),
       ).join("");
-      const calldata = `0xa9059cbb${recipient.slice(2).padStart(64, "0")}${
+      const transfer = `0xa9059cbb${recipient.slice(2).padStart(64, "0")}${
         BigInt(view.amountAtomic).toString(16).padStart(64, "0")
-      }${msg}`;
+      }`;
       const transaction = {
         hash,
         to: token,
         value: "0x0",
-        input: calldata,
+        input: transfer + messageHex(view.message),
         blockHash,
         blockNumber: "0xa",
       };
@@ -273,7 +288,8 @@ Deno.test({
           data: `0x${BigInt(view.amountAtomic).toString(16).padStart(64, "0")}`,
         }],
       };
-      let canonicalBlock = `0x${"6".repeat(64)}`;
+      let latestBlock = "0xd";
+      let replacementVisible = false;
       let holdReplacedHash = false;
       let abortedLookup = false;
       const calls = new Map<string, number>();
@@ -281,9 +297,12 @@ Deno.test({
       globalThis.fetch = ((_url: unknown, init?: RequestInit) => {
         const request = JSON.parse(String(init?.body));
         calls.set(request.method, (calls.get(request.method) ?? 0) + 1);
-        const found = request.params.includes(hash);
+        const isOriginal = request.params.includes(hash);
+        const isLate = request.params.includes(lateHash);
+        const lookupHash = isOriginal ? hash : isLate ? lateHash : replacedHash;
+        const found = isOriginal || isLate || replacementVisible;
         if (
-          holdReplacedHash && !found &&
+          holdReplacedHash && !isOriginal &&
           request.method === "eth_getTransactionByHash"
         ) {
           init?.signal?.addEventListener("abort", () => {
@@ -294,10 +313,16 @@ Deno.test({
         }
         const results: Record<string, unknown> = {
           eth_chainId: "0xaa36a7",
-          eth_getTransactionByHash: found ? transaction : null,
-          eth_getTransactionReceipt: found ? receipt : null,
-          eth_blockNumber: "0xe",
-          eth_getBlockByNumber: { hash: canonicalBlock },
+          eth_getTransactionByHash: found
+            ? {
+              ...transaction,
+              hash: lookupHash,
+              input: isLate ? transfer + messageHex(cancelledView.message) : transaction.input,
+            }
+            : null,
+          eth_getTransactionReceipt: found ? { ...receipt, transactionHash: lookupHash } : null,
+          eth_blockNumber: latestBlock,
+          eth_getBlockByNumber: { hash: blockHash },
         };
         return Promise.resolve(
           Response.json({
@@ -307,15 +332,23 @@ Deno.test({
           }),
         );
       }) as typeof fetch;
-      const verified = await handlePaymentOrder(
+      const notYetVisible = await handlePaymentOrder(
         post({ orderId, transactionId: replacedHash }),
         db,
         true,
       );
+      assertEquals(notYetVisible.status, 409);
+      assertEquals((await notYetVisible.json()).retryPayment, true);
+      const unchanged = await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals([unchanged.status, unchanged.transactionId], ["quoted", null]);
+      replacementVisible = true;
+      const verified = await handlePaymentOrder(
+        post({ orderId, transactionId: replacedHash }), db, true,
+      );
       assertEquals(verified.status, 200);
       const waiting = await verified.json();
       assertEquals(waiting.status, "pending");
-      assertEquals(waiting.confirmationsSeen, 0);
+      assertEquals(waiting.confirmationsSeen, 4);
       assertEquals((await restart(view.message)).status, 409);
       // Toggling the catalog off must not pause verification of stored quotes.
       Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
@@ -329,7 +362,7 @@ Deno.test({
       );
       assertEquals(replacement.status, 200);
       assertEquals((await replacement.json()).status, "pending");
-      canonicalBlock = blockHash;
+      latestBlock = "0xe";
       holdReplacedHash = true;
       calls.clear();
       const reconciliation = reconcilePendingPayments(db);
@@ -358,8 +391,15 @@ Deno.test({
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(finalPayment.status, "confirmed");
       assertEquals(finalPayment.transactionId, hash.slice(2));
+      holdReplacedHash = false;
+      const latePayment = await handlePaymentOrder(
+        post({ orderId: unpaidId, transactionId: lateHash }), db, true,
+      );
+      assertEquals(latePayment.status, 200);
+      const review = await latePayment.json();
+      assertEquals([review.status, review.transactionId], ["manual_review", lateHash.slice(2)]);
       const recoveryProof = createSignedProof(signingKey, {
-        nonce: 12,
+        nonce: 13,
         path: MAIL_PAYMENT_RECOVER_PATH,
         detail: "alice@test.pqpost.com",
         timestamp: Date.now(),
@@ -435,7 +475,7 @@ Deno.test({
         }, stalwartFetch),
       );
       const emailProof = createSignedProof(signingKey, {
-        nonce: 13,
+        nonce: 14,
         path: "email",
         detail: "alice@test.pqpost.com",
         timestamp: Date.now(),

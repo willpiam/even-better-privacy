@@ -2,7 +2,8 @@
  * These functions do not grant an entitlement or check whether a transaction was
  * previously used; callers must do both atomically in the order store.
  */
-export type PaymentCheck = "confirmed" | "pending" | "invalid";
+/** Observed payments match the quote on the canonical chain and are awaiting depth. */
+export type PaymentCheck = "confirmed" | "observed" | "pending" | "invalid";
 
 export type PaymentExpectation = {
   recipient: string;
@@ -143,7 +144,7 @@ export function checkEthereumPayment(input: {
   const count = latest - block + 1n;
   const required = BigInt(expected.confirmations);
   input.onConfirmations?.(Number(count >= required ? required : count));
-  return count >= required ? "confirmed" : "pending";
+  return count >= required ? "confirmed" : "observed";
 }
 
 type CardanoOutput = {
@@ -203,5 +204,5 @@ export function checkCardanoPayment(input: {
   if (total < expected.amount) return "invalid";
   const count = input.latestHeight - tx.block_height! + 1;
   input.onConfirmations?.(Math.min(count, expected.confirmations));
-  return count >= expected.confirmations ? "confirmed" : "pending";
+  return count >= expected.confirmations ? "confirmed" : "observed";
 }

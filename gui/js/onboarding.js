@@ -206,8 +206,8 @@ async function renderPendingSignups() {
         });
       }
       if (action !== "restore" && (!unknown || signup.orderId)) {
-        const missingOrder = !signup.orderId && action === "unavailable";
-        addButton(missingOrder ? "Remove reminder" : "Cancel email purchase", () => cancelSignup(signup, missingOrder));
+        const localOnly = action === "unavailable";
+        addButton(localOnly ? "Remove reminder" : "Cancel email purchase", () => cancelSignup(signup, localOnly));
       }
       container.append(row);
     }
@@ -231,15 +231,19 @@ async function cancelSignup(signup, localOnly) {
   try {
     const approved = await showConfirmModal(
       localOnly ? "Remove setup reminder?" : `Cancel ${signup.username}@${signup.domain}?`,
-      localOnly ? "This device cannot find the purchase. Unpaid server reservations expire on their own."
+      localOnly ? "The original identity is required to cancel the purchase. Keep your checkout link if you already sent payment."
         : "Confirm that you have not sent payment. Cancelling releases this address reservation and keeps your identity.",
       localOnly ? "Remove reminder" : "Cancel unpaid purchase",
     );
     if (!approved) return;
+    if (localOnly) {
+      removePendingSignup(localStorage, signup, "dismissed");
+      return;
+    }
+    const password = await requestPassword(`Unlock ${signup.identityName} to cancel the order`);
+    if (!password) return;
     let orderId = signup.orderId;
-    if (!orderId && !localOnly) {
-      const password = await requestPassword(`Unlock ${signup.identityName} to find the order`);
-      if (!password) return;
+    if (!orderId) {
       const order = await api("/mail/ebp-payment/recover", {
         method: "POST", body: JSON.stringify({
           identity: signup.identityName, password, username: signup.username, server: signup.server,
@@ -254,7 +258,9 @@ async function cancelSignup(signup, localOnly) {
     }
     if (orderId) {
       const result = await api("/mail/ebp-payment/cancel", {
-        method: "POST", body: JSON.stringify({server: signup.server, orderId, confirmUnpaid: true}),
+        method: "POST", body: JSON.stringify({
+          identity: signup.identityName, password, server: signup.server, orderId, confirmUnpaid: true,
+        }),
       });
       if (result.status !== "cancelled") throw new Error("Cancellation could not be confirmed. Try again.");
     }
@@ -577,21 +583,21 @@ async function runCreateSteps() {
         showStep("welcome");
         return;
       }
-      if (status.status === "expired") {
-        $("onboarding-checkout").hidden = true;
-        $("onboarding-create-error").textContent = "The quote expired. Your order is saved. If you sent a payment, contact support before paying again.";
-        $("onboarding-retry").textContent = "Check payment";
-        $("onboarding-retry").style.display = "";
-        return;
-      }
       if (status.status !== "confirmed" && status.status !== "fulfilled") {
         const localTest = wizard.domain === "test.pqpost.com" && new URL(wizard.server).origin === "http://127.0.0.1:8789";
         const checkoutOrigin = localTest ? "http://127.0.0.1:8789" : wizard.domain === "test.pqpost.com" ? "https://test.pqpost.com" : "https://pqpost.com";
         $("onboarding-checkout-link").href = `${checkoutOrigin}/checkout.html#${encodeURIComponent(wizard.orderId)}`;
         $("onboarding-checkout").hidden = false;
-        $("onboarding-create-error").textContent = status.status === "manual_review"
-          ? "This order needs support. Contact support before paying again."
-          : "Payment is not confirmed yet.";
+        const expired = status.status === "expired";
+        const needsReview = status.status === "manual_review";
+        $("onboarding-checkout-message").textContent = expired
+          ? "If you already paid, open checkout to submit your transaction ID for review."
+          : needsReview
+            ? "Open checkout for payment details."
+            : "Complete payment in your browser, then return here and check payment.";
+        $("onboarding-create-error").textContent = expired
+          ? "The quote expired. Your order is saved."
+          : needsReview ? "This order needs support." : "Payment is not confirmed yet.";
         $("onboarding-retry").textContent = "Check payment";
         $("onboarding-retry").style.display = "";
         return;

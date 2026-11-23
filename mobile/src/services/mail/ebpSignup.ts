@@ -4,6 +4,7 @@ import {
   Identity,
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
+  MAIL_PAYMENT_CANCEL_PATH,
   MAIL_PAYMENT_ORDER_PATH,
   MAIL_PAYMENT_RECOVER_PATH,
   buildMailDeleteDetail,
@@ -276,14 +277,21 @@ export async function fetchPaymentOrderSnapshot(
   return {status: body.status, email: body.email, fingerprint: body.fingerprint};
 }
 
-export async function cancelPaymentOrder(server: string, orderId: string): Promise<void> {
+export async function cancelPaymentOrder(params: {
+  server: string;
+  orderId: string;
+  identityName: string;
+  password: string;
+}): Promise<void> {
+  const {server, orderId, identityName, password} = params;
+  const {proof} = await signedPaymentProof(identityName, password, MAIL_PAYMENT_CANCEL_PATH, orderId);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const res = await fetch(apiUrl(server, '/api/v1/mail/payment/cancel'), {
       method: 'POST',
       headers: {'content-type': 'application/json'},
-      body: JSON.stringify({orderId, confirmUnpaid: true}),
+      body: JSON.stringify({orderId, confirmUnpaid: true, proof}),
       signal: controller.signal,
     });
     const body = (await res.json().catch(() => ({}))) as {status?: string; error?: string};

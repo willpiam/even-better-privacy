@@ -107,7 +107,11 @@ async function switchSepolia(ethereum) {
 async function request(path, extra = {}) {
   const response = await fetch(`${apiOrigin}/api/v1/mail/payment/${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ orderId: id, ...extra }), cache: "no-store" });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || "Unable to reach the payment server.");
+  if (!response.ok) {
+    throw Object.assign(new Error(body.error || "Unable to reach the payment server."), {
+      retryPayment: body.retryPayment === true,
+    });
+  }
   return body;
 }
 
@@ -125,9 +129,10 @@ let connected;
 let funded;
 let prepared;
 let activeStep;
-let restartReturnStep;
 let busy = false;
 let poll;
+let retrySavedPayment = Boolean(savedHash);
+let retriesRemaining = 12;
 
 function readUncertain() {
   try { return localStorage.getItem(uncertainKey) === "1"; } catch { return false; }
@@ -156,8 +161,6 @@ function setStep(step) {
   }
   if (activeStep !== step) $(`${step}-step`).querySelector("h2").focus();
   activeStep = step;
-  $("change-payment").hidden = step === "restart" || step === "confirmation" ||
-    !order?.network || order.canRestart !== true;
 }
 
 function selectOptions(select, placeholder, options, selected = select.value) {
@@ -380,24 +383,17 @@ function showProgress(message, spinning = true, count) {
   }
 }
 
-function showRestart(previousStep) {
-  const canRestart = order.canRestart === true;
-  restartReturnStep = previousStep;
-  $("restart-step").querySelector("h2").textContent = previousStep
-    ? "Change network or asset"
-    : order.network ? "Your quote expired" : "Your reservation expired";
-  $("restart-form").hidden = !canRestart;
-  $("cancel-restart").hidden = !previousStep;
-  $("no-payment-label").hidden = !order.network;
-  $("no-payment").required = Boolean(order.network);
-  if (activeStep !== "restart") $("no-payment").checked = false;
-  const message = canRestart && order.network
-    ? "Close any open wallet payment prompts. If you already sent payment, keep the transaction ID and contact support before starting over."
-    : canRestart
-      ? "Start a new quote to choose a network and asset."
-      : "Refresh status or check this order in the app.";
-  if ($("restart-status").textContent !== message) $("restart-status").textContent = message;
+function showRestart() {
+  $("restart-form").hidden = !order.canRestart;
+  $("restart-status").textContent = order.canRestart
+    ? "Start a new quote to choose a network and asset."
+    : "Refresh status or check this order in the app.";
   setStep("restart");
+}
+
+function canReportPayment(order) {
+  return Boolean(order?.network) &&
+    ["quoted", "pending", "expired", "cancelled", "manual_review"].includes(order.status);
 }
 
 async function restartPayment() {
@@ -411,7 +407,6 @@ async function restartPayment() {
       return;
     }
     await request("restart", {
-      noPaymentSent: $("no-payment").checked,
       paymentReference: order.message,
     });
     activeStep = undefined;
@@ -439,19 +434,18 @@ function render(snapshot) {
   const retiredPayment = savedHash && savedReference && savedReference !== order.message;
   renderTransactionLink({ ...order, transactionId: order.confirmationTransactionId ?? order.transactionId ?? (retiredPayment ? "" : savedHash) });
   $("confirmation-title").textContent = complete ? "Payment confirmed" : "Payment status";
-  $("recover").hidden = !savedHash || retiredPayment || !["quoted", "pending"].includes(order.status);
+  $("recover").hidden = !savedHash || retiredPayment || !canReportPayment(order);
+  $("report-payment").hidden = !canReportPayment(order);
   if (complete) {
     showProgress("Payment received. Return to the app and select “Check payment” to finish setting up your address.", false);
-  } else if (order.status === "cancelled") {
-    showProgress("This purchase was cancelled. If you already paid, contact support with your transaction ID.", false);
-  } else if (order.status === "manual_review") {
-    showProgress("This payment needs review. Contact support with your transaction ID.", false);
   } else if (retiredPayment) {
     showProgress(`Your wallet sent a transaction for a previous quote. Contact support with transaction ID ${savedHash}.`, false);
   } else if (savedHash) {
-    showProgress(order.status === "expired"
-      ? "Your wallet sent a transaction for this order. Contact support with the transaction ID."
-      : "Your wallet sent the transaction. Record it to start checking for confirmations.", false);
+    showProgress("The transaction ID is saved. You can retry recording it as the network confirms the payment.", false);
+  } else if (order.status === "cancelled") {
+    showProgress("This purchase was cancelled. If you already paid, report your transaction ID for review.", false);
+  } else if (order.status === "manual_review") {
+    showProgress("This payment needs review. Contact support with your transaction ID.", false);
   } else if (order.status === "pending" && order.paymentMismatch) {
     showProgress("The submitted transaction does not match this payment. Contact support with your transaction ID.", false);
   } else if (order.status === "pending") {
@@ -461,14 +455,14 @@ function render(snapshot) {
       : count === 0 ? "Waiting for the transaction to be included in a block…"
       : "Checking the transaction on the network…", true, count > 0 ? count : undefined);
   } else if (uncertain) {
-    showProgress("Your wallet did not confirm whether it sent the payment. Check your wallet history and contact support before trying again.", false);
+    showProgress("Your wallet did not confirm whether it sent the payment. Check your wallet history and report the transaction ID below.", false);
+  } else if (order.status === "expired" && !order.network) {
+    showRestart();
   } else if (order.status === "expired" ||
     (order.status === "quoted" && order.network && order.expiresAt <= Date.now())) {
-    showRestart();
+    showProgress("The quote expired. Report any payment you already sent, or return to the app to cancel an unpaid purchase.", false);
   } else if (order.network && !walletPayKind(order)) {
     showProgress("This quote is no longer payable. Return to the app to check your order.", false);
-  } else if (activeStep === "restart" && restartReturnStep && !changedQuote) {
-    showRestart(restartReturnStep);
   } else if (!activeStep || activeStep === "confirmation" || activeStep === "restart" || changedQuote) {
     const available = order.network ? [order.network] : (order.paymentAssets ?? []).map(({ network }) => network);
     const options = Array.from(new Set(available)).filter(value => networks.has(value));
@@ -482,6 +476,7 @@ function render(snapshot) {
 async function recordPayment() {
   const recorded = await request("transaction", { transactionId: savedHash, paymentReference: savedReference });
   saveHash("");
+  retrySavedPayment = false;
   render(recorded);
 }
 
@@ -567,12 +562,19 @@ async function run(action, onError = () => {}) {
   try {
     await action();
   } catch (error) {
+    retrySavedPayment = error.retryPayment === true;
     showError(walletErrorMessage(error));
     onError();
   } finally {
     busy = false;
     syncControls();
-    if (order?.status === "pending" && !savedHash) {
+    if (retriesRemaining > 0 && retrySavedPayment && savedHash && canReportPayment(order) &&
+      (!savedReference || savedReference === order.message)) {
+      poll = setTimeout(() => {
+        retriesRemaining--;
+        void run(recordPayment);
+      }, 15_000);
+    } else if (order?.status === "pending" && !savedHash) {
       poll = setTimeout(refresh, 12_000);
     } else if (order?.status === "quoted" && !savedHash && !uncertain) {
       const next = order.expiresAt;
@@ -584,7 +586,12 @@ async function run(action, onError = () => {}) {
 }
 
 function refresh() {
-  return run(async () => render(await request("status")), () => {
+  return run(async () => {
+    render(await request("status"));
+    if (savedHash && canReportPayment(order) && (!savedReference || savedReference === order.message)) {
+      await recordPayment();
+    }
+  }, () => {
     $("loading").hidden = true;
     if (!order) {
       $("order").hidden = false;
@@ -607,8 +614,14 @@ form("network-form", () => {
   setStep("wallet");
 });
 form("restart-form", restartPayment);
-$("change-payment").addEventListener("click", () => { showError(""); showRestart(activeStep); });
-$("cancel-restart").addEventListener("click", () => { showError(""); setStep(restartReturnStep); });
+$("recover").addEventListener("click", () => { retriesRemaining = 12; void run(recordPayment); });
+form("report-payment", async () => {
+  const hash = $("transaction-id").value.trim();
+  if (!/^(?:0x)?[0-9a-f]{64}$/i.test(hash)) throw new Error("Enter a valid transaction ID.");
+  saveHash(hash, order.message);
+  retriesRemaining = 12;
+  await recordPayment();
+});
 form("wallet-form", connectWallet);
 form("asset-form", reviewPayment);
 $("asset").addEventListener("change", () => void run(checkFunds));
@@ -621,7 +634,6 @@ $("send").addEventListener("click", () => void run(sendPayment, () => {
   if (savedHash || uncertain) render(order);
   else setStep("review");
 }));
-$("recover").addEventListener("click", () => void run(recordPayment));
 $("refresh").addEventListener("click", refresh);
 
 if (!apiOrigin || !validId.test(id)) {

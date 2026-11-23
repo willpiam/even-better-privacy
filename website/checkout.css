@@ -35,23 +35,13 @@
 .break { overflow-wrap: anywhere; }
 .checkout form { display: grid; gap: .6rem; margin: 1rem 0; }
 .checkout label { font-weight: 600; }
-.checkbox-label { display: flex; align-items: flex-start; gap: .55rem; }
-.checkbox-label span { flex: 1; min-width: 0; }
-.checkbox-label input[type="checkbox"] {
-  flex: none;
-  width: 1rem;
-  height: 1rem;
-  margin: .15em 0 0;
-  padding: 0;
-  accent-color: #8f421b;
-}
-.checkout select, .checkout button {
+.checkout select, .checkout input, .checkout button {
   padding: .75rem 1rem;
   font: inherit;
   border: 1px solid var(--line);
   border-radius: .5rem;
 }
-.checkout select { width: 100%; color: var(--ink); background: white; }
+.checkout select, .checkout input { min-width: 0; width: 100%; color: var(--ink); background: white; }
 .checkout button { justify-self: start; color: white; background: #8f421b; border-color: #8f421b; cursor: pointer; font-weight: 600; }
 .checkout button.secondary { color: var(--ink); background: var(--surface); border-color: var(--line); }
 .info-label { white-space: nowrap; }

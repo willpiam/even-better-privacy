@@ -68,6 +68,10 @@ async function withEnv(
       payments.push(JSON.parse(String(init?.body)));
       return jsonResponse({ orderId: "123e4567-e89b-42d3-a456-426614174000" });
     }
+    if (url.pathname === "/api/v1/mail/payment/cancel") {
+      payments.push(JSON.parse(String(init?.body)));
+      return jsonResponse({ status: "cancelled" });
+    }
     if (url.pathname === "/api/v1/mail/signup") {
       const body = JSON.parse(String(init?.body)) as SignupBody;
       signups.push(body);
@@ -166,7 +170,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "ebp-payment signs separate recover and order proofs and opens test checkout",
+  name: "ebp-payment signs separate recovery, order, and cancellation proofs",
   permissions: { read: true, write: true, env: true, net: true, sys: ["hostname"] },
   fn: async () => {
     await withEnv(async (home, _signups, _setStatus, payments) => {
@@ -178,7 +182,11 @@ Deno.test({
       const result = await order.json();
       assertEquals(order.status, 200, JSON.stringify(result));
       assertEquals(result.checkoutUrl, "http://127.0.0.1:8789/checkout.html#123e4567-e89b-42d3-a456-426614174000");
-      assertEquals(payments.length, 2);
+      const cancellation = await handleRequest(req("POST", "/api/v1/mail/ebp-payment/cancel", {
+        ...common, orderId: result.orderId, confirmUnpaid: true,
+      }));
+      assertEquals(cancellation.status, 200, await cancellation.clone().text());
+      assertEquals(payments.length, 3);
       const decode = (value: unknown) => JSON.parse(new TextDecoder().decode(Uint8Array.from(String(value).match(/../g)!, (part) => parseInt(part, 16))));
       const recoveryProof = decode(payments[0].proof);
       const orderProof = decode(payments[1].proof);
@@ -186,6 +194,11 @@ Deno.test({
       assertEquals(orderProof.path, "ebp-mail::payment-order");
       assertEquals(orderProof.detail, JSON.stringify(["alice@test.pqpost.com", "ethereum-sepolia", "USDC"]));
       assertEquals(orderProof.nonce, recoveryProof.nonce + 1);
+      const cancelProof = decode(payments[2].proof);
+      assertEquals(cancelProof.path, "ebp-mail::payment-cancel");
+      assertEquals(cancelProof.detail, result.orderId);
+      assertEquals(cancelProof.nonce, orderProof.nonce + 1);
+      assertEquals(Object.keys(payments[2]).sort(), ["confirmUnpaid", "orderId", "proof"]);
     });
   },
 });

@@ -4,7 +4,6 @@ import {
   MIGRATE_PAYMENT_CANDIDATES,
   PAYMENT_ORDER_SCHEMA_UPDATES,
 } from "../db/payment-schema.ts";
-import { handlePaymentCancel } from "../handlers/mail-payment.ts";
 import {
   cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
@@ -153,7 +152,7 @@ Deno.test({
           replacementHash,
           301,
         ),
-        true,
+        false,
       );
       assertEquals(
         (await getPaymentOrder(db, "order2"))?.status,
@@ -222,17 +221,8 @@ Deno.test({
         graceUntil: 800,
       };
       assertEquals(await reservePaymentOrder(db, cancellable, 600), true);
-      const cancel = (orderId: string, confirmUnpaid: boolean) =>
-        handlePaymentCancel(
-          new Request("http://localhost/cancel", {
-            method: "POST",
-            body: JSON.stringify({ orderId, confirmUnpaid }),
-          }),
-          db,
-        );
-      assertEquals((await cancel(cancellable.orderId, false)).status, 400);
-      assertEquals((await cancel(cancellable.orderId, true)).status, 200);
-      assertEquals((await cancel(cancellable.orderId, true)).status, 200);
+      assertEquals((await cancelUnpaidPaymentOrder(db, cancellable.orderId, 650))?.status, "cancelled");
+      assertEquals((await cancelUnpaidPaymentOrder(db, cancellable.orderId, 651))?.status, "cancelled");
       const cancelled = await getPaymentOrder(db, cancellable.orderId);
       assertEquals([cancelled?.status, cancelled?.active], [
         "cancelled",
@@ -242,8 +232,8 @@ Deno.test({
         (await db.query<[number]>(
           "SELECT cancelled_at FROM mail_payment_orders WHERE order_id = ?",
           [cancellable.orderId],
-        ))[0][0] > 0,
-        true,
+        ))[0][0],
+        650,
       );
       assertEquals(
         await submitPaymentTransaction(
@@ -286,6 +276,17 @@ Deno.test({
         (await cancelUnpaidPaymentOrder(db, "order4", 650))?.status,
         "manual_review",
       );
+      // Independently confirmed funds remain attached to a released order without
+      // reactivating its reservation or changing the replacement order.
+      assertEquals(
+        await db.writeTransaction((tx) =>
+          confirmPaymentOrder(tx, cancellable.orderId, "c".repeat(64), 660, "confirmed", true)),
+        true,
+      );
+      const late = await getPaymentOrder(db, cancellable.orderId);
+      assertEquals([late?.status, late?.active, late?.transactionId], [
+        "manual_review", false, "c".repeat(64),
+      ]);
       // Simulate a completed mailbox from the pre-upgrade schema.
       await db.query(
         `INSERT INTO mailboxes (username, domain, identity_fingerprint, stalwart_id, created_at)

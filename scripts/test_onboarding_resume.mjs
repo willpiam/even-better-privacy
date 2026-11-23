@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {existsSync, readFileSync} from 'node:fs';
 import {chromium, expect} from '@playwright/test';
 
 // Run the real signup UI in Chromium with an isolated, mocked payment server.
@@ -25,7 +25,9 @@ const html = readFileSync(new URL('gui/index.html', root), 'utf8')
     await maybeOpenOnboardingOnFirstRun();
     window.ready = true;
   </script>`;
-const browser = await chromium.launch({headless: true});
+const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
+  (existsSync('/usr/bin/chromium') ? '/usr/bin/chromium' : undefined);
+const browser = await chromium.launch({headless: true, ...(executablePath ? {executablePath} : {})});
 try {
   const context = await browser.newContext();
   const calls = [];
@@ -46,6 +48,8 @@ try {
     if (path === '/mail/ebp-payment/cancel') {
       assert.equal(body.confirmUnpaid, true);
       assert.equal(body.orderId, orderId);
+      assert.equal(body.identity, 'Personal');
+      assert.equal(body.password, 'identity-secret');
       abandonedOrder = 'cancelled';
       return {status: 'cancelled'};
     }
@@ -181,15 +185,20 @@ try {
   await page.evaluate(({server, orderId, domain}) => {
     localStorage.clear();
     localStorage.setItem(`ebp.mail.order:${server}:Personal:tester`, orderId);
+    localStorage.setItem(`ebp.mail.order:${server}:Personal:alice`, orderId);
     localStorage.setItem(`ebp.mail.order:${server}:Removed:test`, orderId);
   }, {server, orderId, domain});
   await reload();
-  await expect(page.locator('#identities-open-onboarding')).toHaveText('Manage unfinished email purchases');
-  await page.click('#identities-open-onboarding');
+  await expect(page.locator('#identities-open-onboarding')).toHaveText('Resume email setup');
+  await expect(page.locator('#onboarding-modal')).toBeVisible();
   await expect(page.getByText('Identity removed from this device')).toBeVisible();
-  await expect(page.getByRole('button', {name: /Resume email setup:/})).toHaveCount(0);
+  await page.getByRole('button', {name: 'Remove reminder'}).click();
+  await page.locator('#confirm-modal').getByRole('button', {name: 'Remove reminder', exact: true}).click();
+  await expect(page.getByText('Identity removed from this device')).toHaveCount(0);
+  assert.equal(calls.filter(c => c.path === '/mail/ebp-payment/cancel').length, 0);
   await page.getByRole('button', {name: 'Cancel email purchase'}).click();
   await page.getByRole('button', {name: 'Cancel unpaid purchase'}).click();
+  await unlock();
   await expect(page.getByRole('button', {name: 'Cancel email purchase'})).toHaveCount(0);
   await reload();
   await expect(page.locator('#identities-open-onboarding')).toHaveText('Get started');

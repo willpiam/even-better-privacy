@@ -2,6 +2,7 @@ import { isValidFingerprintBech32 } from "../../core/Fingerprint.ts";
 import {
   buildMailPaymentOrderDetail,
   isE2eMailUsername,
+  MAIL_PAYMENT_CANCEL_PATH,
   MAIL_PAYMENT_ORDER_PATH,
   MAIL_PAYMENT_RECOVER_PATH,
   validateMailUsername,
@@ -287,11 +288,29 @@ function validOrderId(value: unknown): value is string {
 export async function handlePaymentCancel(req: Request, db: DatabaseAdapter): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, confirmUnpaid } = parsed.data;
+  const { orderId, confirmUnpaid, proof } = parsed.data;
   if (!validOrderId(orderId) || confirmUnpaid !== true) {
     return json({ error: "Confirm that you haven't sent payment to cancel this order." }, 400);
   }
-  const order = await cancelUnpaidPaymentOrder(db, orderId, Date.now());
+  if (typeof proof !== "string" || proof.length > 100_000) {
+    return json({ error: "Owner authorization is required to cancel this order." }, 403);
+  }
+  const existing = await getPaymentOrder(db, orderId);
+  if (!existing) return json({ error: "order not found" }, 404);
+  const identity = await getIdentity(db, existing.fingerprint);
+  const authorization = identity && verifyDetailProof(identity, MAIL_PAYMENT_CANCEL_PATH, orderId, proof);
+  if (!authorization || !authorization.ok) {
+    return json({ error: "Invalid cancellation authorization." }, 403);
+  }
+  const order = await db.writeTransaction(async (tx) => {
+    const now = Date.now();
+    const { nonce, timestamp } = authorization.record;
+    if (timestamp < now - 10 * 60_000 || timestamp > now + 2 * 60_000 ||
+      await isIdentityRevoked(tx, existing.fingerprint) ||
+      !(await consumeNonce(tx, existing.fingerprint, nonce)).ok) return undefined;
+    return await cancelUnpaidPaymentOrder(tx, orderId, now);
+  }, `identity:${existing.fingerprint}`);
+  if (order === undefined) return json({ error: "Invalid or expired cancellation authorization." }, 403);
   if (!order) return json({ error: "order not found" }, 404);
   if (order.status === "cancelled") return json({ status: "cancelled" });
   const message = order.status === "manual_review"
@@ -356,21 +375,20 @@ export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Pr
 
 function canRestartCheckout(order: StoredOrder): boolean {
   return order.domain === TEST_MAIL_DOMAIN && !order.transactionId &&
-    (order.status === "expired" || (order.status === "quoted" && Boolean(order.network)));
+    !order.network && order.status === "expired";
 }
 
-/** Reset an unpaid order using the same checkout link. */
+/** Renew an expired reservation before a payable quote has been issued. */
 export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, noPaymentSent, paymentReference } = parsed.data;
+  const { orderId, paymentReference } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
   const now = Date.now();
   const legacyExpiredRequest = paymentReference === undefined && order.status === "expired" && order.graceUntil <= now;
-  if (!canRestartCheckout(order) || (paymentReference !== order.message && !legacyExpiredRequest) ||
-    (order.network && noPaymentSent !== true)) {
+  if (!canRestartCheckout(order) || (paymentReference !== order.message && !legacyExpiredRequest)) {
     return json({ error: "This order cannot be restarted. Refresh its payment status." }, 409);
   }
   const config = paymentConfigForSettings(mailSettingsForMode("test"));
@@ -393,7 +411,7 @@ export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): P
           recipient = '', asset_unit = '', amount_atomic = '0', decimals = 0, usd_per_token = '1',
           confirmations = 1, usd_cents = ?, message = ?, expires_at = ?, grace_until = ?
         WHERE order_id = ? AND message = ? AND transaction_id IS NULL
-          AND (status = 'expired' OR (status = 'quoted' AND active = 1 AND network <> ''))
+          AND status = 'expired' AND network = ''
           AND NOT EXISTS (SELECT 1 FROM mail_payment_candidates WHERE order_id = ?)
           AND NOT EXISTS (
             SELECT 1 FROM mail_payment_orders other WHERE other.order_id <> ?
@@ -430,35 +448,25 @@ export async function handlePaymentOrder(
   const now = Date.now();
   let order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
-  order = await expirePaymentOrder(db, order, now);
-  if (submit) {
-    if (
-      typeof transactionId !== "string" ||
-      (paymentReference !== undefined && paymentReference !== order.message) ||
-      !await submitPaymentTransaction(
-        db,
-        orderId,
-        order.fingerprint,
-        transactionId,
-        now,
-        order.message,
-      )
-    ) {
-      if ((await getPaymentOrder(db, orderId))?.status === "cancelled") {
-        return json({ error: "This purchase was cancelled. Contact support with your transaction ID if you sent payment." }, 409);
-      }
-      return json({ error: "transaction could not be submitted" }, 409);
-    }
-    order = (await getPaymentOrder(db, orderId))!;
-  }
+  if (!submit) order = await expirePaymentOrder(db, order, now);
   const progress: Partial<PaymentProgress> = {};
-  if (submit || checkPayment !== false) {
+  if (submit) {
+    if (!order.network || (paymentReference !== undefined && paymentReference !== order.message)) {
+      return json({ error: "No matching payment quote. Refresh checkout." }, 409);
+    }
+    const hash = typeof transactionId === "string"
+      ? transactionId.toLowerCase().replace(/^0x/, "")
+      : "";
+    if (!/^[0-9a-f]{64}$/.test(hash)) return json({ error: "Invalid transaction ID." }, 400);
+    const result = await reportPayment(db, order, hash, progress);
+    if (result instanceof Response) return result;
+    order = result;
+  } else if (checkPayment !== false) {
     try {
       order = await refreshPaymentOrder(db, order, (value) => { Object.assign(progress, value); });
     } catch (error) {
       if (!(error instanceof PaymentRefreshError)) throw error;
-      // Submission already committed. Let checkout acknowledge the saved hash.
-      if (!submit) return json({ error: error.message }, 503);
+      return json({ error: error.message }, 503);
     }
   }
   const canRestart = canRestartCheckout(order);
@@ -516,13 +524,7 @@ export class PaymentRefreshError extends Error {
   readonly retryable = true;
   constructor(readonly stage: string, message: string) { super(message); }
 }
-/** Domain service shared by the request adapter and scheduled reconciliation. */
-export async function refreshPaymentOrder(
-  db: DatabaseAdapter,
-  order: StoredOrder,
-  onProgress?: (progress: PaymentProgress) => void,
-): Promise<StoredOrder> {
-  if (order.status !== "pending") return order;
+function paymentVerifier(order: StoredOrder, signal?: AbortSignal) {
   const prefix = paymentPrefixForDomain(order.domain);
   const provider = prefix && order.network && readPaymentProvider(prefix, order.network);
   if (!provider) {
@@ -534,23 +536,85 @@ export async function refreshPaymentOrder(
     message: order.message,
     confirmations: order.confirmations,
   };
-  const hashes = await paymentTransactionIds(db, order);
-  if (!hashes.length) return order;
-  const controller = new AbortController();
-  const ethereum = provider.chain === "ethereum"
-    ? createEthereumPaymentVerifier({
+  if (provider.chain === "ethereum") {
+    const verify = createEthereumPaymentVerifier({
       rpcUrl: provider.rpcUrl,
       network: provider.network,
       tokenContract: order.assetUnit === "native" ? undefined : order.assetUnit,
       expected,
-      signal: controller.signal,
-    })
-    : null;
+      signal,
+    });
+    return (hash: string, onConfirmations?: (count: number) => void) => verify(`0x${hash}`, onConfirmations);
+  }
+  return (hash: string, onConfirmations?: (count: number) => void) => verifyCardanoPayment({
+    apiKey: provider.apiKey,
+    network: provider.network,
+    txHash: hash,
+    assetUnit: order.assetUnit,
+    expected,
+    signal,
+    onConfirmations,
+  });
+}
+
+async function reportPayment(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+  hash: string,
+  progress: Partial<PaymentProgress>,
+): Promise<StoredOrder | Response> {
+  if (order.status === "confirmed" || order.status === "fulfilled") {
+    return order.transactionId === hash
+      ? order
+      : json({ error: "This order already has a confirmed payment." }, 409);
+  }
+  let evidence;
+  try {
+    evidence = await paymentVerifier(order)(hash, (count) => {
+      progress.confirmationsSeen = count;
+      progress.confirmationTransactionId = hash;
+    });
+  } catch {
+    return json({ error: "Payment verification is temporarily unavailable. Try again.", retryPayment: true }, 503);
+  }
+  if (evidence === "invalid") {
+    return json({ error: "This transaction does not match the order's payment instructions." }, 422);
+  }
+  if (evidence === "confirmed") {
+    await settleConfirmedPayment(db, order, hash, true);
+    const current = (await getPaymentOrder(db, order.orderId))!;
+    return current.transactionId === hash
+      ? current
+      : json({ error: "This transaction could not be credited to this order. Contact support with your transaction ID." }, 409);
+  }
+  if (evidence === "observed" &&
+    await submitPaymentTransaction(db, order.orderId, order.fingerprint, hash, Date.now(), order.message)) {
+    return (await getPaymentOrder(db, order.orderId))!;
+  }
+  return json({
+    error: evidence === "observed"
+      ? "Payment found. Waiting for on-chain confirmations."
+      : "Payment is not visible on-chain yet. Check the transaction ID and retry.",
+    retryPayment: true,
+  }, 409);
+}
+
+/** Domain service shared by the request adapter and scheduled reconciliation. */
+export async function refreshPaymentOrder(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+  onProgress?: (progress: PaymentProgress) => void,
+): Promise<StoredOrder> {
+  if (order.status !== "pending") return order;
+  const hashes = await paymentTransactionIds(db, order);
+  if (!hashes.length) return order;
+  const controller = new AbortController();
+  const verify = paymentVerifier(order, controller.signal);
   let maxConfirmations = 0;
   let paymentMismatch = true;
   let confirmationTransactionId: string | undefined;
   const unconfirmed = Symbol("unconfirmed");
-  let verified: { hash: string; at: number };
+  let verified: string;
   try {
     verified = await Promise.any(hashes.map(async (hash) => {
       const report = (count: number) => {
@@ -559,20 +623,10 @@ export async function refreshPaymentOrder(
           confirmationTransactionId = hash;
         }
       };
-      const result = provider.chain === "cardano"
-        ? await verifyCardanoPayment({
-          apiKey: provider.apiKey,
-          network: provider.network,
-          txHash: hash,
-          assetUnit: order.assetUnit,
-          expected,
-          signal: controller.signal,
-          onConfirmations: report,
-        })
-        : await ethereum!(`0x${hash}`, report);
+      const result = await verify(hash, report);
       if (result !== "invalid") paymentMismatch = false;
       if (result !== "confirmed") throw unconfirmed;
-      return { hash, at: Date.now() };
+      return hash;
     }));
   } catch (error) {
     if (!(error instanceof AggregateError) || error.errors.some((reason) => reason !== unconfirmed)) {
@@ -584,8 +638,19 @@ export async function refreshPaymentOrder(
   } finally {
     controller.abort();
   }
+  await settleConfirmedPayment(db, order, verified);
+  return (await getPaymentOrder(db, order.orderId))!;
+}
 
+async function settleConfirmedPayment(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+  hash: string,
+  directlySubmitted = false,
+): Promise<void> {
   await db.writeTransaction(async (tx) => {
+    const current = await getPaymentOrder(tx, order.orderId);
+    if (current?.message !== order.message) return;
     const emailDetail = await getDetailRecord(tx, order.fingerprint, "email");
     const unavailable = await getMailboxByFingerprint(tx, order.fingerprint) ||
       await isMailboxUsernameTaken(tx, order.username, order.domain) ||
@@ -594,12 +659,12 @@ export async function refreshPaymentOrder(
     await confirmPaymentOrder(
       tx,
       order.orderId,
-      verified.hash,
-      verified.at,
+      hash,
+      Date.now(),
       unavailable ? "manual_review" : "confirmed",
+      directlySubmitted,
     );
   }, `identity:${order.fingerprint}`);
-  return (await getPaymentOrder(db, order.orderId))!;
 }
 
 const MAX_WALLET_UTXOS = 256;

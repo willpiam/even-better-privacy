@@ -18,12 +18,12 @@ try {
       ...address, asset: "USDC", network: "ethereum-sepolia",
       recipient: `0x${"3".repeat(40)}`, assetUnit: `0x${"4".repeat(40)}`,
       amountAtomic: "4000000", decimals: 6, confirmations: 5, message: "pqpost:public-ref",
-      expiresAt: Date.now() + 100_000, canRestart: true,
+      expiresAt: Date.now() + 100_000, canRestart: false,
     },
     "cardano-preview": {
       ...address, asset: "tUSDCx", network: "cardano-preview",
       recipient: "addr_test1example", assetUnit: "ab".repeat(28) + "745553444378", amountAtomic: "2000000",
-      decimals: 6, confirmations: 3, message: "pqpost:public-ref", expiresAt: Date.now() + 100_000, canRestart: true,
+      decimals: 6, confirmations: 3, message: "pqpost:public-ref", expiresAt: Date.now() + 100_000, canRestart: false,
     },
   };
   const reservation = {
@@ -31,6 +31,7 @@ try {
     paymentAssets: Object.values(quotes).map(({ network, asset }) => ({ network, symbol: asset })),
   };
   let order = reservation;
+  let paymentVisible = true;
   await context.addInitScript(({ walletAddress, hash }) => {
     window.walletSendRequests = 0;
     window.tokenBalance = "0x0";
@@ -77,9 +78,9 @@ try {
       const body = route.request().postDataJSON();
       switch (path.split("/").at(-1)) {
         case "restart":
-          assert.equal(body.noPaymentSent, true);
           assert.equal(body.paymentReference, order.message);
-          assert.equal(order.status, "quoted");
+          assert.equal(order.status, "expired");
+          assert.equal(order.network, undefined);
           order = reservation;
           break;
         case "select": {
@@ -101,7 +102,11 @@ try {
           return await route.fulfill({ json: { signedTx: "signed-reviewed" } });
         case "transaction":
           assert.equal(body.transactionId.replace(/^0x/, ""), hash);
-          order = { ...order, status: "pending", confirmationsSeen: 0, transactionId: hash };
+          if (!paymentVisible) {
+            return await route.fulfill({ status: 409, json: { error: "Payment is not visible on-chain yet.", retryPayment: true } });
+          }
+          order = { ...order, status: order.status === "cancelled" ? "manual_review" : "pending",
+            confirmationsSeen: 1, transactionId: hash };
           break;
       }
       return await route.fulfill({ json: order });
@@ -156,7 +161,7 @@ try {
   assert.equal(tx.to, quotes["ethereum-sepolia"].assetUnit);
   assert.match(tx.data, /^0xa9059cbb/);
   await page.evaluate(() => window.approvePayment());
-  await page.getByText("Waiting for the transaction to be included in a block…").waitFor();
+  await page.getByText("1 of 5 block confirmations").waitFor();
   order = { ...order, confirmationsSeen: 2 };
   await page.getByText("2 of 5 block confirmations").waitFor({ timeout: 20_000 });
   assert.equal(await page.locator("progress").getAttribute("value"), "2");
@@ -166,32 +171,19 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Payment confirmed" }).waitFor();
 
-  order = { ...quotes["ethereum-sepolia"] };
+  order = { ...quotes["ethereum-sepolia"], status: "cancelled" };
+  paymentVisible = false;
   await page.reload();
-  await button(page, "Change network or asset").click();
-  await page.getByRole("heading", { name: "Change network or asset" }).waitFor();
-  await button(page, "Start a new quote").click();
-  assert.equal(order.network, "ethereum-sepolia");
-  await page.getByRole("checkbox").check();
-  await button(page, "Start a new quote").click();
-  await page.getByRole("heading", { name: "Choose a network" }).waitFor();
-  assert.equal(await page.locator("[aria-current=step]").textContent(), "Network");
+  await page.getByLabel("Transaction ID").fill(hash);
+  await button(page, "Report payment").click();
+  await page.getByText("Payment is not visible on-chain yet.").waitFor();
+  paymentVisible = true;
+  await page.reload();
+  await page.getByText("This payment needs review.", { exact: false }).waitFor();
 
-  order = { ...quotes["ethereum-sepolia"], expiresAt: Date.now() - 1000 };
+  order = { ...reservation, status: "expired", canRestart: true };
   await page.reload();
-  await page.getByRole("heading", { name: "Your quote expired" }).waitFor();
-  for (const width of [1280, 320]) {
-    await page.setViewportSize({ width, height: 850 });
-    const checkbox = await page.getByRole("checkbox").boundingBox();
-    const label = await page.locator("#no-payment-label").boundingBox();
-    const text = await page.locator("#no-payment-label span").boundingBox();
-    assert(checkbox && label && text);
-    assert(checkbox.width <= 20, "checkbox should keep its compact width");
-    assert(text.x > checkbox.x + checkbox.width, "label text should sit beside the checkbox");
-    assert(text.x + text.width <= label.x + label.width + 1, "label text should stay inside the form");
-    assert(text.width >= label.width - 32, "label text should have room to wrap");
-  }
-  await page.getByRole("checkbox").check();
+  await page.getByRole("heading", { name: "Your reservation expired" }).waitFor();
   await button(page, "Start a new quote").click();
   await page.getByRole("heading", { name: "Choose a network" }).waitFor();
 
@@ -219,7 +211,7 @@ try {
   await minUtxo.press("Enter");
   assert.equal(await page.locator("#min-utxo-note").isVisible(), false);
   await button(page, "Submit Payment Transaction").click();
-  await page.getByText("Waiting for the transaction to be included in a block…").waitFor();
+  await page.getByText("1 of 3 block confirmations").waitFor();
   assert.equal(await page.evaluate(() => window.cardanoUnsigned), "unsigned-reviewed");
   assert.equal(await page.evaluate(() => window.cardanoSigned), "signed-reviewed");
   assert.equal(await page.locator("#transaction-link").getAttribute("href"), `https://preview.cardanoscan.io/transaction/${hash}`);

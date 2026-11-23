@@ -14,6 +14,7 @@ export const MAIL_PASSWORD_RESET_PATH = "ebp-mail::password-reset";
 export const MAIL_DELETE_PATH = "ebp-mail::delete";
 export const MAIL_PAYMENT_ORDER_PATH = "ebp-mail::payment-order";
 export const MAIL_PAYMENT_RECOVER_PATH = "ebp-mail::payment-recover";
+export const MAIL_PAYMENT_CANCEL_PATH = "ebp-mail::payment-cancel";
 
 export function buildMailPaymentOrderDetail(email: string, network: string, asset: string): string {
   return JSON.stringify([email.toLowerCase(), network, asset]);

@@ -50,7 +50,7 @@ Deno.test("Ethereum payments bind recipient, message, canonical block and confir
   const progress: number[] = [];
   assertEquals(
     checkEthereumPayment({ ...payment, latestBlock: "0xd", onConfirmations: (count) => progress.push(count) }),
-    "pending",
+    "observed",
   );
   assertEquals(progress, [4]);
   assertEquals(checkEthereumPayment({ ...payment, chainId: "0x5" }), "invalid");
@@ -188,7 +188,7 @@ Deno.test("Cardano checks CIP-20, outputs, asset, canonical block and depth", ()
   const progress: number[] = [];
   assertEquals(
     checkCardanoPayment({ ...payment, latestHeight: 10, onConfirmations: (count) => progress.push(count) }),
-    "pending",
+    "observed",
   );
   assertEquals(progress, [1]);
   assertEquals(checkCardanoPayment({ ...payment, metadata: [] }), "invalid");

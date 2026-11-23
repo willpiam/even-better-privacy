@@ -5,6 +5,7 @@ import {
   buildMailPaymentOrderDetail,
   MAIL_DELETE_PATH,
   MAIL_PASSWORD_RESET_PATH,
+  MAIL_PAYMENT_CANCEL_PATH,
   MAIL_PAYMENT_ORDER_PATH,
   MAIL_PAYMENT_RECOVER_PATH,
   validateMailUsername,
@@ -38,12 +39,31 @@ export async function handleManagedMailRoutes(
   url: URL,
 ): Promise<Response | null> {
   if (req.method === "POST" && url.pathname === "/api/v1/mail/ebp-payment/cancel") {
-    const body = await readJson<{home?: string; server?: string; orderId?: string; confirmUnpaid?: boolean}>(req);
-    const server = resolveServer(await getContext(toSafeString(body.home) || undefined), toSafeString(body.server) || undefined);
+    const body = await readJson<{
+      home?: string;
+      server?: string;
+      identity?: string;
+      password?: string;
+      orderId?: string;
+      confirmUnpaid?: boolean;
+    }>(req);
+    const { orderId, password } = body;
+    const name = toSafeString(body.identity, 128);
+    if (!name || /[/\\\u0000]/.test(name) || typeof password !== "string" || !password ||
+      typeof orderId !== "string" || orderId.length !== 36 || body.confirmUnpaid !== true) {
+      throw new HttpError(STATUS.BadRequest, "identity, password, and order confirmation are required");
+    }
+    const ctx = await getContext(toSafeString(body.home) || undefined, name);
+    const server = resolveServer(ctx, toSafeString(body.server) || undefined);
+    const { result: proof } = await mutateIdentityForRequest(
+      ctx,
+      password,
+      (current) => current.createDetailProof(MAIL_PAYMENT_CANCEL_PATH, orderId),
+    );
     const res = await fetch(apiUrl(server, "/api/v1/mail/payment/cancel"), {
       method: "POST",
       headers: {"content-type": "application/json"},
-      body: JSON.stringify({orderId: body.orderId, confirmUnpaid: body.confirmUnpaid}),
+      body: JSON.stringify({orderId, confirmUnpaid: true, proof}),
       signal: AbortSignal.timeout(15_000),
     }).catch(() => {
       throw new HttpError(STATUS.BadGateway, "Cancellation could not be confirmed. Your setup is still saved. Try again.");

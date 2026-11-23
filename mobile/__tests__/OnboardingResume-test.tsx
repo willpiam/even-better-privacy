@@ -24,14 +24,16 @@ jest.mock('react-native-safe-area-context', () => ({SafeAreaView: require('react
 jest.mock('@react-native-clipboard/clipboard', () => ({setString: jest.fn()}));
 jest.mock('react-native-share', () => ({open: jest.fn()}));
 jest.mock('../src/components/FoxArt', () => ({__esModule: true, default: () => null, FoxMotion: () => null}));
-jest.mock('../src/hooks/useSecretPrompt', () => ({useSecretPrompt: () => ({secretPrompt: null})}));
+jest.mock('../src/hooks/useSecretPrompt', () => ({
+  useSecretPrompt: () => ({secretPrompt: null, promptSecret: async () => 'identity-secret'}),
+}));
 jest.mock('../src/ebpCore', () => ({randomHex: () => 'abcd', validatePassword: () => ({ok: true})}));
 jest.mock('../src/services/hd', () => ({createHdIdentity: jest.fn(), createHdMnemonic: jest.fn()}));
 jest.mock('../src/services/publish', () => ({publishIdentity: jest.fn(async () => {})}));
 jest.mock('../src/services/storage', () => ({getCurrentIdentity: async () => 'Personal', listIdentities: jest.fn(), setCurrentIdentity: jest.fn()}));
 jest.mock('../src/services/mail/accountStore', () => ({readMailStore: jest.fn()}));
 jest.mock('../src/services/identityPublication', () => ({fetchIdentityPublication: jest.fn(), isEmailVerified: jest.fn(() => true)}));
-jest.mock('../src/services/settings', () => ({getServerUrl: async () => 'https://keys.example.test', getMailTestMode: async () => true}));
+jest.mock('../src/services/settings', () => ({getServerUrl: async () => 'https://keys.pqpost.com', getMailTestMode: async () => true}));
 jest.mock('../src/services/mail/ebpSignup', () => ({
   fetchEbpSignupConfig: async (_: string, testing = false) => ({enabled: true, domain: testing ? 'test.pqpost.com' : 'pqpost.com'}),
   rememberedPaymentOrder: async () => '',
@@ -46,8 +48,8 @@ jest.mock('../src/services/mail/ebpSignup', () => ({
 }));
 
 const signup: PendingSignup = {
-  server: 'https://keys.example.test', domain: 'test.pqpost.com',
-  identityName: 'Personal', username: 'alice', orderId: 'original-order', testMode: true,
+  server: 'https://keys.pqpost.com', domain: 'test.pqpost.com',
+  identityName: 'Personal', username: 'alice', orderId: '123e4567-e89b-42d3-a456-426614174000', testMode: true,
 };
 let tree: renderer.ReactTestRenderer;
 const button = (id: string) => tree.root.findAllByType(AppButton).find(node => node.props.testID === id)!;
@@ -73,7 +75,7 @@ beforeEach(async () => {
   jest.mocked(fetchPaymentOrderSnapshot).mockResolvedValue({status: 'pending', fingerprint: 'fp', email: 'alice@test.pqpost.com'});
   jest.mocked(cancelPaymentOrder).mockResolvedValue(undefined);
   jest.mocked(fetchPaymentOrderStatus).mockResolvedValue('pending');
-  jest.mocked(recoverTestPaymentOrder).mockResolvedValue('original-order');
+  jest.mocked(recoverTestPaymentOrder).mockResolvedValue(signup.orderId);
   jest.mocked(signupEbpMailbox).mockResolvedValue({email: 'alice@test.pqpost.com', fingerprint: 'fp',
     imap: {host: 'mail.test', port: 993, secure: true}, smtp: {host: 'mail.test', port: 465, secure: true},
     login: 'alice@test.pqpost.com', mailPassword: 'mail-secret', accountId: 'account'});
@@ -120,6 +122,7 @@ it('retains expired orders and retries without creating a replacement payment', 
   await mount();
   await resume();
   expect(button('onboarding-retry').props.title).toBe('Check payment');
+  expect(button('onboarding-open-checkout')).toBeDefined();
   await act(async () => button('onboarding-retry').props.onPress());
   expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([signup]);
   expect(createTestPaymentOrder).not.toHaveBeenCalled();
@@ -176,13 +179,28 @@ it('offers restore for a fulfilled mailbox missing its local config', async () =
   expect(button('onboarding-cancel-alice')).toBeUndefined();
 });
 
-it('lets the user cancel when the identity was removed and keeps the order on a failed attempt', async () => {
+it('only removes the reminder when the original identity was removed', async () => {
   jest.mocked(listIdentities).mockResolvedValue([]);
-  jest.mocked(cancelPaymentOrder).mockRejectedValueOnce(new Error('Payment is already recorded'));
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
   try {
     await mount();
     expect(button('onboarding-resume-alice')).toBeUndefined();
+    const remove = button('onboarding-cancel-alice');
+    expect(remove.props.title).toBe('Remove reminder');
+    remove.props.onPress();
+    await act(async () => alert.mock.calls.at(-1)?.[2]?.[1].onPress?.());
+    expect(cancelPaymentOrder).not.toHaveBeenCalled();
+    expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([]);
+  } finally {
+    alert.mockRestore();
+  }
+});
+
+it('unlocks the original identity for cancellation and keeps the setup after a failure', async () => {
+  jest.mocked(cancelPaymentOrder).mockRejectedValueOnce(new Error('Payment is already recorded'));
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+  try {
+    await mount();
     const confirm = async () => {
       button('onboarding-cancel-alice').props.onPress();
       const [, , buttons] = alert.mock.calls.at(-1)!;
@@ -191,7 +209,9 @@ it('lets the user cancel when the identity was removed and keeps the order on a 
     await confirm();
     expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([signup]);
     await confirm();
-    expect(cancelPaymentOrder).toHaveBeenLastCalledWith(signup.server, signup.orderId);
+    expect(cancelPaymentOrder).toHaveBeenLastCalledWith({
+      server: signup.server, orderId: signup.orderId, identityName: signup.identityName, password: 'identity-secret',
+    });
     expect(button('onboarding-cancel-alice')).toBeUndefined();
     expect(await pendingSignups(signup.server, signup.domain, true)).toEqual([]);
   } finally {

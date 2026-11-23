@@ -241,30 +241,26 @@ export async function getActivePaymentOrderId(
   return rows[0]?.[0];
 }
 
-/** The conditional update competes atomically with transaction submission. */
+/** Run with the transaction that consumes the owner's cancellation authorization. */
 export async function cancelUnpaidPaymentOrder(
   db: DatabaseAdapter,
   orderId: string,
   now: number,
 ): Promise<StoredOrder | null> {
-  const order = await getPaymentOrder(db, orderId);
-  if (!order || order.status === "cancelled") return order;
-  return await db.writeTransaction(async (tx) => {
-    await tx.query(
-      `UPDATE mail_payment_orders SET status = 'cancelled', active = 0, cancelled_at = ?
+  await db.query(
+    `UPDATE mail_payment_orders SET status = 'cancelled', active = 0, cancelled_at = ?
       WHERE order_id = ? AND status IN ('quoted', 'expired') AND transaction_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM mailboxes
           WHERE identity_fingerprint = mail_payment_orders.identity_fingerprint
             AND username = mail_payment_orders.username AND domain = mail_payment_orders.domain)`,
-      [now, orderId],
-    );
-    return await getPaymentOrder(tx, orderId);
-  }, `identity:${order.fingerprint}`);
+    [now, orderId],
+  );
+  return await getPaymentOrder(db, orderId);
 }
 
 const MAX_PAYMENT_TRANSACTIONS = 8;
 
-/** Accept retries and keep earlier hashes eligible until a payment confirms. */
+/** Record an observed payment and retain earlier candidates until a payment confirms. */
 export async function submitPaymentTransaction(
   db: DatabaseAdapter,
   orderId: string,
@@ -279,6 +275,8 @@ export async function submitPaymentTransaction(
     const order = await getPaymentOrder(tx, orderId);
     if (!order?.network || order.fingerprint !== fingerprint ||
       (paymentReference !== undefined && order.message !== paymentReference)) return false;
+    if (!order.active || order.graceUntil <= now ||
+      (order.status !== "quoted" && order.status !== "pending")) return false;
     const hashes = await paymentTransactionIds(tx, order);
     if (hashes.includes(hash)) return true;
     if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;
@@ -320,21 +318,31 @@ export async function paymentTransactionIds(
     : hashes;
 }
 
-/** Only a verifier may call this after independently validating chain evidence. */
+/** Only a verifier may call this after independently validating chain evidence.
+ * A newly reported, confirmed payment can bypass the candidate limit.
+ * Released reservations go to review so they cannot displace a later purchase.
+ */
 export async function confirmPaymentOrder(
   db: DatabaseAdapter,
   orderId: string,
   transactionId: string,
   now: number,
   status: "confirmed" | "manual_review" = "confirmed",
+  directlySubmitted = false,
 ): Promise<boolean> {
   const hash = transactionId.toLowerCase().replace(/^0x/, "");
   const rows = await db.query<[string]>(
-    `UPDATE mail_payment_orders SET status = ?, active = ?, transaction_id = ?
-    WHERE order_id = ? AND status = 'pending' AND active = 1 AND grace_until > ?
-      AND (transaction_id = ? OR EXISTS (
-        SELECT 1 FROM mail_payment_candidates WHERE order_id = ? AND transaction_id = ?
-      ))
+    `UPDATE mail_payment_orders
+    SET status = CASE WHEN active = 1 AND grace_until > ? THEN ? ELSE 'manual_review' END,
+        active = CASE WHEN active = 1 AND grace_until > ? AND ? = 'confirmed' THEN 1 ELSE 0 END,
+        transaction_id = ?
+    WHERE order_id = ? AND (
+      (? = 1 AND status IN ('quoted', 'pending', 'cancelled', 'expired', 'manual_review'))
+      OR (status = 'pending' AND active = 1 AND grace_until > ?
+        AND (transaction_id = ? OR EXISTS (
+          SELECT 1 FROM mail_payment_candidates WHERE order_id = ? AND transaction_id = ?
+        )))
+    )
       AND NOT EXISTS (
         SELECT 1 FROM mail_payment_orders AS credited
         WHERE credited.network = mail_payment_orders.network AND credited.transaction_id = ?
@@ -342,10 +350,13 @@ export async function confirmPaymentOrder(
       )
     RETURNING order_id`,
     [
+      now,
       status,
-      status === "confirmed" ? 1 : 0,
+      now,
+      status,
       hash,
       orderId,
+      directlySubmitted ? 1 : 0,
       now,
       hash,
       orderId,
@@ -353,6 +364,13 @@ export async function confirmPaymentOrder(
       hash,
     ],
   );
+  if (rows.length && directlySubmitted) {
+    await db.query(
+      `INSERT INTO mail_payment_candidates (order_id, transaction_id, submitted_at)
+       VALUES (?, ?, ?) ON CONFLICT (order_id, transaction_id) DO NOTHING`,
+      [orderId, hash, now],
+    );
+  }
   return rows.length === 1;
 }
 
