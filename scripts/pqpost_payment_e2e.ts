@@ -145,7 +145,7 @@ export async function runPaymentE2e(
   if (!orderId) throw new Error("Could not reserve a test address.");
   console.log(`Test address: ${username}@${TEST_MAIL_DOMAIN}`);
   console.log(
-    `Open this local testnet checkout, pay with test funds, and submit the transaction ID:\n${LOCAL_SERVER}/checkout.html#${orderId}`,
+    `Open this local testnet checkout, connect your wallet, and approve the reviewed payment with test funds:\n${LOCAL_SERVER}/checkout.html#${orderId}`,
   );
   let lastStatus = "";
   let confirmed = false;

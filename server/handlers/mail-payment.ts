@@ -52,6 +52,7 @@ import {
   buildPreviewUnsigned,
   cardanoPayError,
   previewBlockfrost,
+  previewTransactionCosts,
   utxoFromCip30,
   selectWalletUtxos,
 } from "../payments/cardano_tx.ts";
@@ -304,25 +305,40 @@ export async function handlePaymentCancel(req: Request, db: DatabaseAdapter): Pr
   }, 409);
 }
 
+async function preparePaymentSelection(order: StoredOrder, network: unknown, asset: unknown) {
+  if (order.domain !== TEST_MAIL_DOMAIN || order.network || !order.active ||
+    order.status !== "quoted" || order.graceUntil <= Date.now()) {
+    return { error: json({ error: "Payment selection is closed. Refresh the order status." }, 409) };
+  }
+  const config = paymentConfigForSettings(mailSettingsForMode("test"));
+  if (!config || !isMailSignupReady()) return { error: json({ error: "paid signup is not enabled" }, 503) };
+  const chosen = checkoutAssets(config).find((item) => item.network === network && item.symbol === asset);
+  if (!chosen) return { error: json({ error: "unsupported payment asset" }, 400) };
+  const quote = await paymentQuote(config, chosen, order.usdCents, Date.now());
+  if (!quote) return { error: json({ error: "exchange rate unavailable; please retry" }, 503) };
+  return { quote };
+}
+
 /** Lock in the first asset selected by the holder of the checkout capability. */
 export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, network, asset } = parsed.data;
+  const { orderId, network, asset, preview } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
-  if (order.domain !== TEST_MAIL_DOMAIN || order.network || !order.active ||
-    order.status !== "quoted" || order.graceUntil <= Date.now()) {
-    return json({ error: "Payment selection is closed. Refresh the order status." }, 409);
-  }
-  const config = paymentConfigForSettings(mailSettingsForMode("test"));
-  if (!config || !isMailSignupReady()) return json({ error: "paid signup is not enabled" }, 503);
-  const chosen = checkoutAssets(config).find((item) => item.network === network && item.symbol === asset);
-  if (!chosen) return json({ error: "unsupported payment asset" }, 400);
-  const quote = await paymentQuote(config, chosen, order.usdCents, Date.now());
-  if (!quote) return json({ error: "exchange rate unavailable; please retry" }, 503);
+  const { quote, error } = await preparePaymentSelection(order, network, asset);
+  if (error) return error;
   const now = Date.now();
+  if (preview === true) {
+    return json({
+      email: `${order.username}@${order.domain}`,
+      status: "quoted",
+      ...quote,
+      message: order.message,
+      expiresAt: now + QUOTE_MS,
+    });
+  }
   const rows = await db.query<[string]>(
     `UPDATE mail_payment_orders SET asset = ?, network = ?, recipient = ?, asset_unit = ?,
       amount_atomic = ?, decimals = ?, usd_per_token = ?, confirmations = ?, expires_at = ?, grace_until = ?
@@ -367,9 +383,10 @@ export async function handlePaymentOrder(
     }
     order = (await getPaymentOrder(db, orderId))!;
   }
+  const progress: Partial<PaymentProgress> = {};
   if (submit || checkPayment !== false) {
     try {
-      order = await refreshPaymentOrder(db, order);
+      order = await refreshPaymentOrder(db, order, (value) => { Object.assign(progress, value); });
     } catch (error) {
       if (!(error instanceof PaymentRefreshError)) throw error;
       // Submission already committed. Let checkout acknowledge the saved hash.
@@ -404,6 +421,7 @@ export async function handlePaymentOrder(
     amountAtomic: order.amountAtomic,
     decimals: order.decimals,
     confirmations: order.confirmations,
+    ...progress,
     message: order.message,
     expiresAt: order.expiresAt,
     graceUntil: order.graceUntil,
@@ -411,6 +429,12 @@ export async function handlePaymentOrder(
     transactionId: order.transactionId,
   });
 }
+
+type PaymentProgress = {
+  confirmationsSeen: number;
+  paymentMismatch: boolean;
+  confirmationTransactionId?: string;
+};
 
 export class PaymentRefreshError extends Error {
   readonly retryable = true;
@@ -420,6 +444,7 @@ export class PaymentRefreshError extends Error {
 export async function refreshPaymentOrder(
   db: DatabaseAdapter,
   order: StoredOrder,
+  onProgress?: (progress: PaymentProgress) => void,
 ): Promise<StoredOrder> {
   if (order.status !== "pending") return order;
   const prefix = paymentPrefixForDomain(order.domain);
@@ -445,10 +470,19 @@ export async function refreshPaymentOrder(
       signal: controller.signal,
     })
     : null;
+  let maxConfirmations = 0;
+  let paymentMismatch = true;
+  let confirmationTransactionId: string | undefined;
   const unconfirmed = Symbol("unconfirmed");
   let verified: { hash: string; at: number };
   try {
     verified = await Promise.any(hashes.map(async (hash) => {
+      const report = (count: number) => {
+        if (count > maxConfirmations) {
+          maxConfirmations = count;
+          confirmationTransactionId = hash;
+        }
+      };
       const result = provider.chain === "cardano"
         ? await verifyCardanoPayment({
           apiKey: provider.apiKey,
@@ -457,8 +491,10 @@ export async function refreshPaymentOrder(
           assetUnit: order.assetUnit,
           expected,
           signal: controller.signal,
+          onConfirmations: report,
         })
-        : await ethereum!(`0x${hash}`);
+        : await ethereum!(`0x${hash}`, report);
+      if (result !== "invalid") paymentMismatch = false;
       if (result !== "confirmed") throw unconfirmed;
       return { hash, at: Date.now() };
     }));
@@ -467,6 +503,7 @@ export async function refreshPaymentOrder(
       throw new PaymentRefreshError("provider", "payment verification temporarily unavailable");
     }
     // Keep the reservation open through grace for reorgs and replacement hashes.
+    onProgress?.({ confirmationsSeen: maxConfirmations, paymentMismatch, confirmationTransactionId });
     return order;
   } finally {
     controller.abort();
@@ -518,31 +555,49 @@ export async function handleCardanoUnsigned(
 ): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const loaded = await quotedCardanoOrder(db, parsed.data.orderId);
-  if (loaded.error) return loaded.error;
-  const { changeAddress, utxos } = parsed.data;
+  const { orderId, changeAddress, utxos, preview, network, asset } = parsed.data;
+  let order: StoredOrder;
+  if (preview === true) {
+    if (!validOrderId(orderId) || network !== "cardano-preview") {
+      return json({ error: "invalid Cardano preview" }, 400);
+    }
+    const reservation = await getPaymentOrder(db, orderId);
+    if (!reservation) return json({ error: "order not found" }, 404);
+    const { quote, error } = await preparePaymentSelection(reservation, network, asset);
+    if (error) return error;
+    order = { ...reservation, ...quote, message: `pqpost:${"0".repeat(36)}`, expiresAt: Date.now() + QUOTE_MS };
+  } else {
+    const loaded = await quotedCardanoOrder(db, orderId);
+    if (loaded.error) return loaded.error;
+    order = loaded.order;
+  }
   if (
     typeof changeAddress !== "string" || changeAddress.length > 200 ||
     !Array.isArray(utxos) || utxos.length === 0 || utxos.length > MAX_WALLET_UTXOS
   ) {
     return json({ error: "invalid cardano payment request" }, 400);
   }
-  const prefix = paymentPrefixForDomain(loaded.order.domain);
-  const provider = prefix && loaded.order.network && readPaymentProvider(prefix, loaded.order.network);
+  const prefix = paymentPrefixForDomain(order.domain);
+  const provider = prefix && order.network && readPaymentProvider(prefix, order.network);
   if (!provider || provider.chain !== "cardano") {
     return json({ error: "cardano payment is not configured" }, 503);
   }
   try {
-    const unsignedTx = await buildPreviewUnsigned(loaded.order, {
-      changeAddress: bech32Address(changeAddress),
-      utxos: selectWalletUtxos(utxos.map((hex) => {
-        if (typeof hex !== "string" || !/^[0-9a-f]+$/i.test(hex) || hex.length > 8000) {
-          throw new Error("The wallet did not provide a usable testnet address or funds.");
-        }
-        return utxoFromCip30(hex);
-      }), loaded.order.assetUnit),
-    }, previewBlockfrost(provider.apiKey));
-    return json({ unsignedTx });
+    const change = bech32Address(changeAddress);
+    const candidates = selectWalletUtxos(utxos.map((hex) => {
+      if (typeof hex !== "string" || !/^[0-9a-f]+$/i.test(hex) || hex.length > 8000) {
+        throw new Error("The wallet did not provide a usable testnet address or funds.");
+      }
+      return utxoFromCip30(hex);
+    }), order.assetUnit);
+    const chain = previewBlockfrost(provider.apiKey);
+    const inputs = await chain.getUtxosByOutRef(candidates.map(({ txHash, outputIndex }) => ({ txHash, outputIndex })));
+    if (!inputs.length) {
+      throw new Error("No spendable wallet inputs were found on Cardano Preview. Check your wallet network.");
+    }
+    const unsignedTx = await buildPreviewUnsigned(order, { changeAddress: change, utxos: inputs }, chain);
+    const costs = previewTransactionCosts(unsignedTx, order);
+    return json(preview === true ? costs : { unsignedTx, changeAddress: change, ...costs });
   } catch (error) {
     return json({ error: cardanoFailure(error) }, 400);
   }

@@ -52,7 +52,7 @@ export function createEthereumPaymentVerifier(args: EthereumVerifierOptions) {
   }
   let chainIdResult: Promise<string> | undefined;
   let latestBlock: Promise<unknown> | undefined;
-  return async (txHash: string): Promise<PaymentCheck> => {
+  return async (txHash: string, onConfirmations?: (count: number) => void): Promise<PaymentCheck> => {
     if (!/^0x[0-9a-f]{64}$/i.test(txHash)) return "invalid";
     const chainId = await (chainIdResult ??= readChainId());
     const [tx, receipt, latest] = await Promise.all([
@@ -102,6 +102,7 @@ export function createEthereumPaymentVerifier(args: EthereumVerifierOptions) {
       latestBlock: latest,
       tokenContract: args.tokenContract,
       expected: args.expected,
+      onConfirmations,
     });
   };
 }
@@ -123,6 +124,7 @@ export async function verifyCardanoPayment(args: {
   network: "mainnet" | "preview";
   txHash: string;
   assetUnit: string;
+  onConfirmations?: (count: number) => void;
   expected: PaymentExpectation;
   fetchImpl?: Fetch;
   signal?: AbortSignal;
@@ -179,5 +181,6 @@ export async function verifyCardanoPayment(args: {
     latestHeight: (latest as { height: number }).height,
     assetUnit: args.assetUnit,
     expected: args.expected,
+    onConfirmations: args.onConfirmations,
   });
 }

@@ -13,40 +13,76 @@
 <body>
   <main class="checkout">
     <a class="brand" href="/">pqpost</a>
-    <p class="eyebrow">Address checkout</p>
-    <h1>Complete your purchase</h1>
-    <p id="testnet" class="notice" hidden>Test network: use test funds only. No real address is purchased.</p>
-    <p id="error" class="notice" role="alert" hidden></p>
+    <h1>Address checkout</h1>
+    <p id="testnet" class="notice" hidden>Use test funds only. This purchase is for a test address.</p>
+    <p id="error" class="notice error" role="alert" hidden></p>
     <p id="loading" role="status">Loading your order…</p>
     <section id="order" hidden>
-      <dl>
-        <dt>Address</dt><dd id="email"></dd>
-        <dt>Identity fingerprint</dt><dd id="fingerprint" class="break"></dd>
-        <dt>Price</dt><dd id="price"></dd>
-        <dt data-quote>Send</dt><dd id="amount" data-quote></dd>
-        <dt data-quote>Network</dt><dd id="network" data-quote></dd>
-        <dt data-quote>Receiving address</dt><dd id="recipient" class="break" data-quote></dd>
-        <dt data-quote>Payment message</dt><dd id="message" class="break" data-quote></dd>
-        <dt data-quote>Quote expires</dt><dd id="expiry" data-quote></dd>
-        <dt>Status</dt><dd id="status"></dd>
-      </dl>
-      <p id="transaction-explorer" hidden><a id="transaction-link" target="_blank" rel="noopener noreferrer"></a></p>
-      <div id="instructions"></div>
-      <form id="payment-method-form" hidden>
-        <label for="payment-method">Payment asset</label>
-        <select id="payment-method" required></select>
-        <button type="submit">Get payment quote</button>
-      </form>
-      <div id="wallet-pay" hidden></div>
-      <form id="transaction-form">
-        <label for="transaction">Transaction ID</label>
-        <input id="transaction" type="text" autocomplete="off" spellcheck="false" required>
-        <button type="submit" id="transaction-submit">Submit transaction</button>
-      </form>
-      <button type="button" id="refresh">Refresh status</button>
-      <p class="muted" data-quote>Keep this page until the payment is confirmed. For late, insufficient, or unmatched payments, contact support before sending another payment.</p>
-      <p class="muted" data-quote>After confirmation, return to the app and select “Check payment”.</p>
-      <p class="muted" data-quote>Stablecoins are priced at one USD per token. This order requires <span id="confirmations"></span> network confirmations.</p>
+      <p class="order-summary"><strong id="email"></strong><span id="price"></span></p>
+      <ol id="steps" class="steps" aria-label="Checkout progress" hidden>
+        <li>Network</li><li>Wallet</li><li>Asset</li><li>Review</li><li>Confirmation</li>
+      </ol>
+      <section id="network-step" class="stage" hidden>
+        <h2 tabindex="-1">Choose a network</h2>
+        <form id="network-form">
+          <label for="network">Network</label>
+          <select id="network" required></select>
+          <button type="submit">Continue to wallet</button>
+        </form>
+      </section>
+      <section id="wallet-step" class="stage" hidden>
+        <h2 tabindex="-1">Connect your wallet</h2>
+        <form id="wallet-form">
+          <label for="wallet">Wallet</label>
+          <select id="wallet" required></select>
+          <p id="wallet-help" hidden></p>
+          <button id="connect" type="submit">Connect wallet</button>
+        </form>
+        <button type="button" class="secondary" id="back-network">Back</button>
+      </section>
+      <section id="asset-step" class="stage" hidden>
+        <h2 tabindex="-1">Choose a payment asset</h2>
+        <form id="asset-form">
+          <label for="asset">Payment asset</label>
+          <select id="asset" required></select>
+          <p id="asset-locked" hidden>This quote is reserved for the selected asset.</p>
+          <p id="balance" role="status"></p>
+          <button id="review" type="submit" disabled>Review payment</button>
+        </form>
+        <div class="actions">
+          <button type="button" class="secondary" id="back-wallet">Back</button>
+          <button type="button" class="secondary" id="check-funds" hidden>Check funds again</button>
+        </div>
+      </section>
+      <section id="review-step" class="stage" hidden>
+        <h2 tabindex="-1">Review payment</h2>
+        <dl>
+          <dt>Network</dt><dd id="review-network"></dd>
+          <dt>Wallet</dt><dd id="review-wallet"></dd>
+          <dt>From</dt><dd id="from" class="break"></dd>
+          <dt>Recipient</dt><dd id="recipient" class="break"></dd>
+          <dt>Payment</dt><dd id="amount"></dd>
+          <dt id="extra-label" hidden>ADA in token output</dt><dd id="extra" hidden></dd>
+          <dt>Network fee</dt><dd id="fee"></dd>
+          <dt>Quote expires</dt><dd id="expiry"></dd>
+        </dl>
+        <p>Review and approve the transaction in your wallet when prompted.</p>
+        <div class="actions">
+          <button type="button" id="send">Submit Payment Transaction</button>
+          <button type="button" class="secondary" id="back-asset">Back</button>
+        </div>
+      </section>
+      <section id="confirmation-step" class="stage" hidden>
+        <h2 id="confirmation-title" tabindex="-1">Payment status</h2>
+        <div class="status" role="status">
+          <span id="spinner" class="spinner" aria-hidden="true" hidden></span>
+          <p id="status"></p>
+        </div>
+        <progress id="confirmations" aria-label="Block confirmations" hidden></progress>
+        <p id="transaction-explorer" hidden><a id="transaction-link" target="_blank" rel="noopener noreferrer"></a></p>
+        <button type="button" id="recover" hidden>Retry recording payment</button>
+      </section>
+      <button type="button" class="secondary" id="refresh" hidden>Refresh status</button>
     </section>
   </main>
 </body>

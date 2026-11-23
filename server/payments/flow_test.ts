@@ -193,6 +193,15 @@ Deno.test({
         (await handlePaymentSelect(post({ orderId, network: "ethereum-mainnet", asset: "USDC" }), db)).status,
         400,
       );
+      const preview = await handlePaymentSelect(
+        post({ orderId, network: "ethereum-sepolia", asset: "USDC", preview: true }),
+        db,
+      );
+      assertEquals(preview.status, 200);
+      assertEquals((await preview.json()).amountAtomic, "4000000");
+      const afterPreview =
+        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals(afterPreview.paymentAssets, unquoted.paymentAssets);
       const select = () => handlePaymentSelect(
         post({ orderId, network: "ethereum-sepolia", asset: "USDC" }),
         db,
@@ -277,7 +286,9 @@ Deno.test({
         true,
       );
       assertEquals(verified.status, 200);
-      assertEquals((await verified.json()).status, "pending");
+      const waiting = await verified.json();
+      assertEquals(waiting.status, "pending");
+      assertEquals(waiting.confirmationsSeen, 0);
       // Toggling the catalog off must not pause verification of stored quotes.
       Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
       Deno.env.delete("MAIL_PAYMENT_BLOCKFROST_KEY");

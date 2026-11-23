@@ -97,6 +97,26 @@ export async function buildPreviewUnsigned(
   return unsigned;
 }
 
+export function previewTransactionCosts(unsignedTx: string, order: StoredOrder) {
+  const body = CML.Transaction.from_cbor_hex(unsignedTx).body();
+  const outputs = body.outputs();
+  let recipientLovelace = 0n;
+  let recipientAmount = 0n;
+  for (let index = 0; index < outputs.len(); index++) {
+    const output = outputs.get(index);
+    if (output.address().to_bech32() === order.recipient) {
+      const assets = valueToAssets(output.amount());
+      recipientLovelace += assets.lovelace ?? 0n;
+      recipientAmount += assets[order.assetUnit] ?? 0n;
+    }
+  }
+  return {
+    feeLovelace: body.fee().toString(),
+    recipientLovelace: recipientLovelace.toString(),
+    recipientAmount: recipientAmount.toString(),
+  };
+}
+
 export function assembleSignedTransaction(
   unsignedTx: string,
   witnessSet: string,
@@ -119,7 +139,7 @@ export function assembleSignedTransaction(
   return hex;
 }
 
-export function previewBlockfrost(projectId: string): ChainProvider {
+export function previewBlockfrost(projectId: string): Blockfrost {
   return new Blockfrost(PREVIEW_BLOCKFROST_URL, projectId);
 }
 

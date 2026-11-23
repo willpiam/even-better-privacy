@@ -8,6 +8,7 @@ import {
   assembleSignedTransaction,
   buildPreviewUnsigned,
   cardanoPayError,
+  previewTransactionCosts,
   selectWalletUtxos,
 } from "./cardano_tx.ts";
 import type { StoredOrder } from "./orders.ts";
@@ -125,6 +126,10 @@ Deno.test("Preview token checkout builds with less than three ADA and verifies t
       assets: { lovelace: 2_500_000n, [unit]: 2_000_000n },
     }],
   }, { getProtocolParameters: () => Promise.resolve(PROTOCOL_PARAMETERS_DEFAULT) });
+  const costs = previewTransactionCosts(unsigned, quote);
+  assertEquals(costs.recipientAmount, quote.amountAtomic);
+  assertEquals(BigInt(costs.recipientLovelace) > 0n, true);
+  assertEquals(BigInt(costs.feeLovelace) > 0n, true);
   const witness = CML.TransactionWitnessSet.new().to_cbor_hex();
   assembleSignedTransaction(unsigned, witness, quote);
   assertThrows(() =>

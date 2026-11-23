@@ -71,6 +71,7 @@ export function checkEthereumPayment(input: {
   latestBlock: string;
   tokenContract?: string;
   expected: PaymentExpectation;
+  onConfirmations?: (count: number) => void;
 }): PaymentCheck {
   const { expected, transaction: tx, receipt } = input;
   const recipient = expected.recipient.toLowerCase();
@@ -139,9 +140,10 @@ export function checkEthereumPayment(input: {
     });
     if (matching.length !== 1) return "invalid";
   }
-  return latest - block + 1n >= BigInt(expected.confirmations)
-    ? "confirmed"
-    : "pending";
+  const count = latest - block + 1n;
+  const required = BigInt(expected.confirmations);
+  input.onConfirmations?.(Number(count >= required ? required : count));
+  return count >= required ? "confirmed" : "pending";
 }
 
 type CardanoOutput = {
@@ -159,6 +161,7 @@ export function checkCardanoPayment(input: {
   latestHeight: number;
   assetUnit: string; // lovelace, or policy ID concatenated with hex asset name
   expected: PaymentExpectation;
+  onConfirmations?: (count: number) => void;
 }): PaymentCheck {
   const { expected, transaction: tx } = input;
   if (
@@ -198,7 +201,7 @@ export function checkCardanoPayment(input: {
     }
   }
   if (total < expected.amount) return "invalid";
-  return input.latestHeight - tx.block_height! + 1 >= expected.confirmations
-    ? "confirmed"
-    : "pending";
+  const count = input.latestHeight - tx.block_height! + 1;
+  input.onConfirmations?.(Math.min(count, expected.confirmations));
+  return count >= expected.confirmations ? "confirmed" : "pending";
 }

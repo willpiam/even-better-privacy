@@ -433,10 +433,10 @@ Domains & Routes → Add → Custom domain → `test.pqpost.com`.
 
 The test refuses non-loopback key servers, non-test mail domains and mainnet
 assets. It creates a disposable eight-character `e2e` test name and prints a
-local checkout link. Use a testnet wallet to send the displayed
-amount and required transaction message, then submit its transaction ID on the
-checkout page. The script waits for confirmation, creates the paid test mailbox,
-and cleans it up through the authenticated test-only cleanup endpoint. It never
+local checkout link. Connect a testnet wallet in checkout, review the generated
+transaction, and approve it in your wallet. Checkout records the transaction ID
+and shows confirmation progress. The script waits for confirmation, creates the
+paid test mailbox, and cleans it up through the authenticated test-only cleanup endpoint. It never
 holds a blockchain spending key. If cleanup reports an error, inspect the
 isolated test server before retrying. Use `deno task test:pqpost-payment:unit`
 for the safety checks without a wallet or network.
