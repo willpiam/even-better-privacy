@@ -211,15 +211,15 @@ Deno.test({
       assertEquals(selections.map(({ status }) => status).sort(), [200, 409]);
       const firstQuote =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
-      const restart = () => handlePaymentRestart(post({ orderId, noPaymentSent: true }), db);
-      const clock = Date.now();
-      await db.query("UPDATE mail_payment_orders SET expires_at = ?, grace_until = ? WHERE order_id = ?", [
-        clock - 1, clock + 60_000, orderId,
-      ]);
-      assertEquals((await restart()).status, 409);
-      await db.query("UPDATE mail_payment_orders SET grace_until = ? WHERE order_id = ?", [clock - 1, orderId]);
-      assertEquals((await handlePaymentRestart(post({ orderId }), db)).status, 409);
-      const restarts = await Promise.all([restart(), restart()]);
+      const restart = (paymentReference: string) =>
+        handlePaymentRestart(post({ orderId, noPaymentSent: true, paymentReference }), db);
+      assertEquals(firstQuote.canRestart, true);
+      assertEquals(firstQuote.expiresAt > Date.now(), true);
+      assertEquals(
+        (await handlePaymentRestart(post({ orderId, paymentReference: firstQuote.message }), db)).status,
+        409,
+      );
+      const restarts = await Promise.all([restart(firstQuote.message), restart(firstQuote.message)]);
       assertEquals(restarts.map(({ status }) => status).sort(), [200, 409]);
       const reset =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
@@ -231,6 +231,15 @@ Deno.test({
       assert(!view.message.includes(orderId));
       assert(view.message !== firstQuote.message);
       assertEquals(view.amountAtomic, "4000000");
+      assertEquals((await restart(firstQuote.message)).status, 409);
+      assertEquals(
+        (await handlePaymentOrder(post({
+          orderId,
+          paymentReference: firstQuote.message,
+          transactionId: "1".repeat(64),
+        }), db, true)).status,
+        409,
+      );
       const hash = `0x${"1".repeat(64)}`;
       const replacedHash = `0x${"5".repeat(64)}`;
       const blockHash = `0x${"2".repeat(64)}`;
@@ -307,7 +316,7 @@ Deno.test({
       const waiting = await verified.json();
       assertEquals(waiting.status, "pending");
       assertEquals(waiting.confirmationsSeen, 0);
-      assertEquals((await restart()).status, 409);
+      assertEquals((await restart(view.message)).status, 409);
       // Toggling the catalog off must not pause verification of stored quotes.
       Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
       Deno.env.delete("MAIL_PAYMENT_BLOCKFROST_KEY");

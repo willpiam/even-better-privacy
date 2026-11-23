@@ -11,19 +11,19 @@ try {
   const hash = "a".repeat(64);
   const address = {
     orderId: "123e4567-e89b-42d3-a456-426614174000", email: "alice@test.pqpost.com",
-    usdCents: 400, status: "quoted",
+    usdCents: 400, status: "quoted", message: "pqpost:public-ref",
   };
   const quotes = {
     "ethereum-sepolia": {
       ...address, asset: "USDC", network: "ethereum-sepolia",
       recipient: `0x${"3".repeat(40)}`, assetUnit: `0x${"4".repeat(40)}`,
       amountAtomic: "4000000", decimals: 6, confirmations: 5, message: "pqpost:public-ref",
-      expiresAt: Date.now() + 100_000,
+      expiresAt: Date.now() + 100_000, canRestart: true,
     },
     "cardano-preview": {
       ...address, asset: "ADA", network: "cardano-preview",
       recipient: "addr_test1example", assetUnit: "lovelace", amountAtomic: "5000000",
-      decimals: 6, confirmations: 3, message: "pqpost:public-ref", expiresAt: Date.now() + 100_000,
+      decimals: 6, confirmations: 3, message: "pqpost:public-ref", expiresAt: Date.now() + 100_000, canRestart: true,
     },
   };
   const reservation = {
@@ -70,7 +70,8 @@ try {
       switch (path.split("/").at(-1)) {
         case "restart":
           assert.equal(body.noPaymentSent, true);
-          assert.equal(order.status, "expired");
+          assert.equal(body.paymentReference, order.message);
+          assert.equal(order.status, "quoted");
           order = reservation;
           break;
         case "select": {
@@ -156,19 +157,23 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Payment confirmed" }).waitFor();
 
-  order = { ...quotes["ethereum-sepolia"], expiresAt: Date.now() - 1000, restartAt: Date.now() + 60_000 };
+  order = { ...quotes["ethereum-sepolia"] };
   await page.reload();
-  await page.getByRole("heading", { name: "Your quote expired" }).waitFor();
-  assert.equal(await button(page, "Start a new quote").isVisible(), false);
-  order = { ...order, status: "expired", restartAt: Date.now() - 1000 };
-  await button(page, "Refresh status").click();
-  await button(page, "Start a new quote").waitFor();
+  await button(page, "Change network or asset").click();
+  await page.getByRole("heading", { name: "Change network or asset" }).waitFor();
   await button(page, "Start a new quote").click();
-  assert.equal(order.status, "expired");
+  assert.equal(order.network, "ethereum-sepolia");
   await page.getByRole("checkbox").check();
   await button(page, "Start a new quote").click();
   await page.getByRole("heading", { name: "Choose a network" }).waitFor();
   assert.equal(await page.locator("[aria-current=step]").textContent(), "Network");
+
+  order = { ...quotes["ethereum-sepolia"], expiresAt: Date.now() - 1000 };
+  await page.reload();
+  await page.getByRole("heading", { name: "Your quote expired" }).waitFor();
+  await page.getByRole("checkbox").check();
+  await button(page, "Start a new quote").click();
+  await page.getByRole("heading", { name: "Choose a network" }).waitFor();
 
   await connect(page, "cardano-preview", "Lace");
   await page.locator("#asset").selectOption("ADA");

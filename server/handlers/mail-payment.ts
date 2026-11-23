@@ -323,10 +323,13 @@ async function preparePaymentSelection(order: StoredOrder, network: unknown, ass
 export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, network, asset, preview } = parsed.data;
+  const { orderId, network, asset, preview, paymentReference } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
+  if (paymentReference !== undefined && paymentReference !== order.message) {
+    return json({ error: "This quote changed. Refresh checkout." }, 409);
+  }
   const { quote, error } = await preparePaymentSelection(order, network, asset);
   if (error) return error;
   const now = Date.now();
@@ -342,33 +345,32 @@ export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Pr
   const rows = await db.query<[string]>(
     `UPDATE mail_payment_orders SET asset = ?, network = ?, recipient = ?, asset_unit = ?,
       amount_atomic = ?, decimals = ?, usd_per_token = ?, confirmations = ?, expires_at = ?, grace_until = ?
-    WHERE order_id = ? AND active = 1 AND status = 'quoted' AND network = '' AND grace_until > ?
+    WHERE order_id = ? AND active = 1 AND status = 'quoted' AND network = '' AND grace_until > ? AND message = ?
     RETURNING order_id`,
     [quote.asset, quote.network, quote.recipient, quote.assetUnit, quote.amountAtomic, quote.decimals,
-      quote.usdPerToken, quote.confirmations, now + QUOTE_MS, now + QUOTE_MS + GRACE_MS, orderId, now],
+      quote.usdPerToken, quote.confirmations, now + QUOTE_MS, now + QUOTE_MS + GRACE_MS, orderId, now, order.message],
   );
   if (!rows.length) return json({ error: "Payment selection is closed. Refresh the order status." }, 409);
   return json({ orderId });
 }
 
-function checkoutRestartAt(order: StoredOrder): number | undefined {
-  if (order.domain !== TEST_MAIL_DOMAIN || order.transactionId) return;
-  if (order.status === "expired" || (order.status === "quoted" && order.network)) {
-    return order.graceUntil;
-  }
+function canRestartCheckout(order: StoredOrder): boolean {
+  return order.domain === TEST_MAIL_DOMAIN && !order.transactionId &&
+    (order.status === "expired" || (order.status === "quoted" && Boolean(order.network)));
 }
 
-/** Reopen an unpaid reservation using its existing capability after the payment window closes. */
+/** Reset an unpaid order using the same checkout link. */
 export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, noPaymentSent } = parsed.data;
+  const { orderId, noPaymentSent, paymentReference } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const order = await getPaymentOrder(db, orderId);
   if (!order) return json({ error: "order not found" }, 404);
   const now = Date.now();
-  const restartAt = checkoutRestartAt(order);
-  if (restartAt === undefined || restartAt > now || (order.network && noPaymentSent !== true)) {
+  const legacyExpiredRequest = paymentReference === undefined && order.status === "expired" && order.graceUntil <= now;
+  if (!canRestartCheckout(order) || (paymentReference !== order.message && !legacyExpiredRequest) ||
+    (order.network && noPaymentSent !== true)) {
     return json({ error: "This order cannot be restarted. Refresh its payment status." }, 409);
   }
   const config = paymentConfigForSettings(mailSettingsForMode("test"));
@@ -390,7 +392,8 @@ export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): P
         `UPDATE mail_payment_orders SET active = 1, status = 'quoted', network = '', asset = '',
           recipient = '', asset_unit = '', amount_atomic = '0', decimals = 0, usd_per_token = '1',
           confirmations = 1, usd_cents = ?, message = ?, expires_at = ?, grace_until = ?
-        WHERE order_id = ? AND status = 'expired' AND grace_until <= ? AND transaction_id IS NULL
+        WHERE order_id = ? AND message = ? AND transaction_id IS NULL
+          AND (status = 'expired' OR (status = 'quoted' AND active = 1 AND network <> ''))
           AND NOT EXISTS (SELECT 1 FROM mail_payment_candidates WHERE order_id = ?)
           AND NOT EXISTS (
             SELECT 1 FROM mail_payment_orders other WHERE other.order_id <> ?
@@ -399,7 +402,7 @@ export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): P
           )
         RETURNING order_id`,
         [usdCents, `pqpost:${crypto.randomUUID()}`, now + QUOTE_MS, now + QUOTE_MS + GRACE_MS,
-          orderId, now, orderId, orderId, fingerprint, username, domain, order.createdAt],
+          orderId, order.message, orderId, orderId, fingerprint, username, domain, order.createdAt],
       );
       return rows.length === 1;
     }, `identity:${fingerprint}`);
@@ -422,7 +425,7 @@ export async function handlePaymentOrder(
 ): Promise<Response> {
   const parsed = await readJsonBody<Record<string, unknown>>(req);
   if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
-  const { orderId, transactionId, checkPayment } = parsed.data;
+  const { orderId, transactionId, checkPayment, paymentReference } = parsed.data;
   if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
   const now = Date.now();
   let order = await getPaymentOrder(db, orderId);
@@ -431,12 +434,14 @@ export async function handlePaymentOrder(
   if (submit) {
     if (
       typeof transactionId !== "string" ||
+      (paymentReference !== undefined && paymentReference !== order.message) ||
       !await submitPaymentTransaction(
         db,
         orderId,
         order.fingerprint,
         transactionId,
         now,
+        order.message,
       )
     ) {
       if ((await getPaymentOrder(db, orderId))?.status === "cancelled") {
@@ -456,6 +461,8 @@ export async function handlePaymentOrder(
       if (!submit) return json({ error: error.message }, 503);
     }
   }
+  const canRestart = canRestartCheckout(order);
+  const restartAt = canRestart ? order.graceUntil : undefined;
   if (!order.network) {
     const config = order.domain === TEST_MAIL_DOMAIN && isMailSignupReady()
       ? paymentConfigForSettings(mailSettingsForMode("test"))
@@ -467,7 +474,9 @@ export async function handlePaymentOrder(
       usdCents: order.usdCents,
       status: order.status,
       expiresAt: order.graceUntil,
-      restartAt: checkoutRestartAt(order),
+      message: order.message,
+      canRestart,
+      restartAt,
       testnet: order.domain === TEST_MAIL_DOMAIN,
       paymentAssets: config && order.active && order.status === "quoted"
         ? checkoutAssets(config).map(({ network, symbol }) => ({ network, symbol }))
@@ -490,7 +499,8 @@ export async function handlePaymentOrder(
     message: order.message,
     expiresAt: order.expiresAt,
     graceUntil: order.graceUntil,
-    restartAt: checkoutRestartAt(order),
+    canRestart,
+    restartAt,
     status: order.status,
     transactionId: order.transactionId,
   });

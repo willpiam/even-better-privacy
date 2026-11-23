@@ -271,12 +271,14 @@ export async function submitPaymentTransaction(
   fingerprint: string,
   transactionId: string,
   now: number,
+  paymentReference?: string,
 ): Promise<boolean> {
   const hash = transactionId.toLowerCase().replace(/^0x/, "");
   if (!/^[0-9a-f]{64}$/.test(hash)) return false;
   return await db.writeTransaction(async (tx) => {
     const order = await getPaymentOrder(tx, orderId);
-    if (!order?.network || order.fingerprint !== fingerprint) return false;
+    if (!order?.network || order.fingerprint !== fingerprint ||
+      (paymentReference !== undefined && order.message !== paymentReference)) return false;
     const hashes = await paymentTransactionIds(tx, order);
     if (hashes.includes(hash)) return true;
     if (hashes.length >= MAX_PAYMENT_TRANSACTIONS) return false;

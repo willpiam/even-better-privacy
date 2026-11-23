@@ -28,12 +28,36 @@ function readSavedHash() {
   return "";
 }
 let savedHash = readSavedHash();
+const savedReferenceKey = `${hashStorageKey}:reference`;
+let savedReference = readSavedReference(savedHash);
 
-function saveHash(hash) {
-  savedHash = hash;
+function readSavedReference(hash) {
+  if (!hash) return;
   try {
-    if (hash) localStorage.setItem(hashStorageKey, hash);
-    else localStorage.removeItem(hashStorageKey);
+    const record = JSON.parse(localStorage.getItem(savedReferenceKey));
+    if (record?.hash === hash && typeof record.reference === "string") return record.reference;
+  } catch { /* Legacy saved hashes have no reference. */ }
+}
+
+function restoreSavedPayment() {
+  const hash = readSavedHash();
+  if (hash) {
+    savedReference = readSavedReference(hash) ?? (hash === savedHash ? savedReference : undefined);
+    savedHash = hash;
+  }
+}
+
+function saveHash(hash, reference) {
+  savedHash = hash;
+  savedReference = reference;
+  try {
+    if (hash) {
+      localStorage.setItem(hashStorageKey, hash);
+      if (reference) localStorage.setItem(savedReferenceKey, JSON.stringify({ hash, reference }));
+    } else {
+      localStorage.removeItem(hashStorageKey);
+      localStorage.removeItem(savedReferenceKey);
+    }
   } catch { /* The in-memory copy still supports retries on this page. */ }
 }
 
@@ -101,6 +125,7 @@ let connected;
 let funded;
 let prepared;
 let activeStep;
+let restartReturnStep;
 let busy = false;
 let poll;
 
@@ -131,6 +156,8 @@ function setStep(step) {
   }
   if (activeStep !== step) $(`${step}-step`).querySelector("h2").focus();
   activeStep = step;
+  $("change-payment").hidden = step === "restart" || step === "confirmation" ||
+    !order?.network || order.canRestart !== true;
 }
 
 function selectOptions(select, placeholder, options, selected = select.value) {
@@ -278,7 +305,7 @@ async function checkFunds() {
   }
   $("balance").textContent = "Checking wallet funds…";
   try {
-    const selection = { network, asset };
+    const selection = { network, asset, paymentReference: order.message };
     const quote = order.network ? order : await request("select", { ...selection, preview: true });
     if (network === "ethereum-sepolia") await ethereumPayment(quote);
     else await cardanoPayment(quote, order.network ? undefined : { preview: true, ...selection });
@@ -328,19 +355,21 @@ function showProgress(message, spinning = true, count) {
   }
 }
 
-function showExpiredQuote() {
-  const canRestart = Number.isFinite(order.restartAt) && Date.now() >= order.restartAt;
-  $("restart-step").querySelector("h2").textContent = order.network ? "Your quote expired" : "Your reservation expired";
+function showRestart(previousStep) {
+  const canRestart = order.canRestart === true;
+  restartReturnStep = previousStep;
+  $("restart-step").querySelector("h2").textContent = previousStep
+    ? "Change network or asset"
+    : order.network ? "Your quote expired" : "Your reservation expired";
   $("restart-form").hidden = !canRestart;
+  $("cancel-restart").hidden = !previousStep;
   $("no-payment-label").hidden = !order.network;
   $("no-payment").required = Boolean(order.network);
   if (activeStep !== "restart") $("no-payment").checked = false;
-  const message = canRestart
-    ? order.network
-      ? "If you paid, contact support with your transaction ID. Otherwise, start a new quote to choose a network and asset again."
-      : "Start a new quote to choose a network and asset."
-    : Number.isFinite(order.restartAt)
-      ? `If you haven’t paid, you can start a new quote after ${new Date(order.restartAt).toLocaleString()}. If you paid, check your wallet history and contact support with the transaction ID.`
+  const message = canRestart && order.network
+    ? "Close any open wallet payment prompts. If you already sent payment, keep the transaction ID and contact support before starting over."
+    : canRestart
+      ? "Start a new quote to choose a network and asset."
       : "Refresh status or check this order in the app.";
   if ($("restart-status").textContent !== message) $("restart-status").textContent = message;
   setStep("restart");
@@ -350,13 +379,16 @@ async function restartPayment() {
   if (!globalThis.navigator?.locks) throw new Error("Open checkout in a browser that supports wallet payments across tabs.");
   await navigator.locks.request(hashStorageKey, { ifAvailable: true }, async lock => {
     if (!lock) throw new Error("Payment is already open in another tab.");
-    savedHash = readSavedHash() || savedHash;
+    restoreSavedPayment();
     uncertain ||= readUncertain();
     if (savedHash || uncertain) {
       render(await request("status"));
       return;
     }
-    await request("restart", { noPaymentSent: $("no-payment").checked });
+    await request("restart", {
+      noPaymentSent: $("no-payment").checked,
+      paymentReference: order.message,
+    });
     activeStep = undefined;
     network = "";
     connected = funded = prepared = undefined;
@@ -368,7 +400,7 @@ function render(snapshot) {
   const testSite = localTest || location.hostname === "test.pqpost.com";
   const isTest = snapshot.testnet === true || networks.has(snapshot.network);
   if (testSite !== isTest) throw new Error("The order is for a different network environment.");
-  const changedNetwork = order?.network !== snapshot.network;
+  const changedQuote = order?.network !== snapshot.network || order?.message !== snapshot.message;
   order = snapshot;
   $("testnet").hidden = !isTest;
   $("email").textContent = order.email;
@@ -379,15 +411,18 @@ function render(snapshot) {
   const complete = ["confirmed", "fulfilled"].includes(order.status);
   if (savedHash && (complete || normalizeHash(savedHash) === normalizeHash(order.transactionId))) saveHash("");
   if (complete || order.transactionId) markUncertain(false);
-  renderTransactionLink({ ...order, transactionId: order.confirmationTransactionId ?? order.transactionId ?? savedHash });
+  const retiredPayment = savedHash && savedReference && savedReference !== order.message;
+  renderTransactionLink({ ...order, transactionId: order.confirmationTransactionId ?? order.transactionId ?? (retiredPayment ? "" : savedHash) });
   $("confirmation-title").textContent = complete ? "Payment confirmed" : "Payment status";
-  $("recover").hidden = !savedHash || !["quoted", "pending"].includes(order.status);
+  $("recover").hidden = !savedHash || retiredPayment || !["quoted", "pending"].includes(order.status);
   if (complete) {
     showProgress("Payment received. Return to the app and select “Check payment” to finish setting up your address.", false);
   } else if (order.status === "cancelled") {
     showProgress("This purchase was cancelled. If you already paid, contact support with your transaction ID.", false);
   } else if (order.status === "manual_review") {
     showProgress("This payment needs review. Contact support with your transaction ID.", false);
+  } else if (retiredPayment) {
+    showProgress(`Your wallet sent a transaction for a previous quote. Contact support with transaction ID ${savedHash}.`, false);
   } else if (savedHash) {
     showProgress(order.status === "expired"
       ? "Your wallet sent a transaction for this order. Contact support with the transaction ID."
@@ -404,10 +439,12 @@ function render(snapshot) {
     showProgress("Your wallet did not confirm whether it sent the payment. Check your wallet history and contact support before trying again.", false);
   } else if (order.status === "expired" ||
     (order.status === "quoted" && order.network && order.expiresAt <= Date.now())) {
-    showExpiredQuote();
+    showRestart();
   } else if (order.network && !walletPayKind(order)) {
     showProgress("This quote is no longer payable. Return to the app to check your order.", false);
-  } else if (!activeStep || activeStep === "confirmation" || activeStep === "restart" || changedNetwork) {
+  } else if (activeStep === "restart" && restartReturnStep && !changedQuote) {
+    showRestart(restartReturnStep);
+  } else if (!activeStep || activeStep === "confirmation" || activeStep === "restart" || changedQuote) {
     const available = order.network ? [order.network] : (order.paymentAssets ?? []).map(({ network }) => network);
     const options = Array.from(new Set(available)).filter(value => networks.has(value));
     selectOptions($("network"), "Choose a network", options.map(value => [value, networks.get(value)]), order.network ?? "");
@@ -418,7 +455,7 @@ function render(snapshot) {
 }
 
 async function recordPayment() {
-  const recorded = await request("transaction", { transactionId: savedHash });
+  const recorded = await request("transaction", { transactionId: savedHash, paymentReference: savedReference });
   saveHash("");
   render(recorded);
 }
@@ -427,7 +464,7 @@ async function sendPayment() {
   if (!globalThis.navigator?.locks) throw new Error("Open checkout in a browser that supports wallet payments across tabs.");
   await navigator.locks.request(hashStorageKey, { ifAvailable: true }, async lock => {
     if (!lock) throw new Error("Payment is already open in another tab.");
-    savedHash = readSavedHash() || savedHash;
+    restoreSavedPayment();
     if (savedHash) {
       showProgress("Recording the transaction…");
       await recordPayment();
@@ -474,7 +511,7 @@ async function sendPayment() {
     if (typeof hash !== "string" || !(tx ? /^0x[0-9a-f]{64}$/i : /^[0-9a-f]{64}$/i).test(hash)) {
       throw new Error("The wallet did not return a transaction ID.");
     }
-    saveHash(hash);
+    saveHash(hash, current.message);
     markUncertain(false);
     showProgress("Recording the transaction…");
     await recordPayment();
@@ -508,7 +545,7 @@ async function run(action, onError = () => {}) {
     if (order?.status === "pending" && !savedHash) {
       poll = setTimeout(refresh, 12_000);
     } else if (order?.status === "quoted" && !savedHash && !uncertain) {
-      const next = activeStep === "restart" ? order.restartAt : order.expiresAt;
+      const next = order.expiresAt;
       if (Number.isFinite(next) && next > Date.now()) {
         poll = setTimeout(refresh, next - Date.now() + 500);
       }
@@ -540,6 +577,8 @@ form("network-form", () => {
   setStep("wallet");
 });
 form("restart-form", restartPayment);
+$("change-payment").addEventListener("click", () => { showError(""); showRestart(activeStep); });
+$("cancel-restart").addEventListener("click", () => { showError(""); setStep(restartReturnStep); });
 form("wallet-form", connectWallet);
 form("asset-form", reviewPayment);
 $("asset").addEventListener("change", () => void run(checkFunds));

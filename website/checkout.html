@@ -81,6 +81,7 @@
           </label>
           <button type="submit">Start a new quote</button>
         </form>
+        <button type="button" class="secondary" id="cancel-restart" hidden>Back</button>
       </section>
       <section id="confirmation-step" class="stage" hidden>
         <h2 id="confirmation-title" tabindex="-1">Payment status</h2>
@@ -92,7 +93,10 @@
         <p id="transaction-explorer" hidden><a id="transaction-link" target="_blank" rel="noopener noreferrer"></a></p>
         <button type="button" id="recover" hidden>Retry recording payment</button>
       </section>
-      <button type="button" class="secondary" id="refresh" hidden>Refresh status</button>
+      <div class="actions">
+        <button type="button" class="secondary" id="change-payment" hidden>Change network or asset</button>
+        <button type="button" class="secondary" id="refresh" hidden>Refresh status</button>
+      </div>
     </section>
   </main>
 </body>

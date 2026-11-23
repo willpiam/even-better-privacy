@@ -11,7 +11,7 @@ const hash = `0x${"a".repeat(64)}`;
 const order = {
   orderId: id, email: "alice@test.pqpost.com", status: "quoted", asset: "ETH", usdCents: 200,
   network: "ethereum-sepolia", assetUnit: "native", recipient: `0x${"1".repeat(40)}`,
-  amountAtomic: "10", decimals: 18, message: "order", expiresAt: Date.now() + 60_000, confirmations: 3,
+  amountAtomic: "10", decimals: 18, message: "order", canRestart: true, expiresAt: Date.now() + 60_000, confirmations: 3,
 };
 
 function element() {
@@ -46,7 +46,7 @@ function page({ origin = "https://test.pqpost.com", current = () => order, walle
     wallet, initialOrder: order, account,
     fetch: async (url, init) => {
       const path = url.split("/").at(-1);
-      const result = path === "transaction" ? await submit(JSON.parse(init.body).transactionId) : current();
+      const result = path === "transaction" ? await submit(JSON.parse(init.body)) : current();
       return { ok: true, json: async () => result };
     },
   });
@@ -94,13 +94,18 @@ await assert.rejects(page({ current: () => ({ ...order, amountAtomic: "11" }), w
 assert.equal(sends, 0);
 const storage = new Map();
 const submissions = [];
-const submit = async txHash => {
-  submissions.push(txHash);
+const submit = async ({ transactionId, paymentReference }) => {
+  assert.equal(paymentReference, order.message);
+  submissions.push(transactionId);
   if (submissions.length === 1) throw new Error("Network offline");
-  return { ...order, status: "pending", transactionId: txHash };
+  return { ...order, status: "pending", transactionId };
 };
 await assert.rejects(page({ wallet, storage, submit }).sendPayment(), /Network offline/);
-assert.equal(storage.size, 1);
+assert.equal(storage.size, 2);
+const changedQuote = page({ storage });
+changedQuote.render({ ...order, message: "new-order" });
+assert.match(changedQuote.$("status").textContent, /previous quote/);
+assert.equal(changedQuote.$("recover").hidden, true);
 await page({ wallet, storage, submit }).sendPayment();
 assert.equal(sends, 1);
 assert.deepEqual(submissions, [hash, hash]);
