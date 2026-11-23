@@ -376,12 +376,6 @@ export default function OnboardingWizardScreen(): JSX.Element {
           setStep('welcome');
           return;
         }
-        if (status === 'expired') {
-          setCheckoutUrl('');
-          setAwaitingPayment(false);
-          setCreateError('The quote expired. Your order is saved. If you sent a payment, contact support before paying again.');
-          return;
-        }
         if (status !== 'confirmed' && status !== 'fulfilled') {
           const url = testCheckoutUrl(server, id);
           if (!url) throw new Error('Checkout is not available for this key server.');
@@ -390,7 +384,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
           setCanOpenCheckout(handoff.canOpenOnDevice && status !== 'manual_review');
           setCheckoutMessage(status === 'manual_review'
             ? 'This order needs support. Contact support before paying again.'
-            : handoff.message);
+            : status === 'expired'
+              ? 'Open checkout to restart this order if you haven’t sent a payment.'
+              : handoff.message);
           setAwaitingPayment(true);
           setCreateError('');
           return;
@@ -959,11 +955,9 @@ export default function OnboardingWizardScreen(): JSX.Element {
                   ? 'Restore access'
                   : awaitingPayment
                     ? 'Check payment'
-                    : createError.startsWith('The quote expired')
-                      ? 'Check payment'
-                      : addressTaken
-                        ? 'Choose another address'
-                        : 'Try again'
+                    : addressTaken
+                      ? 'Choose another address'
+                      : 'Try again'
               }
               testID={mailboxExists ? 'onboarding-restore' : 'onboarding-retry'}
               onPress={() => {

@@ -224,6 +224,17 @@ it('completes the payment flow for a short test name before creating its mailbox
   );
 });
 
+it('keeps the checkout link available for an expired quote', async () => {
+  jest.mocked(fetchPaymentOrderStatus).mockResolvedValue('expired');
+  await mount(true);
+  await press('onboarding-domain-test');
+  await enterUsername('alice');
+  await createMailbox();
+  expect(has('onboarding-open-checkout')).toBe(true);
+  expect(button('onboarding-retry').props.title).toBe('Check payment');
+  expect(signupEbpMailbox).not.toHaveBeenCalled();
+});
+
 it('clears payment state when changing from a short to a long name', async () => {
   await mount(true);
   await press('onboarding-domain-test');

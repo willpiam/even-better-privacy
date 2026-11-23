@@ -72,6 +72,16 @@
           <button type="button" class="secondary" id="back-asset">Back</button>
         </div>
       </section>
+      <section id="restart-step" class="stage" hidden>
+        <h2 tabindex="-1">Your quote expired</h2>
+        <p id="restart-status" role="status"></p>
+        <form id="restart-form" hidden>
+          <label id="no-payment-label" class="checkbox-label" for="no-payment">
+            <input id="no-payment" type="checkbox"> I checked my wallet and haven’t sent payment for this order.
+          </label>
+          <button type="submit">Start a new quote</button>
+        </form>
+      </section>
       <section id="confirmation-step" class="stage" hidden>
         <h2 id="confirmation-title" tabindex="-1">Payment status</h2>
         <div class="status" role="status">

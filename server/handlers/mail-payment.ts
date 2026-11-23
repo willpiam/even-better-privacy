@@ -271,9 +271,9 @@ export async function handlePaymentRecover(
   const rows = await db.query<[string]>(
     `SELECT order_id FROM mail_payment_orders
     WHERE username = ? AND domain = ? AND identity_fingerprint = ?
-      AND (? = 1 OR active = 1 AND status IN ('quoted', 'pending', 'confirmed') OR status = 'manual_review')
-    ORDER BY active DESC, created_at DESC LIMIT 1`,
-    [check.username, mail.domain, fingerprint, forCancellation === true ? 1 : 0],
+      AND (? = 1 OR active = 1 AND status IN ('quoted', 'pending', 'confirmed') OR status IN ('manual_review', 'expired'))
+    ORDER BY active DESC, CASE WHEN ? = 0 AND status = 'expired' THEN 1 ELSE 0 END, created_at DESC LIMIT 1`,
+    [check.username, mail.domain, fingerprint, forCancellation === true ? 1 : 0, forCancellation === true ? 1 : 0],
   );
   return json({ orderId: rows[0]?.[0] ?? null, ...(forCancellation === true ? {cancellationLookup: true} : {}) });
 }
@@ -351,6 +351,69 @@ export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Pr
   return json({ orderId });
 }
 
+function checkoutRestartAt(order: StoredOrder): number | undefined {
+  if (order.domain !== TEST_MAIL_DOMAIN || order.transactionId) return;
+  if (order.status === "expired" || (order.status === "quoted" && order.network)) {
+    return order.graceUntil;
+  }
+}
+
+/** Reopen an unpaid reservation using its existing capability after the payment window closes. */
+export async function handlePaymentRestart(req: Request, db: DatabaseAdapter): Promise<Response> {
+  const parsed = await readJsonBody<Record<string, unknown>>(req);
+  if (!parsed.ok) return json({ error: parsed.error }, parsed.status);
+  const { orderId, noPaymentSent } = parsed.data;
+  if (!validOrderId(orderId)) return json({ error: "invalid order" }, 400);
+  const order = await getPaymentOrder(db, orderId);
+  if (!order) return json({ error: "order not found" }, 404);
+  const now = Date.now();
+  const restartAt = checkoutRestartAt(order);
+  if (restartAt === undefined || restartAt > now || (order.network && noPaymentSent !== true)) {
+    return json({ error: "This order cannot be restarted. Refresh its payment status." }, 409);
+  }
+  const config = paymentConfigForSettings(mailSettingsForMode("test"));
+  if (!config || !isMailSignupReady() || !checkoutAssets(config).length) {
+    return json({ error: "Paid signup is temporarily unavailable." }, 503);
+  }
+  const usdCents = config.prices[order.username.length];
+  const { fingerprint, username, domain } = order;
+  let restarted;
+  try {
+    restarted = await db.writeTransaction(async (tx) => {
+      await expirePaymentOrders(tx, now);
+      const email = await getDetailRecord(tx, fingerprint, "email");
+      if (await isIdentityRevoked(tx, fingerprint) ||
+        await getMailboxByFingerprint(tx, fingerprint) ||
+        await isMailboxUsernameTaken(tx, username, domain) ||
+        (email && email.revoked_at === null)) return false;
+      const rows = await tx.query<[string]>(
+        `UPDATE mail_payment_orders SET active = 1, status = 'quoted', network = '', asset = '',
+          recipient = '', asset_unit = '', amount_atomic = '0', decimals = 0, usd_per_token = '1',
+          confirmations = 1, usd_cents = ?, message = ?, expires_at = ?, grace_until = ?
+        WHERE order_id = ? AND status = 'expired' AND grace_until <= ? AND transaction_id IS NULL
+          AND NOT EXISTS (SELECT 1 FROM mail_payment_candidates WHERE order_id = ?)
+          AND NOT EXISTS (
+            SELECT 1 FROM mail_payment_orders other WHERE other.order_id <> ?
+              AND (other.identity_fingerprint = ? OR (other.username = ? AND other.domain = ?))
+              AND (other.active = 1 OR other.status = 'manual_review' OR other.created_at > ?)
+          )
+        RETURNING order_id`,
+        [usdCents, `pqpost:${crypto.randomUUID()}`, now + QUOTE_MS, now + QUOTE_MS + GRACE_MS,
+          orderId, now, orderId, orderId, fingerprint, username, domain, order.createdAt],
+      );
+      return rows.length === 1;
+    }, `identity:${fingerprint}`);
+  } catch (error) {
+    // PostgreSQL can see a competing reservation for this name from a different identity.
+    const pgError = error as { fields?: { code?: string } };
+    if (pgError?.fields?.code !== "23505") throw error;
+    restarted = false;
+  }
+  return restarted
+    ? json({ orderId })
+    : json({ error: "This address or identity can no longer restart this order. Check your order in the app." }, 409);
+}
+
 /** Order ID is an unguessable checkout capability. It never authorizes a change of identity or address. */
 export async function handlePaymentOrder(
   req: Request,
@@ -403,6 +466,8 @@ export async function handlePaymentOrder(
       fingerprint: order.fingerprint,
       usdCents: order.usdCents,
       status: order.status,
+      expiresAt: order.graceUntil,
+      restartAt: checkoutRestartAt(order),
       testnet: order.domain === TEST_MAIL_DOMAIN,
       paymentAssets: config && order.active && order.status === "quoted"
         ? checkoutAssets(config).map(({ network, symbol }) => ({ network, symbol }))
@@ -425,6 +490,7 @@ export async function handlePaymentOrder(
     message: order.message,
     expiresAt: order.expiresAt,
     graceUntil: order.graceUntil,
+    restartAt: checkoutRestartAt(order),
     status: order.status,
     transactionId: order.transactionId,
   });

@@ -18,6 +18,7 @@ import {
   handlePaymentCreate,
   handlePaymentOrder,
   handlePaymentRecover,
+  handlePaymentRestart,
   handlePaymentSelect,
   reconcilePendingPayments,
 } from "../handlers/mail-payment.ts";
@@ -208,10 +209,27 @@ Deno.test({
       );
       const selections = await Promise.all([select(), select()]);
       assertEquals(selections.map(({ status }) => status).sort(), [200, 409]);
+      const firstQuote =
+        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      const restart = () => handlePaymentRestart(post({ orderId, noPaymentSent: true }), db);
+      const clock = Date.now();
+      await db.query("UPDATE mail_payment_orders SET expires_at = ?, grace_until = ? WHERE order_id = ?", [
+        clock - 1, clock + 60_000, orderId,
+      ]);
+      assertEquals((await restart()).status, 409);
+      await db.query("UPDATE mail_payment_orders SET grace_until = ? WHERE order_id = ?", [clock - 1, orderId]);
+      assertEquals((await handlePaymentRestart(post({ orderId }), db)).status, 409);
+      const restarts = await Promise.all([restart(), restart()]);
+      assertEquals(restarts.map(({ status }) => status).sort(), [200, 409]);
+      const reset =
+        await (await handlePaymentOrder(post({ orderId }), db, false)).json();
+      assertEquals(reset.paymentAssets, unquoted.paymentAssets);
+      assertEquals((await select()).status, 200);
       const view =
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(view.email, "alice@test.pqpost.com");
       assert(!view.message.includes(orderId));
+      assert(view.message !== firstQuote.message);
       assertEquals(view.amountAtomic, "4000000");
       const hash = `0x${"1".repeat(64)}`;
       const replacedHash = `0x${"5".repeat(64)}`;
@@ -289,6 +307,7 @@ Deno.test({
       const waiting = await verified.json();
       assertEquals(waiting.status, "pending");
       assertEquals(waiting.confirmationsSeen, 0);
+      assertEquals((await restart()).status, 409);
       // Toggling the catalog off must not pause verification of stored quotes.
       Deno.env.set("MAIL_PAYMENT_ENABLED", "false");
       Deno.env.delete("MAIL_PAYMENT_BLOCKFROST_KEY");

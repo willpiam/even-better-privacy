@@ -68,6 +68,11 @@ try {
     if (path.startsWith("/api/v1/mail/payment/")) {
       const body = route.request().postDataJSON();
       switch (path.split("/").at(-1)) {
+        case "restart":
+          assert.equal(body.noPaymentSent, true);
+          assert.equal(order.status, "expired");
+          order = reservation;
+          break;
         case "select": {
           const quote = quotes[body.network];
           assert.equal(body.asset, quote.asset);
@@ -151,7 +156,20 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Payment confirmed" }).waitFor();
 
-  order = reservation;
+  order = { ...quotes["ethereum-sepolia"], expiresAt: Date.now() - 1000, restartAt: Date.now() + 60_000 };
+  await page.reload();
+  await page.getByRole("heading", { name: "Your quote expired" }).waitFor();
+  assert.equal(await button(page, "Start a new quote").isVisible(), false);
+  order = { ...order, status: "expired", restartAt: Date.now() - 1000 };
+  await button(page, "Refresh status").click();
+  await button(page, "Start a new quote").waitFor();
+  await button(page, "Start a new quote").click();
+  assert.equal(order.status, "expired");
+  await page.getByRole("checkbox").check();
+  await button(page, "Start a new quote").click();
+  await page.getByRole("heading", { name: "Choose a network" }).waitFor();
+  assert.equal(await page.locator("[aria-current=step]").textContent(), "Network");
+
   await connect(page, "cardano-preview", "Lace");
   await page.locator("#asset").selectOption("ADA");
   await button(page, "Review payment").click();
@@ -162,7 +180,7 @@ try {
   assert.equal(await page.evaluate(() => window.cardanoUnsigned), "unsigned-reviewed");
   assert.equal(await page.evaluate(() => window.cardanoSigned), "signed-reviewed");
   assert.equal(await page.locator("#transaction-link").getAttribute("href"), `https://preview.cardanoscan.io/transaction/${hash}`);
-  console.log("Checkout wizard passed for both networks, balance checks, review, confirmation, and cross-tab protection.");
+  console.log("Checkout wizard passed for both networks, balance checks, review, confirmation, expired-quote recovery, and cross-tab protection.");
 } finally {
   await browser.close();
 }

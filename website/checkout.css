@@ -35,6 +35,8 @@
 .break { overflow-wrap: anywhere; }
 .checkout form { display: grid; gap: .6rem; margin: 1rem 0; }
 .checkout label { font-weight: 600; }
+.checkbox-label { display: flex; align-items: baseline; gap: .5rem; }
+.checkbox-label input { flex: 0 0 auto; }
 .checkout select, .checkout button {
   padding: .75rem 1rem;
   font: inherit;

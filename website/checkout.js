@@ -118,14 +118,15 @@ function markUncertain(value) {
 
 function setStep(step) {
   const indicators = document.querySelectorAll(".steps li");
-  const current = steps.indexOf(step);
+  const current = step === "restart" ? steps.indexOf("network") : steps.indexOf(step);
+  $("restart-step").hidden = step !== "restart";
   $("steps").hidden = false;
   for (const [index, name] of steps.entries()) {
     $(`${name}-step`).hidden = name !== step;
     const indicator = indicators[index];
     indicator.classList.toggle("done", index < current ||
       (step === "confirmation" && ["confirmed", "fulfilled"].includes(order?.status)));
-    if (name === step) indicator.setAttribute("aria-current", "step");
+    if (index === current) indicator.setAttribute("aria-current", "step");
     else indicator.removeAttribute("aria-current");
   }
   if (activeStep !== step) $(`${step}-step`).querySelector("h2").focus();
@@ -327,11 +328,47 @@ function showProgress(message, spinning = true, count) {
   }
 }
 
+function showExpiredQuote() {
+  const canRestart = Number.isFinite(order.restartAt) && Date.now() >= order.restartAt;
+  $("restart-step").querySelector("h2").textContent = order.network ? "Your quote expired" : "Your reservation expired";
+  $("restart-form").hidden = !canRestart;
+  $("no-payment-label").hidden = !order.network;
+  $("no-payment").required = Boolean(order.network);
+  if (activeStep !== "restart") $("no-payment").checked = false;
+  const message = canRestart
+    ? order.network
+      ? "If you paid, contact support with your transaction ID. Otherwise, start a new quote to choose a network and asset again."
+      : "Start a new quote to choose a network and asset."
+    : Number.isFinite(order.restartAt)
+      ? `If you haven’t paid, you can start a new quote after ${new Date(order.restartAt).toLocaleString()}. If you paid, check your wallet history and contact support with the transaction ID.`
+      : "Refresh status or check this order in the app.";
+  if ($("restart-status").textContent !== message) $("restart-status").textContent = message;
+  setStep("restart");
+}
+
+async function restartPayment() {
+  if (!globalThis.navigator?.locks) throw new Error("Open checkout in a browser that supports wallet payments across tabs.");
+  await navigator.locks.request(hashStorageKey, { ifAvailable: true }, async lock => {
+    if (!lock) throw new Error("Payment is already open in another tab.");
+    savedHash = readSavedHash() || savedHash;
+    uncertain ||= readUncertain();
+    if (savedHash || uncertain) {
+      render(await request("status"));
+      return;
+    }
+    await request("restart", { noPaymentSent: $("no-payment").checked });
+    activeStep = undefined;
+    network = "";
+    connected = funded = prepared = undefined;
+    render(await request("status"));
+  });
+}
+
 function render(snapshot) {
   const testSite = localTest || location.hostname === "test.pqpost.com";
   const isTest = snapshot.testnet === true || networks.has(snapshot.network);
   if (testSite !== isTest) throw new Error("The order is for a different network environment.");
-  const newlyLocked = !order?.network && Boolean(snapshot.network);
+  const changedNetwork = order?.network !== snapshot.network;
   order = snapshot;
   $("testnet").hidden = !isTest;
   $("email").textContent = order.email;
@@ -351,10 +388,10 @@ function render(snapshot) {
     showProgress("This purchase was cancelled. If you already paid, contact support with your transaction ID.", false);
   } else if (order.status === "manual_review") {
     showProgress("This payment needs review. Contact support with your transaction ID.", false);
-  } else if (order.status === "expired") {
-    showProgress("This order expired. If you already paid, contact support with your transaction ID.", false);
   } else if (savedHash) {
-    showProgress("Your wallet sent the transaction. Record it to start checking for confirmations.", false);
+    showProgress(order.status === "expired"
+      ? "Your wallet sent a transaction for this order. Contact support with the transaction ID."
+      : "Your wallet sent the transaction. Record it to start checking for confirmations.", false);
   } else if (order.status === "pending" && order.paymentMismatch) {
     showProgress("The submitted transaction does not match this payment. Contact support with your transaction ID.", false);
   } else if (order.status === "pending") {
@@ -365,9 +402,12 @@ function render(snapshot) {
       : "Checking the transaction on the network…", true, count > 0 ? count : undefined);
   } else if (uncertain) {
     showProgress("Your wallet did not confirm whether it sent the payment. Check your wallet history and contact support before trying again.", false);
+  } else if (order.status === "expired" ||
+    (order.status === "quoted" && order.network && order.expiresAt <= Date.now())) {
+    showExpiredQuote();
   } else if (order.network && !walletPayKind(order)) {
     showProgress("This quote is no longer payable. Return to the app to check your order.", false);
-  } else if (!activeStep || activeStep === "confirmation" || newlyLocked) {
+  } else if (!activeStep || activeStep === "confirmation" || activeStep === "restart" || changedNetwork) {
     const available = order.network ? [order.network] : (order.paymentAssets ?? []).map(({ network }) => network);
     const options = Array.from(new Set(available)).filter(value => networks.has(value));
     selectOptions($("network"), "Choose a network", options.map(value => [value, networks.get(value)]), order.network ?? "");
@@ -465,7 +505,14 @@ async function run(action, onError = () => {}) {
   } finally {
     busy = false;
     syncControls();
-    if (order?.status === "pending" && !savedHash) poll = setTimeout(refresh, 12_000);
+    if (order?.status === "pending" && !savedHash) {
+      poll = setTimeout(refresh, 12_000);
+    } else if (order?.status === "quoted" && !savedHash && !uncertain) {
+      const next = activeStep === "restart" ? order.restartAt : order.expiresAt;
+      if (Number.isFinite(next) && next > Date.now()) {
+        poll = setTimeout(refresh, next - Date.now() + 500);
+      }
+    }
   }
 }
 
@@ -492,6 +539,7 @@ form("network-form", () => {
   showWallets();
   setStep("wallet");
 });
+form("restart-form", restartPayment);
 form("wallet-form", connectWallet);
 form("asset-form", reviewPayment);
 $("asset").addEventListener("change", () => void run(checkFunds));
