@@ -171,6 +171,17 @@ try {
   order = { ...quotes["ethereum-sepolia"], expiresAt: Date.now() - 1000 };
   await page.reload();
   await page.getByRole("heading", { name: "Your quote expired" }).waitFor();
+  for (const width of [1280, 320]) {
+    await page.setViewportSize({ width, height: 850 });
+    const checkbox = await page.getByRole("checkbox").boundingBox();
+    const label = await page.locator("#no-payment-label").boundingBox();
+    const text = await page.locator("#no-payment-label span").boundingBox();
+    assert(checkbox && label && text);
+    assert(checkbox.width <= 20, "checkbox should keep its compact width");
+    assert(text.x > checkbox.x + checkbox.width, "label text should sit beside the checkbox");
+    assert(text.x + text.width <= label.x + label.width + 1, "label text should stay inside the form");
+    assert(text.width >= label.width - 32, "label text should have room to wrap");
+  }
   await page.getByRole("checkbox").check();
   await button(page, "Start a new quote").click();
   await page.getByRole("heading", { name: "Choose a network" }).waitFor();
