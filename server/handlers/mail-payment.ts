@@ -500,6 +500,7 @@ export async function handlePaymentOrder(
     recipient: order.recipient,
     assetUnit: order.assetUnit,
     usdCents: order.usdCents,
+    usdPerToken: order.usdPerToken,
     amountAtomic: order.amountAtomic,
     decimals: order.decimals,
     confirmations: order.confirmations,

@@ -15,7 +15,7 @@ try {
   };
   const quotes = {
     "ethereum-sepolia": {
-      ...address, asset: "USDC", network: "ethereum-sepolia",
+      ...address, asset: "USDC", network: "ethereum-sepolia", usdPerToken: "1",
       recipient: `0x${"3".repeat(40)}`, assetUnit: `0x${"4".repeat(40)}`,
       amountAtomic: "4000000", decimals: 6, confirmations: 5, message: "pqpost:public-ref",
       expiresAt: Date.now() + 100_000, canRestart: false,
@@ -165,9 +165,25 @@ try {
   order = { ...order, confirmationsSeen: 2 };
   await page.getByText("2 of 5 block confirmations").waitFor({ timeout: 20_000 });
   assert.equal(await page.locator("progress").getAttribute("value"), "2");
+  assert.equal(await page.locator("#receipt").isVisible(), false);
   order = { ...order, status: "confirmed" };
   await button(page, "Refresh status").click();
   await page.getByRole("heading", { name: "Payment confirmed" }).waitFor();
+  const receipt = page.locator("#receipt");
+  await receipt.getByRole("heading", { name: "Test payment confirmation" }).waitFor();
+  await receipt.getByText("Starling Kestrel Laboratories Inc.", { exact: true }).waitFor();
+  await receipt.getByText("alice@test.pqpost.com (5-character username)", { exact: true }).waitFor();
+  await receipt.getByText("1 USD per USDC", { exact: true }).waitFor();
+  await receipt.getByText("On-chain crypto payment (USDC)", { exact: true }).waitFor();
+  await page.emulateMedia({ media: "print" });
+  const explorerUrl = `https://sepolia.etherscan.io/tx/0x${hash}`;
+  const receiptLink = receipt.getByRole("link", { name: explorerUrl });
+  await receiptLink.waitFor();
+  assert.equal(await receiptLink.getAttribute("href"), explorerUrl);
+  const qr = receipt.getByRole("img", { name: /QR code/ });
+  await qr.waitFor();
+  assert.equal(await qr.evaluate(canvas => canvas.getContext("2d").getImageData(16, 16, 1, 1).data[0]), 0);
+  await page.emulateMedia({ media: "screen" });
   await page.reload();
   await page.getByRole("heading", { name: "Payment confirmed" }).waitFor();
 

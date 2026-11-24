@@ -1,3 +1,4 @@
+import qrcode from "./vendor/qrcode-generator-2.0.4.mjs";
 import { CARDANO_FUNDING_BUFFER, SEPOLIA_CHAIN_ID, cip30PaymentAmount, cip30WalletLovelace, sepoliaPayment, walletPayKind } from "./checkout-wallet.js";
 
 // The API origins are intentionally fixed: a link cannot redirect an order to an attacker.
@@ -416,6 +417,56 @@ async function restartPayment() {
   });
 }
 
+function renderReceipt(order, paid, test) {
+  $("receipt").hidden = !paid;
+  if (!paid) return;
+  $("receipt-title").textContent = test ? "Test payment confirmation" : "Payment receipt";
+  $("receipt-order").textContent = order.orderId;
+  const usernameLength = order.email.split("@", 1)[0].length;
+  $("receipt-email").textContent = `${order.email} (${usernameLength}-character username)`;
+  $("receipt-price").textContent = $("price").textContent;
+  $("receipt-rate").textContent = order.usdPerToken
+    ? `${order.usdPerToken} USD per ${order.asset}`
+    : "Unavailable";
+  $("receipt-method").textContent = `On-chain crypto payment (${order.asset})`;
+  $("receipt-payment").textContent = `${decimalAmount(order.amountAtomic, order.decimals)} ${order.asset}` + (test ? " (test funds)" : "");
+  $("receipt-network").textContent = order.network;
+  $("receipt-transaction").textContent = order.transactionId;
+  const explorerUrl = $("transaction-link").href;
+  const explorerLink = $("receipt-explorer-link");
+  $("receipt-explorer").hidden = !explorerUrl;
+  if (!explorerUrl) {
+    explorerLink.removeAttribute("href");
+    explorerLink.textContent = "";
+    return;
+  }
+  if (explorerLink.href === explorerUrl) return;
+  explorerLink.href = explorerUrl;
+  explorerLink.textContent = explorerUrl;
+  drawExplorerQr(explorerUrl);
+}
+
+function drawExplorerQr(url) {
+  const qr = qrcode(0, "M");
+  qr.addData(url);
+  qr.make();
+  const canvas = $("receipt-explorer-qr");
+  const modules = qr.getModuleCount();
+  const cellSize = 4;
+  const quietZone = 4;
+  canvas.width = canvas.height = (modules + 2 * quietZone) * cellSize;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#000";
+  for (let row = 0; row < modules; row++) {
+    for (let column = 0; column < modules; column++) {
+      if (qr.isDark(row, column)) {
+        context.fillRect((column + quietZone) * cellSize, (row + quietZone) * cellSize, cellSize, cellSize);
+      }
+    }
+  }
+}
 function render(snapshot) {
   const testSite = localTest || location.hostname === "test.pqpost.com";
   const isTest = snapshot.testnet === true || networks.has(snapshot.network);
@@ -432,7 +483,9 @@ function render(snapshot) {
   if (savedHash && (complete || normalizeHash(savedHash) === normalizeHash(order.transactionId))) saveHash("");
   if (complete || order.transactionId) markUncertain(false);
   const retiredPayment = savedHash && savedReference && savedReference !== order.message;
-  renderTransactionLink({ ...order, transactionId: order.confirmationTransactionId ?? order.transactionId ?? (retiredPayment ? "" : savedHash) });
+  const confirmedTransactionId = order.confirmationTransactionId ?? order.transactionId;
+  renderTransactionLink({ ...order, transactionId: confirmedTransactionId ?? (retiredPayment ? "" : savedHash) });
+  renderReceipt({ ...order, transactionId: confirmedTransactionId }, complete && Boolean(confirmedTransactionId), isTest);
   $("confirmation-title").textContent = complete ? "Payment confirmed" : "Payment status";
   $("recover").hidden = !savedHash || retiredPayment || !canReportPayment(order);
   $("report-payment").hidden = !canReportPayment(order);
@@ -635,6 +688,7 @@ $("send").addEventListener("click", () => void run(sendPayment, () => {
   else setStep("review");
 }));
 $("refresh").addEventListener("click", refresh);
+$("print-receipt").addEventListener("click", () => window.print());
 
 if (!apiOrigin || !validId.test(id)) {
   $("loading").hidden = true;

@@ -4,7 +4,7 @@ import vm from "node:vm";
 import * as walletHelpers from "../website/checkout-wallet.js";
 
 const source = readFileSync(new URL("../website/checkout.js", import.meta.url), "utf8")
-  .replace(/^import .*$/m, "").split("if (!apiOrigin || !validId.test(id))")[0];
+  .replace(/^import .*$/gm, "").split("if (!apiOrigin || !validId.test(id))")[0];
 const id = "123e4567-e89b-42d3-a456-426614174000";
 const account = `0x${"2".repeat(40)}`;
 const hash = `0x${"a".repeat(64)}`;

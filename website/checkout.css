@@ -74,3 +74,11 @@
   .checkout dl { grid-template-columns: 1fr; gap: .25rem; }
   .checkout dd { margin-bottom: .55rem; }
 }
+
+#receipt-explorer { margin-bottom: 1rem; break-inside: avoid; }
+#receipt-explorer-qr { display: block; max-width: 100%; height: auto; }
+@media print {
+  .checkout:has(#receipt:not([hidden])) > :not(#receipt),
+  #print-receipt { display: none; }
+  .checkout { width: auto; margin: 0; padding: 0; border: 0; box-shadow: none; }
+}

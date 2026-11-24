@@ -14,6 +14,7 @@
   <main class="checkout">
     <a class="brand" href="/">pqpost</a>
     <h1>Address checkout</h1>
+    <p>Seller: <strong>Starling Kestrel Laboratories Inc.</strong> <a href="/terms.html">Purchase terms</a></p>
     <p id="testnet" class="notice" hidden>Use test funds only. This purchase is for a test address.</p>
     <p id="error" class="notice error" role="alert" hidden></p>
     <p id="loading" role="status">Loading your order…</p>
@@ -105,6 +106,25 @@
       <div class="actions">
         <button type="button" class="secondary" id="refresh" hidden>Refresh status</button>
       </div>
+    </section>
+    <section id="receipt" aria-labelledby="receipt-title" hidden>
+      <h2 id="receipt-title">Payment receipt</h2>
+      <p>Starling Kestrel Laboratories Inc.</p>
+      <dl>
+        <dt>Order</dt><dd id="receipt-order" class="break"></dd>
+        <dt>Purchased mailbox</dt><dd id="receipt-email" class="break"></dd>
+        <dt>Quoted price</dt><dd id="receipt-price"></dd>
+        <dt>Exchange rate</dt><dd id="receipt-rate"></dd>
+        <dt>Payment method</dt><dd id="receipt-method"></dd>
+        <dt>Payment amount</dt><dd id="receipt-payment"></dd>
+        <dt>Network</dt><dd id="receipt-network"></dd>
+        <dt>Transaction ID</dt><dd id="receipt-transaction" class="break"></dd>
+      </dl>
+      <div id="receipt-explorer" hidden>
+        <p>Block explorer: <a id="receipt-explorer-link" class="break" target="_blank" rel="noopener noreferrer"></a></p>
+        <canvas id="receipt-explorer-qr" role="img" aria-label="QR code for the block explorer transaction link"></canvas>
+      </div>
+      <button type="button" id="print-receipt">Print or save receipt</button>
     </section>
   </main>
 </body>
