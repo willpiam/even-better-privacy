@@ -1,4 +1,8 @@
-/** Chainlink USD quotes. A stale or missing round is never used. */
+import { KeyedQueue } from "../../common/KeyedQueue.ts";
+import type { DatabaseAdapter } from "../db/adapter.ts";
+
+const RATE_CACHE_MS = 2 * 60 * 60 * 1000;
+const refreshQueue = new KeyedQueue();
 
 const LATEST_ROUND_DATA = "0xfeaf968c";
 const DECIMALS = 8;
@@ -36,38 +40,80 @@ export async function fetchUsdRate(
   }
   const feed = FEEDS[asset];
   const url = `https://${feed.host}/v2/${apiKey}`;
-  let nextId = 0;
-  async function rpc(method: string, params: unknown[]): Promise<unknown> {
-    const id = ++nextId;
-    const response = await fetchImpl(url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!response.ok) throw new Error("exchange rate unavailable");
-    const body = await response.json();
-    if (
-      body?.jsonrpc !== "2.0" || body.id !== id || body.error ||
-      !("result" in body)
-    ) {
+  const response = await fetchImpl(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify([
+      { jsonrpc: "2.0", id: 1, method: "eth_chainId", params: [] },
+      {
+        jsonrpc: "2.0", id: 2, method: "eth_call",
+        params: [{ to: feed.proxy, data: LATEST_ROUND_DATA }, "latest"],
+      },
+    ]),
+    redirect: "error",
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!response.ok) throw new Error("exchange rate unavailable");
+
+  const body = await response.json();
+  if (
+    !Array.isArray(body) || body.length !== 2 ||
+    body.some((item) => item?.jsonrpc !== "2.0" || item.error || !("result" in item))
+  ) throw new Error("invalid exchange rate response");
+
+  const chainId: unknown = body.find((item) => item.id === 1)?.result;
+  const result: unknown = body.find((item) => item.id === 2)?.result;
+  if (
+    typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId) ||
+    BigInt(chainId) !== feed.chainId
+  ) throw new Error("invalid or stale exchange rate");
+  return roundToDecimal(result, nowMs, feed.maxAgeMs);
+}
+
+/** Claim one refresh per feed and interval across processes sharing the order database. */
+export function getCachedUsdRate(
+  db: DatabaseAdapter,
+  asset: keyof typeof FEEDS,
+  apiKey: string,
+  now = Date.now,
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  return refreshQueue.run(asset, async () => {
+    const readRate = async (time: number) => {
+      const rows = await db.query<[string]>(
+        "SELECT usd_rate FROM mail_payment_rates WHERE asset = ? AND cached_at > ?",
+        [asset, time - RATE_CACHE_MS],
+      );
+      return rows[0]?.[0];
+    };
+
+    const time = now();
+    const cached = await readRate(time);
+    if (cached) return cached;
+
+    const expiredAt = time - RATE_CACHE_MS;
+    const claimed = await db.query<[string]>(
+      `INSERT INTO mail_payment_rates (asset, last_attempt_at)
+       VALUES (?, ?)
+       ON CONFLICT (asset) DO UPDATE SET last_attempt_at = excluded.last_attempt_at
+       WHERE mail_payment_rates.last_attempt_at <= ?
+         AND (mail_payment_rates.cached_at IS NULL OR mail_payment_rates.cached_at <= ?)
+       RETURNING asset`,
+      [asset, time, expiredAt, expiredAt],
+    );
+    if (!claimed.length) {
+      const refreshed = await readRate(now());
+      if (refreshed) return refreshed;
       throw new Error("exchange rate unavailable");
     }
-    return body.result;
-  }
 
-  const chainId = await rpc("eth_chainId", []);
-  if (typeof chainId !== "string" || !/^0x[0-9a-f]+$/i.test(chainId)) {
-    throw new Error("invalid or stale exchange rate");
-  }
-  if (BigInt(chainId) !== feed.chainId) {
-    throw new Error("invalid or stale exchange rate");
-  }
-  const result = await rpc("eth_call", [
-    { to: feed.proxy, data: LATEST_ROUND_DATA },
-    "latest",
-  ]);
-  return roundToDecimal(result, nowMs, feed.maxAgeMs);
+    const rate = await fetchUsdRate(asset, apiKey, time, fetchImpl);
+    await db.query(
+      "UPDATE mail_payment_rates SET usd_rate = ?, cached_at = ? WHERE asset = ? AND last_attempt_at = ?",
+      [rate, now(), asset, time],
+    );
+    return rate;
+  });
 }
 
 function roundToDecimal(result: unknown, nowMs: number, maxAgeMs: number): string {

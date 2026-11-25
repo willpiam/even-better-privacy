@@ -141,6 +141,7 @@ try {
   await button(page, "Review payment").click();
   await page.locator("#review-step").waitFor();
   assert.equal(await page.locator("#amount").textContent(), "4 USDC");
+  await button(page, "Report an existing payment").waitFor();
   assert.equal(await button(page, "About minimum UTxO").isVisible(), false);
   assert.equal(await page.locator("[aria-current=step]").textContent(), "Review");
   assert.equal(await page.locator("pre, #transaction-form").count(), 0);
@@ -175,6 +176,7 @@ try {
   await receipt.getByText("alice@test.pqpost.com (5-character username)", { exact: true }).waitFor();
   await receipt.getByText("1 USD per USDC", { exact: true }).waitFor();
   await receipt.getByText("On-chain crypto payment (USDC)", { exact: true }).waitFor();
+  assert.equal((await receipt.textContent()).includes(address.orderId), false);
   await page.emulateMedia({ media: "print" });
   const explorerUrl = `https://sepolia.etherscan.io/tx/0x${hash}`;
   const receiptLink = receipt.getByRole("link", { name: explorerUrl });

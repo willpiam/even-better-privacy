@@ -1,4 +1,10 @@
 export const PAYMENT_ORDER_SCHEMA_UPDATES = [
+  `CREATE TABLE IF NOT EXISTS mail_payment_rates (
+    asset TEXT PRIMARY KEY,
+    last_attempt_at BIGINT NOT NULL,
+    cached_at BIGINT,
+    usd_rate TEXT
+  )`,
   `DROP INDEX IF EXISTS mail_payment_transaction`,
   `CREATE UNIQUE INDEX IF NOT EXISTS mail_payment_verified_transaction
     ON mail_payment_orders (network, transaction_id)

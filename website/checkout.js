@@ -151,6 +151,7 @@ function setStep(step) {
   const indicators = document.querySelectorAll(".steps li");
   const current = step === "restart" ? steps.indexOf("network") : steps.indexOf(step);
   $("restart-step").hidden = step !== "restart";
+  $("report-existing").hidden = step === "confirmation" || !walletPayKind(order);
   $("steps").hidden = false;
   for (const [index, name] of steps.entries()) {
     $(`${name}-step`).hidden = name !== step;
@@ -421,7 +422,6 @@ function renderReceipt(order, paid, test) {
   $("receipt").hidden = !paid;
   if (!paid) return;
   $("receipt-title").textContent = test ? "Test payment confirmation" : "Payment receipt";
-  $("receipt-order").textContent = order.orderId;
   const usernameLength = order.email.split("@", 1)[0].length;
   $("receipt-email").textContent = `${order.email} (${usernameLength}-character username)`;
   $("receipt-price").textContent = $("price").textContent;
@@ -688,6 +688,12 @@ $("send").addEventListener("click", () => void run(sendPayment, () => {
   else setStep("review");
 }));
 $("refresh").addEventListener("click", refresh);
+$("report-existing").addEventListener("click", () => {
+  showError("");
+  $("report-payment").hidden = false;
+  showProgress("Enter the transaction ID from your wallet history.", false);
+  $("transaction-id").focus();
+});
 $("print-receipt").addEventListener("click", () => window.print());
 
 if (!apiOrigin || !validId.test(id)) {

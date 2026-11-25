@@ -288,9 +288,14 @@ USDA, USDCx, DJED and iUSD on Cardano. Stablecoins are valued at $1 each.
 Set `MAIL_PAYMENT_ETH_RPC_URL` to an HTTPS JSON-RPC endpoint,
 `MAIL_PAYMENT_BLOCKFROST_KEY` to the appropriate Blockfrost project key, and
 `ETHEREUM_ALCHEMY_API_KEY` to an Alchemy API key. ETH and ADA quotes read
-Chainlink through that key: ETH/USD on Ethereum mainnet, accepted for 70
-minutes, and ADA/USD on Polygon mainnet, accepted for 5 minutes. Start a payment
-within the 30-minute quote. The following two hours allow delayed hash
+Chainlink through that key. A new ETH/USD reading from Ethereum mainnet must be
+at most 70 minutes old. A new ADA/USD reading from Polygon mainnet must be at
+most 5 minutes old. Checkout shares a two-hour database cache across users and
+server processes using the same database. A quote request can refresh its asset
+once every two hours. The database records the most recent attempt and the most
+recent successful cache write for each asset. If a refresh fails, new quotes
+for that asset are unavailable until its next refresh window. Other assets can
+refresh independently. Start a payment within the 30-minute quote. The following two hours allow delayed hash
 submission, replacement hashes from a wallet fee bump, and confirmation.
 Confirmation counts default to 5 Ethereum blocks and 2 Cardano blocks; set
 `MAIL_PAYMENT_ETH_CONFIRMATIONS` and `MAIL_PAYMENT_CARDANO_CONFIRMATIONS` to

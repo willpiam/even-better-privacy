@@ -42,7 +42,7 @@ import {
 } from "../payments/orders.ts";
 import { readPaymentProvider } from "../payments/config.ts";
 import { quoteAtomicUnits } from "../payments/quote.ts";
-import { fetchUsdRate } from "../payments/rates.ts";
+import { getCachedUsdRate } from "../payments/rates.ts";
 import {
   verifyCardanoPayment,
   createEthereumPaymentVerifier,
@@ -67,15 +67,15 @@ function checkoutAssets(config: NonNullable<ReturnType<typeof paymentConfigForSe
 }
 
 async function paymentQuote(
+  db: DatabaseAdapter,
   config: NonNullable<ReturnType<typeof paymentConfigForSettings>>,
   chosen: ReturnType<typeof checkoutAssets>[number],
   usdCents: number,
-  now: number,
 ) {
   let rate = "1";
   if (chosen.symbol === "ETH" || chosen.symbol === "ADA") {
     try {
-      rate = await fetchUsdRate(chosen.symbol, config.alchemyApiKey, now);
+      rate = await getCachedUsdRate(db, chosen.symbol, config.alchemyApiKey);
     } catch {
       return null;
     }
@@ -184,7 +184,7 @@ export async function handlePaymentCreate(
   }
   const usdCents = config.prices[check.username.length];
   // An empty network reserves the address without an on-chain quote.
-  const quote = chosen ? await paymentQuote(config, chosen, usdCents, now) : {
+  const quote = chosen ? await paymentQuote(db, config, chosen, usdCents) : {
     asset: "",
     network: "" as const,
     recipient: "",
@@ -324,7 +324,12 @@ export async function handlePaymentCancel(req: Request, db: DatabaseAdapter): Pr
   }, 409);
 }
 
-async function preparePaymentSelection(order: StoredOrder, network: unknown, asset: unknown) {
+async function preparePaymentSelection(
+  db: DatabaseAdapter,
+  order: StoredOrder,
+  network: unknown,
+  asset: unknown,
+) {
   if (order.domain !== TEST_MAIL_DOMAIN || order.network || !order.active ||
     order.status !== "quoted" || order.graceUntil <= Date.now()) {
     return { error: json({ error: "Payment selection is closed. Refresh the order status." }, 409) };
@@ -333,7 +338,7 @@ async function preparePaymentSelection(order: StoredOrder, network: unknown, ass
   if (!config || !isMailSignupReady()) return { error: json({ error: "paid signup is not enabled" }, 503) };
   const chosen = checkoutAssets(config).find((item) => item.network === network && item.symbol === asset);
   if (!chosen) return { error: json({ error: "unsupported payment asset" }, 400) };
-  const quote = await paymentQuote(config, chosen, order.usdCents, Date.now());
+  const quote = await paymentQuote(db, config, chosen, order.usdCents);
   if (!quote) return { error: json({ error: "exchange rate unavailable; please retry" }, 503) };
   return { quote };
 }
@@ -349,7 +354,7 @@ export async function handlePaymentSelect(req: Request, db: DatabaseAdapter): Pr
   if (paymentReference !== undefined && paymentReference !== order.message) {
     return json({ error: "This quote changed. Refresh checkout." }, 409);
   }
-  const { quote, error } = await preparePaymentSelection(order, network, asset);
+  const { quote, error } = await preparePaymentSelection(db, order, network, asset);
   if (error) return error;
   const now = Date.now();
   if (preview === true) {
@@ -489,7 +494,7 @@ export async function handlePaymentOrder(
       paymentAssets: config && order.active && order.status === "quoted"
         ? checkoutAssets(config).map(({ network, symbol }) => ({ network, symbol }))
         : [],
-    });
+    }, 200, { "cache-control": "no-store" });
   }
   return json({
     orderId: order.orderId,
@@ -512,7 +517,7 @@ export async function handlePaymentOrder(
     restartAt,
     status: order.status,
     transactionId: order.transactionId,
-  });
+  }, 200, { "cache-control": "no-store" });
 }
 
 type PaymentProgress = {
@@ -705,7 +710,7 @@ export async function handleCardanoUnsigned(
     }
     const reservation = await getPaymentOrder(db, orderId);
     if (!reservation) return json({ error: "order not found" }, 404);
-    const { quote, error } = await preparePaymentSelection(reservation, network, asset);
+    const { quote, error } = await preparePaymentSelection(db, reservation, network, asset);
     if (error) return error;
     order = { ...reservation, ...quote, message: `pqpost:${"0".repeat(36)}`, expiresAt: Date.now() + QUOTE_MS };
   } else {
