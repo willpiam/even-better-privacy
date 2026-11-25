@@ -118,6 +118,27 @@ Then run the onboarding wizard in the GUI or mobile app and send a message to
 an outside Gmail address. Check headers for `dkim=pass`, `spf=pass`,
 `dmarc=pass`.
 
+### Mailbox deletion requests
+
+The public [mailbox deletion page](https://pqpost.com/delete-mailbox.html) sends
+requests to `postmaster@pqpost.com`. Route that address to the private support
+inbox. Verify ownership by sending a fresh challenge to the hosted mailbox or by
+checking a signed challenge against its EBP identity. A From address or fingerprint
+alone is insufficient. Keep passwords, recovery phrases, and private keys out of
+the request.
+
+After verifying ownership, run the operator command with the key server's
+database and Stalwart admin configuration. Use the fingerprint tied to the
+verified mailbox in the database. Both values must match the same account.
+
+```sh
+deno run -A scripts/delete_hosted_mailbox.ts 'address@pqpost.com' 'verified-fingerprint'
+```
+
+The command destroys the hosted account, revokes its matching email claim and
+retires the address. The user can request deletion of other published details
+separately. Confirm completion at a reply address that will remain accessible.
+
 ## Live mail test on test.pqpost.com
 
 `deno task test:pqpost-mail` creates two disposable

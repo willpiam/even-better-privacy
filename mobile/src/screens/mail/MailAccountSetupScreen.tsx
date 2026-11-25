@@ -11,7 +11,11 @@ import {
   fetchEbpSignupConfig,
   resetEbpMailbox,
 } from '../../services/mail/ebpSignup';
-import {isManagedMailAddress} from '../../services/mail/ebpSignupLogic';
+import {
+  isManagedMailAddress,
+  PRODUCTION_KEY_SERVER,
+  TEST_MAIL_DOMAIN,
+} from '../../services/mail/ebpSignupLogic';
 import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {
   deleteMailAccount,
@@ -82,14 +86,9 @@ export default function MailAccountSetupScreen({
     const name = await getCurrentIdentityRequired();
     setIdentityName(name);
 
-    try {
-      const url = await getServerUrl();
-      setServer(url);
-      const cfg = await fetchEbpSignupConfig(url);
-      setManagedDomain(cfg.enabled ? cfg.domain : '');
-    } catch {
-      setManagedDomain('');
-    }
+    const url = await getServerUrl().catch(() => '');
+    setServer(url);
+    setManagedDomain('');
     if (!accountId) {
       setExisting(null);
       setHasExistingSecrets(false);
@@ -127,6 +126,15 @@ export default function MailAccountSetupScreen({
     setFromEmail(record.config.fromEmail);
     setFromName(record.config.fromName);
     setPersistSecrets(record.config.persistSecrets);
+
+    const email = record.config.fromEmail;
+    const testMode = isManagedMailAddress(email, TEST_MAIL_DOMAIN);
+    if (url === PRODUCTION_KEY_SERVER) {
+      setManagedDomain(testMode ? TEST_MAIL_DOMAIN : 'pqpost.com');
+    } else if (url) {
+      const cfg = await fetchEbpSignupConfig(url, testMode).catch(() => null);
+      setManagedDomain(cfg?.enabled ? cfg.domain : '');
+    }
   }, [accountId]);
 
   useFocusEffect(
@@ -246,12 +254,16 @@ export default function MailAccountSetupScreen({
     setBusyMessage('Restoring mailbox access…');
     setStatus('');
     try {
-      const cfg = await fetchEbpSignupConfig(server);
+      const cfg = await fetchEbpSignupConfig(
+        server,
+        isManagedMailAddress(managedEmail, TEST_MAIL_DOMAIN),
+      );
       const res = await resetEbpMailbox({
         identityName,
         password,
         server,
         config: cfg,
+        expectedEmail: managedEmail,
         accountId,
         fromName,
       });
@@ -268,6 +280,7 @@ export default function MailAccountSetupScreen({
   };
 
   const onDeleteMailbox = async () => {
+    if (!managedEmail) return;
     const password = await promptIdentityPassword();
     if (!password) {
       return;
@@ -280,6 +293,7 @@ export default function MailAccountSetupScreen({
         identityName,
         password,
         server,
+        email: managedEmail,
         confirm: deleteConfirm,
       });
       navigation.goBack();
@@ -296,12 +310,12 @@ export default function MailAccountSetupScreen({
       return;
     }
     Alert.alert(
-      'Delete mail account',
+      'Remove account from device',
       `Remove ${accountName || fromEmail}?`,
       [
         {text: 'Cancel', style: 'cancel'},
         {
-          text: 'Delete',
+          text: 'Remove',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -316,7 +330,10 @@ export default function MailAccountSetupScreen({
     );
   };
 
-  const managedAddress = isManagedMailAddress(fromEmail, managedDomain);
+  const savedEmail = existing?.config.fromEmail ?? '';
+  const managedEmail = isManagedMailAddress(savedEmail, managedDomain)
+    ? savedEmail
+    : '';
 
   return (
     <Screen scroll>
@@ -448,7 +465,7 @@ export default function MailAccountSetupScreen({
         disabled={loading}
         onPress={onSave}
       />
-      {isEdit && managedAddress ? (
+      {isEdit && managedEmail ? (
         <>
           <AppButton
             title="Restore mailbox access"
@@ -458,7 +475,7 @@ export default function MailAccountSetupScreen({
             onPress={() => void onRestoreMailbox()}
           />
           <TextField
-            label={`Type ${fromEmail} to delete the mailbox on the server`}
+            label={`Type ${managedEmail} to delete the mailbox on the server`}
             testID="mail-delete-confirm"
             keyboardType="email-address"
             spellCheck={false}
@@ -471,13 +488,13 @@ export default function MailAccountSetupScreen({
             title="Delete mailbox"
             testID="mail-delete-mailbox"
             variant="danger"
-            disabled={loading}
+            disabled={loading || deleteConfirm.trim().toLowerCase() !== managedEmail.toLowerCase()}
             onPress={() => void onDeleteMailbox()}
           />
         </>
       ) : null}
       {isEdit ? (
-        <AppButton title="Delete account" variant="danger" onPress={onDelete} />
+        <AppButton title="Remove account from device" variant="danger" onPress={onDelete} />
       ) : null}
     </Screen>
   );

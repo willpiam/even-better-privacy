@@ -47,7 +47,7 @@ import {
   readPaymentConfig,
   readTestPaymentConfig,
 } from "../payments/config.ts";
-import type { DatabaseAdapter } from "../db/index.ts";
+import type { DatabaseAdapter, MailboxRow } from "../db/index.ts";
 import { verifyDetailProof } from "../detail.ts";
 import {
   readStalwartConfig,
@@ -617,9 +617,8 @@ export async function handleMailDelete(
   req: Request,
   db: DatabaseAdapter,
 ): Promise<Response> {
-  const settings = readMailSignupSettings();
   const stalwart = getStalwartClient();
-  if (!settings.enabled || !stalwart) return disabled();
+  if (!stalwart) return json({ error: "mailbox deletion is unavailable" }, 503);
 
   const bodyResult = await readJsonBody<Record<string, unknown>>(req);
   if (!bodyResult.ok) {
@@ -658,36 +657,69 @@ export async function handleMailDelete(
     return json({ error: "proof expired; try again" }, 400);
   }
 
-  if (!mailbox.stalwartId) return json({ error: "mailbox setup is incomplete" }, 409);
+  try {
+    await removeHostedMailbox(db, stalwart, mailbox, proofCheck.value);
+    return json({ ok: true, email });
+  } catch (err) {
+    if (!(err instanceof MailboxDeletionError)) throw err;
+    console.error("mailbox deletion failed:", err);
+    return json({ error: err.message }, err.status);
+  }
+}
+
+class MailboxDeletionError extends Error {
+  constructor(readonly status: number, message: string, cause?: unknown) {
+    super(message, { cause });
+  }
+}
+
+async function removeHostedMailbox(
+  db: DatabaseAdapter,
+  stalwart: StalwartClient,
+  mailbox: MailboxRow,
+  proof: string | null,
+): Promise<void> {
+  if (!mailbox.stalwartId) throw new MailboxDeletionError(409, "mailbox setup is incomplete");
   try {
     await stalwart.destroyUser(mailbox.stalwartId);
   } catch (err) {
-    console.error("stalwart destroyUser failed:", err);
-    return json({ error: "mail server could not delete the mailbox" }, 502);
+    throw new MailboxDeletionError(502, "mail server could not delete the mailbox", err);
   }
 
+  const { fingerprint, username, domain } = mailbox;
+  const email = `${username}@${domain}`;
   const now = Date.now();
   try {
-    // Revoke rather than delete so the signup proof's nonce stays on record.
-    const emailDetail = await getDetailRecord(db, fingerprint, "email");
-    if (
-      emailDetail && emailDetail.revoked_at === null &&
-      emailDetail.detail.toLowerCase() === email
-    ) {
-      await revokeDetail(db, fingerprint, "email", proofCheck.value, now);
-    }
-    await retireMailUsername(db, {
-      username: mailbox.username,
-      domain: mailbox.domain,
-      fingerprint,
-      retiredAt: now,
-    });
-    await deleteMailbox(db, mailbox.username, mailbox.domain);
+    await db.writeTransaction(async (tx) => {
+      const current = await getMailboxByUsername(tx, username, domain);
+      if (!current || current.stalwartId !== mailbox.stalwartId || current.fingerprint !== fingerprint) return;
+
+      // The revoked detail keeps the original signup nonce on record.
+      const emailDetail = await getDetailRecord(tx, fingerprint, "email");
+      if (emailDetail?.revoked_at === null && emailDetail.detail.toLowerCase() === email) {
+        await revokeDetail(tx, fingerprint, "email", proof, now);
+      }
+      await retireMailUsername(tx, { username, domain, fingerprint, retiredAt: now });
+      await deleteMailbox(tx, username, domain);
+    }, `identity:${fingerprint}`);
   } catch (err) {
-    console.error("mailbox delete bookkeeping failed:", err);
-    return json({ error: "failed to record mailbox deletion" }, 500);
+    throw new MailboxDeletionError(500, "failed to record mailbox deletion", err);
   }
-  return json({ ok: true, email });
+}
+
+/** Operator-only path for a privately verified deletion request. */
+export async function deleteHostedMailboxByAddress(
+  db: DatabaseAdapter,
+  email: string,
+  fingerprint: string,
+): Promise<void> {
+  const [username, domain, extra] = email.trim().toLowerCase().split("@");
+  if (!username || !domain || extra !== undefined) throw new Error("Enter a full mailbox address");
+  const mailbox = await getMailboxByUsername(db, username, domain);
+  if (!mailbox || mailbox.fingerprint !== fingerprint) throw new Error("No matching hosted mailbox");
+  const stalwart = getStalwartClient();
+  if (!stalwart) throw new Error("Mail server administration is unavailable");
+  await removeHostedMailbox(db, stalwart, mailbox, null);
 }
 
 async function removeE2eMailbox(

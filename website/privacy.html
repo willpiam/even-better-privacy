@@ -39,65 +39,47 @@
     </p>
 
     <section class="card verifier-card">
-      <h2>What We Store</h2>
-      <p>We only store information that you explicitly choose to publish:</p>
-      <ul class="steps">
-        <li>Public keys that you publish</li>
-        <li>Signatures that you publish</li>
-        <li>Details/profile information that you publish</li>
-      </ul>
+      <h2>Published identities and verification</h2>
+      <p>Starling Kestrel Laboratories Inc. operates Even Better Privacy (EBP). The key service stores public keys, identity fingerprints, signatures, and profile details you submit for publication. Managed mailbox signup publishes the identity and links its verified email address to the public key. Other users can look up published details. Email verification processes the address and a confirmation token to prove ownership.</p>
+      <p>Private identity keys and cryptographic passwords stay on your device when you use the Android app. Signing, encryption, and decryption take place on your device.</p>
     </section>
 
     <section class="card verifier-card">
-      <h2>What We Do Not Store</h2>
-      <p>We do not store private keys, private message content, or plaintext of encrypted communications. All encryption and decryption happens client-side.</p>
+      <h2>Hosted pqpost mailboxes</h2>
+      <p>When you create a <code>pqpost.com</code> or <code>test.pqpost.com</code> mailbox, EBP processes the requested address, identity fingerprint, signed proof, and mailbox password to provision access. The key service keeps the address, identity link, creation date, and internal account identifier. The mail server maintains login credentials and stores mailbox messages, headers, folders, and attachments, including copies in Sent and Trash when present. Ordinary email can be readable by the mail server. When you use EBP end-to-end encryption, message bodies protected by it are stored as ciphertext and regular delivery metadata remains visible.</p>
+      <p>If you use test-address checkout, EBP also processes order and transaction records, which may include a wallet address and public blockchain transaction identifier, to reserve an address, confirm payment, and handle support.</p>
+    </section>
+
+    <section class="card verifier-card">
+      <h2>Third-party mail accounts and local data</h2>
+      <p>When you connect an existing mail account in Android, the app connects to the IMAP and SMTP servers you configure. It sends login credentials to those servers and uses email addresses, messages, and attachments to display and deliver your mail. The provider operates that mailbox under its own policy. Saved mail credentials are encrypted on your device. Identities, imported contacts, and account settings stay local until you choose a feature that transmits information, such as publishing a profile, looking up an address, or sending a message.</p>
     </section>
 
     <section class="card verifier-card">
       <h2>Cookies, Analytics, and Tracking</h2>
-      <p>This website and the EBP tools do not use cookies, analytics scripts, or any third-party tracking. There is no telemetry.</p>
+      <p>This website does not use tracking cookies or third-party tracking scripts. The Android app does not include advertising or analytics SDKs.</p>
     </section>
 
     <section class="card verifier-card">
       <h2>Signature Verifier</h2>
-      <p>When you use the browser-based signature verifier, the signature payload is sent to the EBP server for verification. The server does not log request payloads or IP addresses beyond what is required for standard HTTPS transport.</p>
+      <p>The browser signature verifier checks signatures locally and can send the signature payload to the selected key server for verification. The EBP key service logs request time, path, response status, and IP address for operations, troubleshooting, and abuse prevention. The request log omits message and signature payloads.</p>
     </section>
 
     <section class="card verifier-card">
-      <h2>Data Sharing</h2>
-      <p>EBP does not sell user data. Mail data may be shared only in these limited cases:</p>
+      <h2>Data sharing and protection</h2>
+      <p>EBP does not sell user data. Information is disclosed to recipients and mail providers as part of delivery, to service providers that operate the key and mail infrastructure, and when required by law. Data submitted for publication is visible to anyone who looks it up. Public blockchain records are visible on the relevant network.</p>
+      <p>Android mail uses TLS for login and mail data. The production key service uses HTTPS. The mail server may exchange messages with other providers using the transport available to those providers.</p>
+    </section>
+
+    <section class="card verifier-card" id="retention-and-deletion">
+      <h2>Data retention and deletion</h2>
       <ul class="steps">
-        <li>With email recipients and mail providers as part of normal email delivery that you initiate</li>
-        <li>When required by applicable law, regulation, or valid legal process</li>
+        <li>Hosted mailbox data is kept while the mailbox exists. Deleting the mailbox removes its active account, messages, folders, and attachments. Backup copies may remain until the backup that contains them expires.</li>
+        <li>The key service keeps the retired address and its identity link to prevent reassignment and impersonation. It may retain revocation proofs and related records for security and replay prevention. Payment records may be retained to resolve transactions, prevent fraud, or meet legal obligations.</li>
+        <li>Public identity data has no automatic expiry. Revocation removes affected details from active use. You can contact us privately to request deletion of separately published data.</li>
+        <li>Locally saved mail credentials remain until the account is removed on the device. Copies of emails delivered to other people or providers remain under their control.</li>
       </ul>
-    </section>
-
-    <section class="card verifier-card">
-      <h2>Your Control</h2>
-      <p>
-        You choose what to publish. If you do not publish information, we do not store it. Published data can be revoked using EBP's built-in revocation system.
-      </p>
-    </section>
-
-    <section class="card verifier-card">
-      <h2>Data Retention</h2>
-      <p>Published public keys and signatures are retained on the server until revoked by the identity owner. There is no automatic expiry at this time.</p>
-    </section>
-
-    <section class="card verifier-card">
-      <h2>Data Storage and Protection</h2>
-      <ul class="steps">
-        <li>Mail credentials are stored on the user's device in encrypted form (AES-GCM with PBKDF2-derived key) when persisted</li>
-        <li>Private application files are written with restricted file permissions where supported</li>
-        <li>Network traffic between clients and servers uses HTTPS/TLS where applicable</li>
-        <li>EBP is designed so cryptographic operations are performed client-side whenever possible</li>
-      </ul>
-    </section>
-
-    <section class="card verifier-card">
-      <h2>Data Retention and Deletion Requests</h2>
-      <p>Stored mail credentials remain on your device until you remove the mail account from EBP.</p>
-      <p>To request deletion of server-side data that you published through EBP, use EBP's revocation features or contact us through the project's <a href="https://github.com/willpiam/even-better-privacy/issues" target="_blank" rel="noreferrer">GitHub issues page</a>. Please include the relevant fingerprint or account details needed to process your request.</p>
+      <p><a href="./delete-mailbox.html">Request deletion of your EBP mailbox and associated data</a> from the web, including after you uninstall the app.</p>
     </section>
 
     <section class="card verifier-card">
@@ -105,12 +87,12 @@
       <p>
         This Privacy Policy may be updated. Material changes will be reflected in the effective date below. Users are encouraged to review this document periodically.
       </p>
-      <p><strong>Effective date:</strong> November 12, 2026</p>
+      <p><strong>Effective date:</strong> November 25, 2026</p>
     </section>
 
     <section class="card verifier-card">
       <h2>Contact</h2>
-      <p>For privacy inquiries, open an issue on the <a href="https://github.com/willpiam/even-better-privacy/issues" target="_blank" rel="noreferrer">GitHub repository</a>.</p>
+      <p>For privacy inquiries or deletion requests, email <a href="mailto:postmaster@pqpost.com">postmaster@pqpost.com</a>.</p>
     </section>
   </main>
 

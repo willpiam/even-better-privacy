@@ -65,6 +65,18 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
 
       <SectionTitle>Links</SectionTitle>
       <AppButton
+        title="Privacy policy"
+        variant="secondary"
+        onPress={() => void Linking.openURL('https://pqpost.com/privacy')}
+      />
+      <AppButton
+        title="Request mailbox deletion"
+        variant="secondary"
+        onPress={() =>
+          void Linking.openURL('https://pqpost.com/delete-mailbox.html')
+        }
+      />
+      <AppButton
         title="GitHub repository"
         variant="secondary"
         onPress={() =>

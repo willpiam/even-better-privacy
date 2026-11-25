@@ -568,21 +568,16 @@ export async function deleteEbpMailbox(params: {
   identityName: string;
   password: string;
   server: string;
+  email: string;
   confirm: string;
 }): Promise<{email: string}> {
-  const config = await fetchEbpSignupConfig(params.server);
-  if (!config.enabled) {
-    throw new Error('This key server does not offer EBP email');
-  }
-  const identity = await openIdentity(params.identityName, params.password);
-  const email = await fetchVerifiedManagedEmail(
-    params.server,
-    identity.toFingerprint(),
-    config.domain,
-  );
+  const email = params.email.trim().toLowerCase();
   if (!mailboxDeleteConfirmed(email, params.confirm)) {
     throw new Error(`Type ${email} to confirm`);
   }
+  const identity = await openIdentity(params.identityName, params.password);
+  // The key server verifies the signed address against the hosted account.
+  // This still works after the published email detail has been revoked.
   const proof = signThrowawayDetail(
     identity,
     MAIL_DELETE_PATH,

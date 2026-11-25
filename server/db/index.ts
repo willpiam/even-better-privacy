@@ -578,7 +578,7 @@ export async function revokeDetail(
   db: DatabaseAdapter,
   fingerprint: string,
   path: string,
-  certificate: string,
+  certificate: string | null,
   revokedAt: number,
 ): Promise<void> {
   await db.query(

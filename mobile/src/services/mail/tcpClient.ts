@@ -1,8 +1,8 @@
 import {taggedImapStatus} from "../../../../common/mail/ImapStatus.ts";
-import TcpSocket from 'react-native-tcp-socket';
 import {Buffer} from 'buffer';
 import {mailStub} from './mailTrace';
 import {MailByteBuffer} from './tcpBuffer';
+import {connectTLS, createConnection, upgradeMailTls} from './mailSocket';
 
 export {takeBytesFromBuffer, takeLineFromBuffer} from './tcpBuffer';
 
@@ -21,7 +21,7 @@ export type TcpLineClient = {
    * Upgrade a plain-TCP client to TLS after a successful STARTTLS command.
    * No-op / throws if already TLS or if the underlying socket cannot upgrade.
    */
-  startTls?: (options?: {rejectUnauthorized?: boolean}) => Promise<void>;
+  startTls?: () => Promise<void>;
 };
 
 export type MailTlsMode = 'implicit-tls' | 'starttls';
@@ -50,11 +50,6 @@ type AnySocket = {
   write: (data: string | Buffer) => void;
   destroy: () => void;
   on: (event: string, listener: (...args: unknown[]) => void) => void;
-  once?: (event: string, listener: (...args: unknown[]) => void) => void;
-  removeListener?: (
-    event: string,
-    listener: (...args: unknown[]) => void,
-  ) => void;
 };
 
 function dataPreview(text: string): string {
@@ -74,8 +69,8 @@ function attachLineClient(
   const waiters: Waiter[] = [];
   let closed = false;
   let sawData = false;
-  let activeSocket: AnySocket = socket;
   let tlsUpgraded = !params.allowStartTls;
+  let tlsUpgrading = false;
 
   const failWaiters = (err: Error) => {
     while (waiters.length > 0) {
@@ -111,6 +106,7 @@ function attachLineClient(
   };
 
   const onData = (data: unknown) => {
+    if (closed || tlsUpgrading) return;
     const chunk =
       typeof data === 'string'
         ? Buffer.from(data, 'binary')
@@ -148,20 +144,15 @@ function attachLineClient(
     failWaiters(new Error('TCP connection closed'));
   };
 
-  const bindSocket = (next: AnySocket) => {
-    activeSocket = next;
-    next.on('data', onData);
-    next.on('error', onError);
-    next.on('close', onClose);
-  };
-
-  bindSocket(socket);
+  socket.on('data', onData);
+  socket.on('error', onError);
+  socket.on('close', onClose);
 
   function destroySocket() {
     closed = true;
     buffer.clear();
     try {
-      activeSocket.destroy();
+      socket.destroy();
     } catch {
       // ignore
     }
@@ -169,17 +160,19 @@ function attachLineClient(
 
   const client: TcpLineClient = {
     writeLine: (line: string) => {
+      if (tlsUpgrading) throw new Error('TLS handshake is in progress');
       if (!closed) {
-        activeSocket.write(`${line}\r\n`);
+        socket.write(`${line}\r\n`);
       }
     },
     writeBytes: (data: string | Uint8Array) => {
+      if (tlsUpgrading) throw new Error('TLS handshake is in progress');
       if (!closed) {
         const buf =
           typeof data === 'string'
             ? Buffer.from(data, 'utf8')
             : Buffer.from(data);
-        activeSocket.write(buf);
+        socket.write(buf);
       }
     },
     readLine: () =>
@@ -247,45 +240,33 @@ function attachLineClient(
   };
 
   if (params.allowStartTls) {
-    client.startTls = (options?: {rejectUnauthorized?: boolean}) =>
-      new Promise<void>((resolve, reject) => {
-        if (tlsUpgraded) {
-          reject(new Error('TLS already negotiated'));
-          return;
-        }
-        if (closed) {
-          reject(new Error('TCP connection closed'));
-          return;
-        }
-        void mailStub('tcp.starttls.start', params.endpoint);
-        try {
-          // TLSSocket shares the native socket id and calls startTLS. Keep I/O
-          // on the original JS socket so we do not double-bind data listeners.
-          // eslint-disable-next-line no-new
-          new TcpSocket.TLSSocket(activeSocket as never, {
-            rejectUnauthorized: options?.rejectUnauthorized ?? true,
-          });
-          tlsUpgraded = true;
-          void mailStub('tcp.starttls.ok', params.endpoint);
-          resolve();
-        } catch (error) {
-          const err = error instanceof Error ? error : new Error(String(error));
-          void mailStub('tcp.starttls.error', err.message);
-          reject(err);
-        }
-      });
+    client.startTls = async () => {
+      if (tlsUpgraded || tlsUpgrading) throw new Error('TLS already requested');
+      if (closed) throw new Error('TCP connection closed');
+      tlsUpgrading = true;
+      buffer.clear();
+      void mailStub('tcp.starttls.start', params.endpoint);
+      try {
+        await upgradeMailTls(socket);
+        if (closed) throw new Error('TCP connection closed');
+        tlsUpgraded = true;
+        void mailStub('tcp.starttls.ok', params.endpoint);
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        void mailStub('tcp.starttls.error', err.message);
+        destroySocket();
+        failWaiters(err);
+        throw err;
+      } finally {
+        tlsUpgrading = false;
+      }
+    };
   }
 
   return client;
 }
 
-/**
- * Open an implicit-TLS line client (IMAP 993 / SMTP 465).
- *
- * Must use `connectTLS` — `createConnection({ tls: true })` does **not** enable
- * TLS on Android (pendingTLS is only set via startTLS/connectTLS), so the
- * socket would be plain TCP against a TLS port and hang waiting for a text greeting.
- */
+/** Open an implicit-TLS line client (IMAP 993 / SMTP 465). */
 export function connectTlsLineClient(params: {
   host: string;
   port: number;
@@ -303,11 +284,11 @@ export function connectTlsLineClient(params: {
     let settledConnect = false;
     let client: TcpLineClient | null = null;
 
-    const socket = TcpSocket.connectTLS(
+    const socket = connectTLS(
       {
         host: params.host,
         port: params.port,
-        rejectUnauthorized: true,
+        connectTimeout: params.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       },
       () => {
         if (settledConnect) {
@@ -379,10 +360,11 @@ export function connectPlainLineClient(params: {
     let settledConnect = false;
     let client: TcpLineClient | null = null;
 
-    const socket = TcpSocket.createConnection(
+    const socket = createConnection(
       {
         host: params.host,
         port: params.port,
+        connectTimeout: params.timeoutMs ?? DEFAULT_CONNECT_TIMEOUT_MS,
       },
       () => {
         if (settledConnect) {

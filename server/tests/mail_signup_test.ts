@@ -1,4 +1,4 @@
-import { assert, assertEquals } from "jsr:@std/assert@^1.0.6";
+import { assert, assertEquals, assertRejects } from "jsr:@std/assert@^1.0.6";
 import { createIdentityPayload, createSignedProof } from "./helpers.ts";
 import { sha256Hex } from "../../core/MessageHash.ts";
 import {
@@ -8,7 +8,8 @@ import {
   MAIL_PASSWORD_RESET_PATH,
   validateMailUsername,
 } from "../../common/MailUsername.ts";
-import { setStalwartClientForTests } from "../handlers/mail-signup.ts";
+import { deleteHostedMailboxByAddress, setStalwartClientForTests } from "../handlers/mail-signup.ts";
+import { initDb } from "../db/index.ts";
 import { StalwartClient } from "../stalwart.ts";
 import { rateLimitStore } from "../rate-limit.ts";
 
@@ -502,6 +503,7 @@ Deno.test("delete destroys the mailbox, revokes the email detail, and retires th
     assertEquals((await signup(mod, identity, "grace")).status, 200);
     assertEquals(stalwart.accounts.size, 1);
 
+    Deno.env.set("MAIL_SIGNUP_ENABLED", "false");
     const res = await post(mod, "/api/v1/mail/delete", {
       fingerprint: identity.fingerprint,
       proof: deleteProof(identity, `grace@${DOMAIN}`),
@@ -515,6 +517,7 @@ Deno.test("delete destroys the mailbox, revokes the email detail, and retires th
     assertEquals(idBody.revokedDetails, ["email"]);
     assertEquals(idBody.detailsMeta.email.verified, false);
 
+    Deno.env.set("MAIL_SIGNUP_ENABLED", "true");
     const avail = await (await get(mod, "/api/v1/mail/username-available?u=grace")).json();
     assertEquals(avail.available, false);
 
@@ -529,6 +532,31 @@ Deno.test("delete destroys the mailbox, revokes the email detail, and retires th
     });
     assertEquals(again.status, 404);
     await again.body?.cancel();
+  });
+});
+
+Deno.test("operator deletion requires the matching identity and removes the hosted account", async () => {
+  await withServer(async (mod, stalwart) => {
+    const owner = await registerIdentity(mod);
+    const other = await registerIdentity(mod);
+    assertEquals((await signup(mod, owner, "operatorcase")).status, 200);
+    const email = `operatorcase@${DOMAIN}`;
+
+    const db = await initDb(Deno.env.get("DB_PATH")!);
+    try {
+      await assertRejects(() => deleteHostedMailboxByAddress(db, email, other.fingerprint), Error, "No matching hosted mailbox");
+      assertEquals(stalwart.accounts.size, 1);
+      await deleteHostedMailboxByAddress(db, email, owner.fingerprint);
+      assertEquals(stalwart.accounts.size, 0);
+    } finally {
+      await db.close();
+    }
+
+    const identity = await (await get(mod, `/api/v1/identity/${owner.fingerprint}`)).json();
+    assertEquals(identity.revokedDetails, ["email"]);
+    const attempt = await signup(mod, other, "operatorcase");
+    assertEquals(attempt.status, 409);
+    await attempt.body?.cancel();
   });
 });
 
