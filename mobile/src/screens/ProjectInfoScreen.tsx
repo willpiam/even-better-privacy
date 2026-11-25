@@ -39,6 +39,7 @@ export default function ProjectInfoScreen(_props: Props): JSX.Element {
           messaging system using Dilithium/SPHINCS+ for signatures and Kyber for
           encryption.
         </Text>
+        <Text style={styles.p}>Starling Kestrel Laboratories Inc.</Text>
       </Card>
 
       <SectionTitle>How It Works</SectionTitle>
