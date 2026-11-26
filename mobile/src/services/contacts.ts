@@ -203,6 +203,29 @@ export async function importContact(
   });
 }
 
+/** Keep existing contact details and revocations when a public key is rescanned. */
+export async function importScannedContact(
+  payload: ExternalIdentity,
+  localAlias: string,
+): Promise<string> {
+  const contact = normalizeExternalIdentity(
+    payload as unknown as Record<string, unknown>,
+  );
+  const name = contact.fingerprint;
+  const path = contactPath(name);
+  return contactUpdates.run(path, async () => {
+    const existing = (await listContacts()).find(
+      item => item.contact.fingerprint === contact.fingerprint,
+    );
+    if (existing) return existing.name;
+    if (await RNFS.exists(path)) {
+      throw new Error('A contact with this storage name already exists.');
+    }
+    await writeFileAtomic(path, JSON.stringify({...contact, localAlias}, null, 2));
+    return name;
+  });
+}
+
 export async function deleteContact(params: {
   name?: string;
   fingerprint?: string;

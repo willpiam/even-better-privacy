@@ -10,7 +10,7 @@ jest.mock('../src/services/settings',()=>({getServerUrl:async()=>'https://keys.e
 import RNFS from 'react-native-fs';
 import {Identity} from '../../core/Identity';
 import {sha256Hex} from '../../core/MessageHash';
-import {findContactsByEmail,resolveVerifiedRecipient,listContacts} from '../src/services/contacts';
+import {findContactsByEmail,resolveVerifiedRecipient,listContacts,importScannedContact} from '../src/services/contacts';
 import {writeFileAtomic} from '../src/services/atomicFile';
 
 const email='match@example.test';
@@ -42,4 +42,23 @@ test('a server miss does not reread the contact directory, and damaged neighbors
     const warn=jest.spyOn(console,'warn').mockImplementation(()=>{});
     try {expect(await listContacts()).toHaveLength(20);}finally {warn.mockRestore();}
   } finally {globalThis.fetch=oldFetch;}
+});
+
+test('QR imports are idempotent and preserve existing contact revocations', async () => {
+  mockFiles.clear();
+  const {summary} = new Identity('dilithium', 'kyber');
+  const [first, second] = await Promise.all([
+    importScannedContact(summary, 'Alice'),
+    importScannedContact(summary, 'Second alias'),
+  ]);
+  expect(first).toBe(second);
+  expect(mockFiles.size).toBe(1);
+  expect((await listContacts())[0].localAlias).toBe('Alice');
+
+  mockFiles.clear();
+  const original = JSON.stringify({...summary, revoked: true, localAlias: 'Existing alias'});
+  mockFiles.set('/contacts/existing.json', original);
+  expect(await importScannedContact(summary, 'Scanned alias')).toBe('existing');
+  expect(mockFiles.size).toBe(1);
+  expect(mockFiles.get('/contacts/existing.json')).toBe(original);
 });

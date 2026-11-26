@@ -20,6 +20,7 @@ import IdentityDetailScreen from '../screens/IdentityDetailScreen';
 import IdentityActionsScreen from '../screens/IdentityActionsScreen';
 import ContactsScreen from '../screens/ContactsScreen';
 import ContactDetailScreen from '../screens/ContactDetailScreen';
+import IdentityQrScreen from '../screens/IdentityQrScreen';
 import CryptoHubScreen from '../screens/CryptoHubScreen';
 import SignMessageScreen from '../screens/crypto/SignMessageScreen';
 import VerifyMessageScreen from '../screens/crypto/VerifyMessageScreen';
@@ -51,12 +52,14 @@ export type IdentitiesStackParamList = {
   IdentityPublish: {identityName: string};
   IdentityDetails: {identityName: string};
   IdentityExport: {identityName: string};
+  IdentityQr: {identityName: string};
   IdentitySecurity: {identityName: string};
 };
 
 export type ContactsStackParamList = {
   ContactsList: undefined;
   ContactDetail: {name: string};
+  ContactQrScan: undefined;
 };
 
 export type CryptoStackParamList = {
@@ -220,6 +223,11 @@ function IdentitiesNavigator(): JSX.Element {
           options={{title: 'Export and backup'}}
         />
         <IdentitiesStack.Screen
+          name="IdentityQr"
+          component={IdentityQrScreen}
+          options={{title: 'Share public keys'}}
+        />
+        <IdentitiesStack.Screen
           name="IdentitySecurity"
           component={IdentityActionsScreen}
           options={{title: 'Revocation and removal'}}
@@ -237,6 +245,11 @@ function ContactsNavigator(): JSX.Element {
           name="ContactsList"
           component={ContactsScreen}
           options={{title: 'Contacts', ...homeOptions}}
+        />
+        <ContactsStack.Screen
+          name="ContactQrScan"
+          getComponent={() => require('../screens/ContactQrScanScreen').default}
+          options={{title: 'Scan contact QR'}}
         />
         <ContactsStack.Screen
           name="ContactDetail"

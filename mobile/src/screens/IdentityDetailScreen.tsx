@@ -148,6 +148,15 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
           testID="identity-open-details"
           onPress={() => navigation.navigate('IdentityDetails', params)}
         />
+        {!locallyRevoked && publication.state !== 'revoked' ? (
+          <ListRow
+            title="Show contact QR"
+            icon="fingerprint"
+            subtitle="Share your public keys in person"
+            testID="identity-open-qr"
+            onPress={() => navigation.navigate('IdentityQr', params)}
+          />
+        ) : null}
         <ListRow
           title="Export and backup"
           icon="file"

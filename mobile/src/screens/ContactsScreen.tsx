@@ -131,19 +131,24 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
 
   const menuItems = [
     {
+      id: 'contacts-scan-qr',
+      title: 'Scan contact QR',
+      open: () => navigation.navigate('ContactQrScan'),
+    },
+    {
       id: 'contacts-import',
       title: 'Import contact manually',
-      open: setImportVisible,
+      open: () => setImportVisible(true),
     },
     {
       id: 'contacts-fetch',
       title: 'Import via fingerprint',
-      open: setFetchVisible,
+      open: () => setFetchVisible(true),
     },
     {
       id: 'contacts-browse',
       title: 'Browse server identities',
-      open: setBrowseVisible,
+      open: () => setBrowseVisible(true),
     },
   ];
 
@@ -208,7 +213,7 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
                 showDivider={index < menuItems.length - 1}
                 onPress={() => {
                   setMenuOpen(false);
-                  item.open(true);
+                  item.open();
                 }}
               />
             ))}

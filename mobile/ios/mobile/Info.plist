@@ -35,6 +35,8 @@
 			</dict>
 		</dict>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>Scan EBP contact QR codes with your camera.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Use Face ID to unlock your identity.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
