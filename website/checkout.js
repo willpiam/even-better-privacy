@@ -494,7 +494,10 @@ function render(snapshot) {
   } else if (retiredPayment) {
     showProgress(`Your wallet sent a transaction for a previous quote. Contact support with transaction ID ${savedHash}.`, false);
   } else if (savedHash) {
-    showProgress("The transaction ID is saved. You can retry recording it as the network confirms the payment.", false);
+    const checking = retrySavedPayment && retriesRemaining > 0 && canReportPayment(order);
+    showProgress(checking
+      ? "Your transaction is still being verified. We’ll check again automatically. Do not send another payment."
+      : "Your transaction ID is saved. Do not send another payment.", checking);
   } else if (order.status === "cancelled") {
     showProgress("This purchase was cancelled. If you already paid, report your transaction ID for review.", false);
   } else if (order.status === "manual_review") {
@@ -527,7 +530,15 @@ function render(snapshot) {
 }
 
 async function recordPayment() {
-  const recorded = await request("transaction", { transactionId: savedHash, paymentReference: savedReference });
+  let recorded;
+  try {
+    recorded = await request("transaction", { transactionId: savedHash, paymentReference: savedReference });
+  } catch (error) {
+    retrySavedPayment = error.retryPayment === true;
+    render(order);
+    if (!retrySavedPayment) throw error;
+    return;
+  }
   saveHash("");
   retrySavedPayment = false;
   render(recorded);
@@ -615,7 +626,6 @@ async function run(action, onError = () => {}) {
   try {
     await action();
   } catch (error) {
-    retrySavedPayment = error.retryPayment === true;
     showError(walletErrorMessage(error));
     onError();
   } finally {

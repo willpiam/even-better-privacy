@@ -581,7 +581,7 @@ async function reportPayment(
       progress.confirmationTransactionId = hash;
     });
   } catch {
-    return json({ error: "Payment verification is temporarily unavailable. Try again.", retryPayment: true }, 503);
+    return json({ error: "Payment verification is temporarily unavailable. Check this transaction’s status again shortly.", retryPayment: true }, 503);
   }
   if (evidence === "invalid") {
     return json({ error: "This transaction does not match the order's payment instructions." }, 422);
@@ -600,7 +600,7 @@ async function reportPayment(
   return json({
     error: evidence === "observed"
       ? "Payment found. Waiting for on-chain confirmations."
-      : "Payment is not visible on-chain yet. Check the transaction ID and retry.",
+      : "Waiting for the network to verify this transaction.",
     retryPayment: true,
   }, 409);
 }

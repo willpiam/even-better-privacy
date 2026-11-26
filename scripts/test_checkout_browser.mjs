@@ -103,7 +103,9 @@ try {
         case "transaction":
           assert.equal(body.transactionId.replace(/^0x/, ""), hash);
           if (!paymentVisible) {
-            return await route.fulfill({ status: 409, json: { error: "Payment is not visible on-chain yet.", retryPayment: true } });
+            return await route.fulfill({ status: 409, json: {
+              error: "Payment is not visible on-chain yet. Check the transaction ID and retry.", retryPayment: true,
+            } });
           }
           order = { ...order, status: order.status === "cancelled" ? "manual_review" : "pending",
             confirmationsSeen: 1, transactionId: hash };
@@ -118,6 +120,7 @@ try {
   });
 
   const checkoutUrl = `http://127.0.0.1:8789/checkout.html#${address.orderId}`;
+  const waitingForVerification = "Your transaction is still being verified. We’ll check again automatically. Do not send another payment.";
   const button = (page, name) => page.getByRole("button", { name, exact: true });
   async function connect(page, network, wallet) {
     await page.goto(checkoutUrl);
@@ -161,8 +164,15 @@ try {
   const tx = await page.evaluate(() => window.sentTransaction);
   assert.equal(tx.to, quotes["ethereum-sepolia"].assetUnit);
   assert.match(tx.data, /^0xa9059cbb/);
+  paymentVisible = false;
   await page.evaluate(() => window.approvePayment());
-  await page.getByText("1 of 5 block confirmations").waitFor();
+  await page.getByText(waitingForVerification).waitFor();
+  assert.equal(await page.locator("#error").isVisible(), false);
+  assert.equal(await button(page, "Submit Payment Transaction").isVisible(), false);
+  await button(page, "Check transaction status").waitFor();
+  paymentVisible = true;
+  await page.getByText("1 of 5 block confirmations").waitFor({ timeout: 20_000 });
+  assert.equal(await page.evaluate(() => window.walletSendRequests), 1);
   order = { ...order, confirmationsSeen: 2 };
   await page.getByText("2 of 5 block confirmations").waitFor({ timeout: 20_000 });
   assert.equal(await page.locator("progress").getAttribute("value"), "2");
@@ -194,7 +204,8 @@ try {
   await page.reload();
   await page.getByLabel("Transaction ID").fill(hash);
   await button(page, "Report payment").click();
-  await page.getByText("Payment is not visible on-chain yet.").waitFor();
+  await page.getByText(waitingForVerification).waitFor();
+  assert.equal(await page.locator("#error").isVisible(), false);
   paymentVisible = true;
   await page.reload();
   await page.getByText("This payment needs review.", { exact: false }).waitFor();
