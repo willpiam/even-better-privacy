@@ -5,15 +5,13 @@ import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
-import com.swmansion.rnscreens.fragment.restoration.RNScreensFragmentFactory
 
 class MainActivity : ReactActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Install before super.onCreate restores fragments after Android kills the background process.
-    // React Navigation rebuilds its screens; restoring their old native fragments would crash.
-    supportFragmentManager.fragmentFactory = RNScreensFragmentFactory()
-    super.onCreate(savedInstanceState)
+    // React Navigation rebuilds its screens. R8 can rename their fragments, so the screens
+    // library's package-name check cannot reliably prevent Android from restoring them.
+    super.onCreate(null)
   }
 
   /**

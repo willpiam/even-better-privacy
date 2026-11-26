@@ -131,17 +131,16 @@ pressure. Ordinary `launchApp` / force-stop tests do not exercise this path.
    identity/settings remain. Repeat from another tab and from a nested screen.
    A new process starts a new unlock session and may return to the initial tab.
 
-Before the fix, this can crash with `Screen fragments should never be restored`
-or `ScreenStack fragments should never be restored`. Inspect the crash buffer
-with `adb logcat -b crash -d` and check its timestamp and `com.mobile` process;
-old crash records can remain after a successful retest.
+In a minified release, R8 can rename the screen fragments. The previous
+restoration factory checked for the original package name, so Android could
+still try to construct a saved fragment and crash with `Screen fragments should
+never be restored` or `ScreenStack fragments should never be restored`. Inspect
+`adb logcat -b crash -d` for new entries from `com.mobile` after the test.
 
-`MainActivity.onCreate` must install `RNScreensFragmentFactory` **before**
-`super.onCreate(savedInstanceState)`; see the Android installation instructions
-for [react-native-screens 4.24.0](https://github.com/software-mansion/react-native-screens/blob/4.24.0/README.md#android).
-The factory lets React Navigation rebuild its screens instead of restoring
-stale native fragments. This is a native change: rebuild and replace the APK
-with `./build_mobile_android.sh --skip-npm --install` after installing dependencies.
+`MainActivity.onCreate` passes `null` to `super.onCreate` so React Navigation
+can rebuild its screens without restoring stale native fragments. After
+installing dependencies, rebuild and install the release APK with
+`./build_mobile_android.sh --skip-npm --install` to exercise this change.
 
 ## Development tools
 
