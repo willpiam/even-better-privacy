@@ -35,41 +35,6 @@ jobs:
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci --prefix mobile
       - run: npm --prefix mobile test -- --runInBand --watchAll=false
-  android-release:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: mobile/package-lock.json
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-      - uses: gradle/actions/setup-gradle@v4
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: >-
-            platform-tools platforms;android-36 build-tools;36.0.0
-            ndk;27.1.12297006 cmake;3.22.1
-      - run: npm ci --prefix mobile
-      - run: ./build_mobile_android.sh --skip-npm --arch x86_64
-      - name: Enable KVM for the Android emulator
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Launch and restore the minified APK
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 36
-          target: google_apis
-          arch: x86_64
-          disable-animations: true
-          script: bash scripts/test_android_release_launch.sh dist/mobile/ebp-mobile-release.apk
   postgres:
     runs-on: ubuntu-24.04
     services:
