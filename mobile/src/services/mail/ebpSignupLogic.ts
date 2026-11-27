@@ -263,10 +263,12 @@ export function buildMailPasswordResetRequest(params: {
 
 export function buildMailDeleteRequest(params: {
   fingerprint: string;
+  email?: string;
   proof: string;
 }): string {
   return JSON.stringify({
     fingerprint: params.fingerprint,
+    email: params.email,
     proof: params.proof,
   });
 }

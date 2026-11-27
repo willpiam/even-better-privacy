@@ -47,6 +47,7 @@ export default function MailMessageScreen({
 }: Props): JSX.Element {
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const folder = route.params.folder ?? 'INBOX';
+  const {uid, uidValidity, identityName: mailboxIdentity, accountId} = route.params;
   const [subject, setSubject] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -78,8 +79,10 @@ export default function MailMessageScreen({
       try {
         const result = await decryptMailBody({
           identityName,
-          uid: route.params.uid,
+          uid,
           folder,
+          uidValidity,
+          accountId,
         });
         if (request.current !== requestId) return;
         setAuthenticity(result);
@@ -94,7 +97,7 @@ export default function MailMessageScreen({
         }
       }
     },
-    [route.params.uid, folder],
+    [uid, folder, uidValidity, accountId],
   );
 
   useEffect(() => {
@@ -135,14 +138,14 @@ export default function MailMessageScreen({
       setShowTechnical(false);
       setAuthenticity(null);
       try {
-        const identityName = await getCurrentIdentityRequired();
-        const resolved = await resolveSelectedAccount(identityName);
+        const identityName = mailboxIdentity ?? await getCurrentIdentityRequired();
+        const resolved = await resolveSelectedAccount(identityName, accountId);
         if (request.current !== requestId) return;
         if (!resolved) {
           throw new Error('No mail account');
         }
         const [detail, htmlSetting] = await Promise.all([
-          loadMailMessage(identityName, resolved, route.params.uid, folder),
+          loadMailMessage(identityName, resolved, uid, folder, uidValidity),
           getMailRenderHtml(),
         ]);
         if (request.current !== requestId) {
@@ -175,14 +178,14 @@ export default function MailMessageScreen({
       request.current += 1;
       unsubscribe();
     };
-  }, [route.params.uid, folder, decrypt]);
+  }, [uid, folder, uidValidity, mailboxIdentity, accountId, decrypt]);
 
   const onDecrypt = async () => {
     if (decrypting) return;
     const requestId = request.current;
     setDecrypting(true);
     try {
-      const identityName = await ensureUnlocked();
+      const identityName = await ensureUnlocked(mailboxIdentity);
       if (!identityName || request.current !== requestId) return;
       await decrypt(identityName, requestId);
     } catch (error) {

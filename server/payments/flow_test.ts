@@ -262,8 +262,9 @@ Deno.test({
         new TextEncoder().encode(message),
         (b) => b.toString(16).padStart(2, "0"),
       ).join("");
+      const paidAmount = BigInt(view.amountAtomic) + 1n;
       const transfer = `0xa9059cbb${recipient.slice(2).padStart(64, "0")}${
-        BigInt(view.amountAtomic).toString(16).padStart(64, "0")
+        paidAmount.toString(16).padStart(64, "0")
       }`;
       const transaction = {
         hash,
@@ -285,7 +286,7 @@ Deno.test({
             `0x${"0".repeat(64)}`,
             `0x${recipient.slice(2).padStart(64, "0")}`,
           ],
-          data: `0x${BigInt(view.amountAtomic).toString(16).padStart(64, "0")}`,
+          data: `0x${paidAmount.toString(16).padStart(64, "0")}`,
         }],
       };
       let latestBlock = "0xd";
@@ -391,6 +392,8 @@ Deno.test({
         await (await handlePaymentOrder(post({ orderId }), db, false)).json();
       assertEquals(finalPayment.status, "confirmed");
       assertEquals(finalPayment.transactionId, hash.slice(2));
+      assertEquals(finalPayment.amountAtomic, view.amountAtomic);
+      assertEquals(finalPayment.paidAmountAtomic, paidAmount.toString());
       holdReplacedHash = false;
       const latePayment = await handlePaymentOrder(
         post({ orderId: unpaidId, transactionId: lateHash }), db, true,

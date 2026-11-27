@@ -4,7 +4,7 @@ import {Alert, StyleSheet, Switch, Text, View} from 'react-native';
 import {useFocusEffect} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList, MoreStackParamList} from '../../navigation/AppNavigator';
-import {getCurrentIdentityRequired} from '../../services/storage';
+import {getCurrentIdentityRequired, unlockIdentity} from '../../services/storage';
 import {getServerUrl} from '../../services/settings';
 import {
   deleteEbpMailbox,
@@ -20,6 +20,7 @@ import {useSecretPrompt} from '../../hooks/useSecretPrompt';
 import {
   deleteMailAccount,
   getMailSecretsInMemory,
+  MailSecretsLockedError,
   readMailStore,
   saveMailAccountWithSecrets,
 } from '../../services/mail/accountStore';
@@ -306,7 +307,7 @@ export default function MailAccountSetupScreen({
   };
 
   const onDelete = () => {
-    if (!accountId) {
+    if (!accountId || !identityName) {
       return;
     }
     Alert.alert(
@@ -319,7 +320,15 @@ export default function MailAccountSetupScreen({
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteMailAccount(identityName, accountId);
+              try {
+                await deleteMailAccount(identityName, accountId);
+              } catch (error) {
+                if (!(error instanceof MailSecretsLockedError)) throw error;
+                const password = await promptIdentityPassword();
+                if (!password) return;
+                await unlockIdentity(identityName, password);
+                await deleteMailAccount(identityName, accountId);
+              }
               navigation.goBack();
             } catch (error) {
               setStatus(error instanceof Error ? error.message : String(error));

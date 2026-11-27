@@ -2,7 +2,13 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { loadSync } from "std/dotenv";
 import { Pool, type PoolClient } from "postgres";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
-import { MIGRATE_PAYMENT_CANDIDATES, PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
+import {
+  BACKFILL_PAYMENT_ORDERS,
+  CLAIM_PAYMENT_BACKFILL,
+  MIGRATE_PAYMENT_CANDIDATES,
+  PAYMENT_AMOUNT_COLUMNS,
+  PAYMENT_ORDER_SCHEMA_UPDATES,
+} from "./payment-schema.ts";
 
 /** Dead or reset connections should open a new pool instead of failing every request. */
 export function isTransientDbError(err: unknown): boolean {
@@ -351,8 +357,14 @@ export class PostgresDatabaseAdapter extends DatabaseAdapter {
     );
     await this.writeTransaction(async (tx) => {
       await tx.execute("ALTER TABLE mail_payment_orders ADD COLUMN IF NOT EXISTS cancelled_at BIGINT");
+      for (const column of PAYMENT_AMOUNT_COLUMNS) {
+        await tx.execute(`ALTER TABLE mail_payment_orders ADD COLUMN IF NOT EXISTS ${column} TEXT`);
+      }
       await tx.execute("ALTER TABLE mailboxes ADD COLUMN IF NOT EXISTS provisioning_until BIGINT NOT NULL DEFAULT 0");
       for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await tx.execute(sql);
+      if ((await tx.query(CLAIM_PAYMENT_BACKFILL)).length) {
+        for (const sql of BACKFILL_PAYMENT_ORDERS) await tx.execute(sql);
+      }
       const [[legacy]] = await tx.query<[string | null]>("SELECT to_regclass('mail_payment_transactions')::text");
       if (legacy) for (const sql of MIGRATE_PAYMENT_CANDIDATES) await tx.execute(sql);
     }, "schema:payment-orders");

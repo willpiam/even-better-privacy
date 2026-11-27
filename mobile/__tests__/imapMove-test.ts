@@ -23,6 +23,7 @@ beforeEach(() => {
         '* LIST (\\All) "/" "[Gmail]/All Mail"',
       ];
     if (tag === 'm2') return ['* CAPABILITY IMAP4rev1 MOVE'];
+    if (tag === 'm3') return ['* OK [UIDVALIDITY 7] UIDs valid'];
     return [];
   });
 });
@@ -38,6 +39,7 @@ it.each([
       42,
       'INBOX',
       action,
+      7,
     );
     expect(client.writeLine).toHaveBeenCalledWith(`m4 UID MOVE 42 ${target}`);
     expect(client.close).toHaveBeenCalled();
@@ -50,7 +52,7 @@ it('does not use broad EXPUNGE on a server without MOVE', async () => {
       tag === 'm1' ? ['* LIST (\\Trash) "/" Trash'] : [],
     );
   await expect(
-    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 42, 'INBOX', 'delete'),
+    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 42, 'INBOX', 'delete', 7),
   ).rejects.toThrow('safe message moves');
   expect(
     client.writeLine.mock.calls.some(([line]) => /EXPUNGE|UID MOVE/.test(line)),
@@ -59,7 +61,22 @@ it('does not use broad EXPUNGE on a server without MOVE', async () => {
 });
 it('rejects invalid UIDs before opening a connection', async () => {
   await expect(
-    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 0, 'INBOX', 'delete'),
+    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 0, 'INBOX', 'delete', 7),
   ).rejects.toThrow('Invalid message UID');
+  expect(connectMailLineClient).not.toHaveBeenCalled();
+});
+
+it('requires a fresh message list when the mailbox generation changed', async () => {
+  await expect(
+    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 42, 'INBOX', 'delete', 6),
+  ).rejects.toThrow('This mailbox changed');
+  expect(client.writeLine.mock.calls.some(([line]) => /UID MOVE/.test(line))).toBe(false);
+  expect(client.close).toHaveBeenCalled();
+});
+
+it('requires a known mailbox generation before connecting to move a message', async () => {
+  await expect(
+    moveMailboxMessage(DEFAULT_MAIL_ACCOUNT, secrets, 42, 'INBOX', 'delete', undefined),
+  ).rejects.toThrow('Refresh the message list');
   expect(connectMailLineClient).not.toHaveBeenCalled();
 });

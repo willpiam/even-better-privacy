@@ -160,6 +160,7 @@ export type ListMailboxMessagesParams = {
 export type ListMailboxMessagesResult = {
   messages: MailMessageSummary[];
   folder: string;
+  uidValidity?: number;
   page: number;
   totalPages: number;
   total: number;
@@ -237,13 +238,21 @@ export async function appendSentCopy(
   }
 }
 
+function readUidValidity(lines: string[]): number | undefined {
+  for (const line of lines) {
+    const value = Number(/^\S+ OK \[UIDVALIDITY ([1-9]\d{0,9})\](?: |$)/i.exec(line)?.[1]);
+    if (Number.isInteger(value) && value <= 0xffffffff) return value;
+  }
+}
+
 async function selectMailbox(
   client: TcpLineClient,
   folder: string,
   selectTag: string,
-): Promise<string | null> {
+  resolveSent = true,
+): Promise<{folder: string; uidValidity: number | undefined} | null> {
   let opened = folder;
-  if (isSentFolderRequest(folder)) {
+  if (resolveSent && isSentFolderRequest(folder)) {
     const picked = await findSentMailbox(client, false);
     if (!picked) {
       return null;
@@ -252,9 +261,9 @@ async function selectMailbox(
   }
   await mailStub('imap.select.wait', opened);
   client.writeLine(`${selectTag} SELECT ${quoteImap(opened)}`);
-  await readTaggedOk(client, selectTag);
+  const uidValidity = readUidValidity(await readTaggedOk(client, selectTag));
   await mailStub('imap.select.ok');
-  return opened;
+  return {folder: opened, uidValidity};
 }
 
 export async function listMailboxMessages(
@@ -304,7 +313,7 @@ export async function listMailboxMessages(
     await mailStub('inbox.list.done', `count=${out.length}`);
     return {
       messages: out,
-      folder: opened,
+      ...opened,
       page: pageInfo.page,
       totalPages: pageInfo.totalPages,
       total: pageInfo.total,
@@ -320,6 +329,7 @@ export async function fetchMessageDetail(
   secrets: MailAuthSecrets,
   uid: number,
   folder = 'INBOX',
+  uidValidity?: number,
 ): Promise<MailMessageDetail> {
   const mailbox = folder.trim() || 'INBOX';
   await mailStub('inbox.fetch.start', `uid=${uid} folder=${mailbox}`);
@@ -330,9 +340,12 @@ export async function fetchMessageDetail(
   });
   try {
     await imapAuthenticate(client, config, secrets);
-    const opened = await selectMailbox(client, mailbox, 'b2');
+    const opened = await selectMailbox(client, mailbox, 'b2', uidValidity === undefined);
     if (!opened) {
       throw new Error('Sent mailbox not found');
+    }
+    if (uidValidity !== undefined && opened.uidValidity !== uidValidity) {
+      throw new Error('This mailbox changed. Refresh the message list.');
     }
     const fetchTag = 'b3';
     client.writeLine(`${fetchTag} UID FETCH ${uid} (BODY.PEEK[])`);
@@ -356,9 +369,13 @@ export async function moveMailboxMessage(
   uid: number,
   folder: string,
   action: 'archive' | 'delete',
+  uidValidity: number | undefined,
 ): Promise<void> {
   if (!Number.isSafeInteger(uid) || uid <= 0)
     throw new Error('Invalid message UID');
+  if (uidValidity === undefined) {
+    throw new Error('The server did not identify this mailbox. Refresh the message list.');
+  }
   const client = await connectMailLineClient({
     host: config.imapHost,
     port: config.imapPort,
@@ -417,7 +434,10 @@ export async function moveMailboxMessage(
       throw new Error('This mail server does not support safe message moves');
     }
     client.writeLine(`m3 SELECT ${quoteImap(folder)}`);
-    await readTaggedOk(client, 'm3');
+    const currentUidValidity = readUidValidity(await readTaggedOk(client, 'm3'));
+    if (currentUidValidity !== uidValidity) {
+      throw new Error('This mailbox changed. Refresh the message list.');
+    }
     client.writeLine(`m4 UID MOVE ${uid} ${quoteImap(target.path)}`);
     await readTaggedOk(client, 'm4');
   } finally {

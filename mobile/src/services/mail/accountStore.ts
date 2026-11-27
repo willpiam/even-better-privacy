@@ -1,6 +1,5 @@
 import {KeyedQueue} from "../../../../common/KeyedQueue.ts";
 import {writeFileAtomic} from "../atomicFile";
-const accountUpdates = new KeyedQueue();
 import {clearMailDataCache} from './mailCache';
 import RNFS from 'react-native-fs';
 import {gcm} from '@noble/ciphers/aes';
@@ -41,8 +40,15 @@ export {
   upsertAccountInStore,
 } from './accountStoreLogic';
 
+const accountUpdates = new KeyedQueue();
 const secretsMemory = new Map<string, MailAuthSecrets>();
 const pinMemory = new Map<string, string>();
+
+export class MailSecretsLockedError extends Error {
+  constructor() {
+    super('Mail secrets locked; unlock your identity first');
+  }
+}
 
 function getSecretsStoreInMemory(
   identityName: string,
@@ -126,13 +132,12 @@ export async function getMailSecretsStatus(
   }
 }
 
-async function unlockMailSecretsWithPin(
+async function readMailSecretsVault(
   identityName: string,
   pin: string,
 ): Promise<Record<string, MailAuthSecrets>> {
   const path = mailSecretsPath(identityName);
   if (!(await RNFS.exists(path))) {
-    setSecretsStoreInMemory(identityName, {}, pin);
     return {};
   }
   const raw = await RNFS.readFile(path, 'utf8');
@@ -143,15 +148,27 @@ async function unlockMailSecretsWithPin(
     throw new Error('Invalid email secrets file');
   }
   if (isEncryptedSecretsEnvelope(parsed)) {
+    let decrypted: Record<string, MailAuthSecrets>;
     try {
-      const decrypted = await decryptSecretsStore(pin, raw);
-      setSecretsStoreInMemory(identityName, decrypted, pin);
-      return decrypted;
+      decrypted = await decryptSecretsStore(pin, raw);
     } catch {
       throw new Error(
         'Stored mail credentials could not be unlocked with the identity password',
       );
     }
+    const store = await readMailStore(identityName, true);
+    const accountIds = new Set(store.accounts.map(account => account.id));
+    const retained = Object.fromEntries(
+      Object.entries(decrypted).filter(([id]) => accountIds.has(id)),
+    );
+    // Older versions could leave encrypted entries for removed accounts.
+    if (
+      Object.keys(retained).length !== Object.keys(decrypted).length &&
+      await RNFS.exists(mailAccountPath(identityName))
+    ) {
+      await writeMailSecretsVault(identityName, pin, retained);
+    }
+    return retained;
   }
   throw new Error('Unsupported mail credential format');
 }
@@ -160,38 +177,50 @@ async function unlockMailSecretsWithPin(
 export async function unlockMailWithIdentityPassword(
   identityName: string,
   password: string,
+  isCurrent = () => true,
 ): Promise<boolean> {
-  try {
-    await unlockMailSecretsWithPin(identityName, password);
-    return true;
-  } catch {
-    setSecretsStoreInMemory(identityName, {});
-    pinMemory.delete(identityName);
-    return false;
-  }
+  return accountUpdates.run(identityName, async () => {
+    if (!isCurrent()) return false;
+    try {
+      const retained = await readMailSecretsVault(identityName, password);
+      if (!isCurrent()) return false;
+      setSecretsStoreInMemory(identityName, retained, password);
+      return true;
+    } catch {
+      if (isCurrent()) {
+        setSecretsStoreInMemory(identityName, {});
+        pinMemory.delete(identityName);
+      }
+      return false;
+    }
+  });
 }
 
 export async function persistMailSecretsStore(
   identityName: string,
 ): Promise<void> {
   const pin = pinMemory.get(identityName);
+  const secrets = getSecretsStoreInMemory(identityName);
   const store = await readMailStore(identityName);
-  const secretStore = filterPersistableSecrets(
-    store.accounts,
-    getSecretsStoreInMemory(identityName),
-  );
+  const secretStore = filterPersistableSecrets(store.accounts, secrets);
+  if (!pin) {
+    if (Object.keys(secretStore).length === 0) return;
+    throw new Error('Unlock your identity to save encrypted mail credentials');
+  }
+  await writeMailSecretsVault(identityName, pin, secretStore);
+}
+
+async function writeMailSecretsVault(
+  identityName: string,
+  pin: string,
+  secretStore: Record<string, MailAuthSecrets>,
+): Promise<void> {
   const secretsPath = mailSecretsPath(identityName);
   if (Object.keys(secretStore).length === 0) {
     if (await RNFS.exists(secretsPath)) {
-      if (!pin) {
-        return;
-      }
       await RNFS.unlink(secretsPath);
     }
     return;
-  }
-  if (!pin) {
-    throw new Error('Unlock your identity to save encrypted mail credentials');
   }
   await saveEncryptedSecrets(identityName, pin, secretStore);
 }
@@ -244,6 +273,7 @@ export async function saveMailAccountWithSecrets(
 
 export async function readMailStore(
   identityName: string,
+  strict = false,
 ): Promise<MailAccountStore> {
   await ensureIdentityMailDir(identityName);
   const path = mailAccountPath(identityName);
@@ -251,7 +281,7 @@ export async function readMailStore(
     return {...DEFAULT_MAIL_STORE, accounts: []};
   }
   const raw = await RNFS.readFile(path, 'utf8');
-  return parseMailAccountStore(raw);
+  return parseMailAccountStore(raw, strict);
 }
 
 export async function writeMailStore(
@@ -292,12 +322,31 @@ export async function deleteMailAccount(
   accountId: string,
 ): Promise<void> {
   return accountUpdates.run(identityName, async () => {
-  const store = await readMailStore(identityName);
-  await writeMailStore(identityName, deleteAccountFromStore(store, accountId));
-  secretsMemory.delete(mailSecretsStoreKey(identityName, accountId));
-  if (pinMemory.has(identityName)) {
-    await persistMailSecretsStore(identityName);
-  }
+    const store = await readMailStore(identityName, true);
+    if (!store.accounts.some(account => account.id === accountId)) return;
+    const next = deleteAccountFromStore(store, accountId);
+    const path = mailSecretsPath(identityName);
+    const previousVault = await RNFS.exists(path)
+      ? await RNFS.readFile(path, 'utf8')
+      : null;
+    if (previousVault !== null) {
+      if (next.accounts.length > 0) {
+        const pin = pinMemory.get(identityName);
+        if (!pin) throw new MailSecretsLockedError();
+        const saved = await decryptSecretsStore(pin, previousVault);
+        delete saved[accountId];
+        await writeMailSecretsVault(identityName, pin, saved);
+      } else {
+        await RNFS.unlink(path);
+      }
+    }
+    try {
+      await writeMailStore(identityName, next);
+    } catch (error) {
+      if (previousVault !== null) await writeFileAtomic(path, previousVault);
+      throw error;
+    }
+    secretsMemory.delete(mailSecretsStoreKey(identityName, accountId));
   });
 }
 
@@ -395,20 +444,15 @@ export async function resolveSelectedAccount(
   identityName: string,
   accountId?: string,
 ): Promise<{account: MailAccountRecord; secrets: MailAuthSecrets} | null> {
-  const store = await readMailStore(identityName);
-  const id = accountId ?? resolveSelectedAccountId(store);
-  if (!id) {
-    return null;
-  }
-  const account = store.accounts.find(a => a.id === id);
-  if (!account) {
-    return null;
-  }
-  const secrets = getMailSecretsInMemory(identityName, id);
-  if (!secrets) {
-    throw new Error('Mail secrets locked; unlock your identity first');
-  }
-  return {account, secrets};
+  return accountUpdates.run(identityName, async () => {
+    const store = await readMailStore(identityName);
+    const id = accountId ?? resolveSelectedAccountId(store);
+    const account = store.accounts.find(a => a.id === id);
+    if (!account) return null;
+    const secrets = getMailSecretsInMemory(identityName, account.id);
+    if (!secrets) throw new MailSecretsLockedError();
+    return {account, secrets};
+  });
 }
 
 onIdentityLocked(name => {

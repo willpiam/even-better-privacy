@@ -1,10 +1,6 @@
 import { assertEquals } from "jsr:@std/assert@^1.0.6";
 import { SqliteDatabaseAdapter } from "../db/sqlite.ts";
 import {
-  MIGRATE_PAYMENT_CANDIDATES,
-  PAYMENT_ORDER_SCHEMA_UPDATES,
-} from "../db/payment-schema.ts";
-import {
   cancelUnpaidPaymentOrder,
   confirmPaymentOrder,
   expirePaymentOrder,
@@ -21,7 +17,8 @@ Deno.test({
     "payment reservations, expiry and transaction claims are atomic and durable",
   sanitizeResources: false,
   async fn() {
-    const db = new SqliteDatabaseAdapter(":memory:");
+    const path = await Deno.makeTempFile();
+    const db = new SqliteDatabaseAdapter(path);
     try {
       for (const fingerprint of ["one", "two", "three"]) {
         await db.query(
@@ -301,16 +298,34 @@ Deno.test({
         "INSERT INTO mail_payment_transactions VALUES (?, ?, ?, ?)",
         [base.orderId, base.network, replacementHash, 201],
       );
-      for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) await db.execute(sql);
-      for (const sql of MIGRATE_PAYMENT_CANDIDATES) await db.execute(sql);
-      const migrated = (await getPaymentOrder(db, base.orderId))!;
-      assertEquals([migrated.status, migrated.active], ["fulfilled", false]);
-      assertEquals(await paymentTransactionIds(db, migrated), [
-        firstHash,
-        replacementHash,
-      ]);
+      await db.execute("DELETE FROM mail_payment_migrations");
+      const upgraded = new SqliteDatabaseAdapter(path);
+      try {
+        const migrated = (await getPaymentOrder(upgraded, base.orderId))!;
+        assertEquals([migrated.status, migrated.active], ["fulfilled", false]);
+        assertEquals(await paymentTransactionIds(upgraded, migrated), [
+          firstHash,
+          replacementHash,
+        ]);
+        const candidate = "SELECT transaction_id FROM mail_payment_candidates WHERE order_id = ? AND transaction_id = ?";
+        assertEquals(await upgraded.query(candidate, [base.orderId, firstHash]), [[firstHash]]);
+        await upgraded.query(
+          "DELETE FROM mail_payment_candidates WHERE order_id = ? AND transaction_id = ?",
+          [base.orderId, firstHash],
+        );
+        const restarted = new SqliteDatabaseAdapter(path);
+        try {
+          assertEquals(await restarted.query(candidate, [base.orderId, firstHash]), []);
+          assertEquals(await paymentTransactionIds(restarted, migrated), [firstHash, replacementHash]);
+        } finally {
+          await restarted.close();
+        }
+      } finally {
+        await upgraded.close();
+      }
     } finally {
       await db.close();
+      await Deno.remove(path);
     }
   },
 });

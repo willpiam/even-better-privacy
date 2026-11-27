@@ -58,6 +58,7 @@ const message = {
 const mailbox = {
   messages: [message],
   folder: 'INBOX',
+  uidValidity: 7,
   found: true,
   page: 1,
   totalPages: 2,
@@ -102,7 +103,7 @@ beforeEach(() => {
     .mocked(getMailSecretsStatus)
     .mockResolvedValue({locked: false, inMemory: true} as never);
   jest.mocked(resolveSelectedAccount).mockResolvedValue({
-    account: {config: {fromEmail: 'jamie@example.com'}},
+    account: {id: 'account', config: {fromEmail: 'jamie@example.com'}},
     secrets: {},
   } as never);
   jest.mocked(listMailboxMessages).mockResolvedValue(mailbox);
@@ -145,6 +146,9 @@ it('shows unread context and opens a sent message using the resolved mailbox pat
   expect(navigation.navigate).toHaveBeenCalledWith('MailMessage', {
     uid: 42,
     folder: '[Gmail]/Sent Mail',
+    uidValidity: 7,
+    identityName: 'Personal',
+    accountId: 'account',
   });
 });
 
@@ -250,6 +254,7 @@ it.each(['archive', 'delete'] as const)(
       42,
       'INBOX',
       action,
+      7,
     );
     expect(text()).not.toContain('Hello there');
   },

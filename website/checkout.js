@@ -429,7 +429,13 @@ function renderReceipt(order, paid, test) {
     ? `${order.usdPerToken} USD per ${order.asset}`
     : "Unavailable";
   $("receipt-method").textContent = `On-chain crypto payment (${order.asset})`;
-  $("receipt-payment").textContent = `${decimalAmount(order.amountAtomic, order.decimals)} ${order.asset}` + (test ? " (test funds)" : "");
+  const amount = order.paidAmountAtomic ?? order.amountAtomic;
+  $("receipt-payment-label").textContent = order.paidAmountAtomic ? "Payment amount" : "Quoted payment amount";
+  const extraAda = order.paidLovelace && order.paidLovelace !== "0" && order.assetUnit !== "lovelace"
+    ? ` + ${decimalAmount(order.paidLovelace, 6)} ADA`
+    : "";
+  $("receipt-payment").textContent = `${decimalAmount(amount, order.decimals)} ${order.asset}${extraAda}` +
+    (test ? " (test funds)" : "");
   $("receipt-network").textContent = order.network;
   $("receipt-transaction").textContent = order.transactionId;
   const explorerUrl = $("transaction-link").href;
@@ -483,7 +489,7 @@ function render(snapshot) {
   if (savedHash && (complete || normalizeHash(savedHash) === normalizeHash(order.transactionId))) saveHash("");
   if (complete || order.transactionId) markUncertain(false);
   const retiredPayment = savedHash && savedReference && savedReference !== order.message;
-  const confirmedTransactionId = order.confirmationTransactionId ?? order.transactionId;
+  const confirmedTransactionId = complete ? order.transactionId : order.confirmationTransactionId ?? order.transactionId;
   renderTransactionLink({ ...order, transactionId: confirmedTransactionId ?? (retiredPayment ? "" : savedHash) });
   renderReceipt({ ...order, transactionId: confirmedTransactionId }, complete && Boolean(confirmedTransactionId), isTest);
   $("confirmation-title").textContent = complete ? "Payment confirmed" : "Payment status";

@@ -81,7 +81,13 @@ export type MailStackParamList = {
   MailHelp: undefined;
   OnboardingWizard: undefined;
   MailInbox: undefined;
-  MailMessage: {uid: number; folder?: string};
+  MailMessage: {
+    uid: number;
+    folder?: string;
+    uidValidity?: number;
+    identityName?: string;
+    accountId?: string;
+  };
   MailSenderAuthenticity: {summary: MailAuthenticitySummary};
   MailCompose:
     | {

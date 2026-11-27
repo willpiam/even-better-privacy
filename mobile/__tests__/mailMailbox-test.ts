@@ -109,6 +109,7 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
       'a1 OK LOGIN completed',
       '* LIST (\\Sent) "/" "Sent Items"',
       's1 OK LIST completed',
+      '* OK [UIDVALIDITY 321] UIDs valid',
       'a2 OK SELECT completed',
       '* SEARCH 10 11 12',
       'a3 OK SEARCH completed',
@@ -180,6 +181,7 @@ describe('listMailboxMessages IMAP commands (mocked client)', () => {
     expect(written.some(l => l.includes('SELECT "Sent Items"'))).toBe(true);
     expect(written.some(l => l.includes('SELECT INBOX'))).toBe(false);
     expect(result.folder).toBe('Sent Items');
+    expect(result.uidValidity).toBe(321);
     expect(result.total).toBe(3);
     expect(result.messages.map((m: {uid: number}) => m.uid)).toEqual([12, 11]);
     expect(result.messages[0].subject).toBe('Newest');

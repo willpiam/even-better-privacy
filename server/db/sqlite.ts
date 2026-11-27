@@ -2,7 +2,13 @@ import { detailProofNonce } from "./detail-nonces.ts";
 import { Database } from "sqlite";
 import { DatabaseAdapter, type DatabaseQueryParams } from "./adapter.ts";
 import { KeyedQueue } from "../../common/KeyedQueue.ts";
-import { MIGRATE_PAYMENT_CANDIDATES, PAYMENT_ORDER_SCHEMA_UPDATES } from "./payment-schema.ts";
+import {
+  BACKFILL_PAYMENT_ORDERS,
+  CLAIM_PAYMENT_BACKFILL,
+  MIGRATE_PAYMENT_CANDIDATES,
+  PAYMENT_AMOUNT_COLUMNS,
+  PAYMENT_ORDER_SCHEMA_UPDATES,
+} from "./payment-schema.ts";
 
 export class SqliteDatabaseAdapter extends DatabaseAdapter {
   private db: Database;
@@ -266,11 +272,19 @@ export class SqliteDatabaseAdapter extends DatabaseAdapter {
       if (!columns.some(([, name]) => name === "cancelled_at")) {
         this.db.exec("ALTER TABLE mail_payment_orders ADD COLUMN cancelled_at INTEGER");
       }
+      for (const column of PAYMENT_AMOUNT_COLUMNS) {
+        if (!columns.some(([, name]) => name === column)) {
+          this.db.exec(`ALTER TABLE mail_payment_orders ADD COLUMN ${column} TEXT`);
+        }
+      }
       const mailboxColumns = this.db.prepare("PRAGMA table_info(mailboxes)").values<[number, string]>();
       if (!mailboxColumns.some(([, name]) => name === "provisioning_until")) {
         this.db.exec("ALTER TABLE mailboxes ADD COLUMN provisioning_until INTEGER NOT NULL DEFAULT 0");
       }
       for (const sql of PAYMENT_ORDER_SCHEMA_UPDATES) this.db.exec(sql);
+      if (this.db.prepare(CLAIM_PAYMENT_BACKFILL).values().length) {
+        for (const sql of BACKFILL_PAYMENT_ORDERS) this.db.exec(sql);
+      }
       const legacy = this.db.prepare(
         "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'mail_payment_transactions'",
       ).values();

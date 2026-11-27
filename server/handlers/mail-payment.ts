@@ -43,6 +43,7 @@ import {
 import { readPaymentProvider } from "../payments/config.ts";
 import { quoteAtomicUnits } from "../payments/quote.ts";
 import { getCachedUsdRate } from "../payments/rates.ts";
+import type { PaymentAmounts, ReportConfirmations } from "../payments/verification.ts";
 import {
   verifyCardanoPayment,
   createEthereumPaymentVerifier,
@@ -507,6 +508,8 @@ export async function handlePaymentOrder(
     usdCents: order.usdCents,
     usdPerToken: order.usdPerToken,
     amountAtomic: order.amountAtomic,
+    paidAmountAtomic: order.paidAmountAtomic,
+    paidLovelace: order.paidLovelace,
     decimals: order.decimals,
     confirmations: order.confirmations,
     ...progress,
@@ -550,9 +553,9 @@ function paymentVerifier(order: StoredOrder, signal?: AbortSignal) {
       expected,
       signal,
     });
-    return (hash: string, onConfirmations?: (count: number) => void) => verify(`0x${hash}`, onConfirmations);
+    return (hash: string, onConfirmations?: ReportConfirmations) => verify(`0x${hash}`, onConfirmations);
   }
-  return (hash: string, onConfirmations?: (count: number) => void) => verifyCardanoPayment({
+  return (hash: string, onConfirmations?: ReportConfirmations) => verifyCardanoPayment({
     apiKey: provider.apiKey,
     network: provider.network,
     txHash: hash,
@@ -575,8 +578,10 @@ async function reportPayment(
       : json({ error: "This order already has a confirmed payment." }, 409);
   }
   let evidence;
+  let amounts: PaymentAmounts | undefined;
   try {
-    evidence = await paymentVerifier(order)(hash, (count) => {
+    evidence = await paymentVerifier(order)(hash, (count, paid) => {
+      amounts = paid;
       progress.confirmationsSeen = count;
       progress.confirmationTransactionId = hash;
     });
@@ -587,7 +592,7 @@ async function reportPayment(
     return json({ error: "This transaction does not match the order's payment instructions." }, 422);
   }
   if (evidence === "confirmed") {
-    await settleConfirmedPayment(db, order, hash, true);
+    await settleConfirmedPayment(db, order, hash, amounts, true);
     const current = (await getPaymentOrder(db, order.orderId))!;
     return current.transactionId === hash
       ? current
@@ -620,10 +625,12 @@ export async function refreshPaymentOrder(
   let paymentMismatch = true;
   let confirmationTransactionId: string | undefined;
   const unconfirmed = Symbol("unconfirmed");
-  let verified: string;
+  let verified: {hash: string; amounts?: PaymentAmounts};
   try {
     verified = await Promise.any(hashes.map(async (hash) => {
-      const report = (count: number) => {
+      let amounts: PaymentAmounts | undefined;
+      const report: ReportConfirmations = (count, paid) => {
+        amounts = paid;
         if (count > maxConfirmations) {
           maxConfirmations = count;
           confirmationTransactionId = hash;
@@ -632,7 +639,7 @@ export async function refreshPaymentOrder(
       const result = await verify(hash, report);
       if (result !== "invalid") paymentMismatch = false;
       if (result !== "confirmed") throw unconfirmed;
-      return hash;
+      return {hash, amounts};
     }));
   } catch (error) {
     if (!(error instanceof AggregateError) || error.errors.some((reason) => reason !== unconfirmed)) {
@@ -644,7 +651,7 @@ export async function refreshPaymentOrder(
   } finally {
     controller.abort();
   }
-  await settleConfirmedPayment(db, order, verified);
+  await settleConfirmedPayment(db, order, verified.hash, verified.amounts);
   return (await getPaymentOrder(db, order.orderId))!;
 }
 
@@ -652,6 +659,7 @@ async function settleConfirmedPayment(
   db: DatabaseAdapter,
   order: StoredOrder,
   hash: string,
+  amounts: PaymentAmounts | undefined,
   directlySubmitted = false,
 ): Promise<void> {
   await db.writeTransaction(async (tx) => {
@@ -669,6 +677,7 @@ async function settleConfirmedPayment(
       Date.now(),
       unavailable ? "manual_review" : "confirmed",
       directlySubmitted,
+      amounts,
     );
   }, `identity:${order.fingerprint}`);
 }

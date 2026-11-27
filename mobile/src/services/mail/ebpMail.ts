@@ -5,7 +5,7 @@ import {decryptMessage} from '../encryptDecrypt';
 import {listContacts, getDetailValue, loadContact} from '../contacts';
 import {loadIdentityForUse} from '../storage';
 import {getMailIncludePublicKeys, getServerUrl} from '../settings';
-import {resolveSelectedAccount, getMailSecretsInMemory} from './accountStore';
+import {resolveSelectedAccount} from './accountStore';
 import {appendSentCopy} from './imap';
 import {loadMailMessage} from './mailData';
 import {
@@ -162,12 +162,20 @@ function makeSentRetry(
   accountId: string,
 ) {
   return async () => {
-    const secrets = getMailSecretsInMemory(identityName, accountId);
-    if (!secrets)
+    const account = await resolveSelectedAccount(identityName, accountId);
+    if (!account) throw new Error('The original mail account was removed.');
+    const current = account.account.config;
+    if (
+      current.imapHost !== config.imapHost ||
+      current.imapPort !== config.imapPort ||
+      current.imapSecure !== config.imapSecure ||
+      current.username !== config.username
+    ) {
       throw new Error(
-        'Unlock the sending identity before retrying the Sent save.',
+        'The original mail account settings changed. This Sent copy cannot be retried.',
       );
-    await appendSentCopy(config, secrets, mime);
+    }
+    await appendSentCopy(current, account.secrets, mime);
   };
 }
 
@@ -221,8 +229,10 @@ export async function decryptMailBody(params: {
   password?: string;
   uid: number;
   folder?: string;
+  uidValidity?: number;
+  accountId?: string;
 }): Promise<MailAuthenticitySummary> {
-  const resolved = await resolveSelectedAccount(params.identityName);
+  const resolved = await resolveSelectedAccount(params.identityName, params.accountId);
   if (!resolved) {
     throw new Error('No mail account configured');
   }
@@ -231,6 +241,7 @@ export async function decryptMailBody(params: {
     resolved,
     params.uid,
     params.folder ?? 'INBOX',
+    params.uidValidity,
   );
   if (!detail.ebpPayload) {
     if (

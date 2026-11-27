@@ -63,10 +63,11 @@ export function loadMailMessage(
   context: MailContext,
   uid: number,
   folder: string,
+  uidValidity?: number,
 ) {
-  const key = JSON.stringify([scope(identityName, context), folder, uid]);
+  const key = JSON.stringify([scope(identityName, context), folder, uidValidity, uid]);
   return bodies.load(key, () =>
-    fetchMessageDetail(context.account.config, context.secrets, uid, folder),
+    fetchMessageDetail(context.account.config, context.secrets, uid, folder, uidValidity),
   );
 }
 export function invalidateMailBodies() {

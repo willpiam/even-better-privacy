@@ -638,11 +638,19 @@ export async function handleMailDelete(
 
   const identity = await getIdentity(db, fingerprint);
   const mailbox = await getMailboxByFingerprint(db, fingerprint);
-  if (!identity || !mailbox) {
+  const currentEmail = mailbox && `${mailbox.username}@${mailbox.domain}`;
+  let email = currentEmail;
+  if (payload.email !== undefined) {
+    if (typeof payload.email !== "string" || payload.email.length > 254 ||
+      !/^[^@\s]+@[^@\s]+$/.test(payload.email)) {
+      return json({ error: "invalid mailbox address" }, 400);
+    }
+    email = payload.email.toLowerCase();
+  }
+  if (!identity || !email) {
     return json({ error: "no mailbox for this identity" }, 404);
   }
 
-  const email = `${mailbox.username}@${mailbox.domain}`;
   const proofResult = verifyDetailProof(
     identity,
     MAIL_DELETE_PATH,
@@ -655,6 +663,14 @@ export async function handleMailDelete(
   const age = Date.now() - proofResult.record.timestamp;
   if (age > RESET_PROOF_MAX_AGE_MS || age < -RESET_PROOF_MAX_SKEW_MS) {
     return json({ error: "proof expired; try again" }, 400);
+  }
+
+  if (!mailbox || email !== currentEmail) {
+    const [username, domain] = email.split("@");
+    if (await isMailUsernameRetired(db, username, domain, fingerprint)) {
+      return json({ ok: true, email });
+    }
+    return json({ error: "no mailbox for this identity" }, 404);
   }
 
   try {

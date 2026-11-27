@@ -1,6 +1,7 @@
 import type { DatabaseAdapter } from "../db/adapter.ts";
 import type { PaymentNetwork } from "./config.ts";
 import { quoteAtomicUnits } from "./quote.ts";
+import type { PaymentAmounts } from "./verification.ts";
 
 export type PaymentOrder = {
   orderId: string;
@@ -23,7 +24,7 @@ export type PaymentOrder = {
   graceUntil: number;
 };
 
-export type StoredOrder = PaymentOrder & {
+export type StoredOrder = PaymentOrder & Partial<PaymentAmounts> & {
   status:
     | "quoted"
     | "pending"
@@ -58,11 +59,13 @@ type OrderRow = [
   number | bigint,
   number | bigint,
   number | bigint,
+  string | null,
+  string | null,
 ];
 const COLUMNS =
   `order_id, username, domain, identity_fingerprint, asset, network, recipient,
   asset_unit, usd_cents, amount_atomic, decimals, usd_per_token, message, status, created_at, expires_at, grace_until,
-  transaction_id, active, proof_nonce, confirmations`;
+  transaction_id, active, proof_nonce, confirmations, paid_amount_atomic, paid_lovelace`;
 function fromRow(row: OrderRow): StoredOrder {
   const [
     orderId,
@@ -86,6 +89,8 @@ function fromRow(row: OrderRow): StoredOrder {
     active,
     proofNonce,
     confirmations,
+    paidAmountAtomic,
+    paidLovelace,
   ] = row;
   return {
     orderId,
@@ -108,6 +113,8 @@ function fromRow(row: OrderRow): StoredOrder {
     expiresAt: Number(expiresAt),
     graceUntil: Number(graceUntil),
     transactionId,
+    ...(paidAmountAtomic != null && { paidAmountAtomic }),
+    ...(paidLovelace != null && { paidLovelace }),
     active: Number(active) === 1,
   };
 }
@@ -329,13 +336,14 @@ export async function confirmPaymentOrder(
   now: number,
   status: "confirmed" | "manual_review" = "confirmed",
   directlySubmitted = false,
+  amounts?: PaymentAmounts,
 ): Promise<boolean> {
   const hash = transactionId.toLowerCase().replace(/^0x/, "");
   const rows = await db.query<[string]>(
     `UPDATE mail_payment_orders
     SET status = CASE WHEN active = 1 AND grace_until > ? THEN ? ELSE 'manual_review' END,
         active = CASE WHEN active = 1 AND grace_until > ? AND ? = 'confirmed' THEN 1 ELSE 0 END,
-        transaction_id = ?
+        transaction_id = ?, paid_amount_atomic = ?, paid_lovelace = ?
     WHERE order_id = ? AND (
       (? = 1 AND status IN ('quoted', 'pending', 'cancelled', 'expired', 'manual_review'))
       OR (status = 'pending' AND active = 1 AND grace_until > ?
@@ -355,6 +363,8 @@ export async function confirmPaymentOrder(
       now,
       status,
       hash,
+      amounts?.paidAmountAtomic ?? null,
+      amounts?.paidLovelace ?? null,
       orderId,
       directlySubmitted ? 1 : 0,
       now,

@@ -971,12 +971,13 @@ export async function isMailUsernameRetired(
   db: DatabaseAdapter,
   username: string,
   domain: string,
+  fingerprint?: string,
 ): Promise<boolean> {
   const rows = await db.query<[string]>(
-    "SELECT username FROM retired_mail_usernames WHERE username = ? AND domain = ?",
+    "SELECT identity_fingerprint FROM retired_mail_usernames WHERE username = ? AND domain = ?",
     [username, domain],
   );
-  return rows.length > 0;
+  return rows.length > 0 && (fingerprint === undefined || rows[0][0] === fingerprint);
 }
 
 export async function markDetailVerified(

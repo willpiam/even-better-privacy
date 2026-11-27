@@ -186,6 +186,7 @@ try {
   await receipt.getByText("alice@test.pqpost.com (5-character username)", { exact: true }).waitFor();
   await receipt.getByText("1 USD per USDC", { exact: true }).waitFor();
   await receipt.getByText("On-chain crypto payment (USDC)", { exact: true }).waitFor();
+  await receipt.getByText("Quoted payment amount", { exact: true }).waitFor();
   assert.equal((await receipt.textContent()).includes(address.orderId), false);
   await page.emulateMedia({ media: "print" });
   const explorerUrl = `https://sepolia.etherscan.io/tx/0x${hash}`;
@@ -244,6 +245,10 @@ try {
   assert.equal(await page.evaluate(() => window.cardanoUnsigned), "unsigned-reviewed");
   assert.equal(await page.evaluate(() => window.cardanoSigned), "signed-reviewed");
   assert.equal(await page.locator("#transaction-link").getAttribute("href"), `https://preview.cardanoscan.io/transaction/${hash}`);
+  order = { ...order, status: "confirmed", paidAmountAtomic: "2000000", paidLovelace: "1043020" };
+  await button(page, "Refresh status").click();
+  await receipt.getByText("Payment amount", { exact: true }).waitFor();
+  await receipt.getByText("2 tUSDCx + 1.04302 ADA (test funds)", { exact: true }).waitFor();
   console.log("Checkout wizard passed for both networks, balance checks, review, confirmation, expired-quote recovery, and cross-tab protection.");
 } finally {
   await browser.close();

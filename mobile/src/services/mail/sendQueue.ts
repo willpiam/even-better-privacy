@@ -63,7 +63,11 @@ export function createSendQueue(send: Send) {
     enqueue(draft: MailDraft, recoveredId?: string) {
       const id = String(++nextId);
       // Snapshot the editor before navigation/unmount; later edits cannot mutate a send.
-      const snapshot = JSON.parse(JSON.stringify(draft)) as MailDraft;
+      const snapshot: MailDraft = {
+        ...draft,
+        chips: JSON.parse(JSON.stringify(draft.chips)),
+        attachments: draft.attachments.map(attachment => ({...attachment})),
+      };
       drafts.set(id, snapshot);
       jobs = [...jobs, {id, stage: 'queued', subject: draft.subject}];
       listeners.forEach(listener => listener());

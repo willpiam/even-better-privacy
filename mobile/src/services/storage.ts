@@ -234,10 +234,8 @@ export async function unlockIdentity(
     throw error;
   }
   const {unlockMailWithIdentityPassword} = await import('./mail/accountStore');
-  await unlockMailWithIdentityPassword(normalized, password);
+  await unlockMailWithIdentityPassword(normalized, password, isCurrent);
   if (!isCurrent()) {
-    const {clearMailSecretsMemory} = await import('./mail/accountStore');
-    clearMailSecretsMemory(normalized);
     throw new Error('Identity unlock cancelled by lock');
   }
   return normalized;

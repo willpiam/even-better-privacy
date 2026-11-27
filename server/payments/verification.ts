@@ -5,6 +5,13 @@
 /** Observed payments match the quote on the canonical chain and are awaiting depth. */
 export type PaymentCheck = "confirmed" | "observed" | "pending" | "invalid";
 
+export type PaymentAmounts = {
+  paidAmountAtomic: string;
+  paidLovelace?: string;
+};
+
+export type ReportConfirmations = (count: number, amounts: PaymentAmounts) => void;
+
 export type PaymentExpectation = {
   recipient: string;
   amount: bigint;
@@ -72,7 +79,7 @@ export function checkEthereumPayment(input: {
   latestBlock: string;
   tokenContract?: string;
   expected: PaymentExpectation;
-  onConfirmations?: (count: number) => void;
+  onConfirmations?: ReportConfirmations;
 }): PaymentCheck {
   const { expected, transaction: tx, receipt } = input;
   const recipient = expected.recipient.toLowerCase();
@@ -106,6 +113,7 @@ export function checkEthereumPayment(input: {
   const data = tx.input?.toLowerCase() ?? "";
   if (!HEX_DATA.test(data)) return "invalid";
   const message = hexBytes(expected.message);
+  let paidAmount: bigint;
   if (input.tokenContract === undefined) {
     const amount = hexInteger(tx.value);
     if (
@@ -113,6 +121,7 @@ export function checkEthereumPayment(input: {
       amount < expected.amount ||
       data !== `0x${message}`
     ) return "invalid";
+    paidAmount = amount;
   } else {
     const contract = input.tokenContract.toLowerCase();
     // ABI transfer(address,uint256), followed by the exact UTF-8 order message.
@@ -140,10 +149,13 @@ export function checkEthereumPayment(input: {
         received >= expected.amount;
     });
     if (matching.length !== 1) return "invalid";
+    paidAmount = BigInt(matching[0].data!);
   }
   const count = latest - block + 1n;
   const required = BigInt(expected.confirmations);
-  input.onConfirmations?.(Number(count >= required ? required : count));
+  input.onConfirmations?.(Number(count >= required ? required : count), {
+    paidAmountAtomic: paidAmount.toString(),
+  });
   return count >= required ? "confirmed" : "observed";
 }
 
@@ -162,7 +174,7 @@ export function checkCardanoPayment(input: {
   latestHeight: number;
   assetUnit: string; // lovelace, or policy ID concatenated with hex asset name
   expected: PaymentExpectation;
-  onConfirmations?: (count: number) => void;
+  onConfirmations?: ReportConfirmations;
 }): PaymentCheck {
   const { expected, transaction: tx } = input;
   if (
@@ -190,19 +202,25 @@ export function checkCardanoPayment(input: {
     body.msg.length !== 1 || body.msg[0] !== expected.message
   ) return "invalid";
   let total = 0n;
+  let lovelace = 0n;
   for (const output of input.outputs) {
     if (output.collateral === true) continue;
     if (output.address !== expected.recipient) continue;
     for (const item of output.amount ?? []) {
-      if (item.unit !== input.assetUnit) continue;
+      if (item.unit !== input.assetUnit && item.unit !== "lovelace") continue;
       if (
         typeof item.quantity !== "string" || !/^[0-9]+$/.test(item.quantity)
       ) return "invalid";
-      total += BigInt(item.quantity);
+      const quantity = BigInt(item.quantity);
+      if (item.unit === input.assetUnit) total += quantity;
+      if (item.unit === "lovelace") lovelace += quantity;
     }
   }
   if (total < expected.amount) return "invalid";
   const count = input.latestHeight - tx.block_height! + 1;
-  input.onConfirmations?.(Math.min(count, expected.confirmations));
+  input.onConfirmations?.(Math.min(count, expected.confirmations), {
+    paidAmountAtomic: total.toString(),
+    paidLovelace: lovelace.toString(),
+  });
   return count >= expected.confirmations ? "confirmed" : "observed";
 }

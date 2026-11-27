@@ -43,9 +43,12 @@ import RNFS from 'react-native-fs';
 import {DEFAULT_MAIL_ACCOUNT} from '../src/services/mail/types';
 import {
   clearMailSecretsMemory,
+  decryptSecretsStore,
+  deleteMailAccount,
   encryptSecretsStore,
   getMailPinInMemory,
   getMailSecretsInMemory,
+  readMailStore,
   saveMailAccountWithSecrets,
   unlockMailWithIdentityPassword,
 } from '../src/services/mail/accountStore';
@@ -113,4 +116,43 @@ test('concurrent account updates and selection preserve all acknowledged records
   for(let index=1;index<20;index++)expect(store.accounts.some((a:{id:string}) => a.id===`parallel-${index}`)).toBe(true);
   expect(store.accounts.some((a:{id:string})=>a.id==='parallel-last')).toBe(true);
   expect(store.accounts.some((a:{id:string})=>a.id==='parallel-0')).toBe(false);
+});
+
+test('removing a saved account preserves the other vault entries', async () => {
+  const password = 'identity-password';
+  await unlockMailWithIdentityPassword('me', password);
+  for (const id of ['first', 'second']) {
+    await saveMailAccountWithSecrets('me', {
+      record: {id, name: id, config: {...DEFAULT_MAIL_ACCOUNT, persistSecrets: true}},
+      imapPassword: id,
+      smtpPassword: id,
+    });
+  }
+  clearMailSecretsMemory('me');
+  await expect(deleteMailAccount('me', 'first')).rejects.toThrow('Mail secrets locked');
+  expect((await readMailStore('me')).accounts).toHaveLength(2);
+
+  await unlockMailWithIdentityPassword('me', password);
+  await deleteMailAccount('me', 'first');
+  const vault = await RNFS.readFile('/mail/secrets', 'utf8');
+  expect(await decryptSecretsStore(password, vault)).toEqual({
+    second: {imapPassword: 'second', smtpPassword: 'second'},
+  });
+  expect(getMailSecretsInMemory('me', 'first')).toBeNull();
+
+  clearMailSecretsMemory('me');
+  await deleteMailAccount('me', 'second');
+  expect(await RNFS.exists('/mail/secrets')).toBe(false);
+  expect((await readMailStore('me')).accounts).toEqual([]);
+});
+
+test('unlock purges orphaned passwords left by older removals', async () => {
+  const password = 'identity-password';
+  await RNFS.writeFile('/mail/accounts', JSON.stringify({accounts: []}), 'utf8');
+  await RNFS.writeFile('/mail/secrets', await encryptSecretsStore(password, {
+    removed: {imapPassword: 'old-imap', smtpPassword: 'old-smtp'},
+  }), 'utf8');
+  expect(await unlockMailWithIdentityPassword('me', password)).toBe(true);
+  expect(getMailSecretsInMemory('me', 'removed')).toBeNull();
+  expect(await RNFS.exists('/mail/secrets')).toBe(false);
 });

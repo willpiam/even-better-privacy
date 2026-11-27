@@ -191,6 +191,28 @@ Deno.test("Cardano checks CIP-20, outputs, asset, canonical block and depth", ()
     "observed",
   );
   assertEquals(progress, [1]);
+  const token = "a".repeat(56);
+  assertEquals(checkCardanoPayment({
+    ...payment,
+    assetUnit: token,
+    outputs: [
+      {
+        address: expected.recipient,
+        amount: [
+          { unit: token, quantity: "11" },
+          { unit: "lovelace", quantity: "1043020" },
+        ],
+      },
+      {
+        address: "addr_test1change",
+        amount: [{ unit: "lovelace", quantity: "2000000" }],
+      },
+    ],
+    onConfirmations: (count, amounts) => {
+      assertEquals(count, 2);
+      assertEquals(amounts, { paidAmountAtomic: "11", paidLovelace: "1043020" });
+    },
+  }), "confirmed");
   assertEquals(checkCardanoPayment({ ...payment, metadata: [] }), "invalid");
   assertEquals(
     checkCardanoPayment({ ...payment, assetUnit: "a".repeat(56) }),

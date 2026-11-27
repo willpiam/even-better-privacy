@@ -48,9 +48,14 @@ export function isEncryptedSecretsEnvelope(
   );
 }
 
-export function parseMailAccountStore(raw: string): MailAccountStore {
+export function parseMailAccountStore(raw: string, strict = false): MailAccountStore {
   try {
     const parsed = JSON.parse(raw) as MailAccountStore;
+    if (strict && (!Array.isArray(parsed.accounts) || parsed.accounts.some(
+      a => !a?.config || typeof a.id !== 'string',
+    ))) {
+      throw new Error('Invalid mail account store');
+    }
     const accounts = Array.isArray(parsed.accounts)
       ? parsed.accounts.filter(a => a?.config &&
           (a.config.authType === undefined || a.config.authType === 'password'))
@@ -62,6 +67,7 @@ export function parseMailAccountStore(raw: string): MailAccountStore {
       accounts,
     };
   } catch {
+    if (strict) throw new Error('Invalid mail account store');
     return {...DEFAULT_MAIL_STORE, accounts: []};
   }
 }

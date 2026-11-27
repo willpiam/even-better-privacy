@@ -10,16 +10,12 @@ jest.mock('../src/services/settings', () => ({
 }));
 jest.mock('../src/services/mail/accountStore', () => ({
   resolveSelectedAccount: jest.fn(),
-  getMailSecretsInMemory: jest.fn(),
 }));
 jest.mock('../src/services/mail/smtp', () => ({sendMimeMessage: jest.fn()}));
 jest.mock('../src/services/mail/imap', () => ({appendSentCopy: jest.fn()}));
 jest.mock('../src/services/mail/mailData', () => ({}));
 import {sendEbpMail} from '../src/services/mail/ebpMail';
-import {
-  resolveSelectedAccount,
-  getMailSecretsInMemory,
-} from '../src/services/mail/accountStore';
+import {resolveSelectedAccount} from '../src/services/mail/accountStore';
 import {sendMimeMessage} from '../src/services/mail/smtp';
 import {appendSentCopy} from '../src/services/mail/imap';
 import {loadIdentityForUse} from '../src/services/storage';
@@ -30,6 +26,7 @@ const context = {
       fromEmail: 'alice@example.com',
       fromName: 'Alice',
       username: 'alice',
+      imapHost: 'imap.example.com',
     },
   },
   secrets: {imapPassword: 'imap', smtpPassword: 'smtp'},
@@ -49,7 +46,6 @@ const params = {
 beforeEach(() => {
   jest.clearAllMocks();
   (resolveSelectedAccount as jest.Mock).mockResolvedValue(context);
-  (getMailSecretsInMemory as jest.Mock).mockReturnValue(context.secrets);
   (sendMimeMessage as jest.Mock).mockResolvedValue(undefined);
   (appendSentCopy as jest.Mock).mockResolvedValue('Sent');
 });
@@ -80,7 +76,18 @@ test('failed Sent copy can be retried without resending SMTP and with the same M
   expect((appendSentCopy as jest.Mock).mock.calls[0][2]).toBe(
     (appendSentCopy as jest.Mock).mock.calls[1][2],
   );
-  expect(getMailSecretsInMemory).toHaveBeenCalledWith('Alice', 'original');
+  expect(resolveSelectedAccount).toHaveBeenLastCalledWith('Alice', 'original');
+});
+test('a Sent retry stops if the original mailbox settings changed', async () => {
+  (appendSentCopy as jest.Mock).mockRejectedValueOnce(new Error('Offline'));
+  const result = await sendEbpMail(params);
+  const replacement = {...context.account.config, imapHost: 'imap.new.example'};
+  (resolveSelectedAccount as jest.Mock).mockResolvedValueOnce({
+    account: {...context.account, config: replacement},
+    secrets: {imapPassword: 'new-password', smtpPassword: 'new-password'},
+  });
+  await expect(result.retrySentCopy!()).rejects.toThrow('mail account settings changed');
+  expect(appendSentCopy).toHaveBeenCalledTimes(1);
 });
 test('SMTP failure never attempts a Sent save', async () => {
   (sendMimeMessage as jest.Mock).mockRejectedValueOnce(

@@ -144,7 +144,13 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
   const pageRef = useRef(1);
   const [showOptions, setShowOptions] = useState(false);
   const [messages, setMessages] = useState<MailMessageSummary[]>([]);
-  const [openedFolder, setOpenedFolder] = useState('INBOX');
+  const [mailbox, setMailbox] = useState<{
+    folder: string;
+    uidValidity?: number;
+    identityName: string;
+    accountId: string;
+    accountUpdatedAt: number;
+  } | null>(null);
   const [status, setStatus] = useState('');
   const [loadError, setLoadError] = useState<string | null>(null);
   const [accountEmail, setAccountEmail] = useState('');
@@ -176,6 +182,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       onMailCacheCleared(() => {
         requestId.current++;
         setMessages([]);
+        setMailbox(null);
         setAccountEmail('');
         setTotal(0);
         setTotalPages(1);
@@ -190,19 +197,6 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
       const current = () => currentRequest === requestId.current;
       const nextPage = pageOverride ?? pageRef.current;
       let cached: ListMailboxMessagesResult | undefined;
-      const applyResult = (result: ListMailboxMessagesResult) => {
-        setMessages(result.messages);
-        setOpenedFolder(result.folder);
-        pageRef.current = result.page;
-        setPage(result.page);
-        setTotalPages(result.totalPages);
-        setTotal(result.total);
-        setStatus(
-          result.total === 0
-            ? emptyMailboxStatus(folder, result.found)
-            : `Loaded ${result.messages.length} of ${result.total} (page ${result.page}/${result.totalPages})`,
-        );
-      };
       setLoading(true);
       setLoadError(null);
       try {
@@ -223,16 +217,36 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
           resolved.account.config.fromEmail || resolved.account.config.username,
         );
         const params = {folder, search, page: nextPage, limit};
+        const showPage = (result: ListMailboxMessagesResult) => {
+          setMessages(result.messages);
+          setMailbox({
+            folder: result.folder,
+            uidValidity: result.uidValidity,
+            identityName,
+            accountId: resolved.account.id,
+            accountUpdatedAt: resolved.account.updatedAt,
+          });
+          pageRef.current = result.page;
+          setPage(result.page);
+          setTotalPages(result.totalPages);
+          setTotal(result.total);
+          setStatus(
+            result.total === 0
+              ? emptyMailboxStatus(folder, result.found)
+              : `Loaded ${result.messages.length} of ${result.total} (page ${result.page}/${result.totalPages})`,
+          );
+        };
         cached = getCachedMailPage(identityName, resolved, params);
-        if (cached) applyResult(cached);
+        if (cached) showPage(cached);
         else {
           setMessages([]);
+          setMailbox(null);
           setTotal(0);
           setTotalPages(1);
         }
         if (refresh) invalidateMailBodies();
         const result = await refreshMailPage(identityName, resolved, params);
-        if (current()) applyResult(result);
+        if (current()) showPage(result);
       } catch (error) {
         if (!current()) return;
         const message = error instanceof Error ? error.message : String(error);
@@ -240,6 +254,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         setStatus(message);
         if (!cached) {
           setMessages([]);
+          setMailbox(null);
           setAccountEmail('');
           setTotal(0);
           setTotalPages(1);
@@ -305,14 +320,16 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
 
   const openMessage = useCallback(
     (uid: number) => {
-      navigation.navigate('MailMessage', {uid, folder: openedFolder});
+      if (!mailbox) return;
+      const {folder, uidValidity, identityName, accountId} = mailbox;
+      navigation.navigate('MailMessage', {uid, folder, uidValidity, identityName, accountId});
     },
-    [navigation, openedFolder],
+    [navigation, mailbox],
   );
   const moving = useRef(false);
   const moveMessage = useCallback(
     async (uid: number, action: MailSwipeAction) => {
-      if (moving.current) return;
+      if (moving.current || !mailbox) return;
       moving.current = true;
       const currentRequest = requestId.current;
       try {
@@ -320,12 +337,20 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         const context = await resolveSelectedAccount(identity);
         if (!context) throw new Error('Configure a mail account first');
         if (currentRequest !== requestId.current) return;
+        if (
+          identity !== mailbox.identityName ||
+          context.account.id !== mailbox.accountId ||
+          context.account.updatedAt !== mailbox.accountUpdatedAt
+        ) {
+          throw new Error('The mail account changed. Refresh the message list.');
+        }
         await moveMailboxMessage(
           context.account.config,
           context.secrets,
           uid,
-          openedFolder,
+          mailbox.folder,
           action,
+          mailbox.uidValidity,
         );
         invalidateMailPages();
         invalidateMailBodies();
@@ -342,7 +367,7 @@ export default function MailInboxScreen({navigation}: Props): JSX.Element {
         moving.current = false;
       }
     },
-    [openedFolder, load],
+    [mailbox, load],
   );
   const sent = isSentFolderRequest(folder);
   const renderMessage = useCallback(

@@ -3,6 +3,7 @@ import {
   checkEthereumPayment,
   type PaymentCheck,
   type PaymentExpectation,
+  type ReportConfirmations,
 } from "./verification.ts";
 
 type Fetch = typeof fetch;
@@ -52,7 +53,7 @@ export function createEthereumPaymentVerifier(args: EthereumVerifierOptions) {
   }
   let chainIdResult: Promise<string> | undefined;
   let latestBlock: Promise<unknown> | undefined;
-  return async (txHash: string, onConfirmations?: (count: number) => void): Promise<PaymentCheck> => {
+  return async (txHash: string, onConfirmations?: ReportConfirmations): Promise<PaymentCheck> => {
     if (!/^0x[0-9a-f]{64}$/i.test(txHash)) return "invalid";
     const chainId = await (chainIdResult ??= readChainId());
     const [tx, receipt, latest] = await Promise.all([
@@ -124,7 +125,7 @@ export async function verifyCardanoPayment(args: {
   network: "mainnet" | "preview";
   txHash: string;
   assetUnit: string;
-  onConfirmations?: (count: number) => void;
+  onConfirmations?: ReportConfirmations;
   expected: PaymentExpectation;
   fetchImpl?: Fetch;
   signal?: AbortSignal;

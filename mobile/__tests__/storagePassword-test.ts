@@ -94,6 +94,7 @@ describe('mobile identity storage passwords and mutations', () => {
     expect(unlockMailWithIdentityPassword).toHaveBeenLastCalledWith(
       'exact',
       password,
+      expect.any(Function),
     );
   });
 

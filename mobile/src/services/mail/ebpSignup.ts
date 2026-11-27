@@ -588,12 +588,18 @@ export async function deleteEbpMailbox(params: {
     headers: {'content-type': 'application/json'},
     body: buildMailDeleteRequest({
       fingerprint: identity.toFingerprint(),
+      email,
       proof,
     }),
   });
   if (!res.ok) {
     throw new EbpMailApiError(res.status, await readError(res));
   }
+  await mutateIdentityForUse(params.identityName, undefined, current => {
+    if (current.getDetail('email')?.toLowerCase() === email) {
+      current.details.delete('email');
+    }
+  });
   await deleteLocalMailboxAccounts(params.identityName, email);
   return {email};
 }

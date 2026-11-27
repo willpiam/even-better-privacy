@@ -532,6 +532,15 @@ Deno.test("delete destroys the mailbox, revokes the email detail, and retires th
     });
     assertEquals(again.status, 404);
     await again.body?.cancel();
+
+    const retried = await post(mod, "/api/v1/mail/delete", {
+      fingerprint: identity.fingerprint,
+      email: `grace@${DOMAIN}`,
+      proof: deleteProof(identity, `grace@${DOMAIN}`),
+    });
+    assertEquals(retried.status, 200);
+    assertEquals(await retried.json(), { ok: true, email: `grace@${DOMAIN}` });
+    assertEquals(stalwart.accounts.size, 0);
   });
 });
 

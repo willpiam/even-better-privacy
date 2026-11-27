@@ -1,7 +1,14 @@
 import React, {useRef, useState} from 'react';
 import {StyleSheet, Text, View} from 'react-native';
-import {keepLocalCopy, pick} from '@react-native-documents/picker';
+import {
+  errorCodes,
+  isErrorWithCode,
+  keepLocalCopy,
+  pick,
+} from '@react-native-documents/picker';
+import {Buffer} from 'buffer';
 import RNFS from 'react-native-fs';
+import {MAX_MAIL_ATTACHMENT_BYTES} from '../../../../common/MailLimits';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import type {MailStackParamList} from '../../navigation/AppNavigator';
 import RecipientChipsField from '../../components/RecipientChipsField';
@@ -29,6 +36,9 @@ import SectionTitle from '../../components/SectionTitle';
 
 type Props = NativeStackScreenProps<MailStackParamList, 'MailCompose'>;
 
+const attachmentLimitMessage =
+  `Attachments can total up to ${MAX_MAIL_ATTACHMENT_BYTES / (1024 * 1024)} MiB per message.`;
+
 function initialChips(params: Props['route']['params']): RecipientChip[] {
   if (!params?.to && !params?.recipientContact) {
     return [];
@@ -52,6 +62,7 @@ export default function MailComposeScreen({
     ? queue.getDraft(params.draftId)
     : undefined;
   const sending = useRef(false);
+  const pickingAttachment = useRef(false);
   const [starting, setStarting] = useState(false);
   const {ensureUnlocked, unlockPrompt} = useIdentityUnlock();
   const [chips, setChips] = useState<RecipientChip[]>(
@@ -71,19 +82,39 @@ export default function MailComposeScreen({
   const references = recovered?.references ?? params?.references;
 
   const pickAttachment = async () => {
+    if (pickingAttachment.current) return;
+    pickingAttachment.current = true;
+    setStatus('');
+    let path: string | undefined;
     try {
       const [file] = await pick({mode: 'open'});
+      const attachedBytes = attachments.reduce(
+        (sum, item) => sum + Buffer.byteLength(item.contentBase64, 'base64'),
+        0,
+      );
+      const remaining = MAX_MAIL_ATTACHMENT_BYTES - attachedBytes;
+      if (remaining < 0 || (file.size !== null && file.size > remaining)) {
+        throw new Error(attachmentLimitMessage);
+      }
       const [copyResult] = await keepLocalCopy({
-        files: [{uri: file.uri, fileName: file.name ?? 'attachment'}],
+        files: [{uri: file.uri, fileName: 'attachment'}],
         destination: 'cachesDirectory',
       });
       if (copyResult.status !== 'success') {
         throw new Error(copyResult.copyError);
       }
-      const path = copyResult.localUri.startsWith('file://')
-        ? copyResult.localUri.replace('file://', '')
-        : copyResult.localUri;
-      const contentBase64 = await RNFS.readFile(path, 'base64');
+      path = copyResult.localUri.replace(/^file:\/\//, '');
+      const size = Number((await RNFS.stat(path)).size);
+      if (!Number.isSafeInteger(size) || size < 0) {
+        throw new Error('Could not determine the attachment size.');
+      }
+      if (size > remaining) throw new Error(attachmentLimitMessage);
+      const contentBase64 = size === 0
+        ? ''
+        : await RNFS.read(path, size + 1, 0, 'base64');
+      if (Buffer.byteLength(contentBase64, 'base64') !== size) {
+        throw new Error('The attachment changed while it was being read. Choose it again.');
+      }
       setAttachments(prev => [
         ...prev,
         {
@@ -92,8 +123,13 @@ export default function MailComposeScreen({
           contentBase64,
         },
       ]);
-    } catch {
-      // User cancelled picker.
+    } catch (error) {
+      if (!isErrorWithCode(error) || error.code !== errorCodes.OPERATION_CANCELED) {
+        setStatus(error instanceof Error ? error.message : 'Could not attach the file.');
+      }
+    } finally {
+      if (path) await RNFS.unlink(path).catch(() => {});
+      pickingAttachment.current = false;
     }
   };
 

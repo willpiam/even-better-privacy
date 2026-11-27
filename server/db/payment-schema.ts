@@ -23,6 +23,17 @@ export const PAYMENT_ORDER_SCHEMA_UPDATES = [
   )`,
   `CREATE INDEX IF NOT EXISTS mail_payment_candidates_by_order
     ON mail_payment_candidates (order_id, submitted_at DESC, transaction_id)`,
+  `CREATE TABLE IF NOT EXISTS mail_payment_migrations (name TEXT PRIMARY KEY)`,
+];
+
+export const PAYMENT_AMOUNT_COLUMNS = ["paid_amount_atomic", "paid_lovelace"] as const;
+
+// Claim and run the backfill inside the same schema transaction so failure is retryable.
+export const CLAIM_PAYMENT_BACKFILL =
+  `INSERT INTO mail_payment_migrations (name) VALUES ('order-candidates-and-fulfillment')
+    ON CONFLICT (name) DO NOTHING RETURNING name`;
+
+export const BACKFILL_PAYMENT_ORDERS = [
   `INSERT INTO mail_payment_candidates (order_id, transaction_id, submitted_at)
     SELECT order_id, transaction_id, created_at
     FROM mail_payment_orders WHERE transaction_id IS NOT NULL

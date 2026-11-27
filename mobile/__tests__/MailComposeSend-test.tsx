@@ -1,6 +1,9 @@
 import React from 'react';
 import renderer, {act} from 'react-test-renderer';
 import {Text} from 'react-native';
+import {keepLocalCopy, pick} from '@react-native-documents/picker';
+import RNFS from 'react-native-fs';
+import {MAX_MAIL_ATTACHMENT_BYTES} from '../../common/MailLimits';
 const mockEnqueue = jest.fn();
 const mockGetDraft = jest.fn();
 const mockUnlock = jest.fn();
@@ -19,8 +22,13 @@ jest.mock('../src/hooks/useIdentityUnlock', () => ({
 jest.mock('@react-native-documents/picker', () => ({
   pick: jest.fn(),
   keepLocalCopy: jest.fn(),
+  isErrorWithCode: () => false,
 }));
-jest.mock('react-native-fs', () => ({}));
+jest.mock('react-native-fs', () => ({
+  stat: jest.fn(),
+  read: jest.fn(),
+  unlink: jest.fn(async () => {}),
+}));
 jest.mock('../src/components/RecipientChipsField', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({
   SafeAreaView: require('react-native').View,
@@ -48,6 +56,9 @@ const sendButton = () =>
   tree.root
     .findAllByType(AppButton)
     .find(b => b.props.title.startsWith('Send'))!;
+const addAttachment = () => tree.root
+  .findAllByType(AppButton)
+  .find(b => b.props.title === 'Add attachment')!.props.onPress();
 beforeEach(() => {
   jest.clearAllMocks();
   mockUnlock.mockResolvedValue('Alice');
@@ -129,4 +140,34 @@ test('invalid recipients show an error without navigation', async () => {
         String(t.props.children).includes('Add at least one recipient'),
       ),
   ).toBe(true);
+});
+
+test('enforces the combined attachment budget before copying a known large file', async () => {
+  await render({to: 'a@example.com', encryptionIntent: 'unencrypted'});
+  jest.mocked(pick).mockResolvedValueOnce([{uri: 'content://small', name: 'small.txt', size: 1}] as never);
+  jest.mocked(keepLocalCopy).mockResolvedValueOnce([{status: 'success', localUri: 'file:///small'}] as never);
+  jest.mocked(RNFS.stat).mockResolvedValueOnce({size: 1} as never);
+  jest.mocked(RNFS.read).mockResolvedValueOnce('YQ==');
+  await act(addAttachment);
+  expect(RNFS.read).toHaveBeenCalledWith('/small', 2, 0, 'base64');
+  expect(RNFS.unlink).toHaveBeenCalledWith('/small');
+
+  jest.mocked(pick).mockResolvedValueOnce([{
+    uri: 'content://large', name: 'large.mp4', size: MAX_MAIL_ATTACHMENT_BYTES,
+  }] as never);
+  await act(addAttachment);
+  expect(keepLocalCopy).toHaveBeenCalledTimes(1);
+  expect(tree.root.findAllByType(Text).some(node =>
+    String(node.props.children).includes('20 MiB'),
+  )).toBe(true);
+});
+
+test('checks the size of a copied attachment when the picker supplies no size', async () => {
+  await render({to: 'a@example.com', encryptionIntent: 'unencrypted'});
+  jest.mocked(pick).mockResolvedValueOnce([{uri: 'content://large', name: 'large.mp4', size: null}] as never);
+  jest.mocked(keepLocalCopy).mockResolvedValueOnce([{status: 'success', localUri: 'file:///large'}] as never);
+  jest.mocked(RNFS.stat).mockResolvedValueOnce({size: MAX_MAIL_ATTACHMENT_BYTES + 1} as never);
+  await act(addAttachment);
+  expect(RNFS.read).not.toHaveBeenCalled();
+  expect(RNFS.unlink).toHaveBeenCalledWith('/large');
 });
