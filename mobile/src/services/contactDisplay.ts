@@ -7,6 +7,7 @@ import {shortFingerprint} from '../../../core/Fingerprint';
 export type ContactLike = {
   fingerprint: string;
   localAlias?: string;
+  localEmail?: string;
   details?: Record<string, [string, string]>;
   resolvedOpaqueEmail?: string;
   /** Storage filename / import handle — search only, never display. */
@@ -42,7 +43,7 @@ function displayEmail(like: ContactLike): string | null {
     return published;
   }
   const opaque = like.resolvedOpaqueEmail?.trim();
-  return opaque || null;
+  return opaque || like.localEmail?.trim() || null;
 }
 
 export function resolveContactLabels(like: ContactLike): ContactLabels {
@@ -79,6 +80,7 @@ export function contactSearchHaystack(like: ContactLike): string {
     publishedName,
     email,
     like.resolvedOpaqueEmail ?? '',
+    like.localEmail ?? '',
     like.fingerprint,
     like.storageName ?? '',
   ]
@@ -90,6 +92,7 @@ export function storedContactToLike(item: StoredContact): ContactLike {
   return {
     fingerprint: item.contact.fingerprint,
     localAlias: item.localAlias,
+    localEmail: item.localEmail,
     details: item.contact.details,
     resolvedOpaqueEmail: item.contact.resolvedOpaqueDetails?.['opaque::email'],
     storageName: item.name,

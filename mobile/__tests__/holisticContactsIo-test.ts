@@ -49,16 +49,30 @@ test('QR imports are idempotent and preserve existing contact revocations', asyn
   const {summary} = new Identity('dilithium', 'kyber');
   const [first, second] = await Promise.all([
     importScannedContact(summary, 'Alice'),
-    importScannedContact(summary, 'Second alias'),
+    importScannedContact(summary, 'Second alias', email),
   ]);
   expect(first).toBe(second);
   expect(mockFiles.size).toBe(1);
   expect((await listContacts())[0].localAlias).toBe('Alice');
+  expect((await findContactsByEmail(email))[0].localEmail).toBe(email);
+  await importScannedContact(summary, 'Third alias', 'other@example.test');
+  expect((await listContacts())[0].localEmail).toBe(email);
 
   mockFiles.clear();
   const original = JSON.stringify({...summary, revoked: true, localAlias: 'Existing alias'});
   mockFiles.set('/contacts/existing.json', original);
-  expect(await importScannedContact(summary, 'Scanned alias')).toBe('existing');
+  expect(await importScannedContact(summary, 'Scanned alias', email)).toBe('existing');
   expect(mockFiles.size).toBe(1);
   expect(mockFiles.get('/contacts/existing.json')).toBe(original);
+});
+
+test('QR import rejects a supplied fingerprint that differs from the keys', async () => {
+  mockFiles.clear();
+  const {summary} = new Identity('dilithium', 'kyber');
+  const fingerprint = new Identity('dilithium', 'kyber').toFingerprint();
+
+  await expect(
+    importScannedContact({...summary, fingerprint}, 'Alice', email),
+  ).rejects.toThrow(/fingerprint mismatch/);
+  expect(mockFiles.size).toBe(0);
 });

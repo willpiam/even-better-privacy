@@ -112,7 +112,11 @@ export default function ContactQrScanScreen({navigation}: Props) {
     setBusy(true);
     setError('');
     try {
-      const name = await importScannedContact(contact.identity, alias.trim());
+      const name = await importScannedContact(
+        contact.identity,
+        alias.trim(),
+        contact.email,
+      );
       if (navigation.isFocused()) navigation.replace('ContactDetail', {name});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save this contact.');
@@ -123,12 +127,13 @@ export default function ContactQrScanScreen({navigation}: Props) {
   };
 
   if (contact) {
-    const {identity} = contact;
+    const {identity, email} = contact;
     return (
       <Screen scroll>
         <Text style={styles.text}>
-          Ask the person sharing this code to show you their full fingerprint.
-          Check that it matches before you add the contact.
+          {email
+            ? 'Compare the full fingerprint and email address with the person sharing this code before you add the contact.'
+            : 'Compare the full fingerprint with the person sharing this code before you add the contact.'}
         </Text>
         <Card padded style={styles.details}>
           <SectionTitle>Full fingerprint</SectionTitle>
@@ -143,6 +148,14 @@ export default function ContactQrScanScreen({navigation}: Props) {
             signing · ML-KEM encryption
           </Text>
         </Card>
+        {email ? (
+          <Card padded style={styles.details}>
+            <SectionTitle>Email address</SectionTitle>
+            <Text selectable style={styles.text}>
+              {email}
+            </Text>
+          </Card>
+        ) : null}
         <TextField
           label="Contact name"
           placeholder="Optional"

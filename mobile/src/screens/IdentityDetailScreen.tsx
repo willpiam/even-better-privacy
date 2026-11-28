@@ -152,7 +152,7 @@ export default function IdentityDetailScreen({route, navigation}: Props) {
           <ListRow
             title="Show contact QR"
             icon="fingerprint"
-            subtitle="Share your public keys in person"
+            subtitle="Share your EBP contact details in person"
             testID="identity-open-qr"
             onPress={() => navigation.navigate('IdentityQr', params)}
           />

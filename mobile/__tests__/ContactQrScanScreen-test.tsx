@@ -24,9 +24,10 @@ jest.mock('../src/services/contacts', () => ({
 
 import {useCodeScanner} from 'react-native-vision-camera';
 
-test('shows the fingerprint for review and saves only after confirmation', async () => {
+test('shows the fingerprint and email for review and saves only after confirmation', async () => {
   const {summary} = new Identity('dilithium', 'kyber');
-  const frames = encodeContactQr(summary, 'Alice');
+  const email = 'alice@example.test';
+  const frames = encodeContactQr(summary, 'Alice', email);
   const navigation = {
     setOptions: jest.fn(),
     isFocused: () => true,
@@ -69,6 +70,11 @@ test('shows the fingerprint for review and saves only after confirmation', async
         .findAllByType(Text)
         .some(node => node.props.children === summary.fingerprint),
     ).toBe(true);
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(node => node.props.children === email),
+    ).toBe(true);
     expect(save).not.toHaveBeenCalled();
 
     const add = tree!.root
@@ -80,6 +86,7 @@ test('shows the fingerprint for review and saves only after confirmation', async
         fingerprint: summary.fingerprint,
       }),
       'Alice',
+      email,
     );
     expect(navigation.replace).toHaveBeenCalledWith('ContactDetail', {
       name: 'saved-contact',

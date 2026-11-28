@@ -1,13 +1,21 @@
 import {Identity} from '../../core/Identity';
 import {sha256Hex} from '../../core/MessageHash';
-import {ContactQrScanner, encodeContactQr} from '../src/services/contactQr';
+import {
+  ContactQrScanner,
+  encodeContactQr,
+  getContactQrEmail,
+} from '../src/services/contactQr';
 
 describe('contact QR exchange', () => {
-  test.each(['dilithium', 'sphincs'] as const)(
-    'recovers the %s identity from shuffled frames with duplicates',
-    keyType => {
+  test.each([
+    ['dilithium', undefined],
+    ['dilithium', 'Alice@example.test'],
+    ['sphincs', 'zoë@example.test'],
+  ] as const)(
+    'recovers the %s identity with email %s from shuffled frames with duplicates',
+    (keyType, email) => {
       const {summary} = new Identity(keyType, 'kyber');
-      const frames = encodeContactQr(summary, 'Zoë 🦊');
+      const frames = encodeContactQr(summary, 'Zoë 🦊', email);
       const scanner = new ContactQrScanner();
       const reversed = [...frames].reverse();
 
@@ -26,6 +34,7 @@ describe('contact QR exchange', () => {
       ).toBe(true);
       expect(results.at(-1)?.contact).toEqual({
         name: 'Zoë 🦊',
+        ...(email === undefined ? {} : {email}),
         identity: expect.objectContaining({
           fingerprint: summary.fingerprint,
           signingKey: summary.signingKey,
@@ -37,6 +46,23 @@ describe('contact QR exchange', () => {
       });
     },
   );
+
+  test('shares only an active cleartext email from the identity', () => {
+    const email = 'Alice@example.test';
+    const opaque: [string, string] = [sha256Hex(email), 'opaque proof'];
+    const details = {
+      'opaque::email': opaque,
+      email: [email, 'proof'] as [string, string],
+    };
+
+    expect(getContactQrEmail({details})).toBe(email);
+    expect(
+      getContactQrEmail({details, revokedDetails: {email: 'certificate'}}),
+    ).toBeUndefined();
+    expect(
+      getContactQrEmail({details: {'opaque::email': opaque}}),
+    ).toBeUndefined();
+  });
 
   test('rejects unrelated codes, mixed identities, and damaged frames', () => {
     const {summary} = new Identity('dilithium', 'kyber');
@@ -58,7 +84,7 @@ describe('contact QR exchange', () => {
   test('rejects a mismatched fingerprint even when all frame digests match', () => {
     const {summary} = new Identity('dilithium', 'kyber');
     const wrongFingerprint = new Identity('dilithium', 'kyber').toFingerprint();
-    const frames = encodeContactQr(summary, 'Alice');
+    const frames = encodeContactQr(summary, 'Alice', 'alice@example.test');
     const oldDigest = frames[0].split(':')[1];
     const chunks = frames
       .map(frame => frame.split(':').slice(3).join(':'))

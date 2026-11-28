@@ -6,7 +6,11 @@ import qrcode from 'qrcode-generator';
 import Svg, {Path, Rect} from 'react-native-svg';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {Identity} from '../ebpCore';
-import {contactQrNameLimit, encodeContactQr} from '../services/contactQr';
+import {
+  contactQrNameLimit,
+  encodeContactQr,
+  getContactQrEmail,
+} from '../services/contactQr';
 import {readIdentityRaw} from '../services/storage';
 import Card from '../components/Card';
 import Screen from '../components/Screen';
@@ -38,6 +42,7 @@ export default function IdentityQrScreen({route}: Props) {
   const focused = useIsFocused();
   const [share, setShare] = useState<{
     fingerprint: string;
+    email?: string;
     images: ReturnType<typeof qrImage>[];
   }>();
   const [index, setIndex] = useState(0);
@@ -58,9 +63,11 @@ export default function IdentityQrScreen({route}: Props) {
         if (!pub) throw new Error('Could not read the public identity.');
         if (pub.revocationCertificate)
           throw new Error('This identity has been revoked.');
+        const email = getContactQrEmail(pub);
         setShare({
           fingerprint: pub.fingerprint,
-          images: encodeContactQr(pub, identityName).map(qrImage),
+          email,
+          images: encodeContactQr(pub, identityName, email).map(qrImage),
         });
       } catch (e) {
         if (active)
@@ -103,9 +110,11 @@ export default function IdentityQrScreen({route}: Props) {
   return (
     <Screen scroll>
       <Text style={styles.text}>
-        Share your public keys and the name below. On the other device, open
-        Contacts, tap +, and choose Scan contact QR. Hold this screen steady
-        while the codes cycle.
+        {share.email
+          ? 'Share your public keys, name, and email address.'
+          : 'Share your public keys and name.'}{' '}
+        On the other device, open Contacts, tap +, and choose Scan contact QR.
+        Hold this screen steady while the codes cycle.
       </Text>
       <View style={styles.code}>
         <Svg
@@ -123,6 +132,11 @@ export default function IdentityQrScreen({route}: Props) {
         <Text style={styles.name}>
           {identityName.slice(0, contactQrNameLimit)}
         </Text>
+        {share.email ? (
+          <Text selectable style={styles.text}>
+            {share.email}
+          </Text>
+        ) : null}
         <Text selectable style={styles.fingerprint}>
           {share.fingerprint}
         </Text>

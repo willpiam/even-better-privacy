@@ -11,7 +11,6 @@ import {sha256Hex} from '../../../core/MessageHash.ts';
 import {
   decideRecipientResolution,
   matchVerifiedEmailIdentities,
-  searchVerifiedEmailIdentity,
 } from '../../../common/VerifiedEmailMatch.ts';
 import {getServerUrl} from './settings';
 import {ensureAppDirs, getContactsDir} from './storage';
@@ -39,6 +38,7 @@ export type StoredContact = {
   name: string;
   contact: ExternalIdentity;
   localAlias?: string;
+  localEmail?: string;
 };
 
 export type ServerIdentitySummary = {
@@ -80,7 +80,9 @@ export async function listContacts(): Promise<StoredContact[]> {
     const contact = validateContact(parsed);
     const localAlias =
       typeof parsed.localAlias === 'string' ? parsed.localAlias : undefined;
-    contacts.push({name, contact, localAlias});
+    const localEmail =
+      typeof parsed.localEmail === 'string' ? parsed.localEmail : undefined;
+    contacts.push({name, contact, localAlias, localEmail});
     } catch (error) { console.warn(`Skipping damaged contact ${JSON.stringify(entry.name)}`, String(error)); }
   }
   contacts.sort((a, b) => a.name.localeCompare(b.name));
@@ -88,7 +90,7 @@ export async function listContacts(): Promise<StoredContact[]> {
 }
 
 /**
- * Find local contacts whose `email` detail or `opaque::email` matches.
+ * Find local contacts by identity email details or locally saved email.
  * On opaque hash match, persists cleartext via resolveOpaqueDetail when needed.
  */
 export async function findContactsByEmail(
@@ -103,7 +105,15 @@ export async function findContactsByEmail(
   const contacts = snapshot ?? await listContacts();
   const matches: StoredContact[] = [];
   for (const item of contacts) {
-    if (!contactMatchesEmail(item.contact, trimmed, normalized)) {
+    const matchesLocalEmail =
+      item.localEmail &&
+      !item.contact.revoked &&
+      !item.contact.revokedDetails?.includes('email') &&
+      emailsEqualIgnoreCase(item.localEmail, normalized);
+    if (
+      !matchesLocalEmail &&
+      !contactMatchesEmail(item.contact, trimmed, normalized)
+    ) {
       continue;
     }
     matches.push(item);
@@ -203,25 +213,41 @@ export async function importContact(
   });
 }
 
-/** Keep existing contact details and revocations when a public key is rescanned. */
 export async function importScannedContact(
   payload: ExternalIdentity,
   localAlias: string,
+  email?: string,
 ): Promise<string> {
+  // Normalization recomputes the fingerprint from the keys before any write.
   const contact = normalizeExternalIdentity(
     payload as unknown as Record<string, unknown>,
   );
-  const name = contact.fingerprint;
+  const contacts = await listContacts();
+  const name =
+    contacts.find(item => item.contact.fingerprint === contact.fingerprint)
+      ?.name ?? contact.fingerprint;
   const path = contactPath(name);
   return contactUpdates.run(path, async () => {
-    const existing = (await listContacts()).find(
-      item => item.contact.fingerprint === contact.fingerprint,
-    );
-    if (existing) return existing.name;
     if (await RNFS.exists(path)) {
-      throw new Error('A contact with this storage name already exists.');
+      const existing = validateContact(
+        JSON.parse(await RNFS.readFile(path, 'utf8')),
+      );
+      if (existing.fingerprint !== contact.fingerprint) {
+        throw new Error('A contact with this storage name already exists.');
+      }
+      const {localEmail} = existing as ExternalIdentity & {localEmail?: string};
+      if (email && !existing.revoked && !localEmail) {
+        await writeFileAtomic(
+          path,
+          JSON.stringify({...existing, localEmail: email}, null, 2),
+        );
+      }
+      return name;
     }
-    await writeFileAtomic(path, JSON.stringify({...contact, localAlias}, null, 2));
+    await writeFileAtomic(
+      path,
+      JSON.stringify({...contact, localAlias, localEmail: email}, null, 2),
+    );
     return name;
   });
 }
