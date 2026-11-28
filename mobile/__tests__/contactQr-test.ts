@@ -1,5 +1,6 @@
 import {Identity} from '../../core/Identity';
 import {sha256Hex} from '../../core/MessageHash';
+import {decodeNfcContact} from '../src/services/contactNfc';
 import {
   ContactQrScanner,
   encodeContactQr,
@@ -97,5 +98,16 @@ describe('contact QR exchange', () => {
     const scanner = new ContactQrScanner();
     tamperedFrames.slice(0, -1).forEach(frame => scanner.add(frame));
     expect(() => scanner.add(tamperedFrames.at(-1)!)).toThrow(/fingerprint/);
+    expect(() => decodeNfcContact(tamperedFrames.join('\n'))).toThrow(
+      /fingerprint/,
+    );
+  });
+
+  test('rejects an incomplete NFC transfer', () => {
+    const {summary} = new Identity('dilithium', 'kyber');
+    const frames = encodeContactQr(summary, 'Alice');
+    expect(() => decodeNfcContact(frames.slice(0, -1).join('\n'))).toThrow(
+      /incomplete/,
+    );
   });
 });

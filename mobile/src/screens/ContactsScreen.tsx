@@ -16,6 +16,7 @@ import {
   listContacts,
   type StoredContact,
 } from '../services/contacts';
+import {useContactNfcCapability} from '../services/contactNfc';
 import {storedContactToLike} from '../services/contactDisplay';
 import {shortFingerprint} from '../ebpCore';
 import Screen from '../components/Screen';
@@ -38,6 +39,7 @@ type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactsList'>;
 
 export default function ContactsScreen({navigation}: Props): JSX.Element {
   const theme = usePlaceTheme();
+  const canReceiveNfc = useContactNfcCapability('receive');
   const [menuOpen, setMenuOpen] = useState(false);
   const [contacts, setContacts] = useState<StoredContact[]>([]);
   const [importVisible, setImportVisible] = useState(false);
@@ -135,6 +137,13 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
       title: 'Scan contact QR',
       open: () => navigation.navigate('ContactQrScan'),
     },
+    ...(canReceiveNfc
+      ? [{
+          id: 'contacts-receive-nfc',
+          title: 'Receive via NFC',
+          open: () => navigation.navigate('ContactQrScan', {transport: 'nfc'}),
+        } as const]
+      : []),
     {
       id: 'contacts-import',
       title: 'Import contact manually',

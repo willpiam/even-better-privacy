@@ -59,7 +59,7 @@ export type IdentitiesStackParamList = {
 export type ContactsStackParamList = {
   ContactsList: undefined;
   ContactDetail: {name: string};
-  ContactQrScan: undefined;
+  ContactQrScan: {transport: 'nfc'} | undefined;
 };
 
 export type CryptoStackParamList = {

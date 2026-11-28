@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">EBP</string>
+    <string name="contact_nfc_service">EBP contact sharing</string>
 </resources>

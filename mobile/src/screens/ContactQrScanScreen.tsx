@@ -21,6 +21,7 @@ import {
   contactQrNameLimit,
   type ScannedContact,
 } from '../services/contactQr';
+import {contactNfc, decodeNfcContact} from '../services/contactNfc';
 import {importScannedContact} from '../services/contacts';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
@@ -32,7 +33,8 @@ import {colors, radius, spacing, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<ContactsStackParamList, 'ContactQrScan'>;
 
-export default function ContactQrScanScreen({navigation}: Props) {
+export default function ContactQrScanScreen({navigation, route}: Props) {
+  const viaNfc = route.params?.transport === 'nfc';
   const focused = useIsFocused();
   const [foreground, setForeground] = useState(
     AppState.currentState === 'active',
@@ -49,27 +51,61 @@ export default function ContactQrScanScreen({navigation}: Props) {
   const [alias, setAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [nfcAttempt, setNfcAttempt] = useState(0);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', state => {
       setForeground(state === 'active');
-      if (state === 'active') {
+      if (state === 'active' && !viaNfc) {
         setHasPermission(Camera.getCameraPermissionStatus() === 'granted');
       }
     });
     return () => subscription.remove();
+  }, [viaNfc]);
+
+  const scanTitle = viaNfc ? 'Receive via NFC' : 'Scan contact QR';
+  useEffect(() => {
+    navigation.setOptions({
+      title: contact ? 'Verify contact details' : scanTitle,
+    });
+  }, [contact, navigation, scanTitle]);
+
+  const showContact = useCallback((received: ScannedContact) => {
+    scanComplete.current = true;
+    setAlias(received.name);
+    setContact(received);
   }, []);
 
   useEffect(() => {
-    navigation.setOptions({
-      title: contact ? 'Verify contact details' : 'Scan contact QR',
-    });
-  }, [contact, navigation]);
+    if (!viaNfc || !focused || !foreground || contact) return;
+    if (!contactNfc) {
+      setError('NFC contact receiving is unavailable on this phone.');
+      return;
+    }
+    let active = true;
+    setError('');
+    contactNfc
+      .receive()
+      .then(payload => {
+        if (active) showContact(decodeNfcContact(payload));
+      })
+      .catch((e: unknown) => {
+        if (active) {
+          setError(
+            e instanceof Error ? e.message : 'Could not receive this contact.',
+          );
+        }
+      });
+    return () => {
+      active = false;
+      contactNfc.cancelReceive();
+    };
+  }, [viaNfc, focused, foreground, contact, nfcAttempt, showContact]);
 
   const codeScanner = useCodeScanner({
     codeTypes: ['qr'],
     onCodeScanned: codes => {
-      if (scanComplete.current || !foreground || !focused) return;
+      if (viaNfc || scanComplete.current || !foreground || !focused) return;
       for (const {value} of codes) {
         if (!value) continue;
         try {
@@ -82,9 +118,7 @@ export default function ContactQrScanScreen({navigation}: Props) {
           );
           setError('');
           if (result.contact) {
-            scanComplete.current = true;
-            setAlias(result.contact.name);
-            setContact(result.contact);
+            showContact(result.contact);
             break;
           }
         } catch (e) {
@@ -104,7 +138,8 @@ export default function ContactQrScanScreen({navigation}: Props) {
     setProgress(undefined);
     setContact(undefined);
     setError('');
-  }, []);
+    if (viaNfc) setNfcAttempt(attempt => attempt + 1);
+  }, [viaNfc]);
 
   const addContact = async () => {
     if (!contact || saving.current) return;
@@ -132,8 +167,8 @@ export default function ContactQrScanScreen({navigation}: Props) {
       <Screen scroll>
         <Text style={styles.text}>
           {email
-            ? 'Compare the full fingerprint and email address with the person sharing this code before you add the contact.'
-            : 'Compare the full fingerprint with the person sharing this code before you add the contact.'}
+            ? 'Compare the full fingerprint and email address with the person sharing their contact before you add it.'
+            : 'Compare the full fingerprint with the person sharing their contact before you add it.'}
         </Text>
         <Card padded style={styles.details}>
           <SectionTitle>Full fingerprint</SectionTitle>
@@ -172,11 +207,26 @@ export default function ContactQrScanScreen({navigation}: Props) {
           onPress={addContact}
         />
         <AppButton
-          title="Scan again"
+          title={viaNfc ? 'Receive again' : 'Scan again'}
           variant="secondary"
           disabled={busy}
           onPress={restart}
         />
+      </Screen>
+    );
+  }
+
+  if (viaNfc) {
+    return (
+      <Screen>
+        <Text style={styles.text}>
+          Ask the other person to tap Share via NFC in EBP, then hold the backs
+          of your phones together until their contact details appear.
+        </Text>
+        <StatusBanner message={error} kind="error" />
+        {error && contactNfc ? (
+          <AppButton title="Try again" variant="secondary" onPress={restart} />
+        ) : null}
       </Screen>
     );
   }
