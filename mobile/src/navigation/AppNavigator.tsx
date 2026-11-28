@@ -60,6 +60,8 @@ export type ContactsStackParamList = {
   ContactsList: undefined;
   ContactDetail: {name: string};
   ContactQrScan: {transport: 'nfc'} | undefined;
+  PeerVerification: {fingerprint: string} | undefined;
+  Endorsements: {fingerprint?: string} | undefined;
 };
 
 export type CryptoStackParamList = {
@@ -261,6 +263,16 @@ function ContactsNavigator(): JSX.Element {
           name="ContactDetail"
           component={ContactDetailScreen}
           options={{title: 'Contact'}}
+        />
+        <ContactsStack.Screen
+          name="PeerVerification"
+          getComponent={() => require('../screens/PeerVerificationScreen').default}
+          options={{title: 'Verify in person'}}
+        />
+        <ContactsStack.Screen
+          name="Endorsements"
+          getComponent={() => require('../screens/EndorsementsScreen').default}
+          options={{title: 'Endorsements'}}
         />
       </ContactsStack.Navigator>
     </PlaceThemeProvider>

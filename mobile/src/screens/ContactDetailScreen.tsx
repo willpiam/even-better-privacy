@@ -213,6 +213,22 @@ export default function ContactDetailScreen({
         </Text>
       </Card>
       <StatusBanner message={status} kind={statusKind(status)} />
+      {!contact.revoked ? (
+        <AppButton
+          title="Verify in person"
+          variant="secondary"
+          onPress={() =>
+            navigation.navigate('PeerVerification', {fingerprint: contact.fingerprint})
+          }
+        />
+      ) : null}
+      <AppButton
+        title="Endorsements"
+        variant="secondary"
+        onPress={() =>
+          navigation.navigate('Endorsements', {fingerprint: contact.fingerprint})
+        }
+      />
 
       <SectionTitle>Details</SectionTitle>
       {Object.keys(contact.details).length === 0 ? (

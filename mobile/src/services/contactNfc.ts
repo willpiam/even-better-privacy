@@ -2,6 +2,9 @@ import {useEffect, useState} from 'react';
 import {NativeModules, Platform} from 'react-native';
 import {ContactQrScanner, type ScannedContact} from './contactQr';
 
+// Keep in sync with ContactNfcProtocol.maxPayloadBytes in Android.
+export const MAX_NFC_PAYLOAD_BYTES = 8192;
+
 type NfcCapability = 'share' | 'receive';
 
 type ContactNfcModule = {

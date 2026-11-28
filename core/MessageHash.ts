@@ -4,7 +4,7 @@ import { canonicalJsonStringify } from "./CanonicalJson.ts";
 
 const textEncoder = new TextEncoder();
 
-export type SignaturePurpose = "message" | "detail-proof" | "revocation" | "hierarchy";
+export type SignaturePurpose = "message" | "detail-proof" | "revocation" | "hierarchy" | "peer-verification";
 
 export function sha256Hex(message: string): string {
 	return toHex(sha256(textEncoder.encode(message)));
@@ -20,6 +20,8 @@ function purposePrefix(purpose: SignaturePurpose): string {
 			return "ebp::revocation::v2::";
 		case "hierarchy":
 			return "ebp::hierarchy::v2::";
+		case "peer-verification":
+			return "ebp::peer-verification::v1::";
 	}
 }
 

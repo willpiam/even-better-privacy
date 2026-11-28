@@ -159,6 +159,16 @@ export default function ContactsScreen({navigation}: Props): JSX.Element {
       title: 'Browse server identities',
       open: () => setBrowseVisible(true),
     },
+    {
+      id: 'contacts-verify-peer',
+      title: 'Verify in person',
+      open: () => navigation.navigate('PeerVerification'),
+    },
+    {
+      id: 'contacts-endorsements',
+      title: 'Endorsements',
+      open: () => navigation.navigate('Endorsements'),
+    },
   ];
 
   return (

@@ -8,8 +8,6 @@ import {
 } from 'react-native';
 import {useIsFocused} from '@react-navigation/native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
-import qrcode from 'qrcode-generator';
-import Svg, {Path, Rect} from 'react-native-svg';
 import type {IdentitiesStackParamList} from '../navigation/AppNavigator';
 import {Identity} from '../ebpCore';
 import {
@@ -21,28 +19,12 @@ import {contactNfc, useContactNfcCapability} from '../services/contactNfc';
 import {readIdentityRaw} from '../services/storage';
 import AppButton from '../components/AppButton';
 import Card from '../components/Card';
+import QrCode, {qrImage} from '../components/QrCode';
 import Screen from '../components/Screen';
 import StatusBanner from '../components/StatusBanner';
 import {colors, layout, spacing, typography} from '../theme/tokens';
 
 type Props = NativeStackScreenProps<IdentitiesStackParamList, 'IdentityQr'>;
-
-function qrImage(value: string) {
-  const qr = qrcode(0, 'M');
-  qr.addData(value);
-  qr.make();
-  const modules = qr.getModuleCount();
-  const path: string[] = [];
-  // Four white modules around the matrix give scanners the required quiet zone.
-  const margin = 4;
-  for (let row = 0; row < modules; row++) {
-    for (let col = 0; col < modules; col++) {
-      if (qr.isDark(row, col))
-        path.push(`M${col + margin} ${row + margin}h1v1h-1z`);
-    }
-  }
-  return {path: path.join(''), size: modules + margin * 2};
-}
 
 export default function IdentityQrScreen({route}: Props) {
   const {identityName} = route.params;
@@ -102,11 +84,12 @@ export default function IdentityQrScreen({route}: Props) {
 
   useEffect(() => {
     if (!focused || !sharingNfc || !share || !contactNfc) return;
+    const nfc = contactNfc;
     let active = true;
     const subscription = AppState.addEventListener('change', state => {
       if (state !== 'active') setSharingNfc(false);
     });
-    contactNfc.startSharing(share.frames.join('\n')).catch((e: unknown) => {
+    nfc.startSharing(share.frames.join('\n')).catch((e: unknown) => {
       if (active) {
         setNfcError(
           e instanceof Error ? e.message : 'Could not start NFC sharing.',
@@ -117,7 +100,7 @@ export default function IdentityQrScreen({route}: Props) {
     return () => {
       active = false;
       subscription.remove();
-      contactNfc.stopSharing();
+      nfc.stopSharing();
     };
   }, [focused, sharingNfc, share]);
 
@@ -174,15 +157,7 @@ export default function IdentityQrScreen({route}: Props) {
             QR. Hold this screen steady while the codes cycle.
           </Text>
           <View style={styles.code}>
-            <Svg
-              accessible
-              accessibilityLabel="Public identity QR code"
-              width={size}
-              height={size}
-              viewBox={`0 0 ${image.size} ${image.size}`}>
-              <Rect width={image.size} height={image.size} fill="#fff" />
-              <Path d={image.path} fill="#000" />
-            </Svg>
+            <QrCode image={image} size={size} label="Public identity QR code" />
             <Text style={styles.text}>{`Code ${index + 1} of ${count}`}</Text>
           </View>
         </>
